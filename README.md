@@ -4,17 +4,23 @@ Connect Foundry VTT to Claude Desktop for AI-powered campaign management through
 
 ## Overview
 
-The Foundry MCP Bridge enables natural AI conversations with your Foundry VTT game data:
+The Foundry MCP Bridge enables natural AI conversations with your Foundry VTT game data. **Supports both D&D 5e and WFRP 4e game systems** (with extensibility for others):
 
 - **Quest Creation**: [Create quests from prompts that incorporate what exists in your world and journals](https://www.youtube.com/watch?v=NqyB_z2AKME)
-- **Character Management**: Query character stats, abilities, and information
-- **Compendium Search**: Find items, spells, and creatures using natural language
+- **Character Management**: Query character stats, abilities (D&D) or characteristics (WFRP), and information
+- **Compendium Search**: Find items, spells, and creatures using natural language with system-specific filtering
 - **Content Creation**: Generate actors, NPCs, and quest journals from simple prompts
 - **Scene Information**: Access current scene data and world details
-- **Dice Coordination**: Interactive roll requests with player targeting
+- **Dice Coordination**: Interactive roll requests with player targeting (d20 for D&D, d100 for WFRP)
 - **Campaign Management**: Multi-part quest and campaign tracking
 
 This project was built with the assistance of Claude Code. If you like this project, consider [supporting it on Patreon](https://www.patreon.com/c/Adambdooley).
+
+## Supported Game Systems
+
+- **D&D 5e**: Full support for abilities, challenge rating, armor class, skills, and d20 rolls
+- **WFRP 4e**: Full support for characteristics, threat levels, toughness/armor, skills, and d100 rolls
+- **Extensible**: The architecture supports adding other game systems with minimal modifications
 
 ## Installation
 
@@ -23,6 +29,7 @@ This project was built with the assistance of Claude Code. If you like this proj
 - **Foundry VTT v13** 
 - **Claude Desktop** with MCP support
 - **Windows** (for automated installer) or **Node.js 18+** for manual installation
+- **Game System**: D&D 5e or WFRP 4e installed in Foundry VTT
 
 ### Option 1: Windows Installer (Recommended)
 
@@ -86,20 +93,29 @@ Starting Claude Desktop will start the MCP Server.
 
 Once connected, ask Claude Desktop:
 
+**D&D 5e Examples:**
 - *"Show me my character Clark's stats"*
 - *"Find all CR 12 humanoid creatures for an encounter"*  
 - *"Create a quest about investigating missing villagers"*
 - *"Roll a stealth check for Tulkas"*
 - *"What's in the current Foundry scene?"*
 
+**WFRP 4e Examples:**
+- *"Show me my character Grunwald's characteristics"*
+- *"Find all beastmen with threat level 10-15"*
+- *"Create a quest about cultists in Altdorf"*
+- *"Roll a Dodge test for Katerina"*
+- *"List creatures with the Chaos trait"*
+
 ## Features
 
 - **20 MCP Tools** that allow Claude to interact with Foundry
-- **Character Management**: Access stats, abilities, and inventory
-- **Enhanced Compendium Search**: Instant filtering by CR, type, abilities, and more
+- **Multi-System Support**: Works with D&D 5e and WFRP 4e game systems
+- **Character Management**: Access stats, abilities (D&D) / characteristics (WFRP), and inventory
+- **Enhanced Compendium Search**: Instant filtering by CR/threat level, type/species, abilities, and more
 - **Content Creation**: Generate actors, NPCs, and quest journals
 - **Campaign Management**: Multi-part quest tracking with progress dashboards
-- **Interactive Dice System**: Send different dice roll requests to players from Claude
+- **Interactive Dice System**: Send different dice roll requests to players (d20 for D&D, d100 for WFRP)
 - **Actor Ownership**: Manage player permissions for characters and tokens
 - **GM-Only**: MCP Bridge only connects to Game Master users
 
