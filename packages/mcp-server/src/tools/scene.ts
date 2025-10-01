@@ -23,7 +23,7 @@ export class SceneTools {
     return [
       {
         name: 'get-current-scene',
-        description: 'Get information about the currently active scene, including tokens and layout',
+        description: 'Get information about the currently active scene, including tokens and layout. Useful for understanding the current game state and positioning of characters and NPCs.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -42,7 +42,7 @@ export class SceneTools {
       },
       {
         name: 'get-world-info',
-        description: 'Get basic information about the Foundry world and system',
+        description: 'Get basic information about the Foundry world and game system (e.g., D&D 5e, WFRP 4e). Use this to understand what system is being used and tailor responses accordingly.',
         inputSchema: {
           type: 'object',
           properties: {},
@@ -156,7 +156,7 @@ export class SceneTools {
 
   private createTokenSummary(tokens: any[], includeHidden: boolean): any {
     const visibleTokens = includeHidden ? tokens : tokens.filter(t => !t.hidden);
-    
+
     const summary = {
       total: visibleTokens.length,
       byDisposition: {

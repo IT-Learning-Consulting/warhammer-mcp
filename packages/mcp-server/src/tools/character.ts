@@ -19,12 +19,13 @@ export class CharacterTools {
   /**
    * Tool: get-character
    * Retrieve detailed information about a specific character
+   * Supports both D&D 5e and WFRP 4e systems
    */
   getToolDefinitions() {
     return [
       {
         name: 'get-character',
-        description: 'Retrieve detailed information about a specific character by name or ID',
+        description: 'Retrieve detailed information about a specific character by name or ID. Supports both D&D 5e (abilities, HP, AC, skills) and WFRP 4e (characteristics, wounds, toughness, skills) systems.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -38,7 +39,7 @@ export class CharacterTools {
       },
       {
         name: 'list-characters',
-        description: 'List all available characters with basic information',
+        description: 'List all available characters with basic information. Works with both D&D 5e and WFRP 4e character data.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -66,9 +67,9 @@ export class CharacterTools {
         characterName: identifier,
       });
 
-      this.logger.debug('Successfully retrieved character data', { 
+      this.logger.debug('Successfully retrieved character data', {
         characterId: characterData.id,
-        characterName: characterData.name 
+        characterName: characterData.name
       });
 
       // Format the response for Claude
@@ -129,41 +130,81 @@ export class CharacterTools {
 
   private extractBasicInfo(characterData: any): any {
     const system = characterData.system || {};
-    
+
     // Extract common fields that exist across different game systems
     const basicInfo: any = {};
 
-    // D&D 5e / PF2e common fields
-    if (system.attributes) {
-      if (system.attributes.hp) {
-        basicInfo.hitPoints = {
-          current: system.attributes.hp.value,
-          max: system.attributes.hp.max,
-          temp: system.attributes.hp.temp || 0,
+    // Detect game system based on data structure
+    const isWFRP = !!(system.characteristics || system.status?.wounds);
+
+    if (isWFRP) {
+      // WFRP 4e system
+      if (system.status?.wounds) {
+        basicInfo.wounds = {
+          current: system.status.wounds.value,
+          max: system.status.wounds.max,
         };
       }
-      if (system.attributes.ac) {
-        basicInfo.armorClass = system.attributes.ac.value;
+
+      // Toughness Bonus + Armor Points
+      if (system.characteristics?.t) {
+        const toughnessBonus = Math.floor((system.characteristics.t.value || 0) / 10);
+        const armorPoints = system.status?.armour?.value || system.status?.armour?.head || 0;
+        basicInfo.toughness = {
+          bonus: toughnessBonus,
+          armorPoints: armorPoints,
+          total: toughnessBonus + armorPoints
+        };
       }
-    }
 
-    // Level information
-    if (system.details?.level?.value) {
-      basicInfo.level = system.details.level.value;
-    } else if (system.level) {
-      basicInfo.level = system.level;
-    }
+      // Species
+      if (system.details?.species?.value) {
+        basicInfo.species = system.details.species.value;
+      }
 
-    // Class information
-    if (system.details?.class) {
-      basicInfo.class = system.details.class;
-    }
+      // Career
+      if (system.details?.career?.value) {
+        basicInfo.career = system.details.career.value;
+      }
 
-    // Race/ancestry information
-    if (system.details?.race) {
-      basicInfo.race = system.details.race;
-    } else if (system.details?.ancestry) {
-      basicInfo.ancestry = system.details.ancestry;
+      // Status/Class
+      if (system.details?.status?.value) {
+        basicInfo.status = system.details.status.value;
+      }
+
+    } else {
+      // D&D 5e / PF2e system
+      if (system.attributes) {
+        if (system.attributes.hp) {
+          basicInfo.hitPoints = {
+            current: system.attributes.hp.value,
+            max: system.attributes.hp.max,
+            temp: system.attributes.hp.temp || 0,
+          };
+        }
+        if (system.attributes.ac) {
+          basicInfo.armorClass = system.attributes.ac.value;
+        }
+      }
+
+      // Level information
+      if (system.details?.level?.value) {
+        basicInfo.level = system.details.level.value;
+      } else if (system.level) {
+        basicInfo.level = system.level;
+      }
+
+      // Class information
+      if (system.details?.class) {
+        basicInfo.class = system.details.class;
+      }
+
+      // Race/ancestry information
+      if (system.details?.race) {
+        basicInfo.race = system.details.race;
+      } else if (system.details?.ancestry) {
+        basicInfo.ancestry = system.details.ancestry;
+      }
     }
 
     return basicInfo;
@@ -173,42 +214,106 @@ export class CharacterTools {
     const system = characterData.system || {};
     const stats: any = {};
 
-    // Ability scores (D&D 5e style)
-    if (system.abilities) {
-      stats.abilities = {};
-      for (const [key, ability] of Object.entries(system.abilities)) {
-        if (typeof ability === 'object' && ability !== null) {
-          stats.abilities[key] = {
-            score: (ability as any).value || 10,
-            modifier: (ability as any).mod || 0,
-          };
+    // Detect game system based on data structure
+    const isWFRP = !!(system.characteristics || system.status?.wounds);
+
+    if (isWFRP) {
+      // WFRP 4e Characteristics (WS, BS, S, T, I, Ag, Dex, Int, WP, Fel)
+      if (system.characteristics) {
+        stats.characteristics = {};
+        const charMap: any = {
+          ws: 'Weapon Skill',
+          bs: 'Ballistic Skill',
+          s: 'Strength',
+          t: 'Toughness',
+          i: 'Initiative',
+          ag: 'Agility',
+          dex: 'Dexterity',
+          int: 'Intelligence',
+          wp: 'Willpower',
+          fel: 'Fellowship'
+        };
+
+        for (const [key, characteristic] of Object.entries(system.characteristics)) {
+          if (typeof characteristic === 'object' && characteristic !== null) {
+            const char = characteristic as any;
+            stats.characteristics[key.toUpperCase()] = {
+              name: charMap[key] || key.toUpperCase(),
+              initial: char.initial || 0,
+              advances: char.advances || 0,
+              value: char.value || char.initial || 0,
+              bonus: Math.floor((char.value || char.initial || 0) / 10)
+            };
+          }
         }
       }
-    }
 
-    // Skills
-    if (system.skills) {
-      stats.skills = {};
-      for (const [key, skill] of Object.entries(system.skills)) {
-        if (typeof skill === 'object' && skill !== null) {
-          stats.skills[key] = {
-            value: (skill as any).value || 0,
-            proficient: (skill as any).proficient || false,
-            ability: (skill as any).ability || '',
-          };
+      // WFRP Skills
+      if (system.skills) {
+        stats.skills = {};
+        for (const [key, skill] of Object.entries(system.skills)) {
+          if (typeof skill === 'object' && skill !== null) {
+            const s = skill as any;
+            if (s.name) { // Only include named skills
+              stats.skills[s.name] = {
+                characteristic: s.characteristic?.key || s.characteristic || '',
+                advances: s.advances || 0,
+                value: s.total || s.value || 0,
+              };
+            }
+          }
         }
       }
-    }
 
-    // Saves
-    if (system.saves) {
-      stats.saves = {};
-      for (const [key, save] of Object.entries(system.saves)) {
-        if (typeof save === 'object' && save !== null) {
-          stats.saves[key] = {
-            value: (save as any).value || 0,
-            proficient: (save as any).proficient || false,
-          };
+      // WFRP Talents
+      if (system.talents) {
+        stats.talents = Object.values(system.talents)
+          .filter((t: any) => t.name)
+          .map((t: any) => ({
+            name: t.name,
+            advances: t.advances || 1,
+            description: this.truncateText(t.description || '', 100)
+          }));
+      }
+
+    } else {
+      // D&D 5e Ability Scores
+      if (system.abilities) {
+        stats.abilities = {};
+        for (const [key, ability] of Object.entries(system.abilities)) {
+          if (typeof ability === 'object' && ability !== null) {
+            stats.abilities[key] = {
+              score: (ability as any).value || 10,
+              modifier: (ability as any).mod || 0,
+            };
+          }
+        }
+      }
+
+      // D&D 5e Skills
+      if (system.skills) {
+        stats.skills = {};
+        for (const [key, skill] of Object.entries(system.skills)) {
+          if (typeof skill === 'object' && skill !== null) {
+            stats.skills[key] = {
+              value: (skill as any).value || 0,
+              proficient: (skill as any).proficient || false,
+              ability: (skill as any).ability || '',
+            };
+          }
+        }
+      }
+
+      // D&D 5e Saves
+      if (system.saves) {
+        stats.saves = {};
+        for (const [key, save] of Object.entries(system.saves)) {
+          if (typeof save === 'object' && save !== null) {
+            stats.saves[key] = {
+              value: (save as any).value || 0,
+              proficient: (save as any).proficient || false,
+            };
+          }
         }
       }
     }

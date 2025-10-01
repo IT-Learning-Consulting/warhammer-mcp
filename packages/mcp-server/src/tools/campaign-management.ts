@@ -5,11 +5,11 @@ import { z } from 'zod';
 import { FoundryClient } from '../foundry-client.js';
 import { ErrorHandler } from '../utils/error-handler.js';
 import { Logger } from '../logger.js';
-import { 
-  CampaignStructureSchema, 
-  CampaignPartSchema, 
+import {
+  CampaignStructureSchema,
+  CampaignPartSchema,
   CampaignTemplateSchema,
-  CampaignPartTypeSchema 
+  CampaignPartTypeSchema
 } from '@foundry-mcp/shared';
 import type { CampaignStructure, CampaignPart, CampaignTemplate } from '@foundry-mcp/shared';
 
@@ -28,17 +28,17 @@ export class CampaignManagementTools {
     return [
       {
         name: 'create-campaign-dashboard',
-        description: 'Create a comprehensive campaign dashboard journal with navigation, progress tracking, and part management',
+        description: 'Create a comprehensive campaign dashboard journal with navigation, progress tracking, and part management. Perfect for tracking multi-session adventures and campaigns in any fantasy RPG system (D&D 5e, WFRP 4e, etc.).',
         inputSchema: {
           type: 'object',
           properties: {
             campaignTitle: {
               type: 'string',
-              description: 'Title of the campaign (e.g., "The Whisperstone Conspiracy")'
+              description: 'Title of the campaign. Examples: "The Whisperstone Conspiracy" (D&D), "Shadows over Bögenhafen" (WFRP), "Enemy Within Campaign" (WFRP), "Curse of Strahd" (D&D)'
             },
             campaignDescription: {
-              type: 'string', 
-              description: 'Brief description of the campaign theme and scope'
+              type: 'string',
+              description: 'Brief description of the campaign theme and scope. For WFRP: consider grim & perilous themes, Old World politics, Chaos corruption. For D&D: classic fantasy themes, dungeons, epic quests.'
             },
             template: {
               type: 'string',
@@ -52,7 +52,7 @@ export class CampaignManagementTools {
                 properties: {
                   title: { type: 'string' },
                   description: { type: 'string' },
-                  type: { 
+                  type: {
                     type: 'string',
                     enum: ['main_part', 'sub_part', 'chapter', 'session', 'optional']
                   },
@@ -61,7 +61,7 @@ export class CampaignManagementTools {
                   subParts: {
                     type: 'array',
                     items: {
-                      type: 'object', 
+                      type: 'object',
                       properties: {
                         title: { type: 'string' },
                         description: { type: 'string' }
@@ -79,8 +79,8 @@ export class CampaignManagementTools {
               description: 'Default NPC name for quest giving (optional)'
             },
             defaultLocation: {
-              type: 'string', 
-              description: 'Default campaign location/setting (optional)'
+              type: 'string',
+              description: 'Default campaign location/setting. Examples: "The Reikland" (WFRP), "Altdorf and surrounding provinces" (WFRP), "Sword Coast" (D&D), "Waterdeep" (D&D)'
             }
           },
           required: ['campaignTitle', 'campaignDescription', 'template']
@@ -117,10 +117,10 @@ export class CampaignManagementTools {
 
       // Generate campaign structure based on template
       const campaignStructure = this.generateCampaignStructure(request);
-      
+
       // Create dashboard journal entry
       const dashboardContent = this.generateDashboardHTML(campaignStructure);
-      
+
       // Create the journal entry in Foundry (organized in campaign-specific folder)
       const journalResult = await this.foundryClient.query('foundry-mcp-bridge.createJournalEntry', {
         name: `${request.campaignTitle} - Campaign Dashboard`,
@@ -236,18 +236,26 @@ export class CampaignManagementTools {
       ],
       'dungeon-crawl': [
         { title: 'Approach & Entry', description: 'Navigate to the dungeon and overcome entrance challenges', levels: [1, 2] },
-        { title: 'Upper Levels', description: 'Explore the first floors, encounter guardians and traps', levels: [2, 4], 
-          subParts: [{ title: 'Rooms 1-3', description: 'Initial chambers and encounters' }, { title: 'Rooms 4-6', description: 'Mid-level challenges and treasures' }] },
-        { title: 'Lower Levels', description: 'Delve deeper into more dangerous areas', levels: [4, 6],
-          subParts: [{ title: 'Rooms 7-9', description: 'Advanced traps and stronger enemies' }, { title: 'Rooms 10-12', description: 'Elite encounters and hidden secrets' }] },
+        {
+          title: 'Upper Levels', description: 'Explore the first floors, encounter guardians and traps', levels: [2, 4],
+          subParts: [{ title: 'Rooms 1-3', description: 'Initial chambers and encounters' }, { title: 'Rooms 4-6', description: 'Mid-level challenges and treasures' }]
+        },
+        {
+          title: 'Lower Levels', description: 'Delve deeper into more dangerous areas', levels: [4, 6],
+          subParts: [{ title: 'Rooms 7-9', description: 'Advanced traps and stronger enemies' }, { title: 'Rooms 10-12', description: 'Elite encounters and hidden secrets' }]
+        },
         { title: 'Final Boss & Treasure', description: 'Confront the dungeon\'s master and claim the ultimate prize', levels: [6, 8] }
       ],
       'investigation': [
         { title: 'Crime Scene', description: 'Initial investigation of the incident and evidence gathering', levels: [1, 2] },
-        { title: 'Witness Interviews', description: 'Question involved parties and gather testimonies', levels: [2, 3],
-          subParts: [{ title: 'Primary Witnesses', description: 'Key individuals with direct knowledge' }, { title: 'Secondary Sources', description: 'Additional contacts and informants' }] },
-        { title: 'Following Leads', description: 'Pursue clues to multiple locations and uncover connections', levels: [3, 5],
-          subParts: [{ title: 'Location A', description: 'First lead destination' }, { title: 'Location B', description: 'Second investigation site' }, { title: 'Location C', description: 'Final clue location' }] },
+        {
+          title: 'Witness Interviews', description: 'Question involved parties and gather testimonies', levels: [2, 3],
+          subParts: [{ title: 'Primary Witnesses', description: 'Key individuals with direct knowledge' }, { title: 'Secondary Sources', description: 'Additional contacts and informants' }]
+        },
+        {
+          title: 'Following Leads', description: 'Pursue clues to multiple locations and uncover connections', levels: [3, 5],
+          subParts: [{ title: 'Location A', description: 'First lead destination' }, { title: 'Location B', description: 'Second investigation site' }, { title: 'Location C', description: 'Final clue location' }]
+        },
         { title: 'Confrontation', description: 'Face the culprit with evidence and resolve the case', levels: [5, 6] },
         { title: 'Resolution', description: 'Tie up loose ends and deliver justice or closure', levels: [6, 7] }
       ],
@@ -260,7 +268,7 @@ export class CampaignManagementTools {
     };
 
     const templateParts = templates[template] || templates['five-part-adventure'];
-    
+
     return templateParts.map((part, index) => ({
       id: `${campaignId}-part-${index + 1}`,
       title: part.title,
@@ -303,7 +311,7 @@ export class CampaignManagementTools {
   private generateDashboardHTML(campaign: CampaignStructure): string {
     const progress = this.calculateProgress(campaign);
     const currentPart = campaign.parts.find((part: CampaignPart) => part.status === 'in_progress');
-    
+
     return `<style>
 .campaign-status-toggle {
   cursor: pointer;
@@ -395,21 +403,21 @@ export class CampaignManagementTools {
     const statusIcon = this.getStatusIcon(part.status);
     const isLocked = this.isPartLocked(part, campaign);
     const lockIcon = isLocked ? '[LOCKED] ' : '';
-    
+
     // Generate simple status display
     const statusTracker = this.generateStatusTracker(part, campaign.id);
-    
+
     let html = `<div class="campaign-part ${part.status} spaced">
     <h3>${lockIcon}Part ${partNumber}: ${part.title}</h3>
     <p><strong>Status:</strong> ${statusTracker}</p>
     <p><strong>Levels:</strong> ${part.levelRecommendation.start}-${part.levelRecommendation.end}</p>`;
-    
+
     if (part.journalId) {
       html += `\n    <p><strong>@JournalEntry[${part.journalId}]{📖 View Details}</strong></p>`;
     }
-    
+
     html += `\n    <p>${part.description}</p>`;
-    
+
     // Add dependencies info if locked
     if (isLocked && part.dependencies.length > 0) {
       const depNames = part.dependencies.map((depId: string) => {
@@ -418,7 +426,7 @@ export class CampaignManagementTools {
       }).join(', ');
       html += `\n    <p class="dependencies"><small><em>Requires completion of:</em> ${depNames}</small></p>`;
     }
-    
+
     // Add sub-parts if they exist
     if (part.subParts && part.subParts.length > 0) {
       html += `\n    <div class="sub-parts">`;
@@ -433,9 +441,9 @@ export class CampaignManagementTools {
       });
       html += `\n    </div>`;
     }
-    
+
     html += `\n  </div>`;
-    
+
     return html;
   }
 
@@ -445,7 +453,7 @@ export class CampaignManagementTools {
   private getStatusIcon(status: string): string {
     const icons = {
       'not_started': '⚪',
-      'in_progress': '🔄', 
+      'in_progress': '🔄',
       'completed': '✅',
       'skipped': '⏭️'
     };
@@ -459,7 +467,7 @@ export class CampaignManagementTools {
     const statusIcon = this.getStatusIcon(part.status);
     const statusDisplay = this.formatStatus(part.status);
     const statusClass = part.status.replace('_', '-'); // Convert to CSS class format
-    
+
     // Interactive span that will be handled by Foundry hook system
     return `<span class="campaign-status-toggle ${statusClass}" 
                   data-campaign-id="${campaignId}" 
@@ -481,7 +489,7 @@ export class CampaignManagementTools {
    */
   private isPartLocked(part: CampaignPart, campaign: CampaignStructure): boolean {
     if (part.dependencies.length === 0) return false;
-    
+
     return part.dependencies.some((depId: string) => {
       const depPart = campaign.parts.find((p: CampaignPart) => p.id === depId);
       return !depPart || depPart.status !== 'completed';
@@ -494,7 +502,7 @@ export class CampaignManagementTools {
   private calculateProgress(campaign: CampaignStructure) {
     let total = 0;
     let completed = 0;
-    
+
     campaign.parts.forEach((part: any) => {
       if (part.subParts && part.subParts.length > 0) {
         total += part.subParts.length;
@@ -504,9 +512,9 @@ export class CampaignManagementTools {
         if (part.status === 'completed') completed += 1;
       }
     });
-    
+
     const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
-    
+
     return { total, completed, percentage };
   }
 

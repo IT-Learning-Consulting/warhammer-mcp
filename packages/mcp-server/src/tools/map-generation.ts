@@ -47,17 +47,17 @@ export class MapGenerationTools {
     return [
       {
         name: 'generate-map',
-        description: 'Start AI map generation using D&D Battlemaps SDXL (async)',
+        description: 'Start AI map generation using fantasy battlemap style (async). Supports maps for D&D, WFRP, and other fantasy RPG systems. Examples: "Altdorf market square with merchant stalls" (WFRP), "Reikwald forest clearing with ancient standing stones" (WFRP), "Tavern interior with fireplace" (Universal), "Underground sewer tunnels" (Universal).',
         inputSchema: {
           type: 'object',
           properties: {
             prompt: {
               type: 'string',
-              description: 'Map description (will be enhanced with "2d DnD battlemap" trigger and perspective)'
+              description: 'Map description (will be enhanced with "2d fantasy battlemap" trigger and top-down perspective). For WFRP: consider Old World architecture, grim & perilous atmosphere. For D&D: classic fantasy dungeons, taverns, wilderness.'
             },
             scene_name: {
               type: 'string',
-              description: 'Short, creative name for the Foundry scene (e.g., "Harbor District", "Moonlit Tavern", "Crystal Caverns"). Be creative and evocative!'
+              description: 'Short, creative name for the Foundry scene. WFRP examples: "Altdorf Market", "The Reikwald", "Ubersreik Gate", "Temple of Sigmar". D&D examples: "Harbor District", "Moonlit Tavern", "Crystal Caverns". Be creative and evocative!'
             },
             size: {
               type: 'string',
@@ -68,7 +68,7 @@ export class MapGenerationTools {
             grid_size: {
               type: 'number',
               default: 70,
-              description: 'Pixels per 5ft square for Foundry scene setup'
+              description: 'Pixels per grid square for Foundry scene setup. Recommended: 70 pixels for both D&D (5ft squares) and WFRP (2 yard squares)'
             }
           },
           required: ['prompt', 'scene_name']
@@ -395,8 +395,8 @@ export class MapGenerationTools {
   }
 
   private buildWorkflow(input: { prompt: string; width: number; height: number }): Record<string, any> {
-    // Enhanced prompt for D&D Battlemaps SDXL
-    const enhancedPrompt = `2d DnD battlemap of ${input.prompt}, top-down view, overhead perspective, aerial`;
+    // Enhanced prompt for fantasy battlemap generation (works for D&D, WFRP, and other fantasy systems)
+    const enhancedPrompt = `2d fantasy battlemap of ${input.prompt}, top-down view, overhead perspective, aerial`;
 
     // Negative prompt optimized for battlemap generation
     const negativePrompt = 'grid, low angle, isometric, oblique, horizon, text, watermark, logo, caption, people, creatures, monsters, blurry, artifacts';
@@ -435,7 +435,7 @@ export class MapGenerationTools {
         "inputs": {
           "seed": Math.floor(Math.random() * 1000000),
           "steps": 35, // SDXL optimized
-          "cfg": 10.0, // D&D Battlemaps SDXL guidelines
+          "cfg": 10.0, // Fantasy battlemap model guidelines
           "denoise": 1.0,
           "sampler_name": "dpmpp_2m",
           "scheduler": "karras",

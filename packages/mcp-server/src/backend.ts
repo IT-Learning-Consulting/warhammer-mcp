@@ -16,6 +16,28 @@ import { FoundryClient } from './foundry-client.js';
 
 import { CharacterTools } from './tools/character.js';
 
+import { CareerAdvancementTools } from './tools/career-advancement.js';
+
+import { CorruptionMutationTools } from './tools/corruption-mutation.js';
+
+import { FortuneFateTools } from './tools/fortune-fate.js';
+
+import { CriticalWoundsTools } from './tools/critical-wounds.js';
+
+import { AdvantageTools } from './tools/advantage-tracker.js';
+
+import { DiseaseInfectionTools } from './tools/disease-infection.js';
+
+import { InventoryManagementTools } from './tools/inventory-management.js';
+
+import { PrayerBlessingTools } from './tools/prayer-blessing.js';
+
+import { SpellMagicTools } from './tools/spell-magic.js';
+
+import { SocialStatusTools } from './tools/social-status.js';
+
+import { CustomNPCGeneratorTools } from './tools/custom-npc-generator.js';
+
 import { CompendiumTools } from './tools/compendium.js';
 
 import { SceneTools } from './tools/scene.js';
@@ -142,7 +164,7 @@ function acquireLock(): boolean {
 
             console.error(`Removing stale backend lock for PID ${lockPid}`);
 
-            try { fs.unlinkSync(LOCK_FILE); } catch {}
+            try { fs.unlinkSync(LOCK_FILE); } catch { }
 
             lockFd = fs.openSync(LOCK_FILE, 'wx');
 
@@ -152,7 +174,7 @@ function acquireLock(): boolean {
 
           console.error('Corrupt backend lock file, removing:', readErr);
 
-          try { fs.unlinkSync(LOCK_FILE); } catch {}
+          try { fs.unlinkSync(LOCK_FILE); } catch { }
 
           lockFd = fs.openSync(LOCK_FILE, 'wx');
 
@@ -172,7 +194,7 @@ function acquireLock(): boolean {
 
     fs.writeFileSync(lockFd, String(process.pid));
 
-    try { fs.fsyncSync(lockFd); } catch {}
+    try { fs.fsyncSync(lockFd); } catch { }
 
     console.error(`Acquired backend lock with PID ${process.pid}`);
 
@@ -192,9 +214,9 @@ function releaseLock(): void {
 
   try {
 
-    if (lockFd !== null) { try { fs.closeSync(lockFd); } catch {} lockFd = null; }
+    if (lockFd !== null) { try { fs.closeSync(lockFd); } catch { } lockFd = null; }
 
-    if (fs.existsSync(LOCK_FILE)) { try { fs.unlinkSync(LOCK_FILE); } catch {} }
+    if (fs.existsSync(LOCK_FILE)) { try { fs.unlinkSync(LOCK_FILE); } catch { } }
 
   } catch (error) {
 
@@ -894,6 +916,28 @@ async function startBackend(): Promise<void> {
 
   const characterTools = new CharacterTools({ foundryClient, logger });
 
+  const careerAdvancementTools = new CareerAdvancementTools({ foundryClient, logger });
+
+  const corruptionMutationTools = new CorruptionMutationTools({ foundryClient, logger });
+
+  const fortuneFateTools = new FortuneFateTools({ foundryClient, logger });
+
+  const criticalWoundsTools = new CriticalWoundsTools({ foundryClient, logger });
+
+  const advantageTools = new AdvantageTools({ foundryClient, logger });
+
+  const diseaseInfectionTools = new DiseaseInfectionTools(foundryClient, logger);
+
+  const inventoryManagementTools = new InventoryManagementTools(foundryClient, logger);
+
+  const prayerBlessingTools = new PrayerBlessingTools(foundryClient, logger);
+
+  const spellMagicTools = new SpellMagicTools(foundryClient, logger);
+
+  const socialStatusTools = new SocialStatusTools(foundryClient, logger);
+
+  const customNPCGeneratorTools = new CustomNPCGeneratorTools(foundryClient, logger);
+
   const compendiumTools = new CompendiumTools({ foundryClient, logger });
 
   const sceneTools = new SceneTools({ foundryClient, logger });
@@ -1086,6 +1130,28 @@ async function startBackend(): Promise<void> {
 
     ...characterTools.getToolDefinitions(),
 
+    ...careerAdvancementTools.getToolDefinitions(),
+
+    ...corruptionMutationTools.getToolDefinitions(),
+
+    ...fortuneFateTools.getToolDefinitions(),
+
+    ...criticalWoundsTools.getToolDefinitions(),
+
+    ...advantageTools.getToolDefinitions(),
+
+    ...diseaseInfectionTools.getToolDefinitions(),
+
+    ...inventoryManagementTools.getToolDefinitions(),
+
+    ...prayerBlessingTools.getToolDefinitions(),
+
+    ...spellMagicTools.getToolDefinitions(),
+
+    ...socialStatusTools.getToolDefinitions(),
+
+    ...customNPCGeneratorTools.getToolDefinitions(),
+
     ...compendiumTools.getToolDefinitions(),
 
     ...sceneTools.getToolDefinitions(),
@@ -1199,6 +1265,332 @@ async function startBackend(): Promise<void> {
                 case 'list-characters':
 
                   result = await characterTools.handleListCharacters(args);
+
+                  break;
+
+                // Career advancement tools
+
+                case 'get-career-advancement':
+
+                  result = await careerAdvancementTools.handleGetCareerAdvancement(args);
+
+                  break;
+
+                case 'advance-characteristic':
+
+                  result = await careerAdvancementTools.handleAdvanceCharacteristic(args);
+
+                  break;
+
+                case 'advance-skill':
+
+                  result = await careerAdvancementTools.handleAdvanceSkill(args);
+
+                  break;
+
+                case 'advance-talent':
+
+                  result = await careerAdvancementTools.handleAdvanceTalent(args);
+
+                  break;
+
+                // Corruption & Mutation tools
+
+                case 'get-corruption-status':
+
+                  result = await corruptionMutationTools.handleGetCorruptionStatus(args);
+
+                  break;
+
+                case 'add-corruption':
+
+                  result = await corruptionMutationTools.handleAddCorruption(args);
+
+                  break;
+
+                case 'remove-corruption':
+
+                  result = await corruptionMutationTools.handleRemoveCorruption(args);
+
+                  break;
+
+                case 'list-mutations':
+
+                  result = await corruptionMutationTools.handleListMutations(args);
+
+                  break;
+
+                case 'add-mutation':
+
+                  result = await corruptionMutationTools.handleAddMutation(args);
+
+                  break;
+
+                case 'remove-mutation':
+
+                  result = await corruptionMutationTools.handleRemoveMutation(args);
+
+                  break;
+
+                // Fortune & Fate tools
+
+                case 'get-fortune-fate-status':
+
+                  result = await fortuneFateTools.handleGetFortuneFateStatus(args);
+
+                  break;
+
+                case 'spend-fortune':
+
+                  result = await fortuneFateTools.handleSpendFortune(args);
+
+                  break;
+
+                case 'burn-fate':
+
+                  result = await fortuneFateTools.handleBurnFate(args);
+
+                  break;
+
+                case 'refresh-fortune':
+
+                  result = await fortuneFateTools.handleRefreshFortune(args);
+
+                  break;
+
+                // Critical Wounds tools
+
+                case 'get-critical-wounds':
+
+                  result = await criticalWoundsTools.handleGetCriticalWounds(args);
+
+                  break;
+
+                case 'add-critical-wound':
+
+                  result = await criticalWoundsTools.handleAddCriticalWound(args);
+
+                  break;
+
+                case 'remove-critical-wound':
+
+                  result = await criticalWoundsTools.handleRemoveCriticalWound(args);
+
+                  break;
+
+                case 'check-death-from-criticals':
+
+                  result = await criticalWoundsTools.handleCheckDeathFromCriticals(args);
+
+                  break;
+
+                // Advantage tools
+
+                case 'get-advantage':
+
+                  result = await advantageTools.handleGetAdvantage(args);
+
+                  break;
+
+                case 'add-advantage':
+
+                  result = await advantageTools.handleAddAdvantage(args);
+
+                  break;
+
+                case 'remove-advantage':
+
+                  result = await advantageTools.handleRemoveAdvantage(args);
+
+                  break;
+
+                case 'calculate-advantage-bonus':
+
+                  result = await advantageTools.handleCalculateAdvantageBonus(args);
+
+                  break;
+
+                // Disease & Infection tools
+
+                case 'get-diseases':
+
+                  result = await diseaseInfectionTools.handleGetDiseases(args);
+
+                  break;
+
+                case 'add-disease':
+
+                  result = await diseaseInfectionTools.handleAddDisease(args);
+
+                  break;
+
+                case 'check-infection-resilience':
+
+                  result = await diseaseInfectionTools.handleCheckInfectionResilience(args);
+
+                  break;
+
+                case 'remove-disease':
+
+                  result = await diseaseInfectionTools.handleRemoveDisease(args);
+
+                  break;
+
+                // Inventory Management tools
+
+                case 'get-inventory-status':
+
+                  result = await inventoryManagementTools.handleGetInventoryStatus(args);
+
+                  break;
+
+                case 'track-ammunition':
+
+                  result = await inventoryManagementTools.handleTrackAmmunition(args);
+
+                  break;
+
+                case 'check-encumbrance':
+
+                  result = await inventoryManagementTools.handleCheckEncumbrance(args);
+
+                  break;
+
+                case 'add-inventory-item':
+
+                  result = await inventoryManagementTools.handleAddInventoryItem(args);
+
+                  break;
+
+                case 'remove-inventory-item':
+
+                  result = await inventoryManagementTools.handleRemoveInventoryItem(args);
+
+                  break;
+
+                // Prayer & Blessing tools
+
+                case 'get-active-blessings':
+
+                  result = await prayerBlessingTools.handleGetActiveBlessings(args);
+
+                  break;
+
+                case 'invoke-prayer':
+
+                  result = await prayerBlessingTools.handleInvokePrayer(args);
+
+                  break;
+
+                case 'check-divine-favor':
+
+                  result = await prayerBlessingTools.handleCheckDivineFavor(args);
+
+                  break;
+
+                case 'add-sin-point':
+
+                  result = await prayerBlessingTools.handleAddSinPoint(args);
+
+                  break;
+
+                case 'perform-penance':
+
+                  result = await prayerBlessingTools.handlePerformPenance(args);
+
+                  break;
+
+                case 'end-blessing':
+
+                  result = await prayerBlessingTools.handleEndBlessing(args);
+
+                  break;
+
+                // Spell & Magic tools
+
+                case 'get-known-spells':
+
+                  result = await spellMagicTools.handleGetKnownSpells(args);
+
+                  break;
+
+                case 'cast-spell':
+
+                  result = await spellMagicTools.handleCastSpell(args);
+
+                  break;
+
+                case 'channel-power':
+
+                  result = await spellMagicTools.handleChannelPower(args);
+
+                  break;
+
+                case 'check-miscast':
+
+                  result = await spellMagicTools.handleCheckMiscast(args);
+
+                  break;
+
+                case 'memorize-spell':
+
+                  result = await spellMagicTools.handleMemorizeSpell(args);
+
+                  break;
+
+                case 'learn-new-spell':
+
+                  result = await spellMagicTools.handleLearnNewSpell(args);
+
+                  break;
+
+                // Social Status Tools
+                case 'get-social-status':
+
+                  result = await socialStatusTools.handleGetSocialStatus(args);
+
+                  break;
+
+                case 'change-social-status':
+
+                  result = await socialStatusTools.handleChangeSocialStatus(args);
+
+                  break;
+
+                case 'make-social-test':
+
+                  result = await socialStatusTools.handleMakeSocialTest(args);
+
+                  break;
+
+                case 'calculate-income':
+
+                  result = await socialStatusTools.handleCalculateIncome(args);
+
+                  break;
+
+                case 'check-reputation':
+
+                  result = await socialStatusTools.handleCheckReputation(args);
+
+                  break;
+
+                // Custom NPC Generator tools
+                case 'create-custom-npc':
+
+                  result = await customNPCGeneratorTools.handleCreateCustomNPC(args);
+
+                  break;
+
+                case 'list-npc-archetypes':
+
+                  result = await customNPCGeneratorTools.handleListNPCArchetypes(args);
+
+                  break;
+
+                case 'calculate-npc-xp-distribution':
+
+                  result = await customNPCGeneratorTools.handleCalculateXPDistribution(args);
 
                   break;
 
@@ -1392,7 +1784,7 @@ async function startBackend(): Promise<void> {
 
         } catch (e: any) {
 
-          try { socket.write(JSON.stringify({ error: { message: e?.message || 'Bad request' } }) + '\n'); } catch {}
+          try { socket.write(JSON.stringify({ error: { message: e?.message || 'Bad request' } }) + '\n'); } catch { }
 
         }
 

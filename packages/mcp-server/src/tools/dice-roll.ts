@@ -20,18 +20,18 @@ export class DiceRollTools {
     return [
       {
         name: 'request-player-rolls',
-        description: 'Request dice rolls from players with interactive buttons. Creates roll buttons in Foundry chat that players can click. VISIBILITY WORKFLOW: Before calling this function, ensure the user has specified whether they want a public or private roll. If they have already specified "public" or "private" in their request (e.g., "public performance check", "private stealth roll"), you can proceed directly. If the visibility is ambiguous or unspecified, ask: "Do you want this to be a PUBLIC roll (visible to all players) or PRIVATE roll (visible to player and GM only)?" and wait for their answer. Supports character-to-player resolution and GM fallback.',
+        description: 'Request dice rolls from players with interactive buttons. Creates roll buttons in Foundry chat that players can click. Supports both D&D 5e (d20 system) and WFRP 4e (d100 system). Examples: "Roll Weapon Skill for Hans" (WFRP), "Test Willpower against fear" (WFRP), "Roll stealth for Clark" (D&D), "Make a perception check" (D&D). VISIBILITY WORKFLOW: Before calling this function, ensure the user has specified whether they want a public or private roll. If they have already specified "public" or "private" in their request (e.g., "public performance check", "private stealth roll"), you can proceed directly. If the visibility is ambiguous or unspecified, ask: "Do you want this to be a PUBLIC roll (visible to all players) or PRIVATE roll (visible to player and GM only)?" and wait for their answer. Supports character-to-player resolution and GM fallback.',
         inputSchema: {
           type: 'object',
           properties: {
             rollType: {
               type: 'string',
-              description: 'Type of roll to request (ability, skill, save, attack, initiative, custom)',
-              enum: ['ability', 'skill', 'save', 'attack', 'initiative', 'custom']
+              description: 'Type of roll to request. D&D: ability, skill, save, attack, initiative. WFRP: characteristic (for WS/BS/S/T/I/Ag/Dex/Int/WP/Fel tests), skill (for WFRP skills like Melee/Ranged/Channelling), custom',
+              enum: ['ability', 'characteristic', 'skill', 'save', 'attack', 'initiative', 'custom']
             },
             rollTarget: {
-              type: 'string', 
-              description: 'Target for the roll - can be ability name (str, dex, con, int, wis, cha), skill name (perception, insight, stealth, etc.), or custom roll formula'
+              type: 'string',
+              description: 'Target for the roll. D&D: ability name (str, dex, con, int, wis, cha), skill name (perception, insight, stealth, etc.). WFRP: characteristic code (ws, bs, s, t, i, ag, dex, int, wp, fel) or skill name (melee, ranged, channelling, charm, etc.), or custom roll formula (e.g., "1d100<=50")'
             },
             targetPlayer: {
               type: 'string',
@@ -48,12 +48,12 @@ export class DiceRollTools {
             },
             rollModifier: {
               type: 'string',
-              description: 'Optional modifier to add to the roll (e.g., "+2", "-1", "+1d4")',
+              description: 'Optional modifier to add to the roll. D&D: "+2", "-1", "+1d4". WFRP: "+10", "-20" (modifies target number for d100 rolls)',
               default: ''
             },
             flavor: {
               type: 'string',
-              description: 'Optional flavor text to describe the roll context',
+              description: 'Optional flavor text to describe the roll context (e.g., "Testing fear against the approaching beastmen", "Sneaking past the guard")',
               default: ''
             }
           },
@@ -65,7 +65,7 @@ export class DiceRollTools {
 
   async handleRequestPlayerRolls(args: any) {
     const schema = z.object({
-      rollType: z.enum(['ability', 'skill', 'save', 'attack', 'initiative', 'custom']),
+      rollType: z.enum(['ability', 'characteristic', 'skill', 'save', 'attack', 'initiative', 'custom']),
       rollTarget: z.string(),
       targetPlayer: z.string(),
       isPublic: z.boolean(),
@@ -76,18 +76,18 @@ export class DiceRollTools {
 
     try {
       const params = schema.parse(args);
-      
+
       // Validation should be handled by schema, but add extra safety checks
       if (typeof params.isPublic !== 'boolean') {
         return 'Please specify whether you want this to be a PUBLIC roll (visible to all players) or PRIVATE roll (visible only to the target player and GM). You must provide either "true" for public or "false" for private.';
       }
-      
+
       if (params.userConfirmedVisibility !== true) {
         return 'You must determine the roll visibility before calling this function. Either: 1) The user already specified "public" or "private" in their request, or 2) You need to ask: "Do you want this to be a PUBLIC roll or PRIVATE roll?" Set userConfirmedVisibility to true only when you are confident about the visibility preference.';
       }
-      
+
       const response = await this.foundryClient.query('foundry-mcp-bridge.request-player-rolls', params);
-      
+
       if (response.success) {
         return `Roll request sent successfully! ${response.message}`;
       } else {

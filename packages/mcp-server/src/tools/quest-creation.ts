@@ -45,17 +45,17 @@ export class QuestCreationTools {
     return [
       {
         name: 'create-quest-journal',
-        description: 'Create a new quest journal entry with AI-generated content based on natural language description',
+        description: 'Create a new quest journal entry with AI-generated content based on natural language description. Examples: "Investigate cultists in Ubersreik" (WFRP), "Recover a lost heirloom from the sewers" (WFRP), "Investigate missing villagers in Phandalin" (D&D)',
         inputSchema: {
           type: 'object',
           properties: {
             questTitle: {
               type: 'string',
-              description: 'The title of the quest'
+              description: 'The title of the quest (e.g., "The Cult of the Purple Hand", "Lost in the Old World", "Missing Merchant Caravan")'
             },
             questDescription: {
               type: 'string',
-              description: 'Detailed description of what the quest should accomplish'
+              description: 'Detailed description of what the quest should accomplish. For WFRP: consider Chaos cults, Skaven activity, political intrigue, or Old World dangers. For D&D: dungeons, monsters, magic artifacts'
             },
             questType: {
               type: 'string',
@@ -69,11 +69,11 @@ export class QuestCreationTools {
             },
             location: {
               type: 'string',
-              description: 'Where the quest takes place (optional)'
+              description: 'Where the quest takes place (e.g., "Altdorf sewers", "The Reikwald", "Ubersreik", "Neverwinter", "Waterdeep")'
             },
             questGiver: {
               type: 'string',
-              description: 'Name of the NPC who gives this quest to the party (optional)'
+              description: 'Name of the NPC who gives this quest to the party (e.g., "Captain Marcus", "Sister Elsbeth", "Lord Rickard Aschaffenberg")'
             },
             npcName: {
               type: 'string',
@@ -190,7 +190,7 @@ export class QuestCreationTools {
       });
 
       const request = requestSchema.parse(args);
-      
+
       // Generate formatted quest content
       const questContent = this.generateQuestContent(request);
 
@@ -311,11 +311,11 @@ export class QuestCreationTools {
       if (!result) {
         throw new Error('Failed to update quest journal: No response from Foundry');
       }
-      
+
       if (result.error) {
         throw new Error(`Failed to update quest journal: ${result.error}`);
       }
-      
+
       if (!result.success) {
         throw new Error('Failed to update quest journal: Update operation returned failure');
       }
@@ -456,7 +456,7 @@ export class QuestCreationTools {
             const content = await this.foundryClient.query('foundry-mcp-bridge.getJournalContent', {
               journalId: journal.id
             });
-            
+
             if (content?.content?.toLowerCase().includes(query)) {
               matches = true;
               matchInfo.matchType.push('content');
@@ -492,7 +492,7 @@ export class QuestCreationTools {
   private generateQuestContent(request: QuestJournalRequest): string {
     // Build the HTML body content using professional template fragments
     const htmlBody = this.buildStyledQuestContent(request);
-    
+
     // Wrap in styled template
     return this.createStyledJournal(request.questTitle, htmlBody);
   }
@@ -536,115 +536,115 @@ export class QuestCreationTools {
    */
   private buildStyledQuestContent(request: QuestJournalRequest): string {
     let htmlBody = '';
-    
+
     // Lead paragraph with quest summary  
     htmlBody += `<p class="lead">${request.questDescription}</p>`;
-    
+
     // Background section (if we have enough detail to warrant it)
     if (request.location || request.questGiver || request.npcName) {
       htmlBody += '<h2>Background</h2>';
       let backgroundText = this.generateBackgroundText(request);
       htmlBody += `<p>${backgroundText}</p>`;
     }
-    
+
     // Quest details in two-column layout
     if (request.questType || request.difficulty || request.location || request.npcName || request.rewards) {
       htmlBody += '<div class="grid-2">';
-      
+
       // Left column - Quest Details
       htmlBody += '<div><h3>Quest Details</h3><ul>';
-      
+
       if (request.questType) {
         htmlBody += `<li><strong>Type:</strong> ${request.questType.charAt(0).toUpperCase() + request.questType.slice(1)} Quest</li>`;
       }
-      
+
       if (request.difficulty) {
         htmlBody += `<li><strong>Difficulty:</strong> ${request.difficulty.charAt(0).toUpperCase() + request.difficulty.slice(1)}</li>`;
       }
-      
+
       if (request.location) {
         htmlBody += `<li><strong>Location:</strong> ${request.location}</li>`;
       }
-      
+
       if (request.questGiver) {
         htmlBody += `<li><strong>Quest Giver:</strong> ${request.questGiver}</li>`;
       }
-      
+
       if (request.npcName) {
         htmlBody += `<li><strong>Key NPC:</strong> ${request.npcName}</li>`;
       }
-      
+
       htmlBody += '</ul></div>';
-      
+
       // Right column - Rewards & Status
       htmlBody += '<div><h3>Rewards & Status</h3><ul>';
-      
+
       if (request.rewards) {
         htmlBody += `<li><strong>Rewards:</strong> ${request.rewards}</li>`;
       }
-      
+
       htmlBody += `<li><strong>Status:</strong> Active</li>`;
       htmlBody += `<li><strong>Created:</strong> ${new Date().toLocaleDateString()}</li>`;
-      
+
       htmlBody += '</ul></div>';
       htmlBody += '</div>'; // Close grid-2
     }
-    
+
     // Adventure Hook section with proper quest giver logic
     htmlBody += '<h2 class="spaced">Adventure Hook</h2>';
     htmlBody += '<div class="readaloud">';
-    
+
     const hookText = this.generateAdventureHook(request);
     htmlBody += hookText;
     htmlBody += '</div>';
-    
+
     // GM Notes section with specific guidance
     htmlBody += '<div class="gmnote">';
     let gmNotes = '<p><strong>GM Notes:</strong> ';
-    
+
     if (request.difficulty) {
       gmNotes += `This ${request.difficulty} difficulty quest `;
     } else {
       gmNotes += 'This quest ';
     }
-    
+
     if (request.questType) {
       gmNotes += `is designed as a ${request.questType} quest. `;
     }
-    
+
     gmNotes += 'Adjust encounters, NPCs, and obstacles to match your party\'s level and campaign tone. ';
-    
+
     if (request.location) {
       gmNotes += `Consider the specific details of ${request.location} in your world. `;
     }
-    
+
     if (request.rewards) {
       gmNotes += 'The specified rewards can be modified to better fit your campaign\'s economy and progression.';
     } else {
       gmNotes += 'Consider appropriate rewards based on the quest\'s difficulty and your party\'s level.';
     }
-    
+
     gmNotes += '</p>';
     htmlBody += gmNotes;
     htmlBody += '</div>';
-    
+
     // Quest Objectives section with intelligent objectives
     htmlBody += '<h2 class="spaced">Quest Objectives</h2>';
     htmlBody += '<ul>';
-    
+
     const objectives = this.generateQuestObjectives(request);
     objectives.forEach(objective => {
       htmlBody += `<li>${objective}</li>`;
     });
-    
+
     htmlBody += '</ul>';
-    
+
     // Progress tracking section
     htmlBody += '<h2 class="spaced">Progress Notes</h2>';
     htmlBody += '<div class="gmnote">';
     htmlBody += '<p><strong>GM Note:</strong> Use this section to track quest progress, player decisions, and any modifications made during gameplay.</p>';
     htmlBody += '</div>';
-    
+
     return htmlBody;
   }
 
@@ -654,7 +654,7 @@ export class QuestCreationTools {
    */
   private addNPCLinkToJournal(content: string, npcName: string, relationship: string): string {
     const relationshipText = relationship.replace('_', ' ');
-    
+
     // Look for existing Related NPCs section in the grid
     if (content.includes('<h3>Related NPCs</h3>')) {
       // Add to existing NPC list
@@ -686,10 +686,10 @@ export class QuestCreationTools {
     const timestamp = new Date().toLocaleDateString();
     const formattedContent = this.formatUpdateContentForFoundry(newContent);
     let updateSection = '';
-    
+
     // Check if content already has custom headings (like "<h2>The Thorned Grove</h2>")
     const hasCustomHeading = /<h[1-6][^>]*>.*<\/h[1-6]>/i.test(newContent);
-    
+
     if (hasCustomHeading) {
       // Content already has themed sections - insert directly as peer sections
       // This allows custom headings like "<h2>The Thorned Grove</h2>" to be main sections
@@ -711,14 +711,14 @@ export class QuestCreationTools {
           break;
       }
     }
-    
+
     // Update quest status in the grid for completion/failure
     if (updateType === 'completion') {
       currentContent = currentContent.replace('<li><strong>Status:</strong> Active</li>', '<li><strong>Status:</strong> Completed</li>');
     } else if (updateType === 'failure') {
       currentContent = currentContent.replace('<li><strong>Status:</strong> Active</li>', '<li><strong>Status:</strong> Failed</li>');
     }
-    
+
     // Add the update section before the closing section tag
     // Handle both possible closing patterns (with/without spacing)
     if (currentContent.includes('</div>\n    </section>')) {
@@ -737,19 +737,19 @@ export class QuestCreationTools {
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;');
-    
+
     // Convert line breaks to paragraphs
     const paragraphs = escaped.split('\n\n').filter(p => p.trim().length > 0);
-    
+
     if (paragraphs.length === 0) {
       return '<p></p>';
     }
-    
+
     if (paragraphs.length === 1) {
       // Single paragraph - handle line breaks within it
       return `<p>${paragraphs[0].replace(/\n/g, '<br>')}</p>`;
     }
-    
+
     // Multiple paragraphs
     return paragraphs.map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('');
   }
@@ -761,14 +761,14 @@ export class QuestCreationTools {
   private formatUpdateContentForFoundry(content: string): string {
     // Trim whitespace
     const trimmed = content.trim();
-    
+
     if (!trimmed) {
       return '<p></p>';
     }
-    
+
     // Check if content already contains HTML tags - preserve them like create-quest-journal
     const hasHTMLTags = /<[^>]+>/.test(trimmed);
-    
+
     if (hasHTMLTags) {
       // Content already has HTML structure - return as-is for themed sections
       // This allows custom headings like "<h2>The Thorned Grove</h2>" to work properly
@@ -776,16 +776,16 @@ export class QuestCreationTools {
     } else {
       // Plain text content - convert to paragraphs with line break handling
       const paragraphs = trimmed.split('\n\n').filter(p => p.trim().length > 0);
-      
+
       if (paragraphs.length === 0) {
         return '<p></p>';
       }
-      
+
       if (paragraphs.length === 1) {
         // Single paragraph - handle line breaks within it
         return `<p>${paragraphs[0].replace(/\n/g, '<br>')}</p>`;
       }
-      
+
       // Multiple paragraphs
       return paragraphs.map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('');
     }
@@ -806,10 +806,10 @@ export class QuestCreationTools {
   private extractSnippet(content: string, searchTerm: string, maxLength: number = 200): string {
     const index = content.toLowerCase().indexOf(searchTerm.toLowerCase());
     if (index === -1) return '';
-    
+
     const start = Math.max(0, index - 50);
     const end = Math.min(content.length, index + maxLength);
-    
+
     return '...' + content.substring(start, end) + '...';
   }
 
@@ -818,30 +818,30 @@ export class QuestCreationTools {
    */
   private determineNPCRole(questDescription: string, npcName?: string): 'quest_giver' | 'antagonist' | 'neutral' {
     if (!npcName) return 'neutral';
-    
+
     const desc = questDescription.toLowerCase();
     const name = npcName.toLowerCase();
-    
+
     // Keywords that suggest antagonist role
     const antagonistKeywords = [
-      'stop', 'defeat', 'confront', 'evil', 'corrupt', 'mad', 'insane', 
+      'stop', 'defeat', 'confront', 'evil', 'corrupt', 'mad', 'insane',
       'villain', 'enemy', 'threat', 'dangerous', 'rogue', 'gone wrong',
       'obsessed', 'twisted', 'dark', 'forbidden', 'necro', 'tyrant',
       'bandit', 'cultist', 'possessed', 'cursed', 'malevolent'
     ];
-    
+
     // Check if the description mentions the NPC in an antagonistic context
-    const hasAntagonistContext = antagonistKeywords.some(keyword => 
+    const hasAntagonistContext = antagonistKeywords.some(keyword =>
       desc.includes(keyword) && desc.includes(name)
     );
-    
+
     // Check for explicit antagonist phrasing
-    const explicitAntagonist = desc.includes(`${name} has`) || 
-                              desc.includes(`${name} is`) ||
-                              desc.includes(`confront ${name}`) ||
-                              desc.includes(`stop ${name}`) ||
-                              desc.includes(`defeat ${name}`);
-    
+    const explicitAntagonist = desc.includes(`${name} has`) ||
+      desc.includes(`${name} is`) ||
+      desc.includes(`confront ${name}`) ||
+      desc.includes(`stop ${name}`) ||
+      desc.includes(`defeat ${name}`);
+
     return hasAntagonistContext || explicitAntagonist ? 'antagonist' : 'quest_giver';
   }
 
@@ -850,7 +850,7 @@ export class QuestCreationTools {
    */
   private generateBackgroundText(request: QuestJournalRequest): string {
     let backgroundText = '';
-    
+
     if (request.questGiver && request.location) {
       backgroundText = `This quest is provided by ${request.questGiver} and takes place in ${request.location}. `;
     } else if (request.questGiver) {
@@ -860,11 +860,11 @@ export class QuestCreationTools {
     } else {
       backgroundText = `This quest involves the party's investigation and action. `;
     }
-    
+
     if (request.npcName) {
       backgroundText += `The quest centers around ${request.npcName}. `;
     }
-    
+
     backgroundText += 'Adjust these details as needed for your campaign.';
     return backgroundText;
   }
@@ -874,11 +874,11 @@ export class QuestCreationTools {
    */
   private generateAdventureHook(request: QuestJournalRequest): string {
     let hookText = '<p><strong>Read-Aloud:</strong> ';
-    
+
     if (request.questGiver) {
       // Use the explicit quest giver with crafted dialogue
       hookText += `${request.questGiver} approaches the party with evident concern. `;
-      
+
       if (request.location && request.npcName) {
         hookText += `"There's been trouble in ${request.location} involving ${request.npcName}. `;
       } else if (request.location) {
@@ -888,11 +888,11 @@ export class QuestCreationTools {
       } else {
         hookText += `"I have urgent news that requires your attention. `;
       }
-      
+
       // Create specific dialogue based on quest type and content
       const hookDialogue = this.generateQuestGiverDialogue(request);
       hookText += `${hookDialogue}" ${request.questGiver} pauses, clearly hoping you'll take action.`;
-      
+
     } else {
       // No explicit quest giver - use rumors/reports format
       if (request.location) {
@@ -900,12 +900,12 @@ export class QuestCreationTools {
       } else {
         hookText += `Disturbing rumors begin circulating in the area. `;
       }
-      
+
       // Create specific rumor content
       const rumorContent = this.generateRumorHook(request);
       hookText += `${rumorContent} The situation clearly demands investigation before it worsens.`;
     }
-    
+
     hookText += '</p>';
     return hookText;
   }
@@ -915,7 +915,7 @@ export class QuestCreationTools {
    */
   private generateQuestGiverDialogue(request: QuestJournalRequest): string {
     const desc = request.questDescription.toLowerCase();
-    
+
     if (desc.includes('blight') || desc.includes('corruption')) {
       return `A strange blight is spreading, and crops are turning into something unnatural. The situation grows worse by the day`;
     } else if (desc.includes('missing') || desc.includes('disappeared')) {
@@ -939,7 +939,7 @@ export class QuestCreationTools {
    */
   private generateRumorHook(request: QuestJournalRequest): string {
     const desc = request.questDescription.toLowerCase();
-    
+
     if (desc.includes('wizard') || desc.includes('magic')) {
       return `Witnesses speak of uncontrolled magical experiments and their terrifying consequences.`;
     } else if (desc.includes('blight') || desc.includes('corruption')) {
@@ -958,7 +958,7 @@ export class QuestCreationTools {
    */
   private generateQuestObjectives(request: QuestJournalRequest): string[] {
     const objectives: string[] = [];
-    
+
     // Add type-specific objectives
     if (request.questType === 'fetch') {
       objectives.push('Locate and retrieve the required item or information');
@@ -989,19 +989,19 @@ export class QuestCreationTools {
         actionWords.forEach(action => objectives.push(action));
       }
     }
-    
+
     // Add reporting objective based on quest giver
     if (request.questGiver) {
       objectives.push(`Report back to ${request.questGiver} upon completion`);
     } else {
       objectives.push('Report the outcome to the appropriate authorities');
     }
-    
+
     // Add rewards objective if specified
     if (request.rewards) {
       objectives.push('Claim the promised rewards');
     }
-    
+
     return objectives;
   }
 
@@ -1011,12 +1011,12 @@ export class QuestCreationTools {
   private isLikelyAntagonist(description: string, npcName: string): boolean {
     const desc = description.toLowerCase();
     const name = npcName.toLowerCase().split(' ')[0]; // Use first name only
-    
+
     const antagonistPhrases = [
-      'confront', 'stop', 'defeat', 'gone wrong', 'obsessed', 
+      'confront', 'stop', 'defeat', 'gone wrong', 'obsessed',
       'mad', 'threat', 'corrupted', 'evil', 'dangerous'
     ];
-    
+
     return antagonistPhrases.some(phrase => desc.includes(phrase)) && desc.includes(name);
   }
 
@@ -1025,7 +1025,7 @@ export class QuestCreationTools {
    */
   private extractActionObjectives(description: string): string[] {
     const objectives: string[] = [];
-    
+
     // Look for action phrases in the description
     if (description.includes('investigate')) {
       objectives.push('Investigate the mysterious circumstances');
@@ -1039,14 +1039,14 @@ export class QuestCreationTools {
     if (description.includes('stop') || description.includes('prevent')) {
       objectives.push('Prevent further spread of the threat');
     }
-    
+
     // If no specific actions found, create generic objective
     if (objectives.length === 0) {
       const words = description.split(' ');
       const briefObjective = words.slice(0, 15).join(' ') + (words.length > 15 ? '...' : '');
       objectives.push(`Complete the main objective: ${briefObjective}`);
     }
-    
+
     return objectives;
   }
 
@@ -1056,7 +1056,7 @@ export class QuestCreationTools {
    */
   private convertMarkdownToPlainText(content: string): string {
     const originalContent = content;
-    
+
     // Convert common Markdown patterns to plain text
     content = content
       .replace(/\*\*(.+?)\*\*/g, '$1')           // **bold** → bold
@@ -1067,12 +1067,12 @@ export class QuestCreationTools {
       .replace(/^[-*+]\s+(.+)/gm, '$1')         // - item → item
       .replace(/^\d+\.\s+(.+)/gm, '$1')         // 1. item → item
       .replace(/^>\s*(.+)/gm, '$1');            // > quote → quote
-    
+
     // If we made changes, log a warning (but don't block)
     if (content !== originalContent) {
       this.logger.warn('Automatically converted Markdown formatting to plain text. Future updates will work better with plain text input.');
     }
-    
+
     return content;
   }
 }

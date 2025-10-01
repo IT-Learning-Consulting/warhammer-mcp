@@ -27,16 +27,16 @@ export class ActorCreationTools {
     return [
       {
         name: 'create-actor-from-compendium',
-        description: 'Create one or more actors from a specific compendium entry with custom names. Use search-compendium first to find the exact creature you want, then use this tool with the packId and itemId from the search results.',
+        description: 'Create one or more actors from a specific compendium entry with custom names. Supports both D&D 5e and WFRP 4e systems. Use search-compendium first to find the exact creature you want, then use this tool with the packId and itemId from the search results.',
         inputSchema: {
           type: 'object',
           properties: {
             packId: {
               type: 'string',
-              description: 'ID of the compendium pack containing the creature (e.g., "dnd5e.monsters")',
+              description: 'ID of the compendium pack containing the creature (D&D 5e: "dnd5e.monsters"; WFRP 4e: "wfrp4e.bestiary" or similar)',
             },
             itemId: {
-              type: 'string', 
+              type: 'string',
               description: 'ID of the specific creature entry within the pack (get this from search-compendium results)',
             },
             names: {
@@ -217,10 +217,10 @@ export class ActorCreationTools {
    * Format compendium entry response
    */
   private formatCompendiumEntryResponse(entry: any): any {
-    const itemsInfo = entry.items?.length > 0 
+    const itemsInfo = entry.items?.length > 0
       ? `\n📦 Items: ${entry.items.map((item: any) => item.name).join(', ')}`
       : '';
-    
+
     const effectsInfo = entry.effects?.length > 0
       ? `\n✨ Effects: ${entry.effects.map((effect: any) => effect.name).join(', ')}`
       : '';
@@ -242,12 +242,12 @@ export class ActorCreationTools {
    */
   private formatSimpleActorCreationResponse(result: any, packId: string, itemId: string, customNames: string[]): any {
     const summary = `✅ Created ${result.totalCreated} of ${result.totalRequested} requested actors`;
-    
-    const details = result.actors.map((actor: any) => 
+
+    const details = result.actors.map((actor: any) =>
       `• **${actor.name}** (from ${packId})`
     ).join('\n');
 
-    const sceneInfo = result.tokensPlaced > 0 
+    const sceneInfo = result.tokensPlaced > 0
       ? `\n🎯 Added ${result.tokensPlaced} tokens to the current scene`
       : '';
 
