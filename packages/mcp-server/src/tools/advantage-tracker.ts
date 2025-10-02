@@ -256,6 +256,14 @@ export class AdvantageTools {
             const newAdvantage = Math.min(advantageMax, advantageCurrent + amount);
             const actualGain = newAdvantage - advantageCurrent;
 
+            // Update Advantage
+            await this.foundryClient.query('foundry-mcp-bridge.updateActor', {
+                actorId: character.id,
+                updateData: {
+                    'system.status.advantage.value': newAdvantage,
+                },
+            });
+
             // Build response
             let response = `# Advantage Gained: ${character.name}\n\n`;
             response += `**Reason**: ${reason}\n\n`;
@@ -312,7 +320,7 @@ export class AdvantageTools {
             }
 
             response += `## 🎲 Next Steps\n`;
-            response += `1. Update ${character.name}'s Advantage to **${newAdvantage}** in Foundry VTT\n`;
+            response += `1. ✅ Advantage updated to **${newAdvantage}** in Foundry VTT\n`;
             response += `2. Add +${newAdvantage * 10} to all combat tests\n`;
             response += `3. Track Advantage changes throughout combat\n`;
             response += `4. Remember: Advantage typically resets at combat end\n`;
@@ -361,6 +369,14 @@ export class AdvantageTools {
             if (advantageCurrent === 0) {
                 return `${character.name} already has 0 Advantage. No Advantage to lose.`;
             }
+
+            // Update Advantage
+            await this.foundryClient.query('foundry-mcp-bridge.updateActor', {
+                actorId: character.id,
+                updateData: {
+                    'system.status.advantage.value': newAdvantage,
+                },
+            });
 
             // Build response
             let response = `# Advantage Lost: ${character.name}\n\n`;
@@ -416,7 +432,7 @@ export class AdvantageTools {
             }
 
             response += `## 🎲 Next Steps\n`;
-            response += `1. Update ${character.name}'s Advantage to **${newAdvantage}** in Foundry VTT\n`;
+            response += `1. ✅ Advantage updated to **${newAdvantage}** in Foundry VTT\n`;
             if (newAdvantage > 0) {
                 response += `2. Apply +${newAdvantage * 10} bonus to remaining combat tests\n`;
                 response += `3. Work to rebuild Advantage through successful actions\n`;

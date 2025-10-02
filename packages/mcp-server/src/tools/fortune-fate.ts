@@ -270,7 +270,7 @@ export class FortuneFateTools {
 
             // Update the character
             await this.foundryClient.query('foundry-mcp-bridge.updateActor', {
-                actorId: character._id,
+                actorId: character.id,
                 updateData: {
                     'system.status.fortune.value': newFortune,
                 },
@@ -369,7 +369,7 @@ export class FortuneFateTools {
 
             // Update the character
             await this.foundryClient.query('foundry-mcp-bridge.updateActor', {
-                actorId: character._id,
+                actorId: character.id,
                 updateData: {
                     'system.status.fate.value': newFate,
                     'system.status.fate.max': newFateMax,
@@ -482,7 +482,7 @@ export class FortuneFateTools {
 
             // Update the character
             await this.foundryClient.query('foundry-mcp-bridge.updateActor', {
-                actorId: character._id,
+                actorId: character.id,
                 updateData: {
                     'system.status.fortune.value': fortuneMax,
                 },

@@ -260,11 +260,15 @@ Returns breakdown showing:
                 };
 
                 // Set characteristics with advances
+                // WFRP 4e system: value = initial + advances + modifier
+                // - initial: Base characteristic from species (20 + 2d10 for humans, etc.)
+                // - advances: Number of advances bought with XP (each advance = +1 to stat)
+                // - Each advance costs progressively more XP [25,30,40,50,70,90,120,150,190,240]
                 const charOrder = ['ws', 'bs', 's', 't', 'i', 'ag', 'dex', 'int', 'wp', 'fel'];
                 for (const char of charOrder) {
                     actorData.system.characteristics[char] = {
                         initial: xpDistribution.characteristics[char].base,
-                        advances: xpDistribution.characteristics[char].advances,
+                        advances: xpDistribution.characteristics[char].advances, // Number of advances (not multiplied!)
                         modifier: 0
                     };
                 }
@@ -274,7 +278,7 @@ Returns breakdown showing:
                     actorData: actorData
                 });
 
-                createdActorId = actor._id;
+                createdActorId = actor.id;
                 this.logger.info("Created NPC actor", { actorId: createdActorId, name: args.name });
 
                 // Add skills as items
@@ -284,11 +288,25 @@ Returns breakdown showing:
                             name: skill.name,
                             type: 'skill',
                             system: {
-                                advances: {
-                                    value: skill.advances
+                                advanced: {
+                                    value: 'bsc' // Most skills are basic; could be improved by checking against advanced skill list
+                                },
+                                grouped: {
+                                    value: 'noSpec' // Most skills don't have specializations
                                 },
                                 characteristic: {
                                     value: skill.linkedCharacteristic || 'ws'
+                                },
+                                advances: {
+                                    value: skill.advances, // Number of advances bought (each adds +1 to skill)
+                                    costModifier: 0,
+                                    force: false
+                                },
+                                modifier: {
+                                    value: 0
+                                },
+                                total: {
+                                    value: skill.total
                                 }
                             }
                         };
@@ -309,10 +327,14 @@ Returns breakdown showing:
                             name: talent.name,
                             type: 'talent',
                             system: {
-                                advances: {
-                                    value: 1
+                                max: {
+                                    value: 'none' // Most talents can be taken multiple times; could be improved with specific max values
                                 },
-                                description: {
+                                advances: {
+                                    value: talent.rank || 1,
+                                    force: false
+                                },
+                                tests: {
                                     value: talent.description || ''
                                 }
                             }
@@ -743,6 +765,8 @@ Returns breakdown showing:
         archetype: any,
         baseCharacteristics: any
     ) {
+        // XP costs per advance for each tier (every 5 advances, cost increases)
+        // Advances 0-4 cost 25 each, 5-9 cost 30 each, 10-14 cost 40 each, etc.
         const characteristicXPCosts = [25, 30, 40, 50, 70, 90, 120, 150, 190, 240];
         const skillXPCosts = [10, 15, 20, 30, 40, 60, 80, 110, 140, 180];
         const talentXPCost = 100;
@@ -776,18 +800,27 @@ Returns breakdown showing:
                 charBudget = Math.floor(charXP * tertiaryShare / archetype.tertiaryCharacteristics.length);
             }
 
-            // Calculate advances
+            // Calculate how many advances we can afford with this budget
+            // Each tier of 5 advances has a different cost
             let advances = 0;
             let spent = 0;
-            for (let i = 0; i < characteristicXPCosts.length && spent + characteristicXPCosts[i] <= charBudget; i++) {
-                spent += characteristicXPCosts[i];
-                advances++;
+
+            while (spent < charBudget && advances < 50) {
+                const tier = Math.floor(advances / 5); // Which cost tier are we in?
+                const costPerAdvance = characteristicXPCosts[tier] || characteristicXPCosts[characteristicXPCosts.length - 1];
+
+                if (spent + costPerAdvance <= charBudget) {
+                    spent += costPerAdvance;
+                    advances++;
+                } else {
+                    break; // Can't afford next advance
+                }
             }
 
             characteristics[char] = {
                 base: baseCharacteristics[char],
                 advances: advances,
-                final: baseCharacteristics[char] + (advances * 5),
+                final: baseCharacteristics[char] + advances, // Each advance adds +1, not +5
                 xpSpent: spent
             };
             charXPSpent += spent;
@@ -803,21 +836,29 @@ Returns breakdown showing:
             let advances = 0;
             let spent = 0;
 
-            for (let i = 0; i < skillXPCosts.length && spent + skillXPCosts[i] <= xpPerSkill; i++) {
-                spent += skillXPCosts[i];
-                advances++;
+            // Calculate skill advances same way as characteristics
+            while (spent < xpPerSkill && advances < 50) {
+                const tier = Math.floor(advances / 5);
+                const costPerAdvance = skillXPCosts[tier] || skillXPCosts[skillXPCosts.length - 1];
+
+                if (spent + costPerAdvance <= xpPerSkill) {
+                    spent += costPerAdvance;
+                    advances++;
+                } else {
+                    break;
+                }
             }
 
             if (advances > 0) {
-                // Assume skill starts at characteristic value
+                // Skill total = characteristic value + advances + modifier
                 const linkedChar = this.getLinkedCharacteristic(skillName);
-                const baseValue = characteristics[linkedChar]?.final || 30;
+                const charValue = characteristics[linkedChar]?.final || 30;
 
                 skills.push({
                     name: skillName,
                     advances: advances,
                     xpSpent: spent,
-                    total: baseValue + (advances * 5),
+                    total: charValue + advances, // Each skill advance adds +1, not +5
                     linkedCharacteristic: linkedChar
                 });
                 skillXPSpent += spent;

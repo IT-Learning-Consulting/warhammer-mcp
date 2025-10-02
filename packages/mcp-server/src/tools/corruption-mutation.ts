@@ -415,15 +415,22 @@ export class CorruptionMutationTools {
             response += `- Moderate (${thresholds.moderate}): ${newCorruption >= thresholds.moderate ? '⚠️ EXCEEDED' : `${thresholds.moderate - newCorruption} points away`}\n`;
             response += `- Major (${thresholds.major}): ${newCorruption >= thresholds.major ? '⚠️ EXCEEDED' : `${thresholds.major - newCorruption} points away`}\n\n`;
 
+            // Actually update the actor in Foundry
+            await this.foundryClient.query('foundry-mcp-bridge.updateActor', {
+                actorId: character.id,
+                updateData: {
+                    'system.status.corruption.value': newCorruption,
+                },
+            });
+
             response += `## 💡 Next Steps\n`;
-            response += `1. Update ${character.name}'s Corruption value to ${newCorruption} in Foundry\n`;
             if (crossedThresholds.length > 0) {
-                response += `2. Roll for mutation(s) on the appropriate Corruption table(s)\n`;
-                response += `3. Add the mutation(s) to ${character.name}'s character sheet\n`;
-                response += `4. Roleplay the physical or mental changes\n`;
+                response += `1. Roll for mutation(s) on the appropriate Corruption table(s)\n`;
+                response += `2. Add the mutation(s) to ${character.name}'s character sheet\n`;
+                response += `3. Roleplay the physical or mental changes\n`;
             } else {
-                response += `2. Note the Corruption source in ${character.name}'s background\n`;
-                response += `3. Consider the psychological impact of the exposure\n`;
+                response += `1. Note the Corruption source in ${character.name}'s background\n`;
+                response += `2. Consider the psychological impact of the exposure\n`;
             }
 
             return response;
@@ -571,7 +578,7 @@ export class CorruptionMutationTools {
             const newCorruption = currentCorruption - amountToRemove;
 
             await this.foundryClient.query('foundry-mcp-bridge.updateActor', {
-                actorId: character._id,
+                actorId: character.id,
                 updateData: {
                     'system.status.corruption.value': newCorruption,
                 },
@@ -636,7 +643,7 @@ export class CorruptionMutationTools {
             };
 
             await this.foundryClient.query('foundry-mcp-bridge.createItem', {
-                actorId: character._id,
+                actorId: character.id,
                 itemData: mutationData,
             });
 
@@ -683,8 +690,8 @@ export class CorruptionMutationTools {
             }
 
             await this.foundryClient.query('foundry-mcp-bridge.deleteItem', {
-                actorId: character._id,
-                itemId: mutation._id,
+                actorId: character.id,
+                itemId: mutation.id,
             });
 
             return `✅ Removed mutation "${mutation.name}" from ${character.name}\n\n` +

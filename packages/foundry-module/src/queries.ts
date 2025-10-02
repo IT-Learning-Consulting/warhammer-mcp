@@ -63,7 +63,7 @@ export class QueryHandlers {
 
     // Enhanced creature index for campaign analysis
     CONFIG.queries[`${modulePrefix}.getEnhancedCreatureIndex`] = this.handleGetEnhancedCreatureIndex.bind(this);
-    
+
     // Campaign management queries
     CONFIG.queries[`${modulePrefix}.updateCampaignProgress`] = this.handleUpdateCampaignProgress.bind(this);
 
@@ -82,6 +82,13 @@ export class QueryHandlers {
     CONFIG.queries[`${modulePrefix}.check-map-status`] = this.handleCheckMapStatus.bind(this);
     CONFIG.queries[`${modulePrefix}.cancel-map-job`] = this.handleCancelMapJob.bind(this);
 
+    // CRUD operations for items and actors
+    CONFIG.queries[`${modulePrefix}.createActor`] = this.handleCreateActor.bind(this);
+    CONFIG.queries[`${modulePrefix}.updateActor`] = this.handleUpdateActor.bind(this);
+    CONFIG.queries[`${modulePrefix}.updateItem`] = this.handleUpdateItem.bind(this);
+    CONFIG.queries[`${modulePrefix}.createItem`] = this.handleCreateItem.bind(this);
+    CONFIG.queries[`${modulePrefix}.deleteItem`] = this.handleDeleteItem.bind(this);
+
   }
 
   /**
@@ -90,7 +97,7 @@ export class QueryHandlers {
   unregisterHandlers(): void {
     const modulePrefix = MODULE_ID;
     const keysToRemove = Object.keys(CONFIG.queries).filter(key => key.startsWith(modulePrefix));
-    
+
     for (const key of keysToRemove) {
       delete CONFIG.queries[key];
     }
@@ -110,9 +117,9 @@ export class QueryHandlers {
       return await handler(data);
     } catch (error) {
       console.error(`[${MODULE_ID}] Query failed: ${queryName}`, error);
-      return { 
+      return {
         error: error instanceof Error ? error.message : 'Unknown error',
-        success: false 
+        success: false
       };
     }
   }
@@ -155,7 +162,7 @@ export class QueryHandlers {
       this.dataAccess.validateFoundryState();
 
       const actors = await this.dataAccess.listActors();
-      
+
       // Filter by type if specified
       if (data.type) {
         return actors.filter(actor => actor.type === data.type);
@@ -170,8 +177,8 @@ export class QueryHandlers {
   /**
    * Handle compendium search request
    */
-  private async handleSearchCompendium(data: { 
-    query: string; 
+  private async handleSearchCompendium(data: {
+    query: string;
     packType?: string;
     filters?: {
       challengeRating?: number | { min?: number; max?: number };
@@ -229,7 +236,7 @@ export class QueryHandlers {
 
 
       const result = await this.dataAccess.listCreaturesByCriteria(data);
-      
+
       // Handle the new format with search summary
       return {
         response: result
@@ -358,11 +365,11 @@ export class QueryHandlers {
         quantity: data.quantity || 1,
         addToScene: data.addToScene || false,
       };
-      
+
       if (data.placement) {
         requestData.placement = data.placement;
       }
-      
+
       return await this.dataAccess.createActorFromCompendiumEntry(requestData);
     } catch (error) {
       throw new Error(`Failed to create actor from compendium: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -617,7 +624,7 @@ export class QueryHandlers {
       // For now, this is a pass-through to the MCP server
       // In the future, campaign data might be stored in Foundry world flags
       // Currently, the campaign dashboard regeneration happens server-side
-      
+
 
       return {
         success: true,
@@ -954,6 +961,91 @@ export class QueryHandlers {
         error: error.message,
         success: false
       };
+    }
+  }
+
+  /**
+   * Handle create actor request
+   */
+  private async handleCreateActor(data: { actorData: Record<string, any> }): Promise<any> {
+    try {
+      // SECURITY: Silent GM validation
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) {
+        return { error: 'Access denied', success: false };
+      }
+
+      return await this.dataAccess.createActor(data);
+    } catch (error) {
+      throw new Error(`Failed to create actor: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Handle update actor request
+   */
+  private async handleUpdateActor(data: { actorId: string; updateData: Record<string, any> }): Promise<any> {
+    try {
+      // SECURITY: Silent GM validation
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) {
+        return { error: 'Access denied', success: false };
+      }
+
+      return await this.dataAccess.updateActor(data);
+    } catch (error) {
+      throw new Error(`Failed to update actor: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Handle update item request
+   */
+  private async handleUpdateItem(data: { actorId: string; itemId: string; updateData: Record<string, any> }): Promise<any> {
+    try {
+      // SECURITY: Silent GM validation
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) {
+        return { error: 'Access denied', success: false };
+      }
+
+      return await this.dataAccess.updateItem(data);
+    } catch (error) {
+      throw new Error(`Failed to update item: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Handle create item request
+   */
+  private async handleCreateItem(data: { actorId: string; itemData: Record<string, any> }): Promise<any> {
+    try {
+      // SECURITY: Silent GM validation
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) {
+        return { error: 'Access denied', success: false };
+      }
+
+      return await this.dataAccess.createItem(data);
+    } catch (error) {
+      throw new Error(`Failed to create item: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Handle delete item request
+   */
+  private async handleDeleteItem(data: { actorId: string; itemId: string }): Promise<any> {
+    try {
+      // SECURITY: Silent GM validation
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) {
+        return { error: 'Access denied', success: false };
+      }
+
+      return await this.dataAccess.deleteItem(data);
+    } catch (error) {
+      throw new Error(`Failed to delete item: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 

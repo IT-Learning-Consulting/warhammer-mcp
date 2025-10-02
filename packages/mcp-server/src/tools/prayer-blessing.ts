@@ -799,8 +799,8 @@ Use \`perform-penance\` to seek redemption!`,
         const updateResponse = await this.foundryClient.query(
             "foundry-mcp-bridge.updateActor",
             {
-                actorName: args.characterName,
-                updates: {
+                actorId: character.id,
+                updateData: {
                     "system.status.sin.value": newSin,
                 },
             }
@@ -907,8 +907,8 @@ Use \`perform-penance\` to seek redemption!`,
         const updateResponse = await this.foundryClient.query(
             "foundry-mcp-bridge.updateActor",
             {
-                actorName: args.characterName,
-                updates: {
+                actorId: character.id,
+                updateData: {
                     "system.status.sin.value": newSin,
                 },
             }

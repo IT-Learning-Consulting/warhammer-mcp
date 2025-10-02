@@ -473,9 +473,9 @@ Dropping Items in Combat:
         const updateResponse = await this.foundryClient.query(
             "foundry-mcp-bridge.updateItem",
             {
-                actorName: args.characterName,
-                itemName: ammoItem.name,
-                updates: {
+                actorId: character.id,
+                itemId: ammoItem.id,
+                updateData: {
                     "system.quantity.value": newQuantity,
                 },
             }
@@ -637,10 +637,29 @@ Dropping Items in Combat:
 
         const quantity = args.quantity || 1;
 
+        // Get character to find actor ID
+        const charResponse = await this.foundryClient.query(
+            "foundry-mcp-bridge.getCharacterInfo",
+            { characterName: args.characterName }
+        );
+
+        if (!charResponse.success || !charResponse.data) {
+            return {
+                content: [
+                    {
+                        type: "text",
+                        text: `❌ Failed to get character info: ${charResponse.error || "Unknown error"}`,
+                    },
+                ],
+            };
+        }
+
+        const character = charResponse.data;
+
         const response = await this.foundryClient.query(
-            "foundry-mcp-bridge.addItemToActor",
+            "foundry-mcp-bridge.createItem",
             {
-                actorName: args.characterName,
+                actorId: character.id,
                 itemData: {
                     name: args.itemName,
                     type: args.itemType,
@@ -664,7 +683,7 @@ Dropping Items in Combat:
         }
 
         // Get updated character info to check encumbrance
-        const charResponse = await this.foundryClient.query(
+        const updatedCharResponse = await this.foundryClient.query(
             "foundry-mcp-bridge.getCharacterInfo",
             { characterName: args.characterName }
         );
@@ -677,11 +696,11 @@ Dropping Items in Combat:
         resultText += `**Quantity:** ${quantity}\n`;
         resultText += `**Encumbrance:** ${args.encumbrance} Enc each (${totalWeight} Enc total)\n\n`;
 
-        if (charResponse.success && charResponse.data) {
-            const character = charResponse.data;
-            const currentEnc = character.system?.status?.encumbrance?.value || 0;
-            const strengthBonus = Math.floor((character.system?.characteristics?.s?.value || 0) / 10);
-            const toughnessBonus = Math.floor((character.system?.characteristics?.t?.value || 0) / 10);
+        if (updatedCharResponse.success && updatedCharResponse.data) {
+            const updatedCharacter = updatedCharResponse.data;
+            const currentEnc = updatedCharacter.system?.status?.encumbrance?.value || 0;
+            const strengthBonus = Math.floor((updatedCharacter.system?.characteristics?.s?.value || 0) / 10);
+            const toughnessBonus = Math.floor((updatedCharacter.system?.characteristics?.t?.value || 0) / 10);
             const maxEnc = strengthBonus + toughnessBonus;
 
             resultText += `**Updated Encumbrance:** ${currentEnc} / ${maxEnc} Enc\n`;
@@ -758,10 +777,10 @@ Dropping Items in Combat:
         // If removing all or item is not stackable, delete the item
         if (removeQuantity >= itemQuantity) {
             const response = await this.foundryClient.query(
-                "foundry-mcp-bridge.removeItemFromActor",
+                "foundry-mcp-bridge.deleteItem",
                 {
-                    actorName: args.characterName,
-                    itemName: args.itemName,
+                    actorId: character.id,
+                    itemId: item.id,
                 }
             );
 
@@ -816,9 +835,9 @@ Dropping Items in Combat:
             const response = await this.foundryClient.query(
                 "foundry-mcp-bridge.updateItem",
                 {
-                    actorName: args.characterName,
-                    itemName: args.itemName,
-                    updates: {
+                    actorId: character.id,
+                    itemId: item.id,
+                    updateData: {
                         "system.quantity.value": newQuantity,
                     },
                 }

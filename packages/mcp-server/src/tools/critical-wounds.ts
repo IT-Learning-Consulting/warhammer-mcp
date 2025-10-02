@@ -346,6 +346,30 @@ export class CriticalWoundsTools {
             // Check for death
             const isDead = newCriticalCount > tBonus;
 
+            // Create the critical wound item
+            const criticalWoundData = {
+                name: woundName,
+                type: 'injury',
+                system: {
+                    location: { value: location },
+                    wounds: { value: wounds },
+                    description: { value: description }
+                }
+            };
+
+            await this.foundryClient.query('foundry-mcp-bridge.createItem', {
+                actorId: character.id,
+                itemData: criticalWoundData,
+            });
+
+            // Update critical wound count
+            await this.foundryClient.query('foundry-mcp-bridge.updateActor', {
+                actorId: character.id,
+                updateData: {
+                    'system.status.criticalWounds.value': newCriticalCount,
+                },
+            });
+
             // Build response
             let response = `# Critical Wound Added: ${character.name}\n\n`;
 
@@ -412,11 +436,8 @@ export class CriticalWoundsTools {
             }
 
             response += `## 💡 Next Steps\n`;
-            response += `1. Update ${character.name}'s critical wound count to **${newCriticalCount}** in Foundry VTT\n`;
-            response += `2. Add the critical wound item "${woundName}" to their character sheet\n`;
-            response += `   - Set location: ${location}\n`;
-            response += `   - Set wounds: ${wounds}\n`;
-            response += `   - Add description and effects\n`;
+            response += `1. ✅ Critical wound count updated to **${newCriticalCount}** in Foundry VTT\n`;
+            response += `2. ✅ Critical wound item "${woundName}" added to character sheet\n`;
             response += `3. Apply any immediate penalties from this critical\n`;
             response += `4. Reduce current Wounds by ${wounds}\n`;
             if (isDead) {
@@ -465,14 +486,14 @@ export class CriticalWoundsTools {
             let foundCritical: any = null;
             if (character.items && Array.isArray(character.items)) {
                 foundCritical = character.items.find(
-                    (item: any) => item.type === 'critical' && item.name.toLowerCase().includes(woundName.toLowerCase())
+                    (item: any) => (item.type === 'critical' || item.type === 'injury') && item.name.toLowerCase().includes(woundName.toLowerCase())
                 );
             }
 
             if (!foundCritical) {
                 // List available criticals to help
                 const availableCriticals = character.items
-                    ?.filter((item: any) => item.type === 'critical')
+                    ?.filter((item: any) => item.type === 'critical' || item.type === 'injury')
                     .map((item: any) => item.name) || [];
 
                 let errorMsg = `Critical wound "${woundName}" not found on ${character.name}.\n\n`;
@@ -487,6 +508,20 @@ export class CriticalWoundsTools {
             const criticalCurrent = system.status?.criticalWounds?.value || 0;
             const tBonus = system.characteristics?.t?.bonus || 0;
             const newCriticalCount = Math.max(0, criticalCurrent - 1);
+
+            // Delete the critical wound item
+            await this.foundryClient.query('foundry-mcp-bridge.deleteItem', {
+                actorId: character.id,
+                itemId: foundCritical._id,
+            });
+
+            // Update critical wound count
+            await this.foundryClient.query('foundry-mcp-bridge.updateActor', {
+                actorId: character.id,
+                updateData: {
+                    'system.status.criticalWounds.value': newCriticalCount,
+                },
+            });
 
             // Build response
             let response = `# Critical Wound Removed: ${character.name}\n\n`;
@@ -518,8 +553,8 @@ export class CriticalWoundsTools {
             }
 
             response += `## 💡 Next Steps\n`;
-            response += `1. Update ${character.name}'s critical wound count to **${newCriticalCount}** in Foundry VTT\n`;
-            response += `2. Delete the critical wound item "${foundCritical.name}" from their character sheet\n`;
+            response += `1. ✅ Critical wound count updated to **${newCriticalCount}** in Foundry VTT\n`;
+            response += `2. ✅ Critical wound item "${foundCritical.name}" deleted from character sheet\n`;
             response += `3. Remove any penalties associated with this critical\n`;
             response += `4. Note the healing date for character records\n`;
             if (newCriticalCount > 0) {

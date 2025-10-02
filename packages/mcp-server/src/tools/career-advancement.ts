@@ -480,7 +480,7 @@ export class CareerAdvancementTools {
             };
 
             await this.foundryClient.query('foundry-mcp-bridge.updateActor', {
-                actorId: character._id,
+                actorId: character.id,
                 updateData: updateData,
             });
 
@@ -546,8 +546,8 @@ export class CareerAdvancementTools {
             // Update the skill advances
             const newAdvances = currentAdvances + advances;
             await this.foundryClient.query('foundry-mcp-bridge.updateItem', {
-                actorId: character._id,
-                itemId: skillItem._id,
+                actorId: character.id,
+                itemId: skillItem.id,
                 updateData: {
                     'system.advances.value': newAdvances,
                 },
@@ -555,7 +555,7 @@ export class CareerAdvancementTools {
 
             // Update character XP
             await this.foundryClient.query('foundry-mcp-bridge.updateActor', {
-                actorId: character._id,
+                actorId: character.id,
                 updateData: {
                     'system.details.experience.current': availableXP - totalCost,
                     'system.details.experience.spent': (system.details?.experience?.spent || 0) + totalCost,
@@ -622,8 +622,8 @@ export class CareerAdvancementTools {
 
             // Update the talent ranks
             await this.foundryClient.query('foundry-mcp-bridge.updateItem', {
-                actorId: character._id,
-                itemId: talentItem._id,
+                actorId: character.id,
+                itemId: talentItem.id,
                 updateData: {
                     'system.advances.value': newRanks,
                 },
@@ -631,7 +631,7 @@ export class CareerAdvancementTools {
 
             // Update character XP
             await this.foundryClient.query('foundry-mcp-bridge.updateActor', {
-                actorId: character._id,
+                actorId: character.id,
                 updateData: {
                     'system.details.experience.current': availableXP - totalCost,
                     'system.details.experience.spent': (system.details?.experience?.spent || 0) + totalCost,

@@ -314,10 +314,29 @@ ${character.name} is currently free from disease and infection. Their immune sys
             diseaseName: args.diseaseName,
         });
 
+        // Get character to find actor ID
+        const charResponse = await this.foundryClient.query(
+            "foundry-mcp-bridge.getCharacterInfo",
+            { characterName: args.characterName }
+        );
+
+        if (!charResponse.success || !charResponse.data) {
+            return {
+                content: [
+                    {
+                        type: "text",
+                        text: `❌ Failed to get character info: ${charResponse.error || "Unknown error"}`,
+                    },
+                ],
+            };
+        }
+
+        const character = charResponse.data;
+
         const response = await this.foundryClient.query(
-            "foundry-mcp-bridge.addItemToActor",
+            "foundry-mcp-bridge.createItem",
             {
-                actorName: args.characterName,
+                actorId: character.id,
                 itemData: {
                     name: args.diseaseName,
                     type: "disease",
@@ -550,11 +569,46 @@ Use \`check-infection-resilience\` to attempt recovery tests.`,
             diseaseName: args.diseaseName,
         });
 
+        // Get character to find actor ID and disease item ID
+        const charResponse = await this.foundryClient.query(
+            "foundry-mcp-bridge.getCharacterInfo",
+            { characterName: args.characterName }
+        );
+
+        if (!charResponse.success || !charResponse.data) {
+            return {
+                content: [
+                    {
+                        type: "text",
+                        text: `❌ Failed to get character info: ${charResponse.error || "Unknown error"}`,
+                    },
+                ],
+            };
+        }
+
+        const character = charResponse.data;
+
+        // Find the disease item
+        const disease = character.items?.find(
+            (item: any) => item.type === "disease" && item.name === args.diseaseName
+        );
+
+        if (!disease) {
+            return {
+                content: [
+                    {
+                        type: "text",
+                        text: `❌ Disease "${args.diseaseName}" not found on ${args.characterName}.`,
+                    },
+                ],
+            };
+        }
+
         const response = await this.foundryClient.query(
-            "foundry-mcp-bridge.removeItemFromActor",
+            "foundry-mcp-bridge.deleteItem",
             {
-                actorName: args.characterName,
-                itemName: args.diseaseName,
+                actorId: character.id,
+                itemId: disease.id,
             }
         );
 

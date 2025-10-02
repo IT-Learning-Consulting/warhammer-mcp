@@ -3986,4 +3986,147 @@ export class FoundryDataAccess {
     }
   }
 
+  /**
+   * Create a new actor
+   * Creates an actor with the provided data structure
+   */
+  async createActor(data: { actorData: Record<string, any> }): Promise<any> {
+    this.validateFoundryState();
+
+    try {
+      const actor = await Actor.create(data.actorData as any);
+
+      if (!actor) {
+        throw new Error('Failed to create actor');
+      }
+
+      return {
+        success: true,
+        id: actor.id,
+        name: actor.name,
+        type: actor.type
+      };
+    } catch (error) {
+      throw new Error(`Failed to create actor: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Update actor data
+   * Allows updating any actor properties using dot notation for nested fields
+   */
+  async updateActor(data: { actorId: string; updateData: Record<string, any> }): Promise<any> {
+    this.validateFoundryState();
+
+    try {
+      const actor = game.actors?.get(data.actorId);
+      if (!actor) {
+        throw new Error(`Actor not found with ID: ${data.actorId}`);
+      }
+
+      await actor.update(data.updateData);
+
+      return {
+        success: true,
+        actorId: actor.id,
+        actorName: actor.name,
+        updated: Object.keys(data.updateData)
+      };
+    } catch (error) {
+      throw new Error(`Failed to update actor: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Update item data on an actor
+   */
+  async updateItem(data: { actorId: string; itemId: string; updateData: Record<string, any> }): Promise<any> {
+    this.validateFoundryState();
+
+    try {
+      const actor = game.actors?.get(data.actorId);
+      if (!actor) {
+        throw new Error(`Actor not found with ID: ${data.actorId}`);
+      }
+
+      const item = actor.items.get(data.itemId);
+      if (!item) {
+        throw new Error(`Item not found with ID: ${data.itemId} on actor ${actor.name}`);
+      }
+
+      await item.update(data.updateData);
+
+      return {
+        success: true,
+        actorId: actor.id,
+        itemId: item.id,
+        itemName: item.name,
+        updated: Object.keys(data.updateData)
+      };
+    } catch (error) {
+      throw new Error(`Failed to update item: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Create an item on an actor
+   */
+  async createItem(data: { actorId: string; itemData: Record<string, any> }): Promise<any> {
+    this.validateFoundryState();
+
+    try {
+      const actor = game.actors?.get(data.actorId);
+      if (!actor) {
+        throw new Error(`Actor not found with ID: ${data.actorId}`);
+      }
+
+      const createdItems = await actor.createEmbeddedDocuments('Item', [data.itemData]);
+      const item = createdItems[0];
+
+      return {
+        success: true,
+        actorId: actor.id,
+        itemId: item.id,
+        itemName: item.name,
+        itemType: (item as any).type
+      };
+    } catch (error) {
+      throw new Error(`Failed to create item: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Delete an item from an actor
+   */
+  async deleteItem(data: { actorId: string; itemId: string }): Promise<any> {
+    this.validateFoundryState();
+
+    try {
+      const actor = game.actors?.get(data.actorId);
+      if (!actor) {
+        throw new Error(`Actor not found with ID: ${data.actorId}`);
+      }
+
+      const item = actor.items.get(data.itemId);
+      if (!item) {
+        throw new Error(`Item not found with ID: ${data.itemId} on actor ${actor.name}`);
+      }
+
+      const itemName = item.name;
+      const itemType = item.type;
+
+      await actor.deleteEmbeddedDocuments('Item', [data.itemId]);
+
+      return {
+        success: true,
+        actorId: actor.id,
+        itemId: data.itemId,
+        itemName: itemName,
+        itemType: itemType
+      };
+    } catch (error) {
+      throw new Error(`Failed to delete item: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
 }

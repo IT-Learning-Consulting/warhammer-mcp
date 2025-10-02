@@ -1043,12 +1043,27 @@ ${character.name} has not yet learned any arcane spells. Wizards learn spells th
             }
 
             // Forget specified spell
+            const forgetSpellItem = character.items?.find(
+                (item: any) => item.type === "spell" && item.name === args.forgetSpell
+            );
+
+            if (!forgetSpellItem) {
+                return {
+                    content: [
+                        {
+                            type: "text",
+                            text: `❌ Spell "${args.forgetSpell}" not found to forget.`,
+                        },
+                    ],
+                };
+            }
+
             const forgetResponse = await this.foundryClient.query(
                 "foundry-mcp-bridge.updateItem",
                 {
-                    actorName: args.characterName,
-                    itemName: args.forgetSpell,
-                    updates: {
+                    actorId: character.id,
+                    itemId: forgetSpellItem.id,
+                    updateData: {
                         "system.memorized.value": false,
                     },
                 }
@@ -1070,9 +1085,9 @@ ${character.name} has not yet learned any arcane spells. Wizards learn spells th
         const memorizeResponse = await this.foundryClient.query(
             "foundry-mcp-bridge.updateItem",
             {
-                actorName: args.characterName,
-                itemName: args.spellName,
-                updates: {
+                actorId: character.id,
+                itemId: spell.id,
+                updateData: {
                     "system.memorized.value": true,
                 },
             }
@@ -1168,11 +1183,30 @@ ${character.name} has not yet learned any arcane spells. Wizards learn spells th
         resultText += `- Intelligence test to successfully learn\n`;
         resultText += `- Access to spell source throughout study period\n\n`;
 
+        // Get character info for actorId
+        const charResponse = await this.foundryClient.query(
+            "foundry-mcp-bridge.getCharacterInfo",
+            { characterName: args.characterName }
+        );
+
+        if (!charResponse.success || !charResponse.data) {
+            return {
+                content: [
+                    {
+                        type: "text",
+                        text: `❌ Failed to get character info: ${charResponse.error || "Unknown error"}`,
+                    },
+                ],
+            };
+        }
+
+        const character = charResponse.data;
+
         // Add the spell to grimoire
         const response = await this.foundryClient.query(
-            "foundry-mcp-bridge.addItemToActor",
+            "foundry-mcp-bridge.createItem",
             {
-                actorName: args.characterName,
+                actorId: character.id,
                 itemData: {
                     name: args.spellName,
                     type: "spell",
