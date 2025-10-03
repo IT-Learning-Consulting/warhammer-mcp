@@ -1,10 +1,10 @@
 # WFRP 4e Support Enhancements
 
-This document summarizes the WFRP-specific enhancements made to the Foundry VTT MCP integration to better support Warhammer Fantasy Roleplay 4th Edition alongside D&D 5e.
+This document summarizes the WFRP-specific enhancements made to the Foundry VTT MCP integration for Warhammer Fantasy Roleplay 4th Edition.
 
 ## Summary
 
-The system now has comprehensive dual-system support with WFRP-specific examples, terminology, and prompts throughout the tool descriptions. All changes maintain full backward compatibility with D&D 5e while adding WFRP-flavored guidance.
+The system has comprehensive WFRP 4e support with WFRP-specific examples, terminology, and prompts throughout the tool descriptions.
 
 ## Files Modified
 
@@ -65,7 +65,7 @@ The system now has comprehensive dual-system support with WFRP-specific examples
 ### 5. `packages/mcp-server/src/tools/scene.ts`
 **Changes:**
 - Enhanced `get-current-scene` description for clarity
-- Updated `get-world-info` to explicitly mention system detection (D&D 5e, WFRP 4e)
+- Updated `get-world-info` to detect and report the game system being used
 
 ### 6. `packages/mcp-server/src/tools/campaign-management.ts`
 **Changes:**
@@ -80,22 +80,22 @@ The system now has comprehensive dual-system support with WFRP-specific examples
 "Track the Enemy Within campaign with multiple acts"
 ```
 
-## System Support Matrix
+## WFRP 4e Feature Summary
 
-| Feature | D&D 5e | WFRP 4e |
-|---------|--------|---------|
-| Dice Rolling | d20 system | d100 system |
-| Attributes | Abilities (STR, DEX, etc.) | Characteristics (WS, BS, S, T, I, Ag, Dex, Int, WP, Fel) |
-| Combat Stats | AC, HP | Toughness, Wounds, Armor Points |
-| Creature Power | Challenge Rating (CR) | Threat Level (calculated) |
-| Creature Types | D&D types (humanoid, dragon, etc.) | WFRP species (human, beastman, daemon, etc.) |
-| Magic | Spells & spell slots | Magic, Channelling skill |
-| Special Abilities | Legendary actions | Traits & special abilities |
-| Grid Size | 5 feet per square | 2 yards per square |
+| Feature | WFRP 4e Support |
+|---------|-----------------|
+| Dice Rolling | d100 system with characteristic and skill tests |
+| Attributes | Characteristics (WS, BS, S, T, I, Ag, Dex, Int, WP, Fel) |
+| Combat Stats | Toughness, Wounds, Armor Points |
+| Creature Power | Threat Level (calculated from characteristics and abilities) |
+| Creature Types | WFRP species (human, beastman, daemon, greenskin, etc.) |
+| Magic | Spells, Prayers, Channelling skill |
+| Special Abilities | Traits & special abilities |
+| Grid Size | 2 yards per square (70 pixels recommended) |
 
 ## Technical Implementation
 
-All WFRP support is implemented through automatic system detection in the backend:
+WFRP support is implemented through automatic system detection:
 
 ```typescript
 const gameSystem = game.system?.id || '';
@@ -103,18 +103,18 @@ const isWFRP = gameSystem.includes('wfrp');
 ```
 
 The system automatically:
-- Extracts the correct stats based on game system
-- Prioritizes the correct compendium packs
-- Builds roll formulas using the appropriate dice (d20 vs d100)
-- Maps skills and characteristics correctly
+- Extracts WFRP-specific stats (characteristics, wounds, toughness)
+- Prioritizes WFRP compendium packs
+- Builds d100 roll formulas for characteristic and skill tests
+- Maps WFRP skills and characteristics correctly
 - Calculates threat levels for WFRP creatures
 
 ## User Benefits
 
-1. **Natural Language Support**: Users can request actions using either D&D or WFRP terminology
-2. **Contextual Examples**: Tool descriptions now show relevant examples for both systems
-3. **Automatic Detection**: No need to manually specify which system is being used
-4. **Seamless Integration**: Works identically for both systems with appropriate adaptations
+1. **Natural Language Support**: Request actions using WFRP terminology
+2. **Contextual Examples**: Tool descriptions show relevant WFRP examples
+3. **Automatic Detection**: System automatically detects WFRP 4e
+4. **Seamless Integration**: All tools work natively with WFRP
 
 ## Testing Recommendations
 
@@ -126,11 +126,13 @@ When testing WFRP support:
 5. Test quest creation with WFRP-themed content
 6. Verify automatic system detection with `get-world-info` tool
 
-## Future Enhancements
+## Implemented WFRP Features
 
-Potential areas for additional WFRP support:
-- WFRP-specific career progression tracking
-- Corruption and mutation tracking
-- Fortune/Fate point management
-- Old World calendar and timeline tracking
-- WFRP-specific content generation prompts
+Current WFRP-specific features:
+- ✅ Career progression tracking
+- ✅ Corruption and mutation tracking
+- ✅ Fortune/Fate point management
+- ✅ WFRP-specific content generation
+- ✅ Custom NPC generator with species-specific talents
+- ✅ XP-based character advancement
+- ✅ Species wounds calculation (including Halfling special case)

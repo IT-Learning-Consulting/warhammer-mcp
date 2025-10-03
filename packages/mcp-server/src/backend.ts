@@ -54,6 +54,8 @@ import { OwnershipTools } from './tools/ownership.js';
 
 import { MapGenerationTools } from './tools/map-generation.js';
 
+import { RollTableTools } from './tools/rolltable-management.js';
+
 const CONTROL_HOST = '127.0.0.1';
 
 const CONTROL_PORT = 31414;
@@ -952,6 +954,8 @@ async function startBackend(): Promise<void> {
 
   const ownershipTools = new OwnershipTools({ foundryClient, logger });
 
+  const rollTableTools = new RollTableTools(foundryClient, logger);
+
   // Initialize mapgen-style backend components for map generation
   let mapGenerationJobQueue: any = null;
   let mapGenerationComfyUIClient: any = null;
@@ -1167,6 +1171,8 @@ async function startBackend(): Promise<void> {
     ...ownershipTools.getToolDefinitions(),
 
     ...mapGenerationTools.getToolDefinitions(),
+
+    ...rollTableTools.getToolDefinitions(),
 
   ];
 
@@ -1745,6 +1751,38 @@ async function startBackend(): Promise<void> {
                 case 'switch-scene':
 
                   result = await mapGenerationTools.switchScene(args);
+
+                  break;
+
+                // RollTable tools
+
+                case 'create-rolltable':
+
+                  result = await rollTableTools.handleCreateRollTable(args);
+
+                  break;
+
+                case 'list-rolltables':
+
+                  result = await rollTableTools.handleListRollTables(args);
+
+                  break;
+
+                case 'get-rolltable':
+
+                  result = await rollTableTools.handleGetRollTable(args);
+
+                  break;
+
+                case 'roll-on-table':
+
+                  result = await rollTableTools.handleRollOnTable(args);
+
+                  break;
+
+                case 'delete-rolltable':
+
+                  result = await rollTableTools.handleDeleteRollTable(args);
 
                   break;
 

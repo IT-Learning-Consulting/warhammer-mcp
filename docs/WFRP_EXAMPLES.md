@@ -54,28 +54,26 @@ rollModifier: 'Optional modifier to add to the roll (e.g., "+2", "-1", "+1d4")'
 ### After:
 ```
 description: 'Request dice rolls from players with interactive buttons. Creates roll buttons in 
-Foundry chat that players can click. Supports both D&D 5e (d20 system) and WFRP 4e (d100 system). 
-Examples: "Roll Weapon Skill for Hans" (WFRP), "Test Willpower against fear" (WFRP), 
-"Roll stealth for Clark" (D&D), "Make a perception check" (D&D)...'
+Foundry chat that players can click. Supports WFRP 4e d100 system. 
+Examples: "Roll Weapon Skill for Hans", "Test Willpower against fear", 
+"Make a Dodge test"...'
 
-rollType: 'Type of roll to request. D&D: ability, skill, save, attack, initiative. 
-WFRP: characteristic (for WS/BS/S/T/I/Ag/Dex/Int/WP/Fel tests), skill (for WFRP skills like 
-Melee/Ranged/Channelling), custom'
-enum: ['ability', 'characteristic', 'skill', 'save', 'attack', 'initiative', 'custom']
+rollType: 'Type of roll to request for WFRP: characteristic (for WS/BS/S/T/I/Ag/Dex/Int/WP/Fel tests), 
+skill (for WFRP skills like Melee/Ranged/Channelling), custom'
+enum: ['characteristic', 'skill', 'custom']
 
-rollTarget: 'Target for the roll. D&D: ability name (str, dex, con, int, wis, cha), 
-skill name (perception, insight, stealth, etc.). WFRP: characteristic code (ws, bs, s, t, i, ag, 
+rollTarget: 'Target for the roll. WFRP: characteristic code (ws, bs, s, t, i, ag, 
 dex, int, wp, fel) or skill name (melee, ranged, channelling, charm, etc.), or custom roll formula 
 (e.g., "1d100<=50")'
 
-rollModifier: 'Optional modifier to add to the roll. D&D: "+2", "-1", "+1d4". 
+rollModifier: 'Optional modifier to add to the roll. 
 WFRP: "+10", "-20" (modifies target number for d100 rolls)'
 ```
 
 **Impact:** 
-- Added `characteristic` rollType for WFRP tests
+- Native support for WFRP characteristic and skill tests
 - Clear examples showing d100 rolls for WFRP
-- Explains how modifiers work differently in each system
+- Explains how modifiers work with d100 target numbers
 
 ---
 
@@ -171,7 +169,7 @@ defaultLocation: 'Default campaign location/setting. Examples: "The Reikland" (W
 ### After:
 ```
 'get-world-info': 'Get basic information about the Foundry world and game system 
-(e.g., D&D 5e, WFRP 4e). Use this to understand what system is being used and tailor 
+(e.g., WFRP 4e). Use this to understand what system is being used and tailor 
 responses accordingly.'
 ```
 

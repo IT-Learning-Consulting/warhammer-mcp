@@ -4,8 +4,8 @@
 
 **Foundry VTT MCP Bridge** is an AI-powered integration that connects **Claude Desktop** to **Foundry VTT v13** using the **Model Context Protocol (MCP)**. It enables natural language conversations with Claude about your Foundry campaigns, allowing AI-assisted game mastering, content creation, and campaign management.
 
-### **Dual-System Architecture**
-The bridge was originally built for **D&D 5e** but has been **fully enhanced** to support **WFRP 4e** (Warhammer Fantasy Roleplay 4th Edition), with automatic system detection and context-aware tool descriptions.
+### **WFRP 4e Native Support**
+The bridge is built specifically for **WFRP 4e** (Warhammer Fantasy Roleplay 4th Edition), with automatic system detection and WFRP-specific tool descriptions.
 
 ---
 
@@ -196,41 +196,46 @@ foundry-vtt-mcp/
 
 ### **Automatic System Detection**
 The bridge automatically detects your game system using `game.system.id`:
-- **D&D 5e**: `dnd5e`
 - **WFRP 4e**: `wfrp4e`
 
-When WFRP is detected, all tools automatically:
-- Use d100 rolls instead of d20
-- Reference characteristics (WS, BS, S, T, I, Ag, Dex, Int, WP, Fel) instead of abilities (STR, DEX, CON, etc.)
-- Calculate threat levels instead of Challenge Rating
+All tools automatically:
+- Use d100 rolls for characteristic and skill tests
+- Reference characteristics (WS, BS, S, T, I, Ag, Dex, Int, WP, Fel)
+- Calculate threat levels from characteristics and abilities
 - Use WFRP-specific terminology (wounds, toughness, corruption, etc.)
 
-### **Data Structure Adaptation**
+### **Data Structure - WFRP 4e Character:**
 
-#### **D&D 5e Character:**
-```javascript
-{
-  system: {
-    abilities: { str: 16, dex: 14, con: 15, int: 10, wis: 12, cha: 8 },
-    attributes: { hp: { max: 45, value: 32 }, ac: { value: 17 } },
-    skills: { perception: { total: 4 } }
-  }
-}
-```
-
-#### **WFRP 4e Character:**
 ```javascript
 {
   system: {
     characteristics: { 
-      ws: 45, bs: 38, s: 42, t: 47, i: 35, 
-      ag: 40, dex: 38, int: 30, wp: 36, fel: 28 
+      ws: { initial: 35, advances: 5, bonus: 4 },
+      bs: { initial: 30, advances: 3, bonus: 3 },
+      s: { initial: 40, advances: 0, bonus: 4 },
+      t: { initial: 35, advances: 5, bonus: 4 },
+      i: { initial: 33, advances: 2, bonus: 3 },
+      ag: { initial: 30, advances: 5, bonus: 3 },
+      dex: { initial: 32, advances: 3, bonus: 3 },
+      int: { initial: 28, advances: 0, bonus: 2 },
+      wp: { initial: 36, advances: 4, bonus: 4 },
+      fel: { initial: 25, advances: 0, bonus: 2 }
     },
-    status: { 
-      wounds: { max: 14, value: 11 },
-      corruption: { value: 3, threshold: 8 },
-      fortune: { value: 2, max: 3 },
-      fate: { value: 2, max: 2 }
+    status: {
+      wounds: { max: 14, value: 10 },
+      fortune: { value: 2 },
+      fate: { value: 3 },
+      corruption: { value: 1 }
+    },
+    details: {
+      species: { value: "Human" },
+      career: { value: "Soldier" }
+    }
+  }
+}
+```
+
+**Key WFRP Data Points:**
     },
     skills: { 
       "Melee (Basic)": { total: 55, advances: 10 }

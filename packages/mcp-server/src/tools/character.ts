@@ -19,13 +19,13 @@ export class CharacterTools {
   /**
    * Tool: get-character
    * Retrieve detailed information about a specific character
-   * Supports both D&D 5e and WFRP 4e systems
+   * WFRP 4e specific
    */
   getToolDefinitions() {
     return [
       {
         name: 'get-character',
-        description: 'Retrieve detailed information about a specific character by name or ID. Supports both D&D 5e (abilities, HP, AC, skills) and WFRP 4e (characteristics, wounds, toughness, skills) systems.',
+        description: 'Retrieve detailed information about a specific character by name or ID. WFRP 4e specific (characteristics, wounds, toughness, skills, talents, traits).',
         inputSchema: {
           type: 'object',
           properties: {
@@ -39,7 +39,7 @@ export class CharacterTools {
       },
       {
         name: 'list-characters',
-        description: 'List all available characters with basic information. Works with both D&D 5e and WFRP 4e character data.',
+        description: 'List all available characters with basic information. WFRP 4e specific.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -173,7 +173,7 @@ export class CharacterTools {
       }
 
     } else {
-      // D&D 5e / PF2e system
+      // Non-WFRP system - limited data extraction
       if (system.attributes) {
         if (system.attributes.hp) {
           basicInfo.hitPoints = {
@@ -274,47 +274,6 @@ export class CharacterTools {
             advances: t.advances || 1,
             description: this.truncateText(t.description || '', 100)
           }));
-      }
-
-    } else {
-      // D&D 5e Ability Scores
-      if (system.abilities) {
-        stats.abilities = {};
-        for (const [key, ability] of Object.entries(system.abilities)) {
-          if (typeof ability === 'object' && ability !== null) {
-            stats.abilities[key] = {
-              score: (ability as any).value || 10,
-              modifier: (ability as any).mod || 0,
-            };
-          }
-        }
-      }
-
-      // D&D 5e Skills
-      if (system.skills) {
-        stats.skills = {};
-        for (const [key, skill] of Object.entries(system.skills)) {
-          if (typeof skill === 'object' && skill !== null) {
-            stats.skills[key] = {
-              value: (skill as any).value || 0,
-              proficient: (skill as any).proficient || false,
-              ability: (skill as any).ability || '',
-            };
-          }
-        }
-      }
-
-      // D&D 5e Saves
-      if (system.saves) {
-        stats.saves = {};
-        for (const [key, save] of Object.entries(system.saves)) {
-          if (typeof save === 'object' && save !== null) {
-            stats.saves[key] = {
-              value: (save as any).value || 0,
-              proficient: (save as any).proficient || false,
-            };
-          }
-        }
       }
     }
 

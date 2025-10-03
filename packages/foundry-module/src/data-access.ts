@@ -45,20 +45,23 @@ interface CompendiumSearchResult {
   description?: string;
 }
 
+/**
+ * Enhanced creature data stored in creature index
+ * Uses WFRP 4e characteristics
+ */
 interface EnhancedCreatureIndex {
   id: string;
   name: string;
   type: string;
   pack: string;
   packLabel: string;
-  challengeRating: number;
-  creatureType: string;
+  challengeRating: number;  // For WFRP: calculated threat (Toughness + Wounds/10)
+  creatureType: string;  // Species in WFRP (human, beast, daemon, etc.)
   size: string;
-  hitPoints: number;
-  armorClass: number;
+  wounds: number;  // WFRP wounds
+  toughness: number;  // WFRP toughness bonus + armor
   hasSpells: boolean;
-  hasLegendaryActions: boolean;
-  alignment: string;
+  hasSpecialAbilities: boolean;  // WFRP traits/abilities
   description?: string;
   img?: string;
 }
@@ -646,67 +649,44 @@ class PersistentCreatureIndex {
 
   /**
    * Extract enhanced creature data from a single document
-   * Supports both D&D 5e and WFRP 4e systems
+   * WFRP 4e specific implementation
    */
   private extractEnhancedCreatureData(doc: any, pack: any): { creature: EnhancedCreatureIndex, errors: number } | null {
     try {
       const system = doc.system || {};
 
-      // Detect game system
+      // Detect game system - only WFRP 4e supported
       const gameSystem = game.system?.id || '';
       const isWFRP = gameSystem.includes('wfrp');
 
-      // Extract challenge rating (D&D) or threat level (WFRP) with comprehensive fallbacks
-      let challengeRating = 0;
-
-      if (isWFRP) {
-        // WFRP uses different threat assessment - use Toughness or a custom threat rating
-        // For WFRP, we'll use a calculated threat based on characteristics
-        const toughness = system.characteristics?.t?.value ?? system.characteristics?.t?.initial ?? 0;
-        const wounds = system.status?.wounds?.max ?? system.status?.wounds?.value ?? 0;
-        // Simple threat calculation: (Toughness + Wounds/10) to approximate difficulty
-        challengeRating = toughness + Math.floor(wounds / 10);
-      } else {
-        // D&D 5e challenge rating extraction
-        challengeRating = system.details?.cr ??
-          system.details?.cr?.value ??
-          system.cr?.value ?? system.cr ??
-          system.attributes?.cr?.value ?? system.attributes?.cr ??
-          system.challenge?.rating ?? system.challenge?.cr ?? 0;
-
-        // Handle null values (spell effects, etc.)
-        if (challengeRating === null || challengeRating === undefined) {
-          challengeRating = 0;
-        }
-
-        if (typeof challengeRating === 'string') {
-          if (challengeRating === '1/8') challengeRating = 0.125;
-          else if (challengeRating === '1/4') challengeRating = 0.25;
-          else if (challengeRating === '1/2') challengeRating = 0.5;
-          else challengeRating = parseFloat(challengeRating) || 0;
-        }
-
-        // Ensure it's a number
-        challengeRating = Number(challengeRating) || 0;
+      if (!isWFRP) {
+        console.warn(`[${this.moduleId}] Non-WFRP system detected: ${gameSystem}. Skipping creature.`);
+        return null;
       }
+
+      // Extract threat rating - WFRP uses characteristics-based assessment
+      let challengeRating = 0;
+      const toughness = system.characteristics?.t?.value ?? system.characteristics?.t?.initial ?? 0;
+      const wounds = system.status?.wounds?.max ?? system.status?.wounds?.value ?? 0;
+      // Simple threat calculation: (Toughness + Wounds/10) to approximate difficulty
+      challengeRating = toughness + Math.floor(wounds / 10);
+
+      // Handle null values
+      if (challengeRating === null || challengeRating === undefined) {
+        challengeRating = 0;
+      }
+
+      // Ensure it's a number
+      challengeRating = Number(challengeRating) || 0;
 
       // Extract creature type with proper type checking
       let creatureType = 'unknown';
 
-      if (isWFRP) {
-        // WFRP uses species for creatures
-        creatureType = system.details?.species?.value ??
-          system.details?.species ??
-          system.details?.type ??
-          'unknown';
-      } else {
-        // D&D 5e creature type extraction
-        creatureType = system.details?.type?.value ??
-          system.details?.type ??
-          system.type?.value ?? system.type ??
-          system.race?.value ?? system.race ??
-          system.details?.race ?? 'unknown';
-      }
+      // WFRP uses species for creatures
+      creatureType = system.details?.species?.value ??
+        system.details?.species ??
+        system.details?.type ??
+        'unknown';
 
       // Handle null/undefined values properly
       if (creatureType === null || creatureType === undefined || creatureType === '') {
@@ -718,106 +698,36 @@ class PersistentCreatureIndex {
         creatureType = String(creatureType || 'unknown');
       }
 
-      // Extract size with proper type checking
-      let size = 'medium';
-
-      if (isWFRP) {
-        // WFRP uses size in details
-        size = system.details?.size?.value || system.details?.size || 'average';
-      } else {
-        // D&D 5e size extraction
-        size = system.traits?.size?.value || system.traits?.size ||
-          system.size?.value || system.size ||
-          system.details?.size || 'medium';
-      }
+      // Extract size (WFRP specific)
+      let size = 'average';
+      size = system.details?.size?.value || system.details?.size || 'average';
 
       // Ensure size is a string
       if (typeof size !== 'string') {
-        size = String(size || 'medium');
+        size = String(size || 'average');
       }
 
-      // Extract hit points/wounds with system-specific fallbacks
-      let hitPoints = 0;
+      // Extract wounds (WFRP specific)
+      const woundsValue = system.status?.wounds?.max || system.status?.wounds?.value ||
+        system.wounds?.max || system.wounds?.value || 0;
 
-      if (isWFRP) {
-        // WFRP uses wounds instead of hit points
-        hitPoints = system.status?.wounds?.max || system.status?.wounds?.value ||
-          system.wounds?.max || system.wounds?.value || 0;
-      } else {
-        // D&D 5e hit points extraction
-        hitPoints = system.attributes?.hp?.max || system.hp?.max ||
-          system.attributes?.hp?.value || system.hp?.value ||
-          system.health?.max || system.health?.value || 0;
-      }
+      // Extract toughness bonus + armor (WFRP defense calculation)
+      const toughnessBonus = Math.floor((system.characteristics?.t?.value ?? 0) / 10);
+      const armorPoints = system.status?.armour?.value ??
+        system.status?.armour?.head ??
+        system.armour?.value ?? 0;
+      const toughnessValue = toughnessBonus + armorPoints;
 
-      // Extract armor class (D&D) or toughness/armor (WFRP) with more fallbacks
-      let armorClass = 10;
+      // Check for spells (WFRP magic detection)
+      const hasSpells = !!(system.flags?.wfrp4e?.spells ||
+        system.spells ||
+        (system.skills && Object.values(system.skills).some((s: any) =>
+          s.name?.toLowerCase().includes('magic') ||
+          s.name?.toLowerCase().includes('channelling'))));
 
-      if (isWFRP) {
-        // WFRP uses Toughness Bonus + Armor Points
-        const toughnessBonus = Math.floor((system.characteristics?.t?.value ?? 0) / 10);
-        const armorPoints = system.status?.armour?.value ??
-          system.status?.armour?.head ??
-          system.armour?.value ?? 0;
-        armorClass = toughnessBonus + armorPoints;
-      } else {
-        // D&D 5e armor class extraction
-        armorClass = system.attributes?.ac?.value || system.ac?.value ||
-          system.attributes?.ac || system.ac ||
-          system.armor?.value || system.armor || 10;
-      }
-
-      // Extract alignment with proper type checking (D&D only)
-      let alignment = 'unaligned';
-
-      if (!isWFRP) {
-        // D&D 5e alignment
-        alignment = system.details?.alignment?.value || system.details?.alignment ||
-          system.alignment?.value || system.alignment || 'unaligned';
-      }
-
-      // Ensure alignment is a string
-      if (typeof alignment !== 'string') {
-        alignment = String(alignment || 'unaligned');
-      }
-
-      // Check for spells with more comprehensive detection
-      let hasSpells = false;
-
-      if (isWFRP) {
-        // WFRP magic detection
-        hasSpells = !!(system.flags?.wfrp4e?.spells ||
-          system.spells ||
-          (system.skills && Object.values(system.skills).some((s: any) =>
-            s.name?.toLowerCase().includes('magic') ||
-            s.name?.toLowerCase().includes('channelling'))));
-      } else {
-        // D&D 5e spellcasting detection
-        hasSpells = !!(system.spells ||
-          system.attributes?.spellcasting ||
-          (system.details?.spellLevel && system.details.spellLevel > 0) ||
-          (system.resources?.spell && system.resources.spell.max > 0) ||
-          system.spellcasting ||
-          (system.traits?.spellcasting) ||
-          (system.details?.spellcaster));
-      }
-
-      // Check for legendary actions (D&D) or special abilities (WFRP)
-      let hasLegendaryActions = false;
-
-      if (isWFRP) {
-        // WFRP special traits/abilities
-        hasLegendaryActions = !!(system.traits?.length > 0 ||
-          system.flags?.wfrp4e?.traits?.length > 0);
-      } else {
-        // D&D 5e legendary actions detection
-        hasLegendaryActions = !!(system.resources?.legact ||
-          system.legendary ||
-          (system.resources?.legres && system.resources.legres.value > 0) ||
-          system.details?.legendary ||
-          system.traits?.legendary ||
-          (system.resources?.legendary && system.resources.legendary.max > 0));
-      }
+      // Check for special abilities (WFRP traits/abilities)
+      const hasSpecialAbilities = !!(system.traits?.length > 0 ||
+        system.flags?.wfrp4e?.traits?.length > 0);
 
       // Successful extraction
       return {
@@ -830,11 +740,10 @@ class PersistentCreatureIndex {
           challengeRating: challengeRating,
           creatureType: creatureType.toLowerCase(),
           size: size.toLowerCase(),
-          hitPoints: hitPoints,
-          armorClass: armorClass,
+          wounds: woundsValue,
+          toughness: toughnessValue,
           hasSpells: hasSpells,
-          hasLegendaryActions: hasLegendaryActions,
-          alignment: alignment.toLowerCase(),
+          hasSpecialAbilities: hasSpecialAbilities,
           description: doc.system?.details?.biography || doc.system?.description || '',
           img: doc.img
         },
@@ -854,12 +763,11 @@ class PersistentCreatureIndex {
           packLabel: pack.metadata.label,
           challengeRating: 0,
           creatureType: 'unknown',
-          size: 'medium',
-          hitPoints: 1,
-          armorClass: 10,
+          size: 'average',
+          wounds: 1,
+          toughness: 10,
           hasSpells: false,
-          hasLegendaryActions: false,
-          alignment: 'unaligned',
+          hasSpecialAbilities: false,
           description: 'Data extraction failed',
           img: doc.img || ''
         },
@@ -958,8 +866,6 @@ export class FoundryDataAccess {
     challengeRating?: number | { min?: number; max?: number };
     creatureType?: string;
     size?: string;
-    alignment?: string;
-    hasLegendaryActions?: boolean;
     spellcaster?: boolean;
   }): Promise<CompendiumSearchResult[]> {
 
@@ -970,7 +876,7 @@ export class FoundryDataAccess {
 
     // ENHANCED SEARCH: If we have creature-specific filters and Actor packType, use enhanced index
     if (filters && packType === 'Actor' &&
-      (filters.challengeRating || filters.creatureType || filters.hasLegendaryActions)) {
+      (filters.challengeRating || filters.creatureType)) {
 
 
       // Check if enhanced creature index is enabled
@@ -984,7 +890,6 @@ export class FoundryDataAccess {
           if (filters.challengeRating) criteria.challengeRating = filters.challengeRating;
           if (filters.creatureType) criteria.creatureType = filters.creatureType;
           if (filters.size) criteria.size = filters.size;
-          if (filters.hasLegendaryActions) criteria.hasLegendaryActions = filters.hasLegendaryActions;
 
           const enhancedResult = await this.listCreaturesByCriteria(criteria);
 
@@ -1001,17 +906,17 @@ export class FoundryDataAccess {
             packLabel: creature.packLabel || creature.pack,
             description: creature.description || '',
             hasImage: creature.hasImage || !!creature.img,
-            summary: `CR ${creature.challengeRating} ${creature.creatureType} from ${creature.packLabel}`,
+            summary: `${creature.creatureType} from ${creature.packLabel}`,
             // Enhanced data (not part of interface but will be included)
             challengeRating: creature.challengeRating,
             creatureType: creature.creatureType,
             size: creature.size,
-            hasLegendaryActions: creature.hasLegendaryActions
+            hasSpecialAbilities: creature.hasSpecialAbilities
           } as CompendiumSearchResult & {
             challengeRating: number;
             creatureType: string;
             size: string;
-            hasLegendaryActions: boolean;
+            hasSpecialAbilities: boolean;
           }));
 
         } catch (error) {
@@ -1179,42 +1084,13 @@ export class FoundryDataAccess {
     challengeRating?: number | { min?: number; max?: number };
     creatureType?: string;
     size?: string;
-    alignment?: string;
-    hasLegendaryActions?: boolean;
     spellcaster?: boolean;
   }): boolean {
     const system = entry.system || {};
 
 
-    // Challenge Rating filter
-    if (filters.challengeRating !== undefined) {
-      // Try multiple possible CR locations in D&D 5e data structure
-      let entryCR = system.details?.cr?.value || system.details?.cr || system.cr?.value || system.cr || 0;
-
-      // Handle fractional CRs (common in D&D 5e)
-      if (typeof entryCR === 'string') {
-        if (entryCR === '1/8') entryCR = 0.125;
-        else if (entryCR === '1/4') entryCR = 0.25;
-        else if (entryCR === '1/2') entryCR = 0.5;
-        else entryCR = parseFloat(entryCR) || 0;
-      }
-
-      if (typeof filters.challengeRating === 'number') {
-        // Exact CR match
-        if (entryCR !== filters.challengeRating) {
-          return false;
-        }
-      } else if (typeof filters.challengeRating === 'object') {
-        // CR range
-        const { min, max } = filters.challengeRating;
-        if (min !== undefined && entryCR < min) {
-          return false;
-        }
-        if (max !== undefined && entryCR > max) {
-          return false;
-        }
-      }
-    }
+    // WFRP: Challenge Rating filter not applicable
+    // (WFRP uses characteristics-based threat assessment, not CR)
 
     // Creature Type filter
     if (filters.creatureType) {
@@ -1228,23 +1104,6 @@ export class FoundryDataAccess {
     if (filters.size) {
       const entrySize = system.traits?.size || system.size || '';
       if (entrySize.toLowerCase() !== filters.size.toLowerCase()) {
-        return false;
-      }
-    }
-
-    // Alignment filter
-    if (filters.alignment) {
-      const entryAlignment = system.details?.alignment || system.alignment || '';
-      if (!entryAlignment.toLowerCase().includes(filters.alignment.toLowerCase())) {
-        return false;
-      }
-    }
-
-    // Legendary Actions filter
-    if (filters.hasLegendaryActions !== undefined) {
-      const hasLegendary = !!(system.resources?.legact || system.legendary ||
-        (system.resources?.legres && system.resources.legres.value > 0));
-      if (hasLegendary !== filters.hasLegendaryActions) {
         return false;
       }
     }
@@ -1321,7 +1180,7 @@ export class FoundryDataAccess {
     creatureType?: string;
     size?: string;
     hasSpells?: boolean;
-    hasLegendaryActions?: boolean;
+    hasSpecialAbilities?: boolean;
     limit?: number;
   }): Promise<{ creatures: any[], searchSummary: any }> {
 
@@ -1365,16 +1224,15 @@ export class FoundryDataAccess {
         packLabel: creature.packLabel,
         description: creature.description || '',
         hasImage: !!creature.img,
-        summary: `CR ${creature.challengeRating} ${creature.creatureType} from ${creature.packLabel}`,
+        summary: `${creature.creatureType} from ${creature.packLabel}`,
         // Include enhanced data for better sorting and display
         challengeRating: creature.challengeRating,
         creatureType: creature.creatureType,
         size: creature.size,
-        hitPoints: creature.hitPoints,
-        armorClass: creature.armorClass,
+        wounds: creature.wounds,
+        toughness: creature.toughness,
         hasSpells: creature.hasSpells,
-        hasLegendaryActions: creature.hasLegendaryActions,
-        alignment: creature.alignment
+        hasSpecialAbilities: creature.hasSpecialAbilities
       }));
 
       // Calculate pack distribution for summary
@@ -1429,7 +1287,7 @@ export class FoundryDataAccess {
     creatureType?: string;
     size?: string;
     hasSpells?: boolean;
-    hasLegendaryActions?: boolean;
+    hasSpecialAbilities?: boolean;
   }): boolean {
 
     // Challenge Rating filter
@@ -1470,9 +1328,9 @@ export class FoundryDataAccess {
       }
     }
 
-    // Legendary Actions filter
-    if (criteria.hasLegendaryActions !== undefined) {
-      if (creature.hasLegendaryActions !== criteria.hasLegendaryActions) {
+    // Special Abilities filter (WFRP traits/abilities)
+    if (criteria.hasSpecialAbilities !== undefined) {
+      if (creature.hasSpecialAbilities !== criteria.hasSpecialAbilities) {
         return false;
       }
     }
@@ -1521,7 +1379,7 @@ export class FoundryDataAccess {
 
   /**
    * Prioritize compendium packs by likelihood of containing relevant creatures
-   * Supports both D&D 5e and WFRP 4e systems
+   * WFRP 4e specific implementation
    * @unused - Replaced by enhanced persistent index system
    */
   // @ts-ignore - Unused method kept for compatibility
@@ -1555,24 +1413,18 @@ export class FoundryDataAccess {
         { pattern: /hero|player|pc|career/i, priority: 10 },     // Player characters
       ];
     } else {
-      // D&D 5e pack prioritization
+      // Generic pack prioritization for other game systems
       priorityOrder = [
-        // Tier 1: Core D&D 5e content (highest priority)
-        { pattern: /^dnd5e\.monsters/, priority: 100 },           // Core D&D 5e monsters 
-        { pattern: /^dnd5e\.actors/, priority: 95 },             // Core D&D 5e actors
-        { pattern: /ddb.*monsters/i, priority: 90 },             // D&D Beyond monsters
+        // Tier 1: Core content with monsters/creatures
+        { pattern: /monsters?|creatures?|bestiary/i, priority: 100 },
 
         // Tier 2: Official modules and supplements
-        { pattern: /^world\..*ddb.*monsters/i, priority: 85 },   // World-specific DDB monsters
-        { pattern: /monsters/i, priority: 80 },                  // Any pack with "monsters"
+        { pattern: /^world\./i, priority: 80 },                  // World packs
 
-        // Tier 3: Campaign and adventure content
-        { pattern: /^world\.(?!.*summon|.*hero)/i, priority: 70 }, // World packs (not summons/heroes)
-
-        // Tier 4: Specialized content
+        // Tier 3: Specialized content
         { pattern: /summon|familiar/i, priority: 40 },           // Summons and familiars
 
-        // Tier 5: Unlikely to contain monsters (lowest priority) 
+        // Tier 4: Unlikely to contain creatures (lowest priority) 
         { pattern: /hero|player|pc/i, priority: 10 },            // Player characters
       ];
     }
@@ -1613,17 +1465,17 @@ export class FoundryDataAccess {
     creatureType?: string;
     size?: string;
     hasSpells?: boolean;
-    hasLegendaryActions?: boolean;
+    hasSpecialAbilities?: boolean;
   }): boolean {
     const system = entry.system || {};
 
 
     // Challenge Rating filter - enhanced extraction
     if (criteria.challengeRating !== undefined) {
-      // Try multiple possible CR locations in D&D 5e data structure
+      // Try multiple possible CR locations in game system data structure
       let entryCR = system.details?.cr?.value || system.details?.cr || system.cr?.value || system.cr || 0;
 
-      // Handle fractional CRs (common in D&D 5e)
+      // Handle fractional CR values (common in some game systems)
       if (typeof entryCR === 'string') {
         if (entryCR === '1/8') entryCR = 0.125;
         else if (entryCR === '1/4') entryCR = 0.25;
@@ -1645,7 +1497,7 @@ export class FoundryDataAccess {
 
     // Creature Type filter - enhanced extraction
     if (criteria.creatureType) {
-      // Try multiple possible type locations in D&D 5e data structure
+      // Try multiple possible type locations in game system data structure
       const entryType = system.details?.type?.value || system.details?.type || system.type?.value || system.type || '';
       if (entryType.toLowerCase() !== criteria.creatureType.toLowerCase()) {
         return false;
@@ -1665,11 +1517,11 @@ export class FoundryDataAccess {
       if (isSpellcaster !== criteria.hasSpells) return false;
     }
 
-    // Legendary Actions filter
-    if (criteria.hasLegendaryActions !== undefined) {
-      const hasLegendary = !!(system.resources?.legact || system.legendary ||
-        (system.resources?.legres && system.resources.legres.value > 0));
-      if (hasLegendary !== criteria.hasLegendaryActions) return false;
+    // Special Abilities filter (WFRP traits/abilities)
+    if (criteria.hasSpecialAbilities !== undefined) {
+      const hasSpecial = !!(system.traits?.special || system.special ||
+        (system.traits && Object.keys(system.traits).length > 0));
+      if (hasSpecial !== criteria.hasSpecialAbilities) return false;
     }
 
     return true;
@@ -1683,7 +1535,7 @@ export class FoundryDataAccess {
     excludeTerms?: string[];
     size?: string;
     hasSpells?: boolean;
-    hasLegendaryActions?: boolean;
+    hasSpecialAbilities?: boolean;
   }): boolean {
     const name = (entry.name || '').toLowerCase();
     const description = (entry.description || '').toLowerCase();
@@ -2967,88 +2819,55 @@ export class FoundryDataAccess {
 
   /**
    * Build roll formula based on roll type and target using Foundry's roll data system
-   * Supports both D&D 5e and WFRP 4e systems
+   * WFRP 4e specific implementation
    */
   private buildRollFormula(rollType: string, rollTarget: string, rollModifier: string, character?: Actor): string {
-    let baseFormula = '1d20';
+    let baseFormula = '1d100<=50';
 
-    // Detect game system
+    // Only support WFRP 4e
     const gameSystem = game.system?.id || '';
     const isWFRP = gameSystem.includes('wfrp');
+
+    if (!isWFRP) {
+      console.warn(`[${MODULE_ID}] Non-WFRP system detected. This module only supports WFRP 4e.`);
+      return '1d100<=50';
+    }
 
     if (character) {
       // Use Foundry's getRollData() to get calculated modifiers including active effects
       const rollData = character.getRollData() as any; // Type assertion for Foundry's dynamic roll data
 
-      if (isWFRP) {
-        // WFRP 4e uses d100 system with characteristics and skills
-        switch (rollType) {
-          case 'characteristic':
-          case 'ability':
-            // WFRP characteristics (WS, BS, S, T, I, Ag, Dex, Int, WP, Fel)
-            const charCode = this.getWFRPCharacteristicCode(rollTarget);
-            const charValue = rollData.characteristics?.[charCode]?.value ??
-              (character as any).system?.characteristics?.[charCode]?.value ?? 50;
-            baseFormula = `1d100<=${charValue}`;
-            break;
+      // WFRP 4e uses d100 system with characteristics and skills
+      switch (rollType) {
+        case 'characteristic':
+        case 'ability':
+          // WFRP characteristics (WS, BS, S, T, I, Ag, Dex, Int, WP, Fel)
+          const charCode = this.getWFRPCharacteristicCode(rollTarget);
+          const charValue = rollData.characteristics?.[charCode]?.value ??
+            (character as any).system?.characteristics?.[charCode]?.value ?? 50;
+          baseFormula = `1d100<=${charValue}`;
+          break;
 
-          case 'skill':
-            // WFRP skills use characteristic + advances
-            const skillName = rollTarget.toLowerCase();
-            const skill = Object.values((character as any).system?.skills || {}).find((s: any) =>
-              s.name?.toLowerCase() === skillName
-            ) as any;
-            const skillValue = skill?.total ?? skill?.value ?? 50;
-            baseFormula = `1d100<=${skillValue}`;
-            break;
+        case 'skill':
+          // WFRP skills use characteristic + advances
+          const skillName = rollTarget.toLowerCase();
+          const skill = Object.values((character as any).system?.skills || {}).find((s: any) =>
+            s.name?.toLowerCase() === skillName
+          ) as any;
+          const skillValue = skill?.total ?? skill?.value ?? 50;
+          baseFormula = `1d100<=${skillValue}`;
+          break;
 
-          case 'custom':
-            baseFormula = rollTarget; // Use rollTarget as the formula directly
-            break;
+        case 'custom':
+          baseFormula = rollTarget; // Use rollTarget as the formula directly
+          break;
 
-          default:
-            baseFormula = '1d100<=50'; // Default WFRP roll
-        }
-      } else {
-        // D&D 5e d20 system
-        switch (rollType) {
-          case 'ability':
-            // Use calculated ability modifier from roll data
-            const abilityMod = rollData.abilities?.[rollTarget]?.mod ?? 0;
-            baseFormula = `1d20+${abilityMod}`;
-            break;
-
-          case 'skill':
-            // Map skill name to skill code (D&D 5e uses 3-letter codes)
-            const skillCode = this.getSkillCode(rollTarget);
-            // Use calculated skill total from roll data (includes ability mod + proficiency + bonuses)
-            const skillMod = rollData.skills?.[skillCode]?.total ?? 0;
-            baseFormula = `1d20+${skillMod}`;
-            break;
-
-          case 'save':
-            // Use saving throw modifier from roll data
-            const saveMod = rollData.abilities?.[rollTarget]?.save ?? rollData.abilities?.[rollTarget]?.mod ?? 0;
-            baseFormula = `1d20+${saveMod}`;
-            break;
-
-          case 'initiative':
-            // Use initiative modifier from attributes or dex mod
-            const initMod = rollData.attributes?.init?.mod ?? rollData.abilities?.dex?.mod ?? 0;
-            baseFormula = `1d20+${initMod}`;
-            break;
-
-          case 'custom':
-            baseFormula = rollTarget; // Use rollTarget as the formula directly
-            break;
-
-          default:
-            baseFormula = '1d20';
-        }
+        default:
+          baseFormula = '1d100<=50'; // Default WFRP roll
       }
     } else {
-      console.warn(`[${MODULE_ID}] No character provided for roll formula, using base ${isWFRP ? '1d100' : '1d20'}`);
-      baseFormula = isWFRP ? '1d100<=50' : '1d20';
+      console.warn(`[${MODULE_ID}] No character provided for roll formula, using base 1d100<=50`);
+      baseFormula = '1d100<=50';
     }
 
     // Add modifier if provided
@@ -3094,39 +2913,6 @@ export class FoundryDataAccess {
   }
 
   /**
-   * Map skill names to D&D 5e skill codes
-   */
-  private getSkillCode(skillName: string): string {
-    const skillMap: { [key: string]: string } = {
-      'acrobatics': 'acr',
-      'animal handling': 'ani',
-      'animalhandling': 'ani',
-      'arcana': 'arc',
-      'athletics': 'ath',
-      'deception': 'dec',
-      'history': 'his',
-      'insight': 'ins',
-      'intimidation': 'itm',
-      'investigation': 'inv',
-      'medicine': 'med',
-      'nature': 'nat',
-      'perception': 'prc',
-      'performance': 'prf',
-      'persuasion': 'per',
-      'religion': 'rel',
-      'sleight of hand': 'slt',
-      'sleightofhand': 'slt',
-      'stealth': 'ste',
-      'survival': 'sur'
-    };
-
-    const normalizedName = skillName.toLowerCase().replace(/\s+/g, '');
-    const skillCode = skillMap[normalizedName] || skillMap[skillName.toLowerCase()] || skillName.toLowerCase();
-
-    return skillCode;
-  }
-
-  /**
    * Build roll button label
    */
   private buildRollButtonLabel(rollType: string, rollTarget: string, isPublic: boolean): string {
@@ -3137,8 +2923,6 @@ export class FoundryDataAccess {
         return `${rollTarget.toUpperCase()} Ability Check (${visibility})`;
       case 'skill':
         return `${rollTarget.charAt(0).toUpperCase() + rollTarget.slice(1)} Skill Check (${visibility})`;
-      case 'save':
-        return `${rollTarget.toUpperCase()} Saving Throw (${visibility})`;
       case 'attack':
         return `${rollTarget} Attack (${visibility})`;
       case 'initiative':

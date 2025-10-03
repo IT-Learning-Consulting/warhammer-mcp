@@ -89,6 +89,14 @@ export class QueryHandlers {
     CONFIG.queries[`${modulePrefix}.createItem`] = this.handleCreateItem.bind(this);
     CONFIG.queries[`${modulePrefix}.deleteItem`] = this.handleDeleteItem.bind(this);
 
+    // RollTable operations
+    CONFIG.queries[`${modulePrefix}.createRollTable`] = this.handleCreateRollTable.bind(this);
+    CONFIG.queries[`${modulePrefix}.addTableResults`] = this.handleAddTableResults.bind(this);
+    CONFIG.queries[`${modulePrefix}.listRollTables`] = this.handleListRollTables.bind(this);
+    CONFIG.queries[`${modulePrefix}.getRollTable`] = this.handleGetRollTable.bind(this);
+    CONFIG.queries[`${modulePrefix}.rollOnTable`] = this.handleRollOnTable.bind(this);
+    CONFIG.queries[`${modulePrefix}.deleteRollTable`] = this.handleDeleteRollTable.bind(this);
+
   }
 
   /**
@@ -184,8 +192,6 @@ export class QueryHandlers {
       challengeRating?: number | { min?: number; max?: number };
       creatureType?: string;
       size?: string;
-      alignment?: string;
-      hasLegendaryActions?: boolean;
       spellcaster?: boolean;
     }
   }): Promise<any> {
@@ -222,7 +228,7 @@ export class QueryHandlers {
     creatureType?: string;
     size?: string;
     hasSpells?: boolean;
-    hasLegendaryActions?: boolean;
+    hasSpecialAbilities?: boolean;
     limit?: number;
   }): Promise<any> {
     try {
@@ -1046,6 +1052,182 @@ export class QueryHandlers {
       return await this.dataAccess.deleteItem(data);
     } catch (error) {
       throw new Error(`Failed to delete item: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Handle create RollTable request
+   */
+  private async handleCreateRollTable(data: { tableData: any }): Promise<any> {
+    try {
+      // SECURITY: Silent GM validation
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) {
+        return { error: 'Access denied', success: false };
+      }
+
+      console.log("createRollTable received data:", JSON.stringify(data, null, 2));
+
+      // Extract results from tableData if present
+      const results = data.tableData.results || [];
+      const tableDataWithoutResults = { ...data.tableData };
+      delete tableDataWithoutResults.results;
+
+      console.log("Creating table with:", JSON.stringify(tableDataWithoutResults, null, 2));
+      console.log("Number of results to add:", results.length);
+
+      // Create the table first - ensure we have a name
+      if (!tableDataWithoutResults.name) {
+        return { error: 'Table name is required', success: false };
+      }
+
+      const table = await RollTable.create(tableDataWithoutResults);
+
+      console.log("Table created with ID:", table.id);
+
+      // If results were provided, add them to the table
+      if (results.length > 0) {
+        console.log("Adding results:", JSON.stringify(results.slice(0, 2), null, 2)); // Log first 2 results
+        await table.createEmbeddedDocuments('TableResult', results);
+      }
+
+      return {
+        id: table.id,
+        name: table.name,
+        success: true
+      };
+    } catch (error) {
+      console.error("Failed to create RollTable:", error);
+      throw new Error(`Failed to create RollTable: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Handle add table results request
+   */
+  private async handleAddTableResults(data: { tableId: string; results: any[] }): Promise<any> {
+    try {
+      // SECURITY: Silent GM validation
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) {
+        return { error: 'Access denied', success: false };
+      }
+
+      const table = game.tables.get(data.tableId);
+      if (!table) {
+        return { error: 'Table not found', success: false };
+      }
+
+      await table.createEmbeddedDocuments('TableResult', data.results);
+      return { success: true };
+    } catch (error) {
+      throw new Error(`Failed to add table results: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Handle list RollTables request
+   */
+  private async handleListRollTables(_data: {}): Promise<any> {
+    try {
+      const tables = game.tables.map((table: any) => ({
+        id: table.id,
+        name: table.name,
+        formula: table.formula,
+        description: table.description || '',
+        results: table.results.map((r: any) => ({
+          id: r.id,
+          text: r.text,
+          range: r.range,
+          weight: r.weight
+        }))
+      }));
+
+      return tables;
+    } catch (error) {
+      throw new Error(`Failed to list RollTables: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Handle get RollTable request
+   */
+  private async handleGetRollTable(data: { tableId: string }): Promise<any> {
+    try {
+      const table = game.tables.get(data.tableId);
+      if (!table) {
+        return { error: 'Table not found' };
+      }
+
+      return {
+        id: table.id,
+        name: table.name,
+        formula: table.formula,
+        description: table.description || '',
+        replacement: table.replacement,
+        displayRoll: table.displayRoll,
+        results: (table.results as any).map((r: any) => ({
+          id: r.id,
+          text: r.text,
+          range: r.range,
+          weight: r.weight
+        }))
+      };
+    } catch (error) {
+      throw new Error(`Failed to get RollTable: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Handle roll on table request
+   */
+  private async handleRollOnTable(data: { tableId: string; rollMode?: string }): Promise<any> {
+    try {
+      const table = game.tables.get(data.tableId);
+      if (!table) {
+        return { error: 'Table not found' };
+      }
+
+      const rollMode = data.rollMode || 'public';
+      const draw = await table.draw({ rollMode: rollMode as any });
+
+      if (!draw || !draw.results || draw.results.length === 0) {
+        return { error: 'No result drawn from table' };
+      }
+
+      const result = draw.results[0];
+      return {
+        tableName: table.name,
+        formula: table.formula,
+        roll: draw.roll?.total || 0,
+        text: result.text,
+        drawn: result.drawn
+      };
+    } catch (error) {
+      throw new Error(`Failed to roll on table: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Handle delete RollTable request
+   */
+  private async handleDeleteRollTable(data: { tableId: string }): Promise<any> {
+    try {
+      // SECURITY: Silent GM validation
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) {
+        return { error: 'Access denied', success: false };
+      }
+
+      const table = game.tables.get(data.tableId);
+      if (!table) {
+        return { error: 'Table not found', success: false };
+      }
+
+      await table.delete();
+      return { success: true };
+    } catch (error) {
+      throw new Error(`Failed to delete RollTable: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 

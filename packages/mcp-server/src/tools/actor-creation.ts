@@ -27,13 +27,13 @@ export class ActorCreationTools {
     return [
       {
         name: 'create-actor-from-compendium',
-        description: 'Create one or more actors from a specific compendium entry with custom names. Supports both D&D 5e and WFRP 4e systems. Use search-compendium first to find the exact creature you want, then use this tool with the packId and itemId from the search results.',
+        description: 'Create one or more actors from a specific compendium entry with custom names. Use search-compendium first to find the exact creature you want, then use this tool with the packId and itemId from the search results.',
         inputSchema: {
           type: 'object',
           properties: {
             packId: {
               type: 'string',
-              description: 'ID of the compendium pack containing the creature (D&D 5e: "dnd5e.monsters"; WFRP 4e: "wfrp4e.bestiary" or similar)',
+              description: 'ID of the compendium pack containing the creature (e.g., "wfrp4e.bestiary", "wfrp4e-core.bestiary")',
             },
             itemId: {
               type: 'string',

@@ -204,7 +204,8 @@ Returns breakdown showing:
         const xpDistribution = this.distributeXP(
             args.totalXP,
             archetypeData,
-            baseCharacteristics
+            baseCharacteristics,
+            species
         );
 
         // Generate suggested equipment
@@ -528,7 +529,8 @@ Returns breakdown showing:
         const distribution = this.distributeXP(
             args.totalXP,
             archetypeData,
-            baseCharacteristics
+            baseCharacteristics,
+            "human"
         );
 
         let report = `📊 **XP Distribution Preview: ${archetypeData.name}**\n\n`;
@@ -763,10 +765,11 @@ Returns breakdown showing:
     private distributeXP(
         totalXP: number,
         archetype: any,
-        baseCharacteristics: any
+        baseCharacteristics: any,
+        species: string = "human"
     ) {
         // XP costs per advance for each tier (every 5 advances, cost increases)
-        // Advances 0-4 cost 25 each, 5-9 cost 30 each, 10-14 cost 40 each, etc.
+        // Advances 0-5 cost 25 each, 6-10 cost 30 each, 11-15 cost 40 each, etc.
         const characteristicXPCosts = [25, 30, 40, 50, 70, 90, 120, 150, 190, 240];
         const skillXPCosts = [10, 15, 20, 30, 40, 60, 80, 110, 140, 180];
         const talentXPCost = 100;
@@ -801,12 +804,13 @@ Returns breakdown showing:
             }
 
             // Calculate how many advances we can afford with this budget
-            // Each tier of 5 advances has a different cost
+            // Tier ranges: 0-5 (tier 0), 6-10 (tier 1), 11-15 (tier 2), etc.
             let advances = 0;
             let spent = 0;
 
             while (spent < charBudget && advances < 50) {
-                const tier = Math.floor(advances / 5); // Which cost tier are we in?
+                // Determine cost tier: 0-5 is tier 0, then every 5 advances after that
+                const tier = advances <= 5 ? 0 : Math.floor((advances - 1) / 5);
                 const costPerAdvance = characteristicXPCosts[tier] || characteristicXPCosts[characteristicXPCosts.length - 1];
 
                 if (spent + costPerAdvance <= charBudget) {
@@ -836,9 +840,9 @@ Returns breakdown showing:
             let advances = 0;
             let spent = 0;
 
-            // Calculate skill advances same way as characteristics
+            // Calculate skill advances: 0-5 (tier 0), 6-10 (tier 1), 11-15 (tier 2), etc.
             while (spent < xpPerSkill && advances < 50) {
-                const tier = Math.floor(advances / 5);
+                const tier = advances <= 5 ? 0 : Math.floor((advances - 1) / 5);
                 const costPerAdvance = skillXPCosts[tier] || skillXPCosts[skillXPCosts.length - 1];
 
                 if (spent + costPerAdvance <= xpPerSkill) {
@@ -868,6 +872,19 @@ Returns breakdown showing:
         // Acquire talents
         const talents = [];
         let talentXPSpent = 0;
+
+        // Add species-specific talents (these don't cost XP - they're innate)
+        const speciesTalents = this.getSpeciesTalents(species);
+        for (const talentName of speciesTalents) {
+            talents.push({
+                name: talentName,
+                rank: 1,
+                xpSpent: 0, // Species talents are free
+                description: this.getTalentDescription(talentName)
+            });
+        }
+
+        // Add archetype talents with XP budget
         const numTalents = Math.floor(talentXP / talentXPCost);
 
         for (let i = 0; i < numTalents && i < archetype.typicalTalents.length; i++) {
@@ -1000,7 +1017,13 @@ Returns breakdown showing:
             'Dirty Fighting': 'Ignore dishonorable combat penalties',
             'Assassin': 'Lethal critical hits',
             'Backstab': 'Extra damage from behind',
-            'Accurate Shot': 'Ignore cover penalties'
+            'Accurate Shot': 'Ignore cover penalties',
+            'Small': 'Smaller hitbox, advantages in confined spaces',
+            'Resistance (Chaos)': 'Bonus to resist Chaos corruption',
+            'Magic Resistance': 'Bonus to resist magic',
+            'Sturdy': 'Will not fall prone from Impact criticals',
+            'Second Sight': 'Can perceive invisible or ethereal creatures',
+            'Acute Sense (Sight)': 'Exceptional vision'
         };
 
         return descriptions[talentName] || 'Special ability';
@@ -1116,16 +1139,15 @@ Returns breakdown showing:
         const tBonus = Math.floor(t / 10);
         const wpBonus = Math.floor(wp / 10);
 
-        const speciesMultiplier: { [key: string]: number } = {
-            human: 1,
-            halfling: 1,
-            dwarf: 1,
-            "high-elf": 1,
-            "wood-elf": 1
-        };
+        // Halflings use (2 × TB)+WPB, others use SB+(2 × TB)+WPB
+        let baseWounds: number;
+        if (species === "halfling") {
+            baseWounds = (2 * tBonus) + wpBonus;
+        } else {
+            baseWounds = sBonus + (2 * tBonus) + wpBonus;
+        }
 
-        const baseWounds = sBonus + (2 * tBonus) + wpBonus;
-        return Math.max(baseWounds * (speciesMultiplier[species] || 1), 1);
+        return Math.max(baseWounds, 1);
     }
 
     private getMovement(species: string): number {
@@ -1159,5 +1181,17 @@ Returns breakdown showing:
             "wood-elf": 1
         };
         return fate[species] || 2;
+    }
+
+    private getSpeciesTalents(species: string): string[] {
+        // Species-specific innate talents based on WFRP 4e rules
+        const speciesTalents: { [key: string]: string[] } = {
+            human: [], // Humans don't have mandatory species talents (they get random talents)
+            halfling: ['Night Vision', 'Resistance (Chaos)', 'Small'],
+            dwarf: ['Magic Resistance', 'Night Vision', 'Resolute', 'Sturdy'],
+            "high-elf": ['Acute Sense (Sight)', 'Coolheaded', 'Night Vision', 'Second Sight', 'Read/Write'],
+            "wood-elf": ['Acute Sense (Sight)', 'Hardy', 'Night Vision', 'Read/Write', 'Rover']
+        };
+        return speciesTalents[species] || [];
     }
 }

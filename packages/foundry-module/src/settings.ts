@@ -11,12 +11,12 @@ export class ModuleSettings {
     // ============================================================================
     // SETTINGS MENU - Detailed Configuration Dialog
     // ============================================================================
-    
+
     // Enhanced Creature Index submenu
     (game.settings as any).registerMenu(this.moduleId, 'enhancedIndexMenu', {
       name: 'Enhanced Creature Index',
       label: 'Configure Enhanced Index',
-      hint: 'The Enhanced Creature Index pre-computes creature statistics for instant filtering by Challenge Rating, creature type, and abilities. This enables AI models to quickly find creatures matching specific criteria without loading every compendium entry.',
+      hint: 'The Enhanced Creature Index pre-computes creature statistics for instant filtering by species, traits, and abilities. This enables AI models to quickly find creatures matching specific criteria without loading every compendium entry.',
       icon: 'fas fa-search-plus',
       type: class extends FormApplication {
         static get defaultOptions() {
@@ -29,14 +29,14 @@ export class ModuleSettings {
             closeOnSubmit: false
           } as any);
         }
-        
+
         getData(): any {
           return {
             enableEnhancedCreatureIndex: game.settings.get(MODULE_ID, 'enableEnhancedCreatureIndex'),
             autoRebuildIndex: game.settings.get(MODULE_ID, 'autoRebuildIndex')
           };
         }
-        
+
         activateListeners(html: JQuery) {
           super.activateListeners(html);
           html.find('.rebuild-index-btn').click(() => {
@@ -47,7 +47,7 @@ export class ModuleSettings {
             }
           });
         }
-        
+
         async _updateObject(_event: Event, formData: any) {
           await game.settings.set(MODULE_ID, 'enableEnhancedCreatureIndex', formData.enableEnhancedCreatureIndex);
           await game.settings.set(MODULE_ID, 'autoRebuildIndex', formData.autoRebuildIndex);
@@ -205,7 +205,7 @@ export class ModuleSettings {
     // ============================================================================
     // SECTION 1: BASIC SETTINGS
     // ============================================================================
-    
+
     game.settings.register(this.moduleId, 'enabled', {
       name: 'Enable MCP Bridge',
       hint: 'Master switch to enable/disable the MCP bridge connection',
@@ -240,7 +240,7 @@ export class ModuleSettings {
     // ============================================================================
     // SECTION 2: WRITE PERMISSIONS
     // ============================================================================
-    
+
     game.settings.register(this.moduleId, 'allowWriteOperations', {
       name: 'Allow Write Operations',
       hint: 'Let AI model create actors, NPCs, and modify world content. Reading is always allowed.',
@@ -409,16 +409,16 @@ export class ModuleSettings {
    */
   updateConnectionStatusDisplay(connected: boolean, _toolCount: number): void {
     try {
-      const statusText = connected 
-        ? `✅ Connected` 
+      const statusText = connected
+        ? `✅ Connected`
         : `❌ Disconnected - Use connection panel to connect`;
-      
+
       // Update the hint for the enabled setting to show status
       const enabledSetting = (game.settings as any).settings.get(`${this.moduleId}.enabled`);
       if (enabledSetting) {
         enabledSetting.hint = `${enabledSetting.hint.split(' |')[0]} | Status: ${statusText}`;
       }
-      
+
     } catch (error) {
       console.warn(`[${this.moduleId}] Failed to update status display:`, error);
     }
@@ -515,7 +515,7 @@ export class ModuleSettings {
    * Handle enabled setting change
    */
   private onEnabledChange(enabled: boolean): void {
-    
+
     // Trigger bridge state change through global event
     if (window.foundryMCPBridge) {
       if (enabled) {
@@ -530,7 +530,7 @@ export class ModuleSettings {
    * Handle connection setting changes
    */
   private onConnectionChange(): void {
-    
+
     // If bridge is running, restart it with new settings
     if (window.foundryMCPBridge && this.getSetting('enabled')) {
       window.foundryMCPBridge.restart?.();
@@ -563,7 +563,7 @@ export class ModuleSettings {
   }
 
   migrateSettings(_fromVersion: string, _toVersion: string): void {
-    
+
     // Add migration logic here for future versions
     // For now, no migrations needed as this is initial version
   }

@@ -23,7 +23,7 @@ export class CompendiumTools {
     return [
       {
         name: 'search-compendium',
-        description: 'Enhanced search through compendium packs for items, spells, monsters, and other content. Supports advanced filtering for creatures by Challenge Rating (D&D 5e) or threat level (WFRP 4e), creature type/species, size, and more. Perfect for encounter building and creature discovery. OPTIMIZATION TIPS: Start with broad searches using CR/threat ranges (e.g., {min: 10, max: 15}) rather than exact values. Use minimal query terms initially and rely on filters. The default limit of 50 is optimal for discovery - avoid reducing it. Search results now include key stats (CR/threat, HP/Wounds, AC/Toughness) to reduce need for detailed lookups.',
+        description: 'Enhanced search through compendium packs for items, spells, monsters, and other WFRP 4e content. Supports advanced filtering for creatures by threat level (Toughness + Wounds/10), creature species, size, and more. Perfect for encounter building and creature discovery. OPTIMIZATION TIPS: Start with broad searches using threat ranges (e.g., {min: 10, max: 15}) rather than exact values. Use minimal query terms initially and rely on filters. The default limit of 50 is optimal for discovery - avoid reducing it. Search results include key stats (threat, Wounds, Toughness) to reduce need for detailed lookups.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -37,41 +37,33 @@ export class CompendiumTools {
             },
             filters: {
               type: 'object',
-              description: 'Advanced filters for actors/creatures (NPCs, monsters). Supports both D&D 5e and WFRP 4e systems.',
+              description: 'Advanced filters for actors/creatures (NPCs, monsters). WFRP 4e specific.',
               properties: {
                 challengeRating: {
                   oneOf: [
-                    { type: 'number', description: 'Exact CR/threat value (e.g., 12 for D&D, or threat level for WFRP)' },
+                    { type: 'number', description: 'Exact threat level (WFRP: Toughness + Wounds/10)' },
                     {
                       type: 'object',
                       properties: {
-                        min: { type: 'number', description: 'Minimum CR/threat level' },
-                        max: { type: 'number', description: 'Maximum CR/threat level' }
+                        min: { type: 'number', description: 'Minimum threat level' },
+                        max: { type: 'number', description: 'Maximum threat level' }
                       }
                     }
                   ]
                 },
                 creatureType: {
                   type: 'string',
-                  description: 'Creature type/species (D&D: "humanoid", "dragon", "beast", "undead", "fey", "fiend", "celestial", "construct", "elemental", "giant", "monstrosity", "ooze", "plant", "aberration"; WFRP: "human", "dwarf", "elf", "beastman", "daemon", "greenskin", "undead", "beast", "chaos")',
-                  enum: ['humanoid', 'dragon', 'beast', 'undead', 'fey', 'fiend', 'celestial', 'construct', 'elemental', 'giant', 'monstrosity', 'ooze', 'plant', 'aberration', 'human', 'dwarf', 'elf', 'halfling', 'beastman', 'daemon', 'greenskin', 'chaos', 'animal']
+                  description: 'Creature species (WFRP 4e: "human", "dwarf", "elf", "halfling", "beastman", "daemon", "greenskin", "undead", "beast", "chaos")',
+                  enum: ['human', 'dwarf', 'elf', 'halfling', 'beastman', 'daemon', 'greenskin', 'undead', 'beast', 'chaos', 'animal']
                 },
                 size: {
                   type: 'string',
-                  description: 'Creature size (e.g., "medium", "large", "huge")',
-                  enum: ['tiny', 'small', 'medium', 'large', 'huge', 'gargantuan']
-                },
-                alignment: {
-                  type: 'string',
-                  description: 'Creature alignment (e.g., "lawful good", "chaotic evil", "neutral")'
-                },
-                hasLegendaryActions: {
-                  type: 'boolean',
-                  description: 'Filter for creatures with legendary actions'
+                  description: 'Creature size (WFRP 4e: "tiny", "little", "small", "average", "large", "enormous", "monstrous")',
+                  enum: ['tiny', 'little', 'small', 'average', 'large', 'enormous', 'monstrous']
                 },
                 spellcaster: {
                   type: 'boolean',
-                  description: 'Filter for creatures that can cast spells'
+                  description: 'Filter for creatures that can cast spells or use magic'
                 }
               }
             },
@@ -110,14 +102,14 @@ export class CompendiumTools {
       },
       {
         name: 'list-creatures-by-criteria',
-        description: 'OPTIMIZED CREATURE DISCOVERY: Get a comprehensive list of creatures matching specific criteria. Perfect for encounter building - returns minimal data so Claude can use built-in monster knowledge to identify suitable creatures by name, then pull full details only for final selections. Features intelligent pack prioritization (prioritizes core game system packs - D&D 5e or WFRP 4e - then specialized content) and high result limits for complete surveys. This replaces inefficient text searches with efficient criteria-based surveys. Supports both D&D 5e and WFRP 4e systems.',
+        description: 'OPTIMIZED CREATURE DISCOVERY: Get a comprehensive list of creatures matching specific criteria. Perfect for encounter building - returns minimal data so Claude can use built-in monster knowledge to identify suitable creatures by name, then pull full details only for final selections. Features intelligent pack prioritization (prioritizes WFRP 4e core packs, then specialized content) and high result limits for complete surveys. This replaces inefficient text searches with efficient criteria-based surveys. WFRP 4e specific.',
         inputSchema: {
           type: 'object',
           properties: {
             challengeRating: {
               oneOf: [
-                { type: 'number', description: 'Exact CR/threat value (e.g., 12)' },
-                { type: 'string', description: 'Exact CR/threat value as string (e.g., "12")' },
+                { type: 'number', description: 'Exact threat level (WFRP: Toughness + Wounds/10)' },
+                { type: 'string', description: 'Exact threat level as string' },
                 {
                   type: 'object',
                   properties: {
@@ -127,25 +119,25 @@ export class CompendiumTools {
                   description: 'CR/threat range object (e.g., {"min": 10, "max": 15})'
                 }
               ],
-              description: 'Filter by Challenge Rating (D&D 5e) or threat level (WFRP 4e) - accepts number, string, or range object. Use ranges for broader discovery (e.g., {"min": 10, "max": 15}) or exact values (12 or "12")'
+              description: 'Filter by threat level (WFRP 4e: calculated from Toughness + Wounds/10) - accepts number, string, or range object. Use ranges for broader discovery (e.g., {"min": 10, "max": 15}) or exact values (12 or "12")'
             },
             creatureType: {
               type: 'string',
-              description: 'Filter by creature type/species (D&D 5e types or WFRP 4e species)',
-              enum: ['humanoid', 'dragon', 'beast', 'undead', 'fey', 'fiend', 'celestial', 'construct', 'elemental', 'giant', 'monstrosity', 'ooze', 'plant', 'aberration', 'human', 'dwarf', 'elf', 'halfling', 'beastman', 'daemon', 'greenskin', 'chaos', 'animal']
+              description: 'Filter by creature species (WFRP 4e species)',
+              enum: ['human', 'dwarf', 'elf', 'halfling', 'beastman', 'daemon', 'greenskin', 'undead', 'beast', 'chaos', 'animal']
             },
             size: {
               type: 'string',
-              description: 'Filter by creature size (D&D: tiny/small/medium/large/huge/gargantuan; WFRP: tiny/little/small/average/large/enormous)',
-              enum: ['tiny', 'small', 'medium', 'large', 'huge', 'gargantuan', 'little', 'average', 'enormous']
+              description: 'Filter by creature size (WFRP 4e: tiny/little/small/average/large/enormous/monstrous)',
+              enum: ['tiny', 'little', 'small', 'average', 'large', 'enormous', 'monstrous']
             },
             hasSpells: {
               type: 'boolean',
-              description: 'Filter for spellcasting creatures (D&D) or magic-using creatures (WFRP)'
+              description: 'Filter for magic-using creatures (WFRP 4e channelling/spells)'
             },
-            hasLegendaryActions: {
+            hasSpecialAbilities: {
               type: 'boolean',
-              description: 'Filter for creatures with legendary actions (D&D) or special traits (WFRP)'
+              description: 'Filter for creatures with special traits/abilities (WFRP 4e)'
             },
             limit: {
               type: 'number',
@@ -186,11 +178,10 @@ export class CompendiumTools {
             max: z.number().optional()
           })
         ]).optional(),
-        creatureType: z.enum(['humanoid', 'dragon', 'beast', 'undead', 'fey', 'fiend', 'celestial', 'construct', 'elemental', 'giant', 'monstrosity', 'ooze', 'plant', 'aberration']).optional(),
-        size: z.enum(['tiny', 'small', 'medium', 'large', 'huge', 'gargantuan']).optional(),
-        alignment: z.string().optional(),
-        hasLegendaryActions: z.boolean().optional(),
-        spellcaster: z.boolean().optional()
+        creatureType: z.enum(['human', 'dwarf', 'elf', 'halfling', 'beastman', 'daemon', 'greenskin', 'undead', 'beast', 'chaos', 'animal']).optional(),
+        size: z.enum(['tiny', 'little', 'small', 'average', 'large', 'enormous', 'monstrous']).optional(),
+        spellcaster: z.boolean().optional(),
+        hasSpecialAbilities: z.boolean().optional()
       }).optional(),
       limit: z.number().min(1).max(50).default(50),
     });
@@ -358,10 +349,10 @@ export class CompendiumTools {
           message: 'hasSpells must be true or false'
         }).transform(val => val.toLowerCase() === 'true')
       ]).optional(),
-      hasLegendaryActions: z.union([
+      hasSpecialAbilities: z.union([
         z.boolean(),
         z.string().refine((val) => ['true', 'false'].includes(val.toLowerCase()), {
-          message: 'hasLegendaryActions must be true or false'
+          message: 'hasSpecialAbilities must be true or false'
         }).transform(val => val.toLowerCase() === 'true')
       ]).optional(),
       limit: z.union([
@@ -411,8 +402,8 @@ export class CompendiumTools {
         criteria: params,
         searchSummary: {
           ...searchSummary,
-          searchStrategy: 'Prioritized pack search - core game system content (D&D 5e or WFRP 4e) first, then modules, then campaign-specific',
-          note: 'Packs searched in priority order to find most relevant creatures first. Supports both D&D 5e and WFRP 4e systems.'
+          searchStrategy: 'Prioritized pack search - WFRP 4e core content first, then modules, then campaign-specific',
+          note: 'Packs searched in priority order to find most relevant creatures first. WFRP 4e specific.'
         },
         optimizationNote: 'Use creature names to identify suitable options, then call get-compendium-item for final details only'
       };
@@ -479,12 +470,12 @@ export class CompendiumTools {
     };
 
     // Add key stats for actors/creatures to reduce need for detail calls
-    // Supports both D&D 5e and WFRP 4e data structures
+    // WFRP 4e specific data structures
     if (item.type === 'npc' || item.type === 'character') {
       const system = item.system || {};
       const stats: any = {};
 
-      // Challenge Rating (D&D) or Threat Level (WFRP - calculated)
+      // Threat Level (WFRP: Toughness + Wounds/10)
       const cr = system.details?.cr || system.cr;
       if (cr !== undefined) {
         stats.challengeRating = cr;
@@ -497,43 +488,29 @@ export class CompendiumTools {
         }
       }
 
-      // Hit Points (D&D) or Wounds (WFRP)
-      const hp = system.attributes?.hp?.value || system.hp?.value;
-      const maxHp = system.attributes?.hp?.max || system.hp?.max;
+      // WFRP Wounds
       const wounds = system.status?.wounds?.value;
       const maxWounds = system.status?.wounds?.max;
 
-      if (hp !== undefined || maxHp !== undefined) {
-        stats.hitPoints = { current: hp, max: maxHp };
-      } else if (wounds !== undefined || maxWounds !== undefined) {
+      if (wounds !== undefined || maxWounds !== undefined) {
         stats.wounds = { current: wounds, max: maxWounds };
       }
 
-      // Armor Class (D&D) or Toughness Bonus + Armor (WFRP)
-      const ac = system.attributes?.ac?.value || system.ac?.value;
-      if (ac !== undefined) {
-        stats.armorClass = ac;
-      } else {
-        // WFRP Toughness Bonus + Armor
-        const toughnessBonus = Math.floor((system.characteristics?.t?.value ?? 0) / 10);
-        const armorPoints = system.status?.armour?.value ?? system.status?.armour?.head;
-        if (toughnessBonus !== undefined || armorPoints !== undefined) {
-          stats.toughnessAndArmor = { toughnessBonus, armorPoints: armorPoints || 0 };
-        }
+      // WFRP Toughness Bonus + Armor
+      const toughnessBonus = Math.floor((system.characteristics?.t?.value ?? 0) / 10);
+      const armorPoints = system.status?.armour?.value ?? system.status?.armour?.head;
+      if (toughnessBonus !== undefined || armorPoints !== undefined) {
+        stats.toughnessAndArmor = { toughnessBonus, armorPoints: armorPoints || 0 };
       }
 
-      // Creature Type (D&D) or Species (WFRP)
-      const creatureType = system.details?.type?.value || system.type?.value ||
-        system.details?.species?.value || system.details?.species;
+      // Species (WFRP)
+      const creatureType = system.details?.species?.value || system.details?.species ||
+        system.details?.type?.value || system.type?.value;
       if (creatureType) stats.creatureType = creatureType;
 
       // Size
       const size = system.traits?.size || system.size || system.details?.size;
       if (size) stats.size = size;
-
-      // Alignment (D&D only)
-      const alignment = system.details?.alignment || system.alignment;
-      if (alignment) stats.alignment = alignment;
 
       if (Object.keys(stats).length > 0) {
         formatted.stats = stats;
@@ -617,24 +594,23 @@ export class CompendiumTools {
     const system = creature.system || {};
 
     // Handle both enhanced creature index data (direct properties) and raw Foundry data (system paths)
-    // Supports D&D 5e and WFRP 4e
+    // WFRP 4e specific
     const challengeRating = creature.challengeRating ?? system.details?.cr ?? system.cr;
     const creatureType = creature.creatureType ?? system.details?.type?.value ?? system.type?.value ??
       system.details?.species?.value ?? system.details?.species ?? 'unknown';
     const size = creature.size ?? system.traits?.size ?? system.size ?? system.details?.size ?? 'medium';
 
     // Use enhanced data for feature flags if available
-    // D&D 5e spellcasting or WFRP magic
+    // WFRP magic detection
     const hasSpells = creature.hasSpells ?? !!(system.spells || system.attributes?.spellcasting ||
       (system.details?.spellLevel && system.details.spellLevel > 0) ||
       (system.skills && Object.values(system.skills).some((s: any) =>
         s.name?.toLowerCase().includes('magic') ||
         s.name?.toLowerCase().includes('channelling'))));
 
-    // D&D 5e legendary actions or WFRP special traits
-    const hasLegendary = creature.hasLegendaryActions ?? !!(system.resources?.legact || system.legendary ||
-      (system.resources?.legres && system.resources.legres.value > 0) ||
-      system.traits?.length > 0);
+    // WFRP special traits/abilities
+    const hasSpecial = creature.hasSpecialAbilities ?? !!(system.traits?.special || system.special ||
+      (system.traits && Object.keys(system.traits).length > 0));
 
     // Ultra-minimal format for efficient discovery
     return {
@@ -644,15 +620,15 @@ export class CompendiumTools {
       challengeRating: challengeRating,
       creatureType: creatureType,
       size: size,
-      // Key feature flags for quick filtering (works for both systems)
+      // Key feature flags for quick filtering (WFRP specific)
       flags: {
         spellcaster: hasSpells,
-        legendary: hasLegendary,
+        specialAbilities: hasSpecial,
         undead: creatureType.toLowerCase().includes('undead'),
-        dragon: creatureType.toLowerCase().includes('dragon'),
-        fiend: creatureType.toLowerCase().includes('fiend') || creatureType.toLowerCase().includes('daemon'),
+        daemon: creatureType.toLowerCase().includes('daemon'),
         chaos: creatureType.toLowerCase().includes('chaos'),
-        beastman: creatureType.toLowerCase().includes('beastman')
+        beastman: creatureType.toLowerCase().includes('beastman'),
+        greenskin: creatureType.toLowerCase().includes('greenskin') || creatureType.toLowerCase().includes('orc')
       }
     };
   }
@@ -661,63 +637,37 @@ export class CompendiumTools {
     const system = item.system || {};
     const stats: any = {};
 
-    // Core combat stats - supports both D&D 5e and WFRP 4e
+    // Core combat stats - WFRP 4e
 
-    // Armor Class (D&D) or Toughness/Armor (WFRP)
-    if (system.attributes?.ac?.value) {
-      stats.armorClass = system.attributes.ac.value;
-    } else {
-      const toughnessBonus = Math.floor((system.characteristics?.t?.value ?? 0) / 10);
-      const armorPoints = system.status?.armour?.value ?? system.status?.armour?.head;
-      if (toughnessBonus || armorPoints) {
-        stats.toughness = { bonus: toughnessBonus, armor: armorPoints || 0 };
-      }
+    // Toughness/Armor (WFRP)
+    const toughnessBonus = Math.floor((system.characteristics?.t?.value ?? 0) / 10);
+    const armorPoints = system.status?.armour?.value ?? system.status?.armour?.head;
+    if (toughnessBonus || armorPoints) {
+      stats.toughness = { bonus: toughnessBonus, armor: armorPoints || 0 };
     }
 
-    // Hit Points (D&D) or Wounds (WFRP)
-    if (system.attributes?.hp?.max) {
-      stats.hitPoints = system.attributes.hp.max;
-    } else if (system.status?.wounds?.max) {
+    // Wounds (WFRP)
+    if (system.status?.wounds?.max) {
       stats.wounds = system.status.wounds.max;
     }
 
-    // Challenge Rating (D&D) or Threat Level (WFRP)
-    if (system.details?.cr !== undefined) {
-      stats.challengeRating = system.details.cr;
-    } else {
-      const toughness = system.characteristics?.t?.value;
-      const wounds = system.status?.wounds?.max;
-      if (toughness !== undefined && wounds !== undefined) {
-        stats.threatLevel = toughness + Math.floor(wounds / 10);
-      }
+    // Threat Level (WFRP)
+    const toughness = system.characteristics?.t?.value;
+    const wounds = system.status?.wounds?.max;
+    if (toughness !== undefined && wounds !== undefined) {
+      stats.threatLevel = toughness + Math.floor(wounds / 10);
     }
 
     // Basic info
-    const creatureType = system.details?.type?.value || system.details?.species?.value || system.details?.species;
+    const creatureType = system.details?.species?.value || system.details?.species ||
+      system.details?.type?.value;
     if (creatureType) stats.creatureType = creatureType;
 
     const size = system.traits?.size || system.details?.size;
     if (size) stats.size = size;
 
-    const alignment = system.details?.alignment;
-    if (alignment) stats.alignment = alignment;
-
-    // Key abilities (D&D) or Characteristics (WFRP)
-    if (system.abilities) {
-      // D&D 5e abilities
-      const abilities: any = {};
-      for (const [key, ability] of Object.entries(system.abilities)) {
-        const abil = ability as any;
-        if (abil.value !== undefined) {
-          const mod = Math.floor((abil.value - 10) / 2);
-          if (Math.abs(mod) >= 2) { // Only show significant modifiers
-            abilities[key.toUpperCase()] = { value: abil.value, modifier: mod };
-          }
-        }
-      }
-      if (Object.keys(abilities).length > 0) stats.abilities = abilities;
-    } else if (system.characteristics) {
-      // WFRP 4e characteristics
+    // Characteristics (WFRP)
+    if (system.characteristics) {
       const characteristics: any = {};
       for (const [key, char] of Object.entries(system.characteristics)) {
         const c = char as any;
@@ -728,17 +678,8 @@ export class CompendiumTools {
       if (Object.keys(characteristics).length > 0) stats.characteristics = characteristics;
     }
 
-    // Speed (D&D) or Movement (WFRP)
-    if (system.attributes?.movement) {
-      // D&D 5e movement
-      const movement = system.attributes.movement;
-      const speeds: string[] = [];
-      if (movement.walk) speeds.push(`${movement.walk} ft`);
-      if (movement.fly) speeds.push(`fly ${movement.fly} ft`);
-      if (movement.swim) speeds.push(`swim ${movement.swim} ft`);
-      if (speeds.length > 0) stats.speed = speeds.join(', ');
-    } else if (system.details?.move?.value) {
-      // WFRP movement
+    // Movement (WFRP)
+    if (system.details?.move?.value) {
       stats.movement = system.details.move.value;
     }
 
