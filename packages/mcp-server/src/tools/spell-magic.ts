@@ -22,14 +22,27 @@ WFRP Arcane Magic System:
 - Memorization limits based on Intelligence Bonus
 
 Common Lores of Magic:
-- Lore of Fire (Aqshy): Flames, destruction, passion
-- Lore of Metal (Chamon): Transformation, alchemy, metal
-- Lore of Shadows (Ulgu): Illusion, misdirection, darkness
-- Lore of Beasts (Ghur): Animals, primal nature, survival
-- Lore of Heavens (Azyr): Divination, lightning, prophecy
-- Lore of Life (Ghyran): Healing, growth, nature
-- Lore of Light (Hysh): Banishment, truth, illumination
-- Lore of Death (Shyish): Necromancy (often forbidden)
+- Petty Magic: Simple cantrips and minor spells
+- Lore of Fire (fire): Flames, destruction, passion
+- Lore of Metal (metal): Transformation, alchemy, metal
+- Lore of Shadow (shadow): Illusion, misdirection, darkness
+- Lore of Beasts (beasts): Animals, primal nature, survival
+- Lore of Heavens (heavens): Divination, lightning, prophecy
+- Lore of Life (life): Healing, growth, nature
+- Lore of Light (light): Banishment, truth, illumination
+- Lore of Death (death): Necromancy (often forbidden)
+
+Dark & Forbidden Lores:
+- Hedgecraft (hedgecraft): Folk magic, hedge wizardry
+- Witchcraft (witchcraft): Traditional witch magic
+- Daemonology (daemonology): Summoning and binding daemons
+- Necromancy (necromancy): Raising and controlling undead
+- Chaos Undivided (undivided): General chaos sorcery
+- Nurgle (nurgle): Plague and decay magic
+- Slaanesh (slaanesh): Excess and sensation magic
+- Tzeentch (tzeentch): Change and manipulation magic
+
+NOTE: Use lowercase lore keys (e.g., 'fire' not 'Fire') when filtering or referencing lores.
 
 Spell Components:
 - Casting Number (CN): Difficulty (0-20+)
@@ -53,7 +66,7 @@ Returns comprehensive spell list with:
                         },
                         lore: {
                             type: "string",
-                            description: "Optional: Filter by specific lore (e.g., 'Fire', 'Shadow')",
+                            description: "Optional: Filter by specific lore. Use lowercase keys: 'fire', 'shadow', 'metal', 'beasts', 'heavens', 'life', 'light', 'death', 'petty', 'hedgecraft', 'witchcraft', 'daemonology', 'necromancy', 'undivided', 'nurgle', 'slaanesh', 'tzeentch'",
                         },
                     },
                     required: ["characterName"],
@@ -101,10 +114,11 @@ Miscast Effects:
 - Critical: Mutation, summon daemon, explosion
 
 Example Spells:
-- "Blast" (Fire): CN 5, ranged damage
-- "Aethyric Armor" (Metal): CN 3, +AP
-- "Mindslip" (Shadow): CN 2, target forgets
-- "Flight of Doom" (Heavens): CN 8, lightning`,
+- "Dart" (petty): CN 0, minor magic missile
+- "Blast" (fire): CN 5, ranged damage
+- "Aethyric Armor" (metal): CN 3, +AP
+- "Mindslip" (shadow): CN 2, target forgets
+- "Flight of Doom" (heavens): CN 8, lightning`,
                 inputSchema: {
                     type: "object",
                     properties: {
@@ -183,7 +197,7 @@ After Channelling:
                         },
                         lore: {
                             type: "string",
-                            description: "Lore of magic being channelled (e.g., 'Fire', 'Shadow')",
+                            description: "Lore of magic being channelled. Use lowercase: 'fire', 'metal', 'shadow', 'beasts', 'heavens', 'life', 'light', 'death', 'petty', etc. System expects format: Channelling (Lore)",
                         },
                         modifier: {
                             type: "number",
@@ -395,7 +409,7 @@ Adding to Grimoire:
                         },
                         lore: {
                             type: "string",
-                            description: "Lore the spell belongs to (e.g., 'Fire', 'Shadow')",
+                            description: "Lore the spell belongs to. Use lowercase: 'petty', 'fire', 'metal', 'shadow', 'beasts', 'heavens', 'life', 'light', 'death', 'hedgecraft', 'witchcraft', 'daemonology', 'necromancy', 'undivided', 'nurgle', 'slaanesh', 'tzeentch'",
                         },
                         castingNumber: {
                             type: "number",
@@ -746,14 +760,17 @@ ${character.name} has not yet learned any arcane spells. Wizards learn spells th
         const willpower = character.system?.characteristics?.wp?.value || 0;
         const wpBonus = Math.floor(willpower / 10);
 
+        // Capitalize lore name for skill (e.g., 'fire' -> 'Fire')
+        const capitalizedLore = args.lore.charAt(0).toUpperCase() + args.lore.slice(1);
+
         // Make Channelling test
         const rollResponse = await this.foundryClient.query(
             "foundry-mcp-bridge.rollSkill",
             {
                 characterName: args.characterName,
-                skillName: `Channelling (${args.lore})`,
+                skillName: `Channelling (${capitalizedLore})`,
                 modifier: args.modifier || 0,
-                testName: `Channel ${args.lore} Magic`,
+                testName: `Channel ${capitalizedLore} Magic`,
             }
         );
 
@@ -785,13 +802,13 @@ ${character.name} has not yet learned any arcane spells. Wizards learn spells th
             characterName: args.characterName,
             skillName: "Channelling",
             modifier: args.modifier || 0,
-            testName: `Channel ${args.lore} Magic`,
+            testName: `Channel ${capitalizedLore} Magic`,
         }).then(r => r.data);
 
         const success = rollResult.success;
         const sl = rollResult.sl || 0;
 
-        let resultText = `⚡ **Channelling Power** - Lore of ${args.lore}\n\n`;
+        let resultText = `⚡ **Channelling Power** - Lore of ${capitalizedLore}\n\n`;
         resultText += `**Character:** ${args.characterName}\n`;
         resultText += `**Channelling Test:** ${rollResult.roll} vs ${rollResult.target}\n`;
         resultText += `**Success Levels:** ${sl >= 0 ? "+" : ""}${sl}\n`;

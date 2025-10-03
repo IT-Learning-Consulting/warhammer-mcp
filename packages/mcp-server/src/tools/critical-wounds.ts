@@ -346,10 +346,10 @@ export class CriticalWoundsTools {
             // Check for death
             const isDead = newCriticalCount > tBonus;
 
-            // Create the critical wound item
+            // Create critical wound item
             const criticalWoundData = {
                 name: woundName,
-                type: 'injury',
+                type: 'critical',
                 system: {
                     location: { value: location },
                     wounds: { value: wounds },

@@ -30,6 +30,8 @@ import { DiseaseInfectionTools } from './tools/disease-infection.js';
 
 import { InventoryManagementTools } from './tools/inventory-management.js';
 
+import { ItemCreatorTools } from './tools/item-creator.js';
+
 import { PrayerBlessingTools } from './tools/prayer-blessing.js';
 
 import { SpellMagicTools } from './tools/spell-magic.js';
@@ -932,6 +934,8 @@ async function startBackend(): Promise<void> {
 
   const inventoryManagementTools = new InventoryManagementTools(foundryClient, logger);
 
+  const itemCreatorTools = new ItemCreatorTools({ foundryClient, logger });
+
   const prayerBlessingTools = new PrayerBlessingTools(foundryClient, logger);
 
   const spellMagicTools = new SpellMagicTools(foundryClient, logger);
@@ -1147,6 +1151,8 @@ async function startBackend(): Promise<void> {
     ...diseaseInfectionTools.getToolDefinitions(),
 
     ...inventoryManagementTools.getToolDefinitions(),
+
+    ...itemCreatorTools.getToolDefinitions(),
 
     ...prayerBlessingTools.getToolDefinitions(),
 
@@ -1471,6 +1477,56 @@ async function startBackend(): Promise<void> {
                 case 'remove-inventory-item':
 
                   result = await inventoryManagementTools.handleRemoveInventoryItem(args);
+
+                  break;
+
+                // Item Creator tools
+
+                case 'create-weapon':
+
+                  result = await itemCreatorTools.handleCreateWeapon(args);
+
+                  break;
+
+                case 'create-armour':
+
+                  result = await itemCreatorTools.handleCreateArmour(args);
+
+                  break;
+
+                case 'create-trapping':
+
+                  result = await itemCreatorTools.handleCreateTrapping(args);
+
+                  break;
+
+                case 'create-ammunition':
+
+                  result = await itemCreatorTools.handleCreateAmmunition(args);
+
+                  break;
+
+                case 'create-container':
+
+                  result = await itemCreatorTools.handleCreateContainer(args);
+
+                  break;
+
+                case 'modify-item-qualities':
+
+                  result = await itemCreatorTools.handleModifyItemQualities(args);
+
+                  break;
+
+                case 'add-item-to-character':
+
+                  result = await itemCreatorTools.handleAddItemToCharacter(args);
+
+                  break;
+
+                case 'remove-item-from-character':
+
+                  result = await itemCreatorTools.handleRemoveItemFromCharacter(args);
 
                   break;
 
