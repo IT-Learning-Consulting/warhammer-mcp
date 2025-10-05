@@ -112,7 +112,7 @@ export class CorruptionMutationTools {
             },
             {
                 name: 'add-mutation',
-                description: 'Add a mutation to a character. Used when a character crosses a Corruption threshold or is affected by Chaos. Specify mutation name, type (physical/mental), and description. Example: "Add Bestial Appearance mutation to Hans"',
+                description: 'Add a mutation to a character from the WFRP 4e compendium. Searches for the mutation by name in compendiums and adds it with all official effects and mechanics. For custom mutations not in compendiums, use the characterName, mutationName, mutationType (physical/mental), and description parameters to create a custom entry. Example: "Add Animalistic Legs mutation to Hans" will search compendiums first, falling back to custom creation if not found.',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -122,19 +122,19 @@ export class CorruptionMutationTools {
                         },
                         mutationName: {
                             type: 'string',
-                            description: 'Name of the mutation',
+                            description: 'Name of the mutation to add (will search compendiums first)',
                         },
                         mutationType: {
                             type: 'string',
-                            description: 'Type of mutation',
+                            description: 'Type of mutation (only used for custom mutations if compendium search fails)',
                             enum: ['physical', 'mental'],
                         },
                         description: {
                             type: 'string',
-                            description: 'Description of the mutation and its effects',
+                            description: 'Description of the mutation (only used for custom mutations if compendium search fails)',
                         },
                     },
-                    required: ['characterName', 'mutationName', 'mutationType', 'description'],
+                    required: ['characterName', 'mutationName'],
                 },
             },
             {
@@ -606,13 +606,13 @@ export class CorruptionMutationTools {
         const schema = z.object({
             characterName: z.string().min(1, 'Character name cannot be empty'),
             mutationName: z.string().min(1, 'Mutation name cannot be empty'),
-            mutationType: z.enum(['physical', 'mental']),
-            description: z.string().min(1, 'Description cannot be empty'),
+            mutationType: z.enum(['physical', 'mental']).optional(),
+            description: z.string().optional(),
         });
 
         const { characterName, mutationName, mutationType, description } = schema.parse(args);
 
-        this.logger.info('Adding mutation', { characterName, mutationName, mutationType });
+        this.logger.info('Adding mutation', { characterName, mutationName });
 
         try {
             const character = await this.foundryClient.query('foundry-mcp-bridge.getCharacterInfo', {
@@ -632,29 +632,93 @@ export class CorruptionMutationTools {
                 return `⚠️ ${character.name} already has the mutation "${mutationName}". Mutations do not stack.`;
             }
 
-            // Create the mutation item
-            const mutationData = {
-                name: mutationName,
-                type: 'mutation',
-                system: {
-                    mutationType: { value: mutationType },
-                    description: { value: description },
-                },
-            };
+            // STEP 1: Search compendiums for the mutation
+            this.logger.info('Searching compendiums for mutation', { mutationName });
 
-            await this.foundryClient.query('foundry-mcp-bridge.createItem', {
-                actorId: character.id,
-                itemData: mutationData,
-            });
+            let compendiumMutation = null;
+            try {
+                const searchResults = await this.foundryClient.query('foundry-mcp-bridge.searchCompendium', {
+                    query: mutationName,
+                    entityType: 'Item',
+                    itemType: 'mutation',
+                });
 
-            const icon = mutationType === 'physical' ? '💪' : '🧠';
-            let response = `✅ Added ${icon} ${mutationType} mutation to ${character.name}\n\n`;
-            response += `**Mutation**: ${mutationName}\n`;
-            response += `**Type**: ${mutationType.charAt(0).toUpperCase() + mutationType.slice(1)}\n`;
-            response += `**Description**: ${description}\n\n`;
-            response += `⚠️ This mutation is permanent unless removed through divine intervention or powerful magic.`;
+                if (searchResults && searchResults.length > 0) {
+                    // Find exact or best match
+                    compendiumMutation = searchResults.find((item: any) =>
+                        item.name.toLowerCase() === mutationName.toLowerCase()
+                    ) || searchResults[0]; // Use first result if no exact match
+
+                    this.logger.info('Found mutation in compendium', {
+                        mutationName: compendiumMutation.name,
+                        compendiumId: compendiumMutation.uuid
+                    });
+                }
+            } catch (compendiumError) {
+                this.logger.warn('Compendium search failed, will create custom mutation', compendiumError);
+            }
+
+            let response = '';
+
+            // STEP 2: Add mutation from compendium OR create custom
+            if (compendiumMutation) {
+                // Add official compendium mutation with all effects
+                await this.foundryClient.query('foundry-mcp-bridge.addItemFromCompendium', {
+                    actorId: character.id,
+                    compendiumId: compendiumMutation.uuid,
+                });
+
+                const mutType = compendiumMutation.system?.mutationType?.value || 'unknown';
+                const icon = mutType === 'physical' ? '💪' : mutType === 'mental' ? '🧠' : '🧬';
+
+                response = `✅ Added official ${icon} mutation from compendium to ${character.name}\n\n`;
+                response += `**Mutation**: ${compendiumMutation.name}\n`;
+                response += `**Type**: ${mutType.charAt(0).toUpperCase() + mutType.slice(1)}\n`;
+                response += `**Source**: WFRP 4e Compendium (${compendiumMutation.uuid})\n`;
+                if (compendiumMutation.system?.description?.value) {
+                    const desc = compendiumMutation.system.description.value;
+                    const truncatedDesc = desc.length > 200 ? desc.substring(0, 200) + '...' : desc;
+                    response += `**Description**: ${truncatedDesc}\n`;
+                }
+                response += `\n✅ All official game effects, modifiers, and mechanics have been applied.\n`;
+                response += `⚠️ This mutation is permanent unless removed through divine intervention or powerful magic.`;
+
+            } else {
+                // Fallback: Create custom mutation
+                if (!mutationType || !description) {
+                    throw new Error(
+                        `Mutation "${mutationName}" not found in compendiums. ` +
+                        `To create a custom mutation, provide both "mutationType" (physical/mental) and "description" parameters.`
+                    );
+                }
+
+                const mutationData = {
+                    name: mutationName,
+                    type: 'mutation',
+                    system: {
+                        mutationType: { value: mutationType },
+                        description: { value: description },
+                    },
+                };
+
+                await this.foundryClient.query('foundry-mcp-bridge.createItem', {
+                    actorId: character.id,
+                    itemData: mutationData,
+                });
+
+                const icon = mutationType === 'physical' ? '💪' : '🧠';
+                response = `✅ Created custom ${icon} ${mutationType} mutation for ${character.name}\n\n`;
+                response += `**Mutation**: ${mutationName}\n`;
+                response += `**Type**: ${mutationType.charAt(0).toUpperCase() + mutationType.slice(1)}\n`;
+                response += `**Description**: ${description}\n`;
+                response += `**Source**: Custom (not from compendium)\n\n`;
+                response += `⚠️ Note: This is a custom mutation without official WFRP 4e effects. `;
+                response += `Consider searching the compendium for official mutations with proper game mechanics.\n`;
+                response += `⚠️ This mutation is permanent unless removed through divine intervention or powerful magic.`;
+            }
 
             return response;
+
         } catch (error) {
             this.logger.error('Failed to add mutation', error);
             throw new Error(`Failed to add mutation: ${error instanceof Error ? error.message : 'Unknown error'}`);

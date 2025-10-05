@@ -192,7 +192,8 @@ export class CareerAdvancementTools {
                 percentComplete: 0,
             };
 
-            // XP cost tables for WFRP 4e
+            // XP cost tables for WFRP 4e - costs are per tier of 5 advances
+            // Use formula: index = Math.floor(currentAdvances / 5)
             const characteristicXPCosts = [25, 30, 40, 50, 70, 90, 120, 150, 190, 230, 280, 330, 390, 450, 520];
             const skillXPCosts = [10, 15, 20, 30, 40, 60, 80, 110, 140, 180, 220, 270, 320, 380, 440];
 
@@ -209,7 +210,14 @@ export class CareerAdvancementTools {
                             const currentChar = system.characteristics?.[char];
                             const currentAdvances = currentChar?.advances || 0;
                             const advancesRemaining = Math.max(0, advance - currentAdvances);
-                            const xpCost = advancesRemaining > 0 ? characteristicXPCosts[Math.min(currentAdvances, characteristicXPCosts.length - 1)] : 0;
+
+                            // Calculate XP cost for next advance using WFRP4e formula
+                            const tierIndex = Math.floor(currentAdvances / 5);
+                            const xpCost = advancesRemaining > 0
+                                ? (tierIndex >= characteristicXPCosts.length
+                                    ? characteristicXPCosts[characteristicXPCosts.length - 1]
+                                    : characteristicXPCosts[tierIndex])
+                                : 0;
 
                             careerInfo.characteristics.push({
                                 name: char.toUpperCase(),
@@ -239,7 +247,12 @@ export class CareerAdvancementTools {
                         );
 
                         const currentAdvances = skillItem?.system?.advances?.value || 0;
-                        const xpCost = currentAdvances > 0 ? skillXPCosts[Math.min(currentAdvances, skillXPCosts.length - 1)] : 10;
+
+                        // Calculate XP cost for next advance using WFRP4e formula
+                        const tierIndex = Math.floor(currentAdvances / 5);
+                        const xpCost = tierIndex >= skillXPCosts.length
+                            ? skillXPCosts[skillXPCosts.length - 1]
+                            : skillXPCosts[tierIndex];
 
                         careerInfo.skills.push({
                             name: skillName,
@@ -454,17 +467,24 @@ export class CareerAdvancementTools {
                 throw new Error(`Characteristic "${characteristic}" not found on ${character.name}`);
             }
 
+            // WFRP4e XP cost table - costs are per tier of 5 advances
+            // Advances 0-4: 25 XP, 5-9: 30 XP, 10-14: 40 XP, etc.
             const characteristicXPCosts = [25, 30, 40, 50, 70, 90, 120, 150, 190, 230, 280, 330, 390, 450, 520];
             const currentAdvances = currentChar.advances || 0;
             const availableXP = system.details?.experience?.current || 0;
 
+            // Calculate total XP cost using WFRP4e formula: index = Math.floor(currentAdvances / 5)
             let totalCost = 0;
             for (let i = 0; i < advances; i++) {
-                const advanceIndex = currentAdvances + i;
-                if (advanceIndex >= characteristicXPCosts.length) {
-                    throw new Error(`Cannot advance ${characteristic.toUpperCase()} beyond ${characteristicXPCosts.length} times`);
+                const advanceNumber = currentAdvances + i;
+                const tierIndex = Math.floor(advanceNumber / 5);
+
+                if (tierIndex >= characteristicXPCosts.length) {
+                    // Use the last tier cost if beyond the table
+                    totalCost += characteristicXPCosts[characteristicXPCosts.length - 1];
+                } else {
+                    totalCost += characteristicXPCosts[tierIndex];
                 }
-                totalCost += characteristicXPCosts[advanceIndex];
             }
 
             if (availableXP < totalCost) {
@@ -516,6 +536,8 @@ export class CareerAdvancementTools {
             }
 
             const system = character.system as any;
+            // WFRP4e XP cost table - costs are per tier of 5 advances
+            // Advances 0-4: 10 XP, 5-9: 15 XP, 10-14: 20 XP, etc.
             const skillXPCosts = [10, 15, 20, 30, 40, 60, 80, 110, 140, 180, 220, 270, 320, 380, 440];
             const availableXP = system.details?.experience?.current || 0;
 
@@ -530,13 +552,18 @@ export class CareerAdvancementTools {
 
             const currentAdvances = skillItem.system?.advances?.value || 0;
 
+            // Calculate total XP cost using WFRP4e formula: index = Math.floor(currentAdvances / 5)
             let totalCost = 0;
             for (let i = 0; i < advances; i++) {
-                const advanceIndex = currentAdvances + i;
-                if (advanceIndex >= skillXPCosts.length) {
-                    throw new Error(`Cannot advance ${skillName} beyond ${skillXPCosts.length} times`);
+                const advanceNumber = currentAdvances + i;
+                const tierIndex = Math.floor(advanceNumber / 5);
+
+                if (tierIndex >= skillXPCosts.length) {
+                    // Use the last tier cost if beyond the table
+                    totalCost += skillXPCosts[skillXPCosts.length - 1];
+                } else {
+                    totalCost += skillXPCosts[tierIndex];
                 }
-                totalCost += skillXPCosts[advanceIndex];
             }
 
             if (availableXP < totalCost) {
@@ -595,7 +622,7 @@ export class CareerAdvancementTools {
 
             const system = character.system as any;
             const availableXP = system.details?.experience?.current || 0;
-            const talentCostPerRank = 100;
+            const talentBaseCost = 100;
 
             // Find the talent item
             const talentItem = character.items?.find(
@@ -606,15 +633,27 @@ export class CareerAdvancementTools {
                 throw new Error(`Talent "${talentName}" not found on ${character.name}. Please add the talent first.`);
             }
 
-            const currentRanks = talentItem.system?.advances?.value || 0;
+            // FIRST: Check how many times the talent has already been taken
+            const timesTaken = talentItem.system?.advances?.value || 0;
             const maxRanks = talentItem.system?.max?.value || 1;
-            const newRanks = currentRanks + ranks;
+            const newRanks = timesTaken + ranks;
 
             if (newRanks > maxRanks) {
                 throw new Error(`Cannot advance ${talentName} to rank ${newRanks}. Maximum rank is ${maxRanks}.`);
             }
 
-            const totalCost = talentCostPerRank * ranks;
+            // THEN: Calculate the cost based on how many times it's been taken
+            // WFRP4e Rule: "100 XP + 100 XP per time the Talent has already been taken"
+            // Examples:
+            // - Talent taken 0 times → Cost to take it once: 100 + (0×100) = 100 XP
+            // - Talent taken 1 time → Cost to take it again: 100 + (1×100) = 200 XP
+            // - Talent taken 2 times → Cost to take it again: 100 + (2×100) = 300 XP
+            let totalCost = 0;
+            for (let i = 0; i < ranks; i++) {
+                const timesAlreadyTaken = timesTaken + i;
+                const costForThisRank = talentBaseCost + (timesAlreadyTaken * talentBaseCost);
+                totalCost += costForThisRank;
+            }
 
             if (availableXP < totalCost) {
                 throw new Error(`Insufficient XP. Need ${totalCost} XP but only have ${availableXP} available.`);
@@ -639,7 +678,7 @@ export class CareerAdvancementTools {
             });
 
             return `✅ Successfully advanced ${talentName} by ${ranks} rank(s) for ${character.name}!\n` +
-                `- Previous rank: ${currentRanks}\n` +
+                `- Times already taken: ${timesTaken}\n` +
                 `- New rank: ${newRanks}/${maxRanks}\n` +
                 `- XP spent: ${totalCost}\n` +
                 `- Remaining XP: ${availableXP - totalCost}`;

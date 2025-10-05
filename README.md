@@ -2,7 +2,25 @@
 
 **AI-Powered Game Master Assistant for WFRP 4e in Foundry VTT**
 
+**Current Version**: 0.2.1 | [Changelog](docs/CHANGELOG.md) | [Release Notes](RELEASE_v0.2.1.md)
+
 Connect Claude Desktop to your Foundry VTT game for intelligent campaign management, NPC generation, and Old World content creation through the Model Context Protocol (MCP).
+
+---
+
+## 🆕 What's New in v0.2.1 (October 2025)
+
+### Critical Bug Fixes
+- **Fixed XP Calculation Bug**: Corrected critical issue where skill/characteristic advancement charged 1000% too much XP (e.g., 11th skill advance now costs 20 XP instead of 220 XP)
+- **Implemented Missing Compendium Handler**: Added `addItemFromCompendium` infrastructure for proper WFRP4e integration
+
+### New Features
+- **Direct Character Updates**: New `foundry-update-character-info` tool for GM adjustments without XP costs
+- **Direct Skill/Talent Updates**: New `foundry-update-skill-talent` tool for character setup and corrections
+- **Compendium Integration**: New `add-skill-talent` tool adds skills/talents from compendium with all official effects
+- **Enhanced Mutations**: `add-mutation` now searches compendiums first for official mutations with proper mechanics
+
+See [CHANGES_2025-10-05.md](CHANGES_2025-10-05.md) for detailed technical information.
 
 ---
 
@@ -40,21 +58,25 @@ The Warhammer MCP Bridge enables natural AI conversations with your WFRP 4e game
 
 ## Features at a Glance
 
-### 🎭 Core Features (48+ Tools)
+### 🎭 Core Features (52+ Tools)
 
-**Character Management** (2 tools)
+**Character Management** (5 tools) - **UPDATED!**
 - Get character details (characteristics, skills, talents, corruption, wounds)
 - List all player characters and NPCs
+- **NEW**: Direct character updates (stats, fortune, fate) without XP costs
+- **NEW**: Add skills/talents from compendium with official effects
+- **NEW**: Direct skill/talent advance updates for GM adjustments
 
-**Career & Advancement** (3 tools)
+**Career & Advancement** (3 tools) - **FIXED!**
 - Track career progression and XP requirements
-- Advance characteristics, skills, and talents
-- Calculate XP costs based on WFRP 4e rules
+- Advance characteristics, skills, and talents with **corrected XP calculations**
+- Calculate XP costs based on WFRP 4e rules (now using proper tiered formula)
 
-**Combat & Conditions** (6 tools)
+**Combat & Conditions** (6 tools) - **ENHANCED!**
 - Critical wounds tracking by location
 - Advantage system management
 - Corruption and mutation tracking
+- **UPDATED**: Add mutations from compendium with official effects
 - Disease and infection management
 
 **Fortune & Fate** (5 tools)
@@ -635,9 +657,18 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 ## Changelog
 
-See [CHANGELOG.md](docs/CHANGELOG.md) for version history and updates.
+See [CHANGELOG.md](docs/CHANGELOG.md) for complete version history and updates.
 
 ### Recent Updates
+
+**v0.2.1** (2025-10-05) - **CRITICAL BUG FIXES**
+- **FIXED**: Critical XP calculation bug (skills/characteristics overcharged by 1000%)
+- **ADDED**: Missing compendium handler infrastructure for proper WFRP4e integration
+- **NEW TOOL**: `foundry-update-character-info` - Direct character stat updates without XP
+- **NEW TOOL**: `foundry-update-skill-talent` - Direct skill/talent updates for GM adjustments
+- **NEW TOOL**: `add-skill-talent` - Add skills/talents from compendium with official effects
+- **ENHANCED**: `add-mutation` now searches compendiums first for official mutations
+- See [CHANGES_2025-10-05.md](CHANGES_2025-10-05.md) for detailed technical information
 
 **v0.5.0** (2025-01-03)
 - Added RollTable tools (create, list, roll, delete)

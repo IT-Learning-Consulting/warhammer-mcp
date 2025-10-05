@@ -71,18 +71,63 @@ Prompt: "Get me the information for NonExistentCharacter123"
 
 ### Tool: `foundry-update-character-info`
 
-**Purpose**: Update character characteristics, wounds, and basic stats.
+**Purpose**: Update character characteristics, wounds, and basic stats **DIRECTLY** (without XP costs).
 
-#### Test Case 1.3: Update Single Characteristic
+**⚡ BOTH TOOLS COEXIST**: This tool and `advance-characteristic` both exist and serve different purposes:
+- **`foundry-update-character-info`**: "Update WP to 40" → Sets initial value to 40 (0 XP)
+- **`advance-characteristic`**: "Advance WP by 10" → Adds 10 advances (costs XP)
+
+**When to Use This Tool**:
+- Character creation: Setting starting characteristics
+- GM adjustments: Story-driven changes (mutations, blessings, curses)
+- Corrections: Fixing errors in character sheets
+- Trigger phrases: "update to", "set to", "change to"
+
+This tool updates the following WFRP4e data:
+- **Characteristics**: Sets the `initial` value (base stat before advances), not the `advances` value
+- **Status Values**: Current wounds, fortune, fate, resilience, resolve
+- **Does NOT** spend XP or add advances - it directly modifies the base values
+
+#### Test Case 1.3: Update Single Characteristic (Direct Set)
 ```
 Prompt: "Update Test Character's Strength to 40"
 ```
 **Expected Result**:
+- Tool used: `foundry-update-character-info`
 - Confirmation message
-- Strength characteristic updated to 40
+- Strength characteristic **initial value** updated to 40
+- Characteristic advances remain unchanged (0)
+- Total Strength: 40 (initial 40 + advances 0)
+- XP unchanged (no cost)
 - Verify in Foundry VTT character sheet
 
-**Success Criteria**: ✅ Characteristic visible in Foundry at new value
+**Success Criteria**: ✅ Characteristic initial value = 40, advances = 0, XP unchanged
+
+**Technical Details**: Updates `system.characteristics.s.initial` (not `advances`)
+
+---
+
+#### Test Case 1.3b: Advance Characteristic (XP-Based)
+```
+Prompt: "Advance Test Character's Strength by 9 advances"
+```
+**Expected Result**:
+- Tool used: `advance-characteristic`
+- XP cost calculated (~765 XP total for 9 advances)
+- If sufficient XP: XP deducted, advances increased by 9
+- If insufficient XP: Error message about XP shortage
+- Initial value unchanged
+- Total Strength: initial + 9 advances
+
+**Success Criteria**: ✅ Tool correctly uses XP-based advancement, not direct update
+
+**Technical Details**: Updates `system.characteristics.s.advances` and spends XP
+
+**Comparison**:
+| Request | Tool | Initial | Advances | Total | XP Cost |
+|---------|------|---------|----------|-------|---------|
+| "Update Strength to 40" | update-character-info | 31→40 | 0→0 | 40 | 0 XP |
+| "Advance Strength by 9" | advance-characteristic | 31→31 | 0→9 | 40 | ~765 XP |
 
 ---
 
@@ -112,21 +157,35 @@ Prompt: "Set Test Character's Strength to 999"
 
 ## 2. CAREER ADVANCEMENT TOOLS
 
-### Tool: `foundry-advance-career`
+### Tool: `advance-characteristic` (and related advancement tools)
 
-**Purpose**: Handle career progression and experience spending.
+**Purpose**: Handle career progression and experience spending (XP-based).
 
-#### Test Case 2.1: Advance Characteristic
+**⚡ BOTH TOOLS COEXIST**: This tool and `foundry-update-character-info` both exist and serve different purposes:
+- **`advance-characteristic`**: "Advance WP by 10" → Adds 10 advances (costs XP)
+- **`foundry-update-character-info`**: "Update WP to 40" → Sets initial value to 40 (0 XP)
+
+**When to Use This Tool**:
+- Normal character progression through XP spending
+- Following WFRP4e career advancement rules
+- Career-based character development
+- Trigger phrases: "advance by", "increase", "spend XP on"
+
+#### Test Case 2.1: Advance Characteristic (XP-Based)
 ```
 Prompt: "Advance Test Character's Weapon Skill characteristic in their current career"
 ```
 **Expected Result**:
+- Tool used: `advance-characteristic`
 - XP cost calculated (25 XP for in-career advance)
 - XP deducted from character
-- Characteristic increased by 1
+- Characteristic **advances** increased by 1 (not initial value)
+- Initial value unchanged
 - Confirmation message with new value
 
-**Success Criteria**: ✅ XP spent, stat increased, recorded in Foundry
+**Success Criteria**: ✅ XP spent, advances increased, initial unchanged
+
+**Technical Details**: Updates `system.characteristics.ws.advances` and spends XP
 
 ---
 
@@ -1860,6 +1919,116 @@ Screenshots:
 Notes:
 [Additional observations]
 ```
+
+---
+
+## 📋 ACTUAL TEST RESULTS
+
+### Test Case 1.1: Basic Character Retrieval
+
+**Test ID**: 1.1  
+**Test Name**: Basic Character Retrieval  
+**Date Tested**: October 5, 2025  
+**Tester**: Claude  
+**Claude Desktop Version**: Claude Sonnet 4.5  
+**Foundry VTT Version**: [Connected]  
+**WFRP4e System Version**: WFRP4e-core  
+
+**Status**: ❌ **FAIL**
+
+**Results**:
+Character information was partially retrieved. The tool returned:
+- ✅ Character name: Test Character
+- ✅ All 10 characteristics with values, advances, and bonuses
+- ✅ Current wounds: 15/15
+- ✅ Talents list (6 talents: Marksman, Doomed, Warrior Born, Suave, Strong Back, Savvy)
+- ⚠️ Partial inventory (weapons, armor, money, clothing)
+- ✅ Active conditions: Fatigued
+- ❌ Skills list incomplete - only 2 skills returned (Dodge, Entertain) with no advances data shown
+- ❌ Fortune and Fate points not returned
+
+**Issues Found**:
+1. **Missing Fortune/Fate Data**: Fortune and Fate points not returned in data structure
+2. **Incomplete Skills List**: Only 2 skills returned (Dodge, Entertain) without advance values
+   - For a WFRP4e Soldier career character, expected additional career skills like:
+     - Melee (Basic)
+     - Athletics
+     - Endurance
+     - Intimidate
+     - Leadership
+     - etc.
+3. **Missing Skills Advances**: Skills returned don't show advances count
+
+**Error Messages**: None
+
+**Root Cause Analysis**:
+The MCP tool `foundry-get-character-info` is not querying the complete character data structure from Foundry VTT. Possible causes:
+1. Query may not be accessing `actor.system.skills` properly
+2. Fortune/Fate might be in a different data path than expected
+3. Skills array might be filtered incorrectly or have incorrect property access
+
+**Priority**: 🔴 **HIGH** - Core functionality failure. Skills are fundamental to WFRP4e gameplay.
+
+**Recommended Fix**:
+1. Review `packages/mcp-server/src/tools/character.ts` - `handleGetCharacterInfo` method
+2. Check data access paths:
+   - Skills: `actor.system.skills` or `actor.items` (filter type='skill')
+   - Fortune: `actor.system.status.fortune.value`
+   - Fate: `actor.system.status.fate.value`
+3. Ensure all skills are being iterated and advances are accessed correctly
+4. Add logging to verify data structure being received from Foundry
+
+**Next Steps**:
+- [X] Investigate character.ts data extraction
+- [X] Fix skills query to return all skills with advances
+- [X] Add Fortune/Fate to response
+- [ ] Rebuild MCP server (`npm run build` in packages/mcp-server)
+- [ ] Restart MCP server
+- [ ] Retest Test Case 1.1
+- [ ] Update test status once fixed
+
+**Fix Applied**: October 5, 2025 (Second Iteration)
+- Modified `extractBasicInfo()` to include Fortune and Fate from `system.status.fortune` and `system.status.fate`
+- Added Experience tracking (current, total, spent)
+- Modified `extractStats()` to extract skills from items array (filter `type === 'skill'`) instead of non-existent `system.skills` object
+- Modified `extractStats()` to extract talents from items array (filter `type === 'talent'`) instead of `system.talents`
+- Fixed skills to include: characteristic, advances, total, and modifier
+- Fixed talents to include: name, advances, tests, and description
+- Modified `formatItems()` to exclude skills and talents (now in stats section)
+- Increased items limit from 20 to 50 for better inventory visibility
+- Added equipped/worn status to items
+
+**Second Fix Applied**: October 5, 2025
+- ✅ **Fixed Fortune/Fate Structure**: Changed from object with current/max to single numeric value (Fortune and Fate don't have separate max properties - they ARE the max values for Fortune/Resolve pools)
+- ✅ **Added Resilience and Resolve**: New WFRP4e properties representing determination and personal drive
+- ✅ **Added Corruption Tracking**: Displays current and max corruption points from `system.status.corruption`
+- ✅ **Added Critical Wounds Tracking**: Filters items with `type === 'critical'` and displays count, location, severity, and descriptions
+- ✅ **Fixed Money Display**: Properly filters `type === 'money'` items and displays only items with quantity > 0, using item name as currency name (e.g., "Gold Crown", "Silver Shilling", "Brass Penny")
+- ✅ **Improved Data Accuracy**: All values now correctly extracted from WFRP4e data model structure verified in wfrp.js
+
+**Data Structure Corrections Based on wfrp.js Analysis**:
+```typescript
+// Fortune/Fate - Single value, no max property
+system.status.fortune.value  // e.g., 4
+system.status.fate.value     // e.g., 4
+
+// Resilience/Resolve - Single value
+system.status.resilience.value  // e.g., 3
+system.status.resolve.value     // e.g., 3
+
+// Corruption - Has value and max
+system.status.corruption.value  // Current corruption
+system.status.corruption.max    // Maximum before mutation
+
+// Critical Wounds - Items, not status property
+items.filter(item => item.type === 'critical')
+
+// Money - Items with coinValue
+items.filter(item => item.type === 'money')
+item.system.quantity.value  // Amount of this coin type
+```
+
+---
 
 ---
 

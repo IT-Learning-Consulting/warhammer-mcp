@@ -1280,6 +1280,24 @@ async function startBackend(): Promise<void> {
 
                   break;
 
+                case 'foundry-update-character-info':
+
+                  result = await characterTools.handleUpdateCharacterInfo(args);
+
+                  break;
+
+                case 'foundry-update-skill-talent':
+
+                  result = await characterTools.handleUpdateSkillTalent(args);
+
+                  break;
+
+                case 'add-skill-talent':
+
+                  result = await characterTools.handleAddSkillTalent(args);
+
+                  break;
+
                 // Career advancement tools
 
                 case 'get-career-advancement':

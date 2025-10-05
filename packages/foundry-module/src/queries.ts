@@ -34,6 +34,7 @@ export class QueryHandlers {
 
     // Compendium queries
     CONFIG.queries[`${modulePrefix}.searchCompendium`] = this.handleSearchCompendium.bind(this);
+    CONFIG.queries[`${modulePrefix}.addItemFromCompendium`] = this.handleAddItemFromCompendium.bind(this);
     CONFIG.queries[`${modulePrefix}.listCreaturesByCriteria`] = this.handleListCreaturesByCriteria.bind(this);
     CONFIG.queries[`${modulePrefix}.getAvailablePacks`] = this.handleGetAvailablePacks.bind(this);
 
@@ -217,6 +218,74 @@ export class QueryHandlers {
       return await this.dataAccess.searchCompendium(data.query, data.packType, data.filters);
     } catch (error) {
       throw new Error(`Failed to search compendium: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Handle add item from compendium request
+   * Adds an item (skill, talent, mutation, spell, etc.) from a compendium to an actor
+   */
+  private async handleAddItemFromCompendium(data: {
+    actorId: string;
+    compendiumId: string; // UUID like "Compendium.wfrp4e-core.items.Item.abc123" or "Compendium.wfrp4e-core.mutations.xyz789"
+  }): Promise<any> {
+    try {
+      // SECURITY: Silent GM validation
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) {
+        return { error: 'Access denied', success: false };
+      }
+
+      this.dataAccess.validateFoundryState();
+
+      // Validate parameters
+      if (!data || typeof data !== 'object') {
+        throw new Error('Invalid data parameter structure');
+      }
+
+      if (!data.actorId || typeof data.actorId !== 'string') {
+        throw new Error('actorId parameter is required and must be a string');
+      }
+
+      if (!data.compendiumId || typeof data.compendiumId !== 'string') {
+        throw new Error('compendiumId parameter is required and must be a string (UUID format)');
+      }
+
+      // Get the actor
+      const actor = game.actors?.get(data.actorId);
+      if (!actor) {
+        throw new Error(`Actor with ID "${data.actorId}" not found`);
+      }
+
+      // Get the item from compendium using UUID
+      const itemDoc = await fromUuid(data.compendiumId);
+      if (!itemDoc) {
+        throw new Error(`Item with UUID "${data.compendiumId}" not found in compendium`);
+      }
+
+      // Convert to plain object for creation
+      const itemData = itemDoc.toObject();
+
+      // Create the item on the actor
+      const createdItems = await actor.createEmbeddedDocuments('Item', [itemData]);
+
+      if (!createdItems || createdItems.length === 0) {
+        throw new Error('Failed to create item on actor');
+      }
+
+      const createdItem = createdItems[0];
+
+      return {
+        success: true,
+        itemId: createdItem.id,
+        itemName: createdItem.name,
+        itemType: (createdItem as any).type,
+        actorId: actor.id,
+        actorName: actor.name,
+        message: `Successfully added "${createdItem.name}" to ${actor.name} from compendium`
+      };
+    } catch (error) {
+      throw new Error(`Failed to add item from compendium: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
