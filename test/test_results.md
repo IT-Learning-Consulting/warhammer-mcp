@@ -236,25 +236,9 @@ Tester: Claude
 Claude Desktop Version: Claude Sonnet 4.5
 Foundry VTT Version: [Connected]
 WFRP4e System Version: WFRP4e-core
-Status: [X] Pass [ ] Fail [ ] Partial
+Status: [] Pass [X] Fail [ ] Partial
 Results:
-Successfully added Sergeant career to Test Character using the add-item-to-character tool.
-Character Career Status:
-The character now has three career items in their inventory:
-
-Recruit (original starting career)
-Soldier (progression from Recruit)
-Sergeant (newly added)
-
-All three career items are visible in the character's items list.
-Issues Found:
-None. The Sergeant career was successfully added from the compendium.
-Error Messages:
-None.
-Screenshots:
-N/A
-Notes:
-Success criteria met - the new career has been added and is visible in Foundry VTT. In WFRP4e, characters maintain all their career items as a record of their progression path. The Sergeant career represents the next tier in the Soldier career path. The tool successfully located the career in the compendium and added it to the character. The career can now be used for advancement planning and tracking the character's professional development.
+Working in progress
 
 ---
 
@@ -566,7 +550,7 @@ Tester: Claude
 Claude Desktop Version: Unknown
 Foundry VTT Version: Unknown
 WFRP4e System Version: Unknown
-Status: [ ] Pass [ ] Fail [X] Partial
+Status: [X] Pass [ ] Fail [] Partial
 Results:
 The tool executed but was unable to add a resolve point because Test Character's resolve is already at maximum (2/2). The system correctly enforced the bounds check preventing resolve from exceeding resilience value.
 Issues Found:
@@ -613,7 +597,7 @@ Tester: Claude
 Claude Desktop Version: Unknown
 Foundry VTT Version: Unknown
 WFRP4e System Version: Unknown
-Status: [ ] Pass [X] Fail [ ] Partial
+Status: [X] Pass [] Fail [ ] Partial
 Results:
 The tool executed but was unable to spend a resolve point because Test Character has 0 resolve points remaining (0/2). The system correctly enforced the "cannot go below 0" constraint, but the primary success criteria ("Resolve reduced by 1") cannot be verified.
 Issues Found:

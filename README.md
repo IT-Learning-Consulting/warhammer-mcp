@@ -2,13 +2,40 @@
 
 **AI-Powered Game Master Assistant for WFRP 4e in Foundry VTT**
 
-**Current Version**: 0.2.1 | [Changelog](docs/CHANGELOG.md) | [Release Notes](RELEASE_v0.2.1.md)
+**Current Version**: 0.2.2 | [Changelog](docs/CHANGELOG.md) | [Release Notes](RELEASE_v0.2.2.md)
 
 Connect Claude Desktop to your Foundry VTT game for intelligent campaign management, NPC generation, and Old World content creation through the Model Context Protocol (MCP).
 
 ---
 
-## 🆕 What's New in v0.2.1 (October 2025)
+## 🆕 What's New in v0.2.2 (October 6, 2025)
+
+### Critical Bug Fixes
+- **Fixed Career Change Tool UUID Bug**: Career changes now work correctly - tool properly constructs UUIDs from compendium pack/id data
+- **Fixed Career Change Operation Order**: Atomic operation order prevents characters from having no current career during career changes
+- **Operation Order**: Now adds new career first, then marks it current, then unmarks old career (better error recovery)
+
+### New Features
+- **Resilience & Resolve System**: Complete NPC resource management system mirroring Fortune/Fate (6 new tools)
+  - Spend Resolve for daily rerolls (like Fortune)
+  - Burn Resilience to avoid death (like Fate)
+  - Award bonus Resolve for exceptional NPC actions
+  - Grant permanent Resilience for epic achievements
+- **File Rename**: `fortune-fate.ts` renamed to `fate-resilience.ts` for better clarity (now contains all 12 tools)
+
+### Testing & Quality
+- All character management tests passing ✅
+- All career advancement tests passing ✅  
+- All corruption/mutation tests passing ✅
+- All Fortune/Fate tests passing ✅
+- All Resilience/Resolve tests passing ✅ (new)
+- Enhanced error messages with detailed debugging data
+
+See [CHANGELOG.md](docs/CHANGELOG.md) for complete details.
+
+---
+
+## 🔄 Previous Release: v0.2.1 (October 5, 2025)
 
 ### Critical Bug Fixes
 - **Fixed XP Calculation Bug**: Corrected critical issue where skill/characteristic advancement charged 1000% too much XP (e.g., 11th skill advance now costs 20 XP instead of 220 XP)
@@ -58,7 +85,7 @@ The Warhammer MCP Bridge enables natural AI conversations with your WFRP 4e game
 
 ## Features at a Glance
 
-### 🎭 Core Features (59+ Tools)
+### 🎭 Core Features (65+ Tools)
 
 **Character Management** (5 tools) - **UPDATED!**
 - Get character details (characteristics, skills, talents, corruption, wounds)
@@ -67,10 +94,11 @@ The Warhammer MCP Bridge enables natural AI conversations with your WFRP 4e game
 - **NEW**: Add skills/talents from compendium with official effects
 - **NEW**: Direct skill/talent advance updates for GM adjustments
 
-**Career & Advancement** (3 tools) - **FIXED!**
+**Career & Advancement** (4 tools) - **FIXED!**
 - Track career progression and XP requirements
 - Advance characteristics, skills, and talents with **corrected XP calculations**
 - Calculate XP costs based on WFRP 4e rules (now using proper tiered formula)
+- **NEW**: Change career tool with proper UUID handling and atomic operations
 
 **Combat & Conditions** (6 tools) - **ENHANCED!**
 - Critical wounds tracking by location
@@ -79,12 +107,19 @@ The Warhammer MCP Bridge enables natural AI conversations with your WFRP 4e game
 - **UPDATED**: Add mutations from compendium with official effects
 - Disease and infection management
 
-**Fortune & Fate** (6 tools) - **NEW TOOLS!**
+**Fortune & Fate** (12 tools) - **EXPANDED!**
 - Manage Fortune points (daily rerolls)
 - Track Fate points (death saves)
 - Burn Fate to survive lethal damage
-- **NEW**: Award bonus Fortune for exceptional roleplay
-- **NEW**: Grant Fate for epic achievements (auto-updates Fortune max)
+- Award bonus Fortune for exceptional roleplay
+- Grant Fate for epic achievements (auto-updates Fortune max)
+- **NEW**: Complete Resilience/Resolve system for NPCs (6 tools)
+  - `get-resilience-resolve-status` - Check NPC Resilience/Resolve
+  - `spend-resolve` - NPC daily reroll resource
+  - `spend-resilience` - NPC death save resource
+  - `refresh-resolve` - Reset daily Resolve points
+  - `add-resolve` - Award bonus Resolve
+  - `add-resilience` - Grant permanent Resilience (rare)
 
 **Magic & Religion** (11 tools)
 - Spell casting and channelling
@@ -303,6 +338,7 @@ Once connected, you can ask Claude Desktop about your WFRP campaign:
 **advance-characteristic** - Increase a characteristic (WS, BS, S, T, I, Ag, Dex, Int, WP, Fel)  
 **advance-skill** - Improve a skill with XP  
 **advance-talent** - Purchase a new talent  
+**change-career** - Change to a new career with proper XP costs (100/200 based on completion)  
 
 ### Combat & Conditions
 
@@ -329,6 +365,16 @@ Once connected, you can ask Claude Desktop about your WFRP campaign:
 **burn-fate** - Spend a Fate point to avoid death  
 **restore-fortune** - Reset Fortune points (new day)  
 **modify-fate** - Adjust permanent Fate (rare)  
+**add-fortune** - Award bonus Fortune for exceptional roleplay  
+
+### Resilience & Resolve (NEW!)
+
+**get-resilience-resolve-status** - Display current Resilience and Resolve points for NPCs  
+**spend-resolve** - Use a Resolve point for NPC rerolls (daily resource)  
+**spend-resilience** - Burn a Resilience point for NPC to avoid death (permanent cost)  
+**refresh-resolve** - Reset Resolve points to maximum (new day)  
+**add-resolve** - Award bonus Resolve for exceptional NPC actions  
+**add-resilience** - Grant permanent Resilience increase (extremely rare)  
 
 ### Magic & Channelling
 
@@ -663,6 +709,14 @@ See [CHANGELOG.md](docs/CHANGELOG.md) for complete version history and updates.
 
 ### Recent Updates
 
+**v0.2.2** (2025-10-06) - **CAREER CHANGE FIXES & RESILIENCE/RESOLVE SYSTEM**
+- **FIXED**: Career change tool UUID construction bug (now properly builds `Compendium.{pack}.{id}` format)
+- **FIXED**: Career change operation order for atomic transactions (add new career first, then unmark old)
+- **NEW SYSTEM**: Complete Resilience/Resolve mechanics for NPCs (6 new tools mirroring Fortune/Fate)
+- **RENAMED**: `fortune-fate.ts` → `fate-resilience.ts` for clarity (now contains 12 tools total)
+- **TESTING**: All character, career, corruption, Fortune/Fate, and Resilience/Resolve tests passing ✅
+- See [CHANGELOG.md](docs/CHANGELOG.md) for detailed technical information
+
 **v0.2.1** (2025-10-05) - **CRITICAL BUG FIXES**
 - **FIXED**: Critical XP calculation bug (skills/characteristics overcharged by 1000%)
 - **ADDED**: Missing compendium handler infrastructure for proper WFRP4e integration
@@ -670,7 +724,6 @@ See [CHANGELOG.md](docs/CHANGELOG.md) for complete version history and updates.
 - **NEW TOOL**: `foundry-update-skill-talent` - Direct skill/talent updates for GM adjustments
 - **NEW TOOL**: `add-skill-talent` - Add skills/talents from compendium with official effects
 - **ENHANCED**: `add-mutation` now searches compendiums first for official mutations
-- See [CHANGES_2025-10-05.md](CHANGES_2025-10-05.md) for detailed technical information
 
 **v0.5.0** (2025-01-03)
 - Added RollTable tools (create, list, roll, delete)
