@@ -52,7 +52,7 @@ export class CharacterTools {
       },
       {
         name: 'foundry-update-character-info',
-        description: 'Update character basic information directly (not XP-based advancement). Use this to set characteristic initial values, current wounds, fortune, fate, and other basic properties. For XP-based characteristic advancement, use advance-characteristic tool instead.',
+        description: 'Directly set character stats to specific values (GM override tool - no restrictions). Use this for quick stat changes, character creation, testing, or corrections where you just need to SET a value without ceremony or bounds checking. For AWARDING bonus Fortune/Fate with proper narrative (increments with bounds), use foundry-add-fortune-point or foundry-add-fate-point instead. Use natural language like "set", "change", "update to [number]". Example: "Set Hans\' fate to 3" or "Change strength to 45"',
         inputSchema: {
           type: 'object',
           properties: {
@@ -62,7 +62,7 @@ export class CharacterTools {
             },
             updates: {
               type: 'object',
-              description: 'Object containing fields to update. Examples: {"strength": 40} sets initial Strength to 40, {"currentWounds": 10} sets current wounds, {"fortune": 2, "fate": 3} sets fortune and fate values',
+              description: 'Object containing fields to update. Sets exact values with no restrictions or bounds checking. Examples: {"strength": 40} sets initial Strength to 40, {"currentWounds": 10} sets current wounds, {"fortune": 2, "fate": 3} sets fortune and fate values',
               properties: {
                 // Characteristics (initial values, not advances)
                 weaponSkill: { type: 'number', description: 'Weapon Skill initial value (0-100)' },
@@ -76,9 +76,9 @@ export class CharacterTools {
                 willpower: { type: 'number', description: 'Willpower initial value (0-100)' },
                 fellowship: { type: 'number', description: 'Fellowship initial value (0-100)' },
                 // Status values
-                currentWounds: { type: 'number', description: 'Current wounds value' },
-                fortune: { type: 'number', description: 'Fortune points (max value)' },
-                fate: { type: 'number', description: 'Fate points (max value)' },
+                currentWounds: { type: 'number', description: 'Current wounds value (direct set, no bounds)' },
+                fortune: { type: 'number', description: 'Fortune points current value (direct set - for awarding bonus Fortune with bounds checking, use foundry-add-fortune-point)' },
+                fate: { type: 'number', description: 'Fate points current value (direct set - for epic achievements with ceremony, use foundry-add-fate-point)' },
                 resilience: { type: 'number', description: 'Resilience points (max value)' },
                 resolve: { type: 'number', description: 'Resolve points (max value)' },
               },

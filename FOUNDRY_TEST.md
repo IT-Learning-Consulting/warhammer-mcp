@@ -215,15 +215,51 @@ Prompt: "Advance Test Character's Strength 10 times"
 ---
 
 #### Test Case 2.4: Career Change
-```
-Prompt: "Change Test Character's career to Soldier"
-```
-**Expected Result**:
-- Career updated on character sheet
-- Career level set appropriately
-- Status/tier updated if applicable
 
-**Success Criteria**: ✅ New career visible in Foundry
+**⚠️ SETUP REQUIRED**: Character must have a career marked as "current" before this test can run.
+
+**Setup Steps**:
+1. Verify Test Character has at least one career item (e.g., "Soldier")
+2. Ensure one career is marked with "Current" checkbox in Foundry VTT
+3. OR use: `"Update Test Character's Soldier career, set system.current.value to true"`
+4. Verify character has 200+ available XP
+5. See `docs/TEST_2.4_SETUP_GUIDE.md` for detailed setup instructions
+
+```
+Prompt: "Change Test Character's career to Sergeant"
+```
+
+**Expected Result**:
+- Current career (e.g., "Soldier") found and checked for completion status
+- If current career is **complete**: 100 XP deducted
+- If current career is **NOT complete**: 200 XP deducted
+- New career "Sergeant" found in compendium and added to character
+- Old career unmarked as "current" (checkbox unchecked)
+- New career marked as "current" (checkbox checked)
+- XP deducted from available experience
+- Confirmation message shows:
+  - Previous career name and completion status
+  - New career name
+  - XP cost and remaining XP
+  - WFRP 4e rules explanation
+
+**Success Criteria**: 
+- ✅ New career visible in Foundry as "current"
+- ✅ Old career still in items list but not marked as current
+- ✅ Correct XP amount deducted (100 or 200 based on completion)
+- ✅ Experience totals updated properly
+
+**Common Setup Errors**:
+- ❌ "No current career found" - No career has `current: true` (see setup guide)
+- ❌ "No careers found" - Character has no career items (add one first)
+- ❌ "Insufficient XP" - Character needs 100-200 available XP
+
+**Technical Details**:
+- Uses `change-career` tool (not `foundry-update-character-info`)
+- Implements full WFRP 4e career change mechanics
+- Career history preserved (all careers remain in items)
+- See `docs/CAREER_CHANGE_TOOL.md` for complete documentation
+- See `docs/TEST_2.4_SETUP_GUIDE.md` for setup instructions
 
 ---
 
@@ -348,6 +384,83 @@ Prompt: "Test Character burns a fate point to survive certain death"
 - Dramatic confirmation message
 
 **Success Criteria**: ✅ Permanent reduction recorded
+
+---
+
+### Tool: `foundry-add-resolve-point`
+
+#### Test Case 4.6: Add Resolve Point
+```
+Prompt: "Give Test Character 1 resolve point"
+```
+**Expected Result**:
+- Resolve points increased by 1
+- Cannot exceed maximum (based on Resilience value)
+- Confirmation message
+
+**Success Criteria**: ✅ Resolve visible on character sheet
+
+---
+
+### Tool: `spend-resolve`
+
+#### Test Case 4.7: Spend Resolve Point
+```
+Prompt: "Test Character spends a resolve point to ignore Psychology effects from Fear"
+```
+**Expected Result**:
+- Resolve points decreased by 1
+- Cannot go below 0
+- Usage type logged (ignore-psychology)
+- Appropriate mechanical guidance provided
+
+**Success Criteria**: ✅ Resolve reduced by 1
+
+---
+
+### Tool: `foundry-add-resilience-point`
+
+#### Test Case 4.8: Add Resilience Point (Rare)
+```
+Prompt: "Increase Test Character's resilience by 1 for nourishing their soul with their Motivation"
+```
+**Expected Result**:
+- Resilience permanently increased
+- Resolve maximum also increases
+- Significant confirmation message
+
+**Success Criteria**: ✅ Both Resilience and max Resolve increase
+
+---
+
+### Tool: `spend-resilience`
+
+#### Test Case 4.9: Spend Resilience Point
+```
+Prompt: "Test Character spends a resilience point to deny a Chaos mutation"
+```
+**Expected Result**:
+- Resilience permanently reduced by 1
+- Resolve maximum also reduces
+- Dramatic confirmation message
+- Usage type logged (deny-mutation or auto-succeed)
+
+**Success Criteria**: ✅ Permanent reduction recorded
+
+---
+
+### Tool: `refresh-resolve`
+
+#### Test Case 4.10: Refresh Resolve Points
+```
+Prompt: "Test Character refreshes their resolve points by acting on their Motivation"
+```
+**Expected Result**:
+- Resolve restored to maximum (equal to Resilience value)
+- Confirmation message
+- Thematic messaging about Motivation
+
+**Success Criteria**: ✅ Resolve refreshed to maximum
 
 ---
 

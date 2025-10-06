@@ -58,7 +58,7 @@ The Warhammer MCP Bridge enables natural AI conversations with your WFRP 4e game
 
 ## Features at a Glance
 
-### 🎭 Core Features (52+ Tools)
+### 🎭 Core Features (59+ Tools)
 
 **Character Management** (5 tools) - **UPDATED!**
 - Get character details (characteristics, skills, talents, corruption, wounds)
@@ -79,10 +79,12 @@ The Warhammer MCP Bridge enables natural AI conversations with your WFRP 4e game
 - **UPDATED**: Add mutations from compendium with official effects
 - Disease and infection management
 
-**Fortune & Fate** (5 tools)
+**Fortune & Fate** (6 tools) - **NEW TOOLS!**
 - Manage Fortune points (daily rerolls)
 - Track Fate points (death saves)
 - Burn Fate to survive lethal damage
+- **NEW**: Award bonus Fortune for exceptional roleplay
+- **NEW**: Grant Fate for epic achievements (auto-updates Fortune max)
 
 **Magic & Religion** (11 tools)
 - Spell casting and channelling

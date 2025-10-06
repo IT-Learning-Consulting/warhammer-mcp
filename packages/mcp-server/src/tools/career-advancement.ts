@@ -132,6 +132,24 @@ export class CareerAdvancementTools {
                     required: ['characterName', 'talentName'],
                 },
             },
+            {
+                name: 'change-career',
+                description: 'Change character\'s career following WFRP 4e rules. Finds the career in compendium, adds it to character, marks it as current, and deducts appropriate XP cost (100 XP if current career is complete, 200 XP if not complete). The old career is unmarked as current. Example: "Change Gustav\'s career to Sergeant" or "Hans changes to Scholar"',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        characterName: {
+                            type: 'string',
+                            description: 'Name or ID of the character',
+                        },
+                        newCareerName: {
+                            type: 'string',
+                            description: 'Name of the new career to change to (will be found in compendium)',
+                        },
+                    },
+                    required: ['characterName', 'newCareerName'],
+                },
+            },
         ];
     }
 
@@ -685,6 +703,186 @@ export class CareerAdvancementTools {
         } catch (error) {
             this.logger.error('Failed to advance talent', error);
             throw new Error(`Failed to advance talent: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+    }
+
+    async handleChangeCareer(args: any): Promise<any> {
+        const schema = z.object({
+            characterName: z.string().min(1, 'Character name cannot be empty'),
+            newCareerName: z.string().min(1, 'New career name cannot be empty'),
+        });
+
+        const { characterName, newCareerName } = schema.parse(args);
+
+        this.logger.info('Changing career', { characterName, newCareerName });
+
+        try {
+            // Get character data
+            const character = await this.foundryClient.query('foundry-mcp-bridge.getCharacterInfo', {
+                characterName: characterName,
+            });
+
+            if (!character) {
+                throw new Error(`Character "${characterName}" not found`);
+            }
+
+            const system = character.system as any;
+            const availableXP = system.details?.experience?.current || 0;
+
+            // Find all career items for this character
+            const careerItems = character.items?.filter((item: any) => item.type === 'career') || [];
+
+            if (careerItems.length === 0) {
+                throw new Error(`No careers found for ${character.name}. Character must have at least one career before changing.`);
+            }
+
+            // Find the current career (the one marked as current)
+            const currentCareer = careerItems.find((item: any) => item.system?.current?.value === true);
+
+            if (!currentCareer) {
+                throw new Error(`No current career found for ${character.name}. Please mark a career as current first.`);
+            }
+
+            // Check if current career is complete
+            const isCurrentCareerComplete = currentCareer.system?.complete?.value === true;
+
+            // Calculate XP cost based on WFRP4e rules
+            const xpCost = isCurrentCareerComplete ? 100 : 200;
+
+            // Check if character has enough XP
+            if (availableXP < xpCost) {
+                throw new Error(
+                    `Insufficient XP to change career.\n` +
+                    `- Required: ${xpCost} XP (current career is ${isCurrentCareerComplete ? 'complete' : 'NOT complete'})\n` +
+                    `- Available: ${availableXP} XP\n` +
+                    `- Short by: ${xpCost - availableXP} XP`
+                );
+            }
+
+            // Search compendium for the new career
+            const compendiumResults = await this.foundryClient.query('foundry-mcp-bridge.searchCompendium', {
+                query: newCareerName,
+                types: ['career'],
+            });
+
+            if (!compendiumResults || compendiumResults.length === 0) {
+                throw new Error(`Career "${newCareerName}" not found in compendium. Please check the spelling.`);
+            }
+
+            // Find exact or best match
+            let newCareer = compendiumResults.find(
+                (item: any) => item.name.toLowerCase() === newCareerName.toLowerCase()
+            );
+
+            if (!newCareer) {
+                // No exact match, use the first result
+                newCareer = compendiumResults[0];
+                this.logger.info('No exact match found, using closest match', {
+                    searched: newCareerName,
+                    found: newCareer.name
+                });
+            }
+
+            // Construct UUID from pack and id
+            // Format: Compendium.{packId}.{itemId}
+            let careerUuid: string | null = null;
+            if (newCareer.uuid) {
+                // If UUID is already present, use it
+                careerUuid = newCareer.uuid;
+            } else if (newCareer.pack && (newCareer.id || newCareer._id)) {
+                // Construct UUID from pack and id
+                const itemId = newCareer.id || newCareer._id;
+                careerUuid = `Compendium.${newCareer.pack}.${itemId}`;
+                this.logger.info('Constructed UUID for career', {
+                    career: newCareer.name,
+                    pack: newCareer.pack,
+                    id: itemId,
+                    uuid: careerUuid
+                });
+            }
+
+            if (!careerUuid) {
+                throw new Error(
+                    `Career "${newCareer.name}" found but lacks UUID/pack/id data. ` +
+                    `Cannot add from compendium. Data: ${JSON.stringify(newCareer)}`
+                );
+            }
+
+            // Step 1: Add new career from compendium using UUID (do this FIRST)
+            const addResult = await this.foundryClient.query('foundry-mcp-bridge.addItemFromCompendium', {
+                actorId: character.id,
+                compendiumId: careerUuid,
+            });
+
+            if (!addResult || !addResult.success) {
+                throw new Error(`Failed to add career from compendium: ${addResult?.message || 'Unknown error'}`);
+            }
+
+            // Step 2: Mark the newly added career as current (before unmarking old one)
+            await this.foundryClient.query('foundry-mcp-bridge.updateItem', {
+                actorId: character.id,
+                itemId: addResult.itemId,
+                updateData: {
+                    'system.current.value': true,
+                },
+            });
+
+            // Step 3: Unmark old career as "current" (do this AFTER marking new one)
+            await this.foundryClient.query('foundry-mcp-bridge.updateItem', {
+                actorId: character.id,
+                itemId: currentCareer.id,
+                updateData: {
+                    'system.current.value': false,
+                },
+            });
+
+            // Step 4: Deduct XP
+            const newAvailableXP = availableXP - xpCost;
+            const newSpentXP = (system.details?.experience?.spent || 0) + xpCost;
+
+            await this.foundryClient.query('foundry-mcp-bridge.updateActor', {
+                actorId: character.id,
+                updateData: {
+                    'system.details.experience.current': newAvailableXP,
+                    'system.details.experience.spent': newSpentXP,
+                },
+            });
+
+            // Build result message
+            let result = `🎖️ **CAREER CHANGE SUCCESSFUL!** 🎖️\n\n`;
+            result += `**${character.name}** has changed careers!\n\n`;
+            result += `📋 **Career Transition:**\n`;
+            result += `- Previous Career: **${currentCareer.name}** ${isCurrentCareerComplete ? '✅ (Complete)' : '⚠️ (Incomplete)'}\n`;
+            result += `- New Career: **${newCareer.name}** ⭐ (Now Current)\n\n`;
+            result += `💰 **Experience Cost:**\n`;
+            result += `- XP Cost: **${xpCost} XP** (${isCurrentCareerComplete ? 'completed career rate' : 'incomplete career penalty'})\n`;
+            result += `- Previous XP: ${availableXP} available\n`;
+            result += `- XP Spent: ${xpCost}\n`;
+            result += `- Remaining XP: **${newAvailableXP}** available\n\n`;
+            result += `📚 **WFRP 4e Rules:**\n`;
+
+            if (isCurrentCareerComplete) {
+                result += `✅ Your previous career was **complete**, so you paid the standard rate of 100 XP.\n\n`;
+                result += `*A complete career means you had the required advances in characteristics and skills.*\n`;
+            } else {
+                result += `⚠️ Your previous career was **incomplete**, so you paid a penalty of 200 XP.\n\n`;
+                result += `*To avoid this penalty in the future, complete your career first:*\n`;
+                result += `- Level 1: 5 advances in characteristics and 8 skills\n`;
+                result += `- Level 2: 10 advances in characteristics and 8 skills\n`;
+                result += `- Level 3: 15 advances in characteristics and 8 skills\n`;
+                result += `- Level 4: 20 advances in characteristics and 8 skills\n`;
+            }
+
+            result += `\n🎯 **Next Steps:**\n`;
+            result += `- Review your new career's available advances\n`;
+            result += `- Use \`get-career-advancement\` to see what you can purchase\n`;
+            result += `- Purchase new skills and talents from your new career path\n`;
+
+            return result;
+
+        } catch (error) {
+            this.logger.error('Failed to change career', error);
+            throw new Error(`Failed to change career: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
     }
 }

@@ -20,7 +20,7 @@ import { CareerAdvancementTools } from './tools/career-advancement.js';
 
 import { CorruptionMutationTools } from './tools/corruption-mutation.js';
 
-import { FortuneFateTools } from './tools/fortune-fate.js';
+import { FortuneFateTools } from './tools/fate-resilience.js';
 
 import { CriticalWoundsTools } from './tools/critical-wounds.js';
 
@@ -1324,6 +1324,12 @@ async function startBackend(): Promise<void> {
 
                   break;
 
+                case 'change-career':
+
+                  result = await careerAdvancementTools.handleChangeCareer(args);
+
+                  break;
+
                 // Corruption & Mutation tools
 
                 case 'get-corruption-status':
@@ -1385,6 +1391,54 @@ async function startBackend(): Promise<void> {
                 case 'refresh-fortune':
 
                   result = await fortuneFateTools.handleRefreshFortune(args);
+
+                  break;
+
+                case 'foundry-add-fortune-point':
+
+                  result = await fortuneFateTools.handleAddFortune(args);
+
+                  break;
+
+                case 'foundry-add-fate-point':
+
+                  result = await fortuneFateTools.handleAddFate(args);
+
+                  break;
+
+                case 'get-resilience-resolve-status':
+
+                  result = await fortuneFateTools.handleGetResilienceResolveStatus(args);
+
+                  break;
+
+                case 'spend-resolve':
+
+                  result = await fortuneFateTools.handleSpendResolve(args);
+
+                  break;
+
+                case 'spend-resilience':
+
+                  result = await fortuneFateTools.handleSpendResilience(args);
+
+                  break;
+
+                case 'refresh-resolve':
+
+                  result = await fortuneFateTools.handleRefreshResolve(args);
+
+                  break;
+
+                case 'foundry-add-resolve-point':
+
+                  result = await fortuneFateTools.handleAddResolve(args);
+
+                  break;
+
+                case 'foundry-add-resilience-point':
+
+                  result = await fortuneFateTools.handleAddResilience(args);
 
                   break;
 
