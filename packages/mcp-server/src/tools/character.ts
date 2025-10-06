@@ -667,23 +667,42 @@ export class CharacterTools {
       this.logger.info('Searching compendiums for item', { itemName, itemType });
 
       let compendiumItem = null;
+      let compendiumUuid = null;
       try {
         const searchResults = await this.foundryClient.query('foundry-mcp-bridge.searchCompendium', {
           query: itemName,
-          entityType: 'Item',
-          itemType: itemType,
+          packType: 'Item',
         });
 
-        if (searchResults && searchResults.length > 0) {
-          // Find exact or best match
-          compendiumItem = searchResults.find((item: any) =>
-            item.name.toLowerCase() === itemName.toLowerCase()
-          ) || searchResults[0]; // Use first result if no exact match
+        this.logger.info('Search results:', { searchResults });
 
-          this.logger.info('Found item in compendium', {
-            itemName: compendiumItem.name,
-            compendiumId: compendiumItem.uuid
-          });
+        if (searchResults && searchResults.length > 0) {
+          // Filter for the specific item type
+          const typeResults = searchResults.filter((item: any) => item.type === itemType);
+
+          if (typeResults.length > 0) {
+            // Find exact or best match
+            compendiumItem = typeResults.find((item: any) =>
+              item.name.toLowerCase() === itemName.toLowerCase()
+            ) || typeResults[0]; // Use first result if no exact match
+
+            // Construct UUID from pack and id
+            // Format: Compendium.{packId}.{itemId}
+            if (compendiumItem.pack && compendiumItem.id) {
+              compendiumUuid = `Compendium.${compendiumItem.pack}.${compendiumItem.id}`;
+            } else if (compendiumItem.pack && compendiumItem._id) {
+              compendiumUuid = `Compendium.${compendiumItem.pack}.${compendiumItem._id}`;
+            }
+
+            this.logger.info('Found item in compendium', {
+              itemName: compendiumItem.name,
+              pack: compendiumItem.pack,
+              id: compendiumItem.id || compendiumItem._id,
+              constructedUuid: compendiumUuid
+            });
+          } else {
+            this.logger.info(`No ${itemType}-type items found in search results`);
+          }
         }
       } catch (compendiumError) {
         this.logger.warn('Compendium search failed, will create basic entry', compendiumError);
@@ -692,19 +711,19 @@ export class CharacterTools {
       let response = '';
 
       // STEP 2: Add from compendium OR create basic entry
-      if (compendiumItem) {
+      if (compendiumItem && compendiumUuid) {
         // Add official compendium item with all effects
         await this.foundryClient.query('foundry-mcp-bridge.addItemFromCompendium', {
           actorId: character.id,
-          compendiumId: compendiumItem.uuid,
+          compendiumId: compendiumUuid,
         });
 
         response = `✅ Added official ${itemType} from compendium to ${character.name}\n\n`;
         response += `**${itemType === 'skill' ? 'Skill' : 'Talent'}**: ${compendiumItem.name}\n`;
-        response += `**Source**: WFRP 4e Compendium (${compendiumItem.uuid})\n`;
+        response += `**Source**: WFRP 4e Compendium (${compendiumUuid})\n`;
 
-        if (compendiumItem.system?.description?.value) {
-          const desc = compendiumItem.system.description.value;
+        if (compendiumItem.description) {
+          const desc = compendiumItem.description;
           const truncatedDesc = desc.length > 200 ? desc.substring(0, 200) + '...' : desc;
           response += `**Description**: ${truncatedDesc}\n`;
         }

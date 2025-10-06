@@ -636,23 +636,42 @@ export class CorruptionMutationTools {
             this.logger.info('Searching compendiums for mutation', { mutationName });
 
             let compendiumMutation = null;
+            let compendiumUuid = null;
             try {
                 const searchResults = await this.foundryClient.query('foundry-mcp-bridge.searchCompendium', {
                     query: mutationName,
-                    entityType: 'Item',
-                    itemType: 'mutation',
+                    packType: 'Item',
                 });
 
-                if (searchResults && searchResults.length > 0) {
-                    // Find exact or best match
-                    compendiumMutation = searchResults.find((item: any) =>
-                        item.name.toLowerCase() === mutationName.toLowerCase()
-                    ) || searchResults[0]; // Use first result if no exact match
+                this.logger.info('Search results:', { searchResults });
 
-                    this.logger.info('Found mutation in compendium', {
-                        mutationName: compendiumMutation.name,
-                        compendiumId: compendiumMutation.uuid
-                    });
+                if (searchResults && searchResults.length > 0) {
+                    // Filter for mutations only
+                    const mutationResults = searchResults.filter((item: any) => item.type === 'mutation');
+
+                    if (mutationResults.length > 0) {
+                        // Find exact or best match
+                        compendiumMutation = mutationResults.find((item: any) =>
+                            item.name.toLowerCase() === mutationName.toLowerCase()
+                        ) || mutationResults[0]; // Use first result if no exact match
+
+                        // Construct UUID from pack and id
+                        // Format: Compendium.{packId}.{itemId}
+                        if (compendiumMutation.pack && compendiumMutation.id) {
+                            compendiumUuid = `Compendium.${compendiumMutation.pack}.${compendiumMutation.id}`;
+                        } else if (compendiumMutation.pack && compendiumMutation._id) {
+                            compendiumUuid = `Compendium.${compendiumMutation.pack}.${compendiumMutation._id}`;
+                        }
+
+                        this.logger.info('Found mutation in compendium', {
+                            mutationName: compendiumMutation.name,
+                            pack: compendiumMutation.pack,
+                            id: compendiumMutation.id || compendiumMutation._id,
+                            constructedUuid: compendiumUuid
+                        });
+                    } else {
+                        this.logger.info('No mutation-type items found in search results');
+                    }
                 }
             } catch (compendiumError) {
                 this.logger.warn('Compendium search failed, will create custom mutation', compendiumError);
@@ -661,22 +680,22 @@ export class CorruptionMutationTools {
             let response = '';
 
             // STEP 2: Add mutation from compendium OR create custom
-            if (compendiumMutation) {
+            if (compendiumMutation && compendiumUuid) {
                 // Add official compendium mutation with all effects
                 await this.foundryClient.query('foundry-mcp-bridge.addItemFromCompendium', {
                     actorId: character.id,
-                    compendiumId: compendiumMutation.uuid,
+                    compendiumId: compendiumUuid,
                 });
 
-                const mutType = compendiumMutation.system?.mutationType?.value || 'unknown';
+                const mutType = compendiumMutation.type || 'unknown';
                 const icon = mutType === 'physical' ? '💪' : mutType === 'mental' ? '🧠' : '🧬';
 
                 response = `✅ Added official ${icon} mutation from compendium to ${character.name}\n\n`;
                 response += `**Mutation**: ${compendiumMutation.name}\n`;
                 response += `**Type**: ${mutType.charAt(0).toUpperCase() + mutType.slice(1)}\n`;
-                response += `**Source**: WFRP 4e Compendium (${compendiumMutation.uuid})\n`;
-                if (compendiumMutation.system?.description?.value) {
-                    const desc = compendiumMutation.system.description.value;
+                response += `**Source**: WFRP 4e Compendium (${compendiumUuid})\n`;
+                if (compendiumMutation.description) {
+                    const desc = compendiumMutation.description;
                     const truncatedDesc = desc.length > 200 ? desc.substring(0, 200) + '...' : desc;
                     response += `**Description**: ${truncatedDesc}\n`;
                 }
