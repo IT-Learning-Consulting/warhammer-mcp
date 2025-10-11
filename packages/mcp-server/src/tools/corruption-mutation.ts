@@ -168,7 +168,7 @@ export class CorruptionMutationTools {
         this.logger.info('Getting corruption status', { characterName });
 
         try {
-            const character = await this.foundryClient.query('foundry-mcp-bridge.getCharacterInfo', {
+            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
                 characterName: characterName,
             });
 
@@ -336,7 +336,7 @@ export class CorruptionMutationTools {
         this.logger.info('Adding corruption', { characterName, amount, reason });
 
         try {
-            const character = await this.foundryClient.query('foundry-mcp-bridge.getCharacterInfo', {
+            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
                 characterName: characterName,
             });
 
@@ -416,7 +416,7 @@ export class CorruptionMutationTools {
             response += `- Major (${thresholds.major}): ${newCorruption >= thresholds.major ? '⚠️ EXCEEDED' : `${thresholds.major - newCorruption} points away`}\n\n`;
 
             // Actually update the actor in Foundry
-            await this.foundryClient.query('foundry-mcp-bridge.updateActor', {
+            await this.foundryClient.query('warhammer-mcp.updateActor', {
                 actorId: character.id,
                 updateData: {
                     'system.status.corruption.value': newCorruption,
@@ -450,7 +450,7 @@ export class CorruptionMutationTools {
         this.logger.info('Listing mutations', { characterName });
 
         try {
-            const character = await this.foundryClient.query('foundry-mcp-bridge.getCharacterInfo', {
+            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
                 characterName: characterName,
             });
 
@@ -559,7 +559,7 @@ export class CorruptionMutationTools {
         this.logger.info('Removing Corruption', { characterName, amount, reason });
 
         try {
-            const character = await this.foundryClient.query('foundry-mcp-bridge.getCharacterInfo', {
+            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
                 characterName: characterName,
             });
 
@@ -577,7 +577,7 @@ export class CorruptionMutationTools {
             const amountToRemove = Math.min(amount, currentCorruption);
             const newCorruption = currentCorruption - amountToRemove;
 
-            await this.foundryClient.query('foundry-mcp-bridge.updateActor', {
+            await this.foundryClient.query('warhammer-mcp.updateActor', {
                 actorId: character.id,
                 updateData: {
                     'system.status.corruption.value': newCorruption,
@@ -615,7 +615,7 @@ export class CorruptionMutationTools {
         this.logger.info('Adding mutation', { characterName, mutationName });
 
         try {
-            const character = await this.foundryClient.query('foundry-mcp-bridge.getCharacterInfo', {
+            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
                 characterName: characterName,
             });
 
@@ -638,7 +638,7 @@ export class CorruptionMutationTools {
             let compendiumMutation = null;
             let compendiumUuid = null;
             try {
-                const searchResults = await this.foundryClient.query('foundry-mcp-bridge.searchCompendium', {
+                const searchResults = await this.foundryClient.query('warhammer-mcp.searchCompendium', {
                     query: mutationName,
                     packType: 'Item',
                 });
@@ -682,7 +682,7 @@ export class CorruptionMutationTools {
             // STEP 2: Add mutation from compendium OR create custom
             if (compendiumMutation && compendiumUuid) {
                 // Add official compendium mutation with all effects
-                await this.foundryClient.query('foundry-mcp-bridge.addItemFromCompendium', {
+                await this.foundryClient.query('warhammer-mcp.addItemFromCompendium', {
                     actorId: character.id,
                     compendiumId: compendiumUuid,
                 });
@@ -720,7 +720,7 @@ export class CorruptionMutationTools {
                     },
                 };
 
-                await this.foundryClient.query('foundry-mcp-bridge.createItem', {
+                await this.foundryClient.query('warhammer-mcp.createItem', {
                     actorId: character.id,
                     itemData: mutationData,
                 });
@@ -755,7 +755,7 @@ export class CorruptionMutationTools {
         this.logger.info('Removing mutation', { characterName, mutationName });
 
         try {
-            const character = await this.foundryClient.query('foundry-mcp-bridge.getCharacterInfo', {
+            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
                 characterName: characterName,
             });
 
@@ -772,7 +772,7 @@ export class CorruptionMutationTools {
                 throw new Error(`Mutation "${mutationName}" not found on ${character.name}`);
             }
 
-            await this.foundryClient.query('foundry-mcp-bridge.deleteItem', {
+            await this.foundryClient.query('warhammer-mcp.deleteItem', {
                 actorId: character.id,
                 itemId: mutation.id,
             });

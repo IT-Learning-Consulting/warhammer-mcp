@@ -150,7 +150,7 @@ export class MapGenerationTools {
         filter: typeof safeInput.filter === 'string' ? safeInput.filter : undefined,
         include_active_only: Boolean(safeInput.include_active_only),
       };
-      return await this.foundryClient.query('foundry-mcp-bridge.list-scenes', params);
+      return await this.foundryClient.query('warhammer-mcp.list-scenes', params);
     } catch (error: any) {
       this.logger.error('List scenes failed', { error, input: safeInput });
       return { success: false, error: error?.message ?? 'Unknown error' };
@@ -170,7 +170,7 @@ export class MapGenerationTools {
         optimize_view: safeInput.optimize_view !== false,
       };
 
-      return await this.foundryClient.query('foundry-mcp-bridge.switch-scene', params);
+      return await this.foundryClient.query('warhammer-mcp.switch-scene', params);
     } catch (error: any) {
       this.logger.error('Switch scene failed', { error, input: safeInput });
       return { success: false, error: error?.message ?? 'Unknown error' };
@@ -203,7 +203,7 @@ export class MapGenerationTools {
         grid_size: gridSize,
       } as const;
 
-      const response = await this.foundryClient.query('foundry-mcp-bridge.generate-map', params);
+      const response = await this.foundryClient.query('warhammer-mcp.generate-map', params);
       if (response?.error) {
         throw new Error(response.error);
       }
@@ -240,7 +240,7 @@ export class MapGenerationTools {
 
       this.logger.info('Map status check requested via MCP', { jobId, input: safeInput });
 
-      const response = await this.foundryClient.query('foundry-mcp-bridge.check-map-status', { job_id: jobId });
+      const response = await this.foundryClient.query('warhammer-mcp.check-map-status', { job_id: jobId });
       if (response?.error) {
         const message = response?.message ?? response?.error ?? 'Failed to check job status';
         return `Error: ${message}`;
@@ -286,7 +286,7 @@ export class MapGenerationTools {
 
       this.logger.info('Map job cancellation requested via MCP', { jobId, input: safeInput });
 
-      const response = await this.foundryClient.query('foundry-mcp-bridge.cancel-map-job', { job_id: jobId });
+      const response = await this.foundryClient.query('warhammer-mcp.cancel-map-job', { job_id: jobId });
       if (response?.error) {
         const message = response?.message ?? response?.error ?? 'Failed to cancel map job';
         return `Error: ${message}`;

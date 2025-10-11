@@ -445,6 +445,29 @@ this.logger.error('Operation failed', {
    - File: `fate-resilience.ts` (renamed from `fortune-fate.ts`)
    - Tools: get-status, spend, burn, refresh, add
 
+### v0.2.2.1 (October 7, 2025) - HOTFIX
+
+**Critical Fix:**
+1. **Critical Wounds Tool - Complete Rewrite**
+   - **Problem**: Old implementation created fake criticals and subtracted wounds incorrectly
+   - **WFRP 4e Rules**: Critical wounds are specific injuries from compendium, not generic damage
+   - **Solution**: Tool now:
+     - Searches compendium for actual critical (e.g., "Minor Head Injury")
+     - Constructs UUID from pack/id (same pattern as career change fix)
+     - Adds official critical with all effects/modifiers
+     - Sets location but DOES NOT subtract wounds (GM does separately)
+     - Simplified response without verbose guidance
+   - Location: `critical-wounds.ts` handleAddCriticalWound
+   - **Old parameters**: characterName, location, woundName, wounds, description
+   - **New parameters**: characterName, criticalName, location
+   - Status: Needs testing (Test 5.1)
+
+**Why This Matters:**
+- WFRP 4e separates wound loss from critical wounds
+- Critical wounds are specific conditions from Critical Tables
+- Each has unique effects, penalties, healing times
+- Must use official compendium data, not custom descriptions
+
 ### v0.2.1 (October 5, 2025)
 
 **Critical Fixes:**
@@ -522,10 +545,10 @@ await addItemFromCompendium(actorId, uuid);
 ### In Progress 🔄
 - Career change tool (fixes implemented, needs retest with Test 2.4)
 - Disease progression system (partially implemented)
-- Critical wounds tracking (partially implemented)
+- **Critical wounds tool (rewritten Oct 7 - needs testing)**
 
 ### Known Test Failures ❌
-- None currently - all tests passing as of v0.2.2
+- Test 5.1: Critical wounds (old implementation wrong - now fixed, awaiting retest)
 
 ### Backlog 📋
 - Inventory weight/encumbrance calculations

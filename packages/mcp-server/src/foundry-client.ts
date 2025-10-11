@@ -21,7 +21,7 @@ export class FoundryClient {
   constructor(config: Config['foundry'], logger: Logger) {
     this.config = config;
     this.logger = logger.child({ component: 'FoundryClient' });
-    
+
     // Initialize the socket connector
     this.connector = new FoundryConnector({
       config: this.config,
@@ -31,7 +31,7 @@ export class FoundryClient {
 
   async connect(): Promise<void> {
     this.logger.info('Starting Foundry connector socket.io server');
-    
+
     try {
       // Start the socket.io server that Foundry will connect to
       await this.connector.start();
@@ -69,7 +69,7 @@ export class FoundryClient {
   }
 
   ping(): Promise<any> {
-    return this.query('foundry-mcp-bridge.ping');
+    return this.query('warhammer-mcp.ping');
   }
 
   getConnectionInfo(): any {

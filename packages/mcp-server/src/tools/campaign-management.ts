@@ -122,7 +122,7 @@ export class CampaignManagementTools {
       const dashboardContent = this.generateDashboardHTML(campaignStructure);
 
       // Create the journal entry in Foundry (organized in campaign-specific folder)
-      const journalResult = await this.foundryClient.query('foundry-mcp-bridge.createJournalEntry', {
+      const journalResult = await this.foundryClient.query('warhammer-mcp.createJournalEntry', {
         name: `${request.campaignTitle} - Campaign Dashboard`,
         content: dashboardContent,
         folderName: request.campaignTitle // Organize in campaign-named folder

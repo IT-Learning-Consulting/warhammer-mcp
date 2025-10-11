@@ -1,7 +1,7 @@
 {
-  "id": "foundry-mcp-bridge",
-  "title": "Foundry MCP Bridge",
-  "description": "Connect Foundry VTT to AI models through MCP protocol. Enable AI-powered actor creation, intelligent compendium search, campaign analysis, and interactive dice roll coordination. Supports Claude, local LLMs, and future AI models with comprehensive GM-only security.",
+  "id": "warhammer-mcp",
+  "title": "Warhammer MCP",
+  "description": "Connect Foundry VTT to AI models through MCP protocol. WFRP 4e specialized bridge enabling AI-powered character management, career advancement, corruption tracking, NPC generation, and intelligent compendium search. Supports Claude with comprehensive GM-only security.",
   "version": "0.2.2",
   "compatibility": {
     "minimum": "13",
@@ -10,16 +10,16 @@
   },
   "authors": [
     {
-      "name": "Adam Dooley",
-      "email": "adambriandooley@gmail.com",
-      "url": "https://github.com/adambdooley"
+      "name": "Danny Castillo",
+      "email": "danny.c@itlearningkonsult.com",
+      "url": "https://github.com/IT-Learning-Consulting"
     }
   ],
-  "url": "https://github.com/adambdooley/foundry-vtt-mcp",
-  "bugs": "https://github.com/adambdooley/foundry-vtt-mcp/issues",
-  "changelog": "https://github.com/adambdooley/foundry-vtt-mcp/releases",
-  "readme": "https://github.com/adambdooley/foundry-vtt-mcp/blob/master/README.md",
-  "license": "https://github.com/adambdooley/foundry-vtt-mcp/blob/master/LICENSE",
+  "url": "https://github.com/IT-Learning-Consulting/warhammer-mcp",
+  "bugs": "https://github.com/IT-Learning-Consulting/warhammer-mcp/issues",
+  "changelog": "https://github.com/IT-Learning-Consulting/warhammer-mcp/releases",
+  "readme": "https://github.com/IT-Learning-Consulting/warhammer-mcp/blob/main/README.md",
+  "license": "https://github.com/IT-Learning-Consulting/warhammer-mcp/blob/main/LICENSE",
   "esmodules": [
     "dist/main.js"
   ],
@@ -35,8 +35,8 @@
     }
   ],
   "socket": true,
-  "manifest": "https://raw.githubusercontent.com/adambdooley/foundry-vtt-mcp/master/packages/foundry-module/module.json",
-  "download": "https://github.com/adambdooley/foundry-vtt-mcp/releases/latest/download/foundry-vtt-mcp.zip",
+  "manifest": "https://raw.githubusercontent.com/IT-Learning-Consulting/warhammer-mcp/main/packages/foundry-module/module.json",
+  "download": "https://github.com/IT-Learning-Consulting/warhammer-mcp/releases/latest/download/warhammer-mcp.zip",
   "protected": false,
   "coreTranslation": false,
   "library": false,

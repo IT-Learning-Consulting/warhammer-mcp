@@ -195,7 +195,7 @@ export class QuestCreationTools {
       const questContent = this.generateQuestContent(request);
 
       // Create journal entry via Foundry client
-      const result = await this.foundryClient.query('foundry-mcp-bridge.createJournalEntry', {
+      const result = await this.foundryClient.query('warhammer-mcp.createJournalEntry', {
         name: request.questTitle,
         content: questContent
       });
@@ -231,7 +231,7 @@ export class QuestCreationTools {
       const request = requestSchema.parse(args);
 
       // Get journal content first
-      const journalResult = await this.foundryClient.query('foundry-mcp-bridge.getJournalContent', {
+      const journalResult = await this.foundryClient.query('warhammer-mcp.getJournalContent', {
         journalId: request.journalId
       });
 
@@ -243,7 +243,7 @@ export class QuestCreationTools {
       const updatedContent = this.addNPCLinkToJournal(journalResult.content, request.npcName, request.relationship);
 
       // Update journal with NPC link
-      const updateResult = await this.foundryClient.query('foundry-mcp-bridge.updateJournalContent', {
+      const updateResult = await this.foundryClient.query('warhammer-mcp.updateJournalContent', {
         journalId: request.journalId,
         content: updatedContent
       });
@@ -282,7 +282,7 @@ export class QuestCreationTools {
       request.newContent = this.convertMarkdownToPlainText(request.newContent);
 
       // Get current journal content
-      const currentJournal = await this.foundryClient.query('foundry-mcp-bridge.getJournalContent', {
+      const currentJournal = await this.foundryClient.query('warhammer-mcp.getJournalContent', {
         journalId: request.journalId
       });
 
@@ -303,7 +303,7 @@ export class QuestCreationTools {
 
 
       // Update the journal
-      const result = await this.foundryClient.query('foundry-mcp-bridge.updateJournalContent', {
+      const result = await this.foundryClient.query('warhammer-mcp.updateJournalContent', {
         journalId: request.journalId,
         content: updatedContent
       });
@@ -321,7 +321,7 @@ export class QuestCreationTools {
       }
 
       // Verify the update by reading the content back
-      const verifyResult = await this.foundryClient.query('foundry-mcp-bridge.getJournalContent', {
+      const verifyResult = await this.foundryClient.query('warhammer-mcp.getJournalContent', {
         journalId: request.journalId
       });
 
@@ -371,7 +371,7 @@ export class QuestCreationTools {
       const request = requestSchema.parse(args);
 
       // Get all journals
-      const journals = await this.foundryClient.query('foundry-mcp-bridge.listJournals', {});
+      const journals = await this.foundryClient.query('warhammer-mcp.listJournals', {});
 
       if (!journals || journals.error) {
         throw new Error('Failed to retrieve journals');
@@ -390,7 +390,7 @@ export class QuestCreationTools {
       if (request.includeContent) {
         for (const journal of filteredJournals) {
           try {
-            const content = await this.foundryClient.query('foundry-mcp-bridge.getJournalContent', {
+            const content = await this.foundryClient.query('warhammer-mcp.getJournalContent', {
               journalId: journal.id
             });
             journal.contentPreview = content?.content?.substring(0, 150) + '...' || '';
@@ -425,7 +425,7 @@ export class QuestCreationTools {
       const request = requestSchema.parse(args);
 
       // Get all journals
-      const journals = await this.foundryClient.query('foundry-mcp-bridge.listJournals', {});
+      const journals = await this.foundryClient.query('warhammer-mcp.listJournals', {});
 
       if (!journals || journals.error) {
         throw new Error('Failed to retrieve journals');
@@ -453,7 +453,7 @@ export class QuestCreationTools {
         // Search content
         if (request.searchType === 'content' || request.searchType === 'both') {
           try {
-            const content = await this.foundryClient.query('foundry-mcp-bridge.getJournalContent', {
+            const content = await this.foundryClient.query('warhammer-mcp.getJournalContent', {
               journalId: journal.id
             });
 

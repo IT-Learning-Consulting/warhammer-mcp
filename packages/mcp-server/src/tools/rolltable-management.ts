@@ -214,7 +214,7 @@ WARNING: This permanently removes the table. Make sure you have the correct tabl
             }
 
             // Create the table with all results in one call
-            const result = await this.foundryClient.query('foundry-mcp-bridge.createRollTable', {
+            const result = await this.foundryClient.query('warhammer-mcp.createRollTable', {
                 tableData: tableData
             });
 
@@ -265,7 +265,7 @@ WARNING: This permanently removes the table. Make sure you have the correct tabl
         this.logger.info("Listing RollTables");
 
         try {
-            const tables = await this.foundryClient.query('foundry-mcp-bridge.listRollTables', {});
+            const tables = await this.foundryClient.query('warhammer-mcp.listRollTables', {});
 
             if (!tables || tables.length === 0) {
                 return {
@@ -306,7 +306,7 @@ WARNING: This permanently removes the table. Make sure you have the correct tabl
         this.logger.info("Getting RollTable", { tableId: args.tableId });
 
         try {
-            const table = await this.foundryClient.query('foundry-mcp-bridge.getRollTable', {
+            const table = await this.foundryClient.query('warhammer-mcp.getRollTable', {
                 tableId: args.tableId
             });
 
@@ -354,7 +354,7 @@ WARNING: This permanently removes the table. Make sure you have the correct tabl
         });
 
         try {
-            const result = await this.foundryClient.query('foundry-mcp-bridge.rollOnTable', {
+            const result = await this.foundryClient.query('warhammer-mcp.rollOnTable', {
                 tableId: args.tableId,
                 rollMode: args.rollMode || "public"
             });
@@ -385,7 +385,7 @@ WARNING: This permanently removes the table. Make sure you have the correct tabl
         this.logger.info("Deleting RollTable", { tableId: args.tableId });
 
         try {
-            await this.foundryClient.query('foundry-mcp-bridge.deleteRollTable', {
+            await this.foundryClient.query('warhammer-mcp.deleteRollTable', {
                 tableId: args.tableId
             });
 

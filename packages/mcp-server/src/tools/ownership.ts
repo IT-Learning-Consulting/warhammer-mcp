@@ -157,7 +157,7 @@ export class OwnershipTools {
     for (const actor of actors) {
       for (const player of players) {
         try {
-          const result = await this.foundryClient.query('foundry-mcp-bridge.setActorOwnership', {
+          const result = await this.foundryClient.query('warhammer-mcp.setActorOwnership', {
             actorId: actor.id,
             userId: player.id,
             permission: numericLevel,
@@ -224,7 +224,7 @@ export class OwnershipTools {
     this.logger.info(`Listing actor ownership for actor: "${actorIdentifier || 'all'}", player: "${playerIdentifier || 'all'}"`);
 
     try {
-      const ownershipData = await this.foundryClient.query('foundry-mcp-bridge.getActorOwnership', {
+      const ownershipData = await this.foundryClient.query('warhammer-mcp.getActorOwnership', {
         actorIdentifier,
         playerIdentifier,
       });
@@ -252,18 +252,18 @@ export class OwnershipTools {
     try {
       if (identifier.toLowerCase().includes('all friendly npcs')) {
         // Get all tokens in current scene with friendly disposition
-        const actors = await this.foundryClient.query('foundry-mcp-bridge.getFriendlyNPCs', {});
+        const actors = await this.foundryClient.query('warhammer-mcp.getFriendlyNPCs', {});
         this.logger.debug(`Found ${actors.length} friendly NPCs`);
         return actors;
       } else if (identifier.toLowerCase().includes('party characters')) {
         // Get all player-owned characters
-        const actors = await this.foundryClient.query('foundry-mcp-bridge.getPartyCharacters', {});
+        const actors = await this.foundryClient.query('warhammer-mcp.getPartyCharacters', {});
         this.logger.debug(`Found ${actors.length} party characters`);
         return actors;
       } else {
         // Single actor lookup
         this.logger.debug(`Looking for single actor: ${identifier}`);
-        const actor = await this.foundryClient.query('foundry-mcp-bridge.findActor', { identifier });
+        const actor = await this.foundryClient.query('warhammer-mcp.findActor', { identifier });
         this.logger.debug(`Single actor lookup result:`, actor);
         return actor ? [actor] : [];
       }
@@ -282,13 +282,13 @@ export class OwnershipTools {
     try {
       if (identifier.toLowerCase() === 'party') {
         // Get all connected players (excluding GM)
-        const players = await this.foundryClient.query('foundry-mcp-bridge.getConnectedPlayers', {});
+        const players = await this.foundryClient.query('warhammer-mcp.getConnectedPlayers', {});
         this.logger.debug(`Found ${players.length} connected players`);
         return players;
       } else {
         // Single player lookup with partial matching
         this.logger.debug(`Looking for single player: ${identifier}`);
-        const players = await this.foundryClient.query('foundry-mcp-bridge.findPlayers', { 
+        const players = await this.foundryClient.query('warhammer-mcp.findPlayers', { 
           identifier,
           allowPartialMatch: true,
           includeCharacterOwners: true, // Also match by character names they own

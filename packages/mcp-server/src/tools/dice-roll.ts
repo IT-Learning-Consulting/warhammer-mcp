@@ -86,7 +86,7 @@ export class DiceRollTools {
         return 'You must determine the roll visibility before calling this function. Either: 1) The user already specified "public" or "private" in their request, or 2) You need to ask: "Do you want this to be a PUBLIC roll or PRIVATE roll?" Set userConfirmedVisibility to true only when you are confident about the visibility preference.';
       }
 
-      const response = await this.foundryClient.query('foundry-mcp-bridge.request-player-rolls', params);
+      const response = await this.foundryClient.query('warhammer-mcp.request-player-rolls', params);
 
       if (response.success) {
         return `Roll request sent successfully! ${response.message}`;

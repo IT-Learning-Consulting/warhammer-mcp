@@ -3241,7 +3241,7 @@ export class FoundryDataAccess {
 
         // Send socket request to GM
         if (game.socket) {
-          game.socket.emit('module.foundry-mcp-bridge', {
+          game.socket.emit('module.warhammer-mcp', {
             type: 'requestMessageUpdate',
             buttonId: buttonId,
             userId: userId,
@@ -3784,6 +3784,9 @@ export class FoundryDataAccess {
         throw new Error('Failed to create actor');
       }
 
+      // Show notification to GM
+      ui.notifications?.info(`✅ MCP: Created new actor: ${actor.name}`);
+
       return {
         success: true,
         id: actor.id,
@@ -3799,7 +3802,7 @@ export class FoundryDataAccess {
    * Update actor data
    * Allows updating any actor properties using dot notation for nested fields
    */
-  async updateActor(data: { actorId: string; updateData: Record<string, any> }): Promise<any> {
+  async updateActor(data: { actorId: string; updateData: Record<string, any>; warnings?: string[] }): Promise<any> {
     this.validateFoundryState();
 
     try {
@@ -3809,6 +3812,17 @@ export class FoundryDataAccess {
       }
 
       await actor.update(data.updateData);
+
+      // Show notification to GM with warnings if present
+      const updateFields = Object.keys(data.updateData).join(', ');
+      if (data.warnings && data.warnings.length > 0) {
+        // Show warning notification with details
+        ui.notifications?.warn(`MCP: Updated ${actor.name} (${updateFields}) - ${data.warnings.length} warning(s)`);
+        // Log warnings to console for GM review
+        console.warn(`[Warhammer MCP] Warnings for ${actor.name}:`, data.warnings);
+      } else {
+        ui.notifications?.info(`MCP: Updated ${actor.name} (${updateFields})`);
+      }
 
       return {
         success: true,
@@ -3840,6 +3854,9 @@ export class FoundryDataAccess {
 
       await item.update(data.updateData);
 
+      // Show notification to GM
+      ui.notifications?.info(`MCP: Updated ${item.name} on ${actor.name}`);
+
       return {
         success: true,
         actorId: actor.id,
@@ -3866,6 +3883,9 @@ export class FoundryDataAccess {
 
       const createdItems = await actor.createEmbeddedDocuments('Item', [data.itemData]);
       const item = createdItems[0];
+
+      // Show notification to GM
+      ui.notifications?.info(`MCP: Added ${item.name} to ${actor.name}`);
 
       return {
         success: true,
@@ -3900,6 +3920,9 @@ export class FoundryDataAccess {
       const itemType = item.type;
 
       await actor.deleteEmbeddedDocuments('Item', [data.itemId]);
+
+      // Show notification to GM
+      ui.notifications?.warn(`MCP: Removed ${itemName} from ${actor.name}`);
 
       return {
         success: true,

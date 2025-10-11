@@ -349,7 +349,7 @@ Reputation Scope:
         this.logger.info("Getting social status", { characterName: args.characterName });
 
         const response = await this.foundryClient.query(
-            "foundry-mcp-bridge.getCharacterInfo",
+            "warhammer-mcp.getCharacterInfo",
             { characterName: args.characterName }
         );
 
@@ -488,7 +488,7 @@ Reputation Scope:
         });
 
         const response = await this.foundryClient.query(
-            "foundry-mcp-bridge.getCharacterInfo",
+            "warhammer-mcp.getCharacterInfo",
             { characterName: args.characterName }
         );
 
@@ -508,7 +508,7 @@ Reputation Scope:
 
         // Update status
         const updateResponse = await this.foundryClient.query(
-            "foundry-mcp-bridge.updateActor",
+            "warhammer-mcp.updateActor",
             {
                 actorName: args.characterName,
                 updates: {
@@ -649,7 +649,7 @@ Reputation Scope:
         });
 
         const response = await this.foundryClient.query(
-            "foundry-mcp-bridge.getCharacterInfo",
+            "warhammer-mcp.getCharacterInfo",
             { characterName: args.characterName }
         );
 
@@ -683,7 +683,7 @@ Reputation Scope:
 
         // Make the skill test
         const rollResponse = await this.foundryClient.query(
-            "foundry-mcp-bridge.rollSkill",
+            "warhammer-mcp.rollSkill",
             {
                 characterName: args.characterName,
                 skillName: args.skillName,
@@ -853,7 +853,7 @@ Reputation Scope:
         this.logger.info("Calculating income", { characterName: args.characterName });
 
         const response = await this.foundryClient.query(
-            "foundry-mcp-bridge.getCharacterInfo",
+            "warhammer-mcp.getCharacterInfo",
             { characterName: args.characterName }
         );
 
@@ -1021,7 +1021,7 @@ Reputation Scope:
         this.logger.info("Checking reputation", { characterName: args.characterName });
 
         const response = await this.foundryClient.query(
-            "foundry-mcp-bridge.getCharacterInfo",
+            "warhammer-mcp.getCharacterInfo",
             { characterName: args.characterName }
         );
 

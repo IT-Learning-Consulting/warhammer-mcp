@@ -431,7 +431,7 @@ Adding to Grimoire:
         this.logger.info("Getting known spells", { characterName: args.characterName });
 
         const response = await this.foundryClient.query(
-            "foundry-mcp-bridge.getCharacterInfo",
+            "warhammer-mcp.getCharacterInfo",
             { characterName: args.characterName }
         );
 
@@ -567,7 +567,7 @@ ${character.name} has not yet learned any arcane spells. Wizards learn spells th
 
         // Get character and spell info
         const charResponse = await this.foundryClient.query(
-            "foundry-mcp-bridge.getCharacterInfo",
+            "warhammer-mcp.getCharacterInfo",
             { characterName: args.characterName }
         );
 
@@ -608,7 +608,7 @@ ${character.name} has not yet learned any arcane spells. Wizards learn spells th
 
         // Make Language (Magick) test
         const rollResponse = await this.foundryClient.query(
-            "foundry-mcp-bridge.rollSkill",
+            "warhammer-mcp.rollSkill",
             {
                 characterName: args.characterName,
                 skillName: "Language (Magick)",
@@ -741,7 +741,7 @@ ${character.name} has not yet learned any arcane spells. Wizards learn spells th
         });
 
         const response = await this.foundryClient.query(
-            "foundry-mcp-bridge.getCharacterInfo",
+            "warhammer-mcp.getCharacterInfo",
             { characterName: args.characterName }
         );
 
@@ -765,7 +765,7 @@ ${character.name} has not yet learned any arcane spells. Wizards learn spells th
 
         // Make Channelling test
         const rollResponse = await this.foundryClient.query(
-            "foundry-mcp-bridge.rollSkill",
+            "warhammer-mcp.rollSkill",
             {
                 characterName: args.characterName,
                 skillName: `Channelling (${capitalizedLore})`,
@@ -777,7 +777,7 @@ ${character.name} has not yet learned any arcane spells. Wizards learn spells th
         if (!rollResponse.success) {
             // Try generic Channelling if specific lore not found
             const genericResponse = await this.foundryClient.query(
-                "foundry-mcp-bridge.rollSkill",
+                "warhammer-mcp.rollSkill",
                 {
                     characterName: args.characterName,
                     skillName: "Channelling",
@@ -798,7 +798,7 @@ ${character.name} has not yet learned any arcane spells. Wizards learn spells th
             }
         }
 
-        const rollResult = rollResponse.success ? rollResponse.data : await this.foundryClient.query("foundry-mcp-bridge.rollSkill", {
+        const rollResult = rollResponse.success ? rollResponse.data : await this.foundryClient.query("warhammer-mcp.rollSkill", {
             characterName: args.characterName,
             skillName: "Channelling",
             modifier: args.modifier || 0,
@@ -880,7 +880,7 @@ ${character.name} has not yet learned any arcane spells. Wizards learn spells th
         });
 
         const response = await this.foundryClient.query(
-            "foundry-mcp-bridge.getCharacterInfo",
+            "warhammer-mcp.getCharacterInfo",
             { characterName: args.characterName }
         );
 
@@ -1006,7 +1006,7 @@ ${character.name} has not yet learned any arcane spells. Wizards learn spells th
         });
 
         const response = await this.foundryClient.query(
-            "foundry-mcp-bridge.getCharacterInfo",
+            "warhammer-mcp.getCharacterInfo",
             { characterName: args.characterName }
         );
 
@@ -1076,7 +1076,7 @@ ${character.name} has not yet learned any arcane spells. Wizards learn spells th
             }
 
             const forgetResponse = await this.foundryClient.query(
-                "foundry-mcp-bridge.updateItem",
+                "warhammer-mcp.updateItem",
                 {
                     actorId: character.id,
                     itemId: forgetSpellItem.id,
@@ -1100,7 +1100,7 @@ ${character.name} has not yet learned any arcane spells. Wizards learn spells th
 
         // Memorize the spell
         const memorizeResponse = await this.foundryClient.query(
-            "foundry-mcp-bridge.updateItem",
+            "warhammer-mcp.updateItem",
             {
                 actorId: character.id,
                 itemId: spell.id,
@@ -1202,7 +1202,7 @@ ${character.name} has not yet learned any arcane spells. Wizards learn spells th
 
         // Get character info for actorId
         const charResponse = await this.foundryClient.query(
-            "foundry-mcp-bridge.getCharacterInfo",
+            "warhammer-mcp.getCharacterInfo",
             { characterName: args.characterName }
         );
 
@@ -1221,7 +1221,7 @@ ${character.name} has not yet learned any arcane spells. Wizards learn spells th
 
         // Add the spell to grimoire
         const response = await this.foundryClient.query(
-            "foundry-mcp-bridge.createItem",
+            "warhammer-mcp.createItem",
             {
                 actorId: character.id,
                 itemData: {

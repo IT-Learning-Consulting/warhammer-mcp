@@ -252,7 +252,7 @@ Dropping Items in Combat:
         this.logger.info("Getting inventory status", { characterName: args.characterName });
 
         const response = await this.foundryClient.query(
-            "foundry-mcp-bridge.getCharacterInfo",
+            "warhammer-mcp.getCharacterInfo",
             { characterName: args.characterName }
         );
 
@@ -433,7 +433,7 @@ Dropping Items in Combat:
         });
 
         const response = await this.foundryClient.query(
-            "foundry-mcp-bridge.getCharacterInfo",
+            "warhammer-mcp.getCharacterInfo",
             { characterName: args.characterName }
         );
 
@@ -471,7 +471,7 @@ Dropping Items in Combat:
 
         // Update ammunition quantity
         const updateResponse = await this.foundryClient.query(
-            "foundry-mcp-bridge.updateItem",
+            "warhammer-mcp.updateItem",
             {
                 actorId: character.id,
                 itemId: ammoItem.id,
@@ -526,7 +526,7 @@ Dropping Items in Combat:
         this.logger.info("Checking encumbrance", { characterName: args.characterName });
 
         const response = await this.foundryClient.query(
-            "foundry-mcp-bridge.getCharacterInfo",
+            "warhammer-mcp.getCharacterInfo",
             { characterName: args.characterName }
         );
 
@@ -639,7 +639,7 @@ Dropping Items in Combat:
 
         // Get character to find actor ID
         const charResponse = await this.foundryClient.query(
-            "foundry-mcp-bridge.getCharacterInfo",
+            "warhammer-mcp.getCharacterInfo",
             { characterName: args.characterName }
         );
 
@@ -657,7 +657,7 @@ Dropping Items in Combat:
         const character = charResponse.data;
 
         const response = await this.foundryClient.query(
-            "foundry-mcp-bridge.createItem",
+            "warhammer-mcp.createItem",
             {
                 actorId: character.id,
                 itemData: {
@@ -684,7 +684,7 @@ Dropping Items in Combat:
 
         // Get updated character info to check encumbrance
         const updatedCharResponse = await this.foundryClient.query(
-            "foundry-mcp-bridge.getCharacterInfo",
+            "warhammer-mcp.getCharacterInfo",
             { characterName: args.characterName }
         );
 
@@ -741,7 +741,7 @@ Dropping Items in Combat:
 
         // Get character info to find the item
         const charResponse = await this.foundryClient.query(
-            "foundry-mcp-bridge.getCharacterInfo",
+            "warhammer-mcp.getCharacterInfo",
             { characterName: args.characterName }
         );
 
@@ -777,7 +777,7 @@ Dropping Items in Combat:
         // If removing all or item is not stackable, delete the item
         if (removeQuantity >= itemQuantity) {
             const response = await this.foundryClient.query(
-                "foundry-mcp-bridge.deleteItem",
+                "warhammer-mcp.deleteItem",
                 {
                     actorId: character.id,
                     itemId: item.id,
@@ -804,7 +804,7 @@ Dropping Items in Combat:
 
             // Get updated encumbrance
             const updatedResponse = await this.foundryClient.query(
-                "foundry-mcp-bridge.getCharacterInfo",
+                "warhammer-mcp.getCharacterInfo",
                 { characterName: args.characterName }
             );
 
@@ -833,7 +833,7 @@ Dropping Items in Combat:
             // Update quantity for stackable items
             const newQuantity = itemQuantity - removeQuantity;
             const response = await this.foundryClient.query(
-                "foundry-mcp-bridge.updateItem",
+                "warhammer-mcp.updateItem",
                 {
                     actorId: character.id,
                     itemId: item.id,

@@ -689,7 +689,7 @@ The system searches the WFRP4e compendiums for matching items by name.
 
             // If character specified, add to character
             if (parsed.characterName) {
-                const character = await this.foundryClient.query('foundry-mcp-bridge.getCharacterInfo', {
+                const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
                     characterName: parsed.characterName,
                 });
 
@@ -697,7 +697,7 @@ The system searches the WFRP4e compendiums for matching items by name.
                     throw new Error(`Character "${parsed.characterName}" not found`);
                 }
 
-                await this.foundryClient.query('foundry-mcp-bridge.createItem', {
+                await this.foundryClient.query('warhammer-mcp.createItem', {
                     actorId: character.id,
                     itemData: weaponData,
                 });
@@ -807,7 +807,7 @@ The system searches the WFRP4e compendiums for matching items by name.
 
             // If character specified, add to character
             if (parsed.characterName) {
-                const character = await this.foundryClient.query('foundry-mcp-bridge.getCharacterInfo', {
+                const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
                     characterName: parsed.characterName,
                 });
 
@@ -815,7 +815,7 @@ The system searches the WFRP4e compendiums for matching items by name.
                     throw new Error(`Character "${parsed.characterName}" not found`);
                 }
 
-                await this.foundryClient.query('foundry-mcp-bridge.createItem', {
+                await this.foundryClient.query('warhammer-mcp.createItem', {
                     actorId: character.id,
                     itemData: armourData,
                 });
@@ -908,7 +908,7 @@ The system searches the WFRP4e compendiums for matching items by name.
             }
 
             if (parsed.characterName) {
-                const character = await this.foundryClient.query('foundry-mcp-bridge.getCharacterInfo', {
+                const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
                     characterName: parsed.characterName,
                 });
 
@@ -916,7 +916,7 @@ The system searches the WFRP4e compendiums for matching items by name.
                     throw new Error(`Character "${parsed.characterName}" not found`);
                 }
 
-                await this.foundryClient.query('foundry-mcp-bridge.createItem', {
+                await this.foundryClient.query('warhammer-mcp.createItem', {
                     actorId: character.id,
                     itemData: trappingData,
                 });
@@ -988,7 +988,7 @@ The system searches the WFRP4e compendiums for matching items by name.
                 },
             };
 
-            const character = await this.foundryClient.query('foundry-mcp-bridge.getCharacterInfo', {
+            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
                 characterName: parsed.characterName,
             });
 
@@ -996,7 +996,7 @@ The system searches the WFRP4e compendiums for matching items by name.
                 throw new Error(`Character "${parsed.characterName}" not found`);
             }
 
-            await this.foundryClient.query('foundry-mcp-bridge.createItem', {
+            await this.foundryClient.query('warhammer-mcp.createItem', {
                 actorId: character.id,
                 itemData: ammunitionData,
             });
@@ -1036,7 +1036,7 @@ The system searches the WFRP4e compendiums for matching items by name.
                 },
             };
 
-            const character = await this.foundryClient.query('foundry-mcp-bridge.getCharacterInfo', {
+            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
                 characterName: parsed.characterName,
             });
 
@@ -1044,7 +1044,7 @@ The system searches the WFRP4e compendiums for matching items by name.
                 throw new Error(`Character "${parsed.characterName}" not found`);
             }
 
-            await this.foundryClient.query('foundry-mcp-bridge.createItem', {
+            await this.foundryClient.query('warhammer-mcp.createItem', {
                 actorId: character.id,
                 itemData: containerData,
             });
@@ -1081,7 +1081,7 @@ The system searches the WFRP4e compendiums for matching items by name.
         this.logger.info('Modifying item qualities', { itemName: parsed.itemName });
 
         try {
-            const character = await this.foundryClient.query('foundry-mcp-bridge.getCharacterInfo', {
+            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
                 characterName: parsed.characterName,
             });
 
@@ -1124,7 +1124,7 @@ The system searches the WFRP4e compendiums for matching items by name.
                 delete updateData['system.properties.flaws'][flaw];
             }
 
-            await this.foundryClient.query('foundry-mcp-bridge.updateItem', {
+            await this.foundryClient.query('warhammer-mcp.updateItem', {
                 actorId: character.id,
                 itemId: item.id,
                 updateData: updateData,
@@ -1184,7 +1184,7 @@ The system searches the WFRP4e compendiums for matching items by name.
         this.logger.info('Adding item to character', { itemName: parsed.itemName, characterName: parsed.characterName });
 
         try {
-            const character = await this.foundryClient.query('foundry-mcp-bridge.getCharacterInfo', {
+            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
                 characterName: parsed.characterName,
             });
 
@@ -1193,7 +1193,7 @@ The system searches the WFRP4e compendiums for matching items by name.
             }
 
             // Search compendium for the item
-            const searchResult = await this.foundryClient.query('foundry-mcp-bridge.searchCompendium', {
+            const searchResult = await this.foundryClient.query('warhammer-mcp.searchCompendium', {
                 query: parsed.itemName,
                 type: 'Item',
             });
@@ -1215,7 +1215,7 @@ The system searches the WFRP4e compendiums for matching items by name.
                 itemData['system.equipped.value'] = true;
             }
 
-            await this.foundryClient.query('foundry-mcp-bridge.createItem', {
+            await this.foundryClient.query('warhammer-mcp.createItem', {
                 actorId: character.id,
                 itemData: itemData,
             });
@@ -1242,7 +1242,7 @@ The system searches the WFRP4e compendiums for matching items by name.
         this.logger.info('Removing item from character', { itemName: parsed.itemName, characterName: parsed.characterName });
 
         try {
-            const character = await this.foundryClient.query('foundry-mcp-bridge.getCharacterInfo', {
+            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
                 characterName: parsed.characterName,
             });
 
@@ -1265,7 +1265,7 @@ The system searches the WFRP4e compendiums for matching items by name.
             if (parsed.quantity && parsed.quantity < currentQuantity) {
                 // Reduce quantity
                 const newQuantity = currentQuantity - parsed.quantity;
-                await this.foundryClient.query('foundry-mcp-bridge.updateItem', {
+                await this.foundryClient.query('warhammer-mcp.updateItem', {
                     actorId: character.id,
                     itemId: item.id,
                     updateData: {
@@ -1278,7 +1278,7 @@ The system searches the WFRP4e compendiums for matching items by name.
                     `- **Remaining**: ${newQuantity}\n`;
             } else {
                 // Delete item completely
-                await this.foundryClient.query('foundry-mcp-bridge.deleteItem', {
+                await this.foundryClient.query('warhammer-mcp.deleteItem', {
                     actorId: character.id,
                     itemId: item.id,
                 });

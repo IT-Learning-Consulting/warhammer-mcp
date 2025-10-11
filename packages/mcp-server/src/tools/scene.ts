@@ -62,7 +62,7 @@ export class SceneTools {
     this.logger.info('Getting current scene information', { includeTokens, includeHidden });
 
     try {
-      const sceneData = await this.foundryClient.query('foundry-mcp-bridge.getActiveScene');
+      const sceneData = await this.foundryClient.query('warhammer-mcp.getActiveScene');
 
       this.logger.debug('Successfully retrieved scene data', {
         sceneId: sceneData.id,
@@ -82,7 +82,7 @@ export class SceneTools {
     this.logger.info('Getting world information');
 
     try {
-      const worldData = await this.foundryClient.query('foundry-mcp-bridge.getWorldInfo');
+      const worldData = await this.foundryClient.query('warhammer-mcp.getWorldInfo');
 
       this.logger.debug('Successfully retrieved world data', {
         worldId: worldData.id,

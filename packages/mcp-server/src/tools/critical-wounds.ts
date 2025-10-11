@@ -50,32 +50,48 @@ export class CriticalWoundsTools {
             },
             {
                 name: 'add-critical-wound',
-                description: 'Add a critical wound to a character. WFRP 4e specific: Critical wounds occur when taking damage at 0 Wounds, or from a critical hit. Location is determined by hit location (head, body, left/right arm/leg). The GM should roll on the appropriate critical table based on damage type and severity. Each critical has specific penalties and healing times. Example: "Add critical wound to Hans - Left Leg, Cracked Shin" or "Gustav takes head critical"',
+                description: 'Add a critical wound from the WFRP 4e Critical Tables to a character. IMPORTANT: This searches the compendium for the actual critical wound result and adds it with all official effects. Critical wounds occur when: (1) Taking damage while at 0 Wounds, or (2) Suffering a Critical Hit. The GM should have already rolled on the appropriate Critical Table (Head/Body/Arm/Leg) and determined the specific critical result. This tool then adds that result from the compendium. Example: "Add Minor Head Injury to Hans" or "Gustav suffers Badly Jarred Arm"',
                 inputSchema: {
                     type: 'object',
                     properties: {
                         characterName: {
                             type: 'string',
-                            description: 'Name or ID of the character receiving the critical wound',
+                            description: 'Name of the character receiving the critical wound',
+                        },
+                        criticalName: {
+                            type: 'string',
+                            description: 'Name of the critical wound from the Critical Tables (e.g., "Minor Head Injury", "Badly Jarred Arm", "Cracked Ribs"). Must match the exact critical result rolled on the table.',
                         },
                         location: {
                             type: 'string',
-                            description: 'Hit location of the critical wound (e.g., "Head", "Body", "Left Arm", "Right Arm", "Left Leg", "Right Leg")',
-                        },
-                        woundName: {
-                            type: 'string',
-                            description: 'Name/description of the critical wound (e.g., "Cracked Shin", "Concussion", "Broken Ribs")',
-                        },
-                        wounds: {
-                            type: 'number',
-                            description: 'Number of Wounds dealt by this critical (typically 1-10+)',
-                        },
-                        description: {
-                            type: 'string',
-                            description: 'Full description of the critical wound effects and duration',
+                            description: 'Hit location (Head, Body, Left Arm, Right Arm, Left Leg, Right Leg)',
+                            enum: ['Head', 'Body', 'Left Arm', 'Right Arm', 'Left Leg', 'Right Leg'],
                         },
                     },
-                    required: ['characterName', 'location', 'woundName', 'wounds', 'description'],
+                    required: ['characterName', 'criticalName', 'location'],
+                },
+            },
+            {
+                name: 'roll-critical-wound',
+                description: 'Roll a random critical wound on the appropriate WFRP 4e Critical Table and add it to a character. The tool rolls d100 and selects the corresponding critical from the Head, Body, Arm, or Leg table based on the specified location. This simulates the GM rolling on the Critical Tables. Example: "Roll a head critical for Hans" or "Gustav takes a random body critical"',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        characterName: {
+                            type: 'string',
+                            description: 'Name of the character receiving the critical wound',
+                        },
+                        location: {
+                            type: 'string',
+                            description: 'Hit location to determine which Critical Table to use (Head, Body, Arm, or Leg)',
+                            enum: ['Head', 'Body', 'Arm', 'Leg'],
+                        },
+                        modifier: {
+                            type: 'number',
+                            description: 'Optional modifier to the d100 roll (e.g., -20 if damage was less than Toughness Bonus in negative wounds). Default: 0',
+                        },
+                    },
+                    required: ['characterName', 'location'],
                 },
             },
             {
@@ -123,7 +139,7 @@ export class CriticalWoundsTools {
         this.logger.info('Getting critical wounds', { characterName });
 
         try {
-            const character = await this.foundryClient.query('foundry-mcp-bridge.getCharacterInfo', {
+            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
                 characterName: characterName,
             });
 
@@ -310,19 +326,18 @@ export class CriticalWoundsTools {
 
     async handleAddCriticalWound(args: any): Promise<any> {
         const schema = z.object({
-            characterName: z.string().min(1, 'Character name cannot be empty'),
-            location: z.string().min(1, 'Location cannot be empty'),
-            woundName: z.string().min(1, 'Wound name cannot be empty'),
-            wounds: z.number().min(1),
-            description: z.string().min(1, 'Description cannot be empty'),
+            characterName: z.string().min(1, 'Character name is required'),
+            criticalName: z.string().min(1, 'Critical wound name is required'),
+            location: z.enum(['Head', 'Body', 'Left Arm', 'Right Arm', 'Left Leg', 'Right Leg']),
         });
 
-        const { characterName, location, woundName, wounds, description } = schema.parse(args);
+        const { characterName, criticalName, location } = schema.parse(args);
 
-        this.logger.info('Adding critical wound', { characterName, location, woundName, wounds });
+        this.logger.info('Adding critical wound from compendium', { characterName, criticalName, location });
 
         try {
-            const character = await this.foundryClient.query('foundry-mcp-bridge.getCharacterInfo', {
+            // Get character
+            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
                 characterName: characterName,
             });
 
@@ -336,7 +351,12 @@ export class CriticalWoundsTools {
             const isWFRP = !!(system.status?.criticalWounds !== undefined || system.characteristics?.t);
 
             if (!isWFRP) {
-                return `${character.name} is not using the WFRP 4e system. Critical wound tracking is only available for WFRP characters.`;
+                return {
+                    content: [{
+                        type: 'text',
+                        text: `${character.name} is not using the WFRP 4e system. Critical wound tracking is only available for WFRP characters.`
+                    }]
+                };
             }
 
             const criticalCurrent = system.status?.criticalWounds?.value || 0;
@@ -346,111 +366,233 @@ export class CriticalWoundsTools {
             // Check for death
             const isDead = newCriticalCount > tBonus;
 
-            // Create critical wound item
-            const criticalWoundData = {
-                name: woundName,
-                type: 'critical',
-                system: {
-                    location: { value: location },
-                    wounds: { value: wounds },
-                    description: { value: description }
-                }
-            };
+            // Search compendium for the critical wound
+            this.logger.info('Searching compendium for critical wound', { criticalName });
 
-            await this.foundryClient.query('foundry-mcp-bridge.createItem', {
+            const compendiumResults = await this.foundryClient.query('warhammer-mcp.searchCompendium', {
+                query: criticalName,
+                types: ['critical'],
+            });
+
+            if (!compendiumResults || compendiumResults.length === 0) {
+                throw new Error(
+                    `Critical wound "${criticalName}" not found in compendium.\n` +
+                    `Please check the spelling or use the exact name from the Critical Tables.\n` +
+                    `Common criticals: "Minor Head Injury", "Badly Jarred Arm", "Cracked Ribs", "Torn Thigh"`
+                );
+            }
+
+            // Find exact or best match
+            let criticalItem = compendiumResults.find(
+                (item: any) => item.name.toLowerCase() === criticalName.toLowerCase()
+            );
+
+            if (!criticalItem) {
+                // No exact match, use the first result
+                criticalItem = compendiumResults[0];
+                this.logger.info('No exact match found, using closest match', {
+                    searched: criticalName,
+                    found: criticalItem.name
+                });
+            }
+
+            // Construct UUID from pack and id (CRITICAL - same pattern as career change fix)
+            let criticalUuid: string | null = null;
+            if (criticalItem.uuid) {
+                // If UUID is already present, use it
+                criticalUuid = criticalItem.uuid;
+            } else if (criticalItem.pack && (criticalItem.id || criticalItem._id)) {
+                // Construct UUID from pack and id
+                const itemId = criticalItem.id || criticalItem._id;
+                criticalUuid = `Compendium.${criticalItem.pack}.${itemId}`;
+                this.logger.info('Constructed UUID for critical wound', {
+                    critical: criticalItem.name,
+                    pack: criticalItem.pack,
+                    id: itemId,
+                    uuid: criticalUuid
+                });
+            }
+
+            if (!criticalUuid) {
+                throw new Error(
+                    `Critical wound "${criticalItem.name}" found but lacks UUID/pack/id data. ` +
+                    `Cannot add from compendium. Data: ${JSON.stringify(criticalItem)}`
+                );
+            }
+
+            // Add the critical wound from compendium with all official effects
+            this.logger.info('Adding critical wound from compendium', {
+                character: character.name,
+                critical: criticalItem.name,
+                uuid: criticalUuid,
+                location
+            });
+
+            const addResult = await this.foundryClient.query('warhammer-mcp.addItemFromCompendium', {
                 actorId: character.id,
-                itemData: criticalWoundData,
+                compendiumId: criticalUuid,
+            });
+
+            if (!addResult || !addResult.success) {
+                throw new Error(`Failed to add critical from compendium: ${addResult?.message || 'Unknown error'}`);
+            }
+
+            // Update the added critical's location
+            await this.foundryClient.query('warhammer-mcp.updateItem', {
+                actorId: character.id,
+                itemId: addResult.itemId,
+                updateData: {
+                    'system.location.value': location,
+                },
             });
 
             // Update critical wound count
-            await this.foundryClient.query('foundry-mcp-bridge.updateActor', {
+            await this.foundryClient.query('warhammer-mcp.updateActor', {
                 actorId: character.id,
                 updateData: {
                     'system.status.criticalWounds.value': newCriticalCount,
                 },
             });
 
-            // Build response
-            let response = `# Critical Wound Added: ${character.name}\n\n`;
+            // Build simplified response
+            let response = `# Critical Wound Added\n\n`;
+            response += `**Character**: ${character.name}\n`;
+            response += `**Critical**: ${criticalItem.name}\n`;
+            response += `**Location**: ${location}\n\n`;
 
-            response += `## 🩸 New Critical Wound\n`;
-            response += `**Location**: ${location}\n`;
-            response += `**Injury**: ${woundName}\n`;
-            response += `**Wounds Dealt**: ${wounds}\n\n`;
-            response += `**Description**: ${description}\n\n`;
+            response += `**Critical Wound Count**: ${newCriticalCount} / ${tBonus} (Toughness Bonus)\n\n`;
 
-            response += `## 📊 Critical Wound Count\n`;
-            response += `- Previous: ${criticalCurrent} critical${criticalCurrent === 1 ? '' : 's'}\n`;
-            response += `- Added: +1 critical\n`;
-            response += `- **New Total**: ${newCriticalCount} / ${tBonus} (Toughness Bonus)\n\n`;
-
-            // Visual
+            // Visual bar
             const criticalBar = '█'.repeat(newCriticalCount) + '░'.repeat(Math.max(0, tBonus - newCriticalCount));
             response += `\`${criticalBar}\`\n\n`;
 
             // Death check
             if (isDead) {
-                response += `## ☠️ DEATH FROM CRITICAL WOUNDS!\n\n`;
-                response += `${character.name} has exceeded their Toughness Bonus (${tBonus}) in critical wounds.\n\n`;
-                response += `**${character.name.toUpperCase()} DIES IMMEDIATELY!**\n\n`;
-                response += `### Last Chance: Burn Fate\n`;
-                response += `If ${character.name} has any Fate points remaining, they can burn one to survive:\n`;
-                response += `- Survives with 1 Wound\n`;
-                response += `- Permanently loses 1 Fate point (max Fate reduced by 1)\n`;
-                response += `- Gains a permanent injury or disfigurement\n`;
-                response += `- All critical wounds remain active\n\n`;
-                response += `If they have no Fate points, or choose not to burn one, **death is permanent**.\n\n`;
+                response += `## ☠️ DEATH!\n`;
+                response += `${character.name} has exceeded their Toughness Bonus and **DIES IMMEDIATELY**.\n\n`;
+                response += `Only burning a Fate point can save them now!\n`;
             } else if (newCriticalCount === tBonus) {
-                response += `## ⚠️ CRITICAL THRESHOLD REACHED!\n\n`;
-                response += `${character.name} is now at their maximum critical wound capacity.\n\n`;
-                response += `**ONE MORE CRITICAL WOUND WILL BE FATAL!**\n\n`;
-                response += `Immediate actions:\n`;
-                response += `- Retreat from combat if possible\n`;
-                response += `- Seek urgent medical attention\n`;
-                response += `- Avoid any further risks\n`;
-                response += `- Prepare to burn Fate if necessary\n\n`;
+                response += `## ⚠️ CRITICAL!\n`;
+                response += `One more critical wound will be fatal!\n`;
             } else {
-                response += `## ⚠️ Injured\n`;
-                response += `${character.name} now has ${newCriticalCount} critical wound${newCriticalCount === 1 ? '' : 's'}. `;
                 const remaining = tBonus - newCriticalCount;
-                response += `They can survive ${remaining} more critical${remaining === 1 ? '' : 's'} before dying.\n\n`;
+                response += `${character.name} can survive ${remaining} more critical${remaining === 1 ? '' : 's'} before dying.\n`;
             }
 
-            // Location-specific concerns
-            response += `## 📍 Location: ${location}\n`;
-            const locationEffects: Record<string, string> = {
-                'head': 'Head injuries may cause unconsciousness, concussion, or sensory impairment. May affect Intelligence, Initiative, or Fellowship tests.',
-                'body': 'Body wounds affect core functions. May cause bleeding, difficulty breathing, or internal damage. Can affect Toughness and Endurance.',
-                'arm': 'Arm injuries impair manual dexterity and weapon use. May prevent using two-handed weapons or shields. Affects Agility and Weapon Skill tests.',
-                'leg': 'Leg injuries reduce mobility and balance. Movement may be halved or impossible. Affects Movement, Dodge, and Athletics tests.',
+            return {
+                content: [{
+                    type: 'text',
+                    text: response
+                }]
             };
-
-            let locationKey = location.toLowerCase();
-            if (locationKey.includes('arm')) locationKey = 'arm';
-            if (locationKey.includes('leg')) locationKey = 'leg';
-            if (locationKey.includes('head')) locationKey = 'head';
-            if (locationKey.includes('body')) locationKey = 'body';
-
-            if (locationEffects[locationKey]) {
-                response += `${locationEffects[locationKey]}\n\n`;
-            }
-
-            response += `## 💡 Next Steps\n`;
-            response += `1. ✅ Critical wound count updated to **${newCriticalCount}** in Foundry VTT\n`;
-            response += `2. ✅ Critical wound item "${woundName}" added to character sheet\n`;
-            response += `3. Apply any immediate penalties from this critical\n`;
-            response += `4. Reduce current Wounds by ${wounds}\n`;
-            if (isDead) {
-                response += `5. **DETERMINE IF FATE IS BURNED** or if character dies permanently\n`;
-            } else {
-                response += `5. Determine healing time and track recovery\n`;
-                response += `6. Narrate the injury and its immediate impact\n`;
-            }
-
-            return response;
         } catch (error) {
             this.logger.error('Failed to add critical wound', error);
             throw new Error(`Failed to add critical wound to "${characterName}": ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+    }
+
+    async handleRollCriticalWound(args: any): Promise<any> {
+        const schema = z.object({
+            characterName: z.string().min(1, 'Character name is required'),
+            location: z.enum(['Head', 'Body', 'Arm', 'Leg']),
+            modifier: z.number().int().optional().default(0),
+        });
+
+        const { characterName, location, modifier } = schema.parse(args);
+
+        this.logger.info('Rolling random critical wound', { characterName, location, modifier });
+
+        try {
+            // Roll d100
+            const baseRoll = Math.floor(Math.random() * 100) + 1;
+            const finalRoll = Math.max(1, Math.min(100, baseRoll + modifier));
+
+            this.logger.info('Critical wound roll', { baseRoll, modifier, finalRoll, location });
+
+            // Search compendium for criticals matching this location and roll range
+            // WFRP4e stores criticals with their roll ranges, we need to find the right one
+            const searchLocation = location === 'Arm' ? 'arm' : location === 'Leg' ? 'leg' : location.toLowerCase();
+
+            const compendiumResults = await this.foundryClient.query('warhammer-mcp.searchCompendium', {
+                query: searchLocation,
+                types: ['critical'],
+            });
+
+            if (!compendiumResults || compendiumResults.length === 0) {
+                throw new Error(`No critical wounds found for location: ${location}`);
+            }
+
+            // Filter by location and find the one that matches our roll
+            // Note: WFRP4e criticals should have system.location and system.range data
+            let selectedCritical: any = null;
+
+            for (const critical of compendiumResults) {
+                // Check if this critical matches the location
+                const critLocation = critical.system?.location?.value || critical.system?.location || '';
+                if (critLocation.toLowerCase().includes(searchLocation)) {
+                    // Check if our roll falls in this critical's range
+                    const minRoll = critical.system?.minRoll?.value || critical.system?.minRoll || 0;
+                    const maxRoll = critical.system?.maxRoll?.value || critical.system?.maxRoll || 0;
+
+                    if (minRoll > 0 && maxRoll > 0 && finalRoll >= minRoll && finalRoll <= maxRoll) {
+                        selectedCritical = critical;
+                        break;
+                    }
+                }
+            }
+
+            // If no critical found by roll range, pick one randomly from matching location
+            if (!selectedCritical) {
+                const locationCriticals = compendiumResults.filter((c: any) => {
+                    const loc = c.system?.location?.value || c.system?.location || '';
+                    return loc.toLowerCase().includes(searchLocation);
+                });
+
+                if (locationCriticals.length > 0) {
+                    const randomIndex = Math.floor(Math.random() * locationCriticals.length);
+                    selectedCritical = locationCriticals[randomIndex];
+                    this.logger.info('No critical found by roll range, selected randomly', {
+                        selectedName: selectedCritical.name
+                    });
+                }
+            }
+
+            if (!selectedCritical) {
+                throw new Error(
+                    `Could not find a critical wound for ${location} with roll ${finalRoll}.\n` +
+                    `This may indicate the compendium doesn't have the critical tables loaded.`
+                );
+            }
+
+            this.logger.info('Selected critical from roll', {
+                roll: finalRoll,
+                critical: selectedCritical.name,
+                location: selectedCritical.system?.location
+            });
+
+            // Now use the regular add-critical-wound logic
+            // Determine specific location (Left/Right for arms and legs)
+            let specificLocation: 'Head' | 'Body' | 'Left Arm' | 'Right Arm' | 'Left Leg' | 'Right Leg';
+            if (location === 'Arm') {
+                const side = Math.random() < 0.5 ? 'Left' : 'Right';
+                specificLocation = `${side} Arm` as 'Left Arm' | 'Right Arm';
+            } else if (location === 'Leg') {
+                const side = Math.random() < 0.5 ? 'Left' : 'Right';
+                specificLocation = `${side} Leg` as 'Left Leg' | 'Right Leg';
+            } else {
+                specificLocation = location as 'Head' | 'Body';
+            }
+
+            // Call the add handler with the rolled critical
+            return await this.handleAddCriticalWound({
+                characterName,
+                criticalName: selectedCritical.name,
+                location: specificLocation
+            });
+
+        } catch (error) {
+            this.logger.error('Failed to roll critical wound', error);
+            throw new Error(`Failed to roll critical wound for "${characterName}": ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
     }
 
@@ -465,7 +607,7 @@ export class CriticalWoundsTools {
         this.logger.info('Removing critical wound', { characterName, woundName });
 
         try {
-            const character = await this.foundryClient.query('foundry-mcp-bridge.getCharacterInfo', {
+            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
                 characterName: characterName,
             });
 
@@ -510,13 +652,13 @@ export class CriticalWoundsTools {
             const newCriticalCount = Math.max(0, criticalCurrent - 1);
 
             // Delete the critical wound item
-            await this.foundryClient.query('foundry-mcp-bridge.deleteItem', {
+            await this.foundryClient.query('warhammer-mcp.deleteItem', {
                 actorId: character.id,
                 itemId: foundCritical._id,
             });
 
             // Update critical wound count
-            await this.foundryClient.query('foundry-mcp-bridge.updateActor', {
+            await this.foundryClient.query('warhammer-mcp.updateActor', {
                 actorId: character.id,
                 updateData: {
                     'system.status.criticalWounds.value': newCriticalCount,
@@ -580,7 +722,7 @@ export class CriticalWoundsTools {
         this.logger.info('Checking death from criticals', { characterName });
 
         try {
-            const character = await this.foundryClient.query('foundry-mcp-bridge.getCharacterInfo', {
+            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
                 characterName: characterName,
             });
 

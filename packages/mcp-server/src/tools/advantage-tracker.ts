@@ -110,7 +110,7 @@ export class AdvantageTools {
         this.logger.info('Getting Advantage', { characterName });
 
         try {
-            const character = await this.foundryClient.query('foundry-mcp-bridge.getCharacterInfo', {
+            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
                 characterName: characterName,
             });
 
@@ -234,7 +234,7 @@ export class AdvantageTools {
         this.logger.info('Adding Advantage', { characterName, amount, reason });
 
         try {
-            const character = await this.foundryClient.query('foundry-mcp-bridge.getCharacterInfo', {
+            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
                 characterName: characterName,
             });
 
@@ -257,7 +257,7 @@ export class AdvantageTools {
             const actualGain = newAdvantage - advantageCurrent;
 
             // Update Advantage
-            await this.foundryClient.query('foundry-mcp-bridge.updateActor', {
+            await this.foundryClient.query('warhammer-mcp.updateActor', {
                 actorId: character.id,
                 updateData: {
                     'system.status.advantage.value': newAdvantage,
@@ -344,7 +344,7 @@ export class AdvantageTools {
         this.logger.info('Removing Advantage', { characterName, amount, reason });
 
         try {
-            const character = await this.foundryClient.query('foundry-mcp-bridge.getCharacterInfo', {
+            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
                 characterName: characterName,
             });
 
@@ -371,7 +371,7 @@ export class AdvantageTools {
             }
 
             // Update Advantage
-            await this.foundryClient.query('foundry-mcp-bridge.updateActor', {
+            await this.foundryClient.query('warhammer-mcp.updateActor', {
                 actorId: character.id,
                 updateData: {
                     'system.status.advantage.value': newAdvantage,
@@ -458,7 +458,7 @@ export class AdvantageTools {
         this.logger.info('Calculating Advantage bonus', { characterName });
 
         try {
-            const character = await this.foundryClient.query('foundry-mcp-bridge.getCharacterInfo', {
+            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
                 characterName: characterName,
             });
 

@@ -283,7 +283,7 @@ export class FortuneFateTools {
         this.logger.info('Getting Fortune/Fate status', { characterName });
 
         try {
-            const character = await this.foundryClient.query('foundry-mcp-bridge.getCharacterInfo', {
+            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
                 characterName: characterName,
             });
 
@@ -413,7 +413,7 @@ export class FortuneFateTools {
         this.logger.info('Spending Fortune', { characterName, purpose, usageType });
 
         try {
-            const character = await this.foundryClient.query('foundry-mcp-bridge.getCharacterInfo', {
+            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
                 characterName: characterName,
             });
 
@@ -444,7 +444,7 @@ export class FortuneFateTools {
             const newFortune = fortuneCurrent - 1;
 
             // Update the character
-            await this.foundryClient.query('foundry-mcp-bridge.updateActor', {
+            await this.foundryClient.query('warhammer-mcp.updateActor', {
                 actorId: character.id,
                 updateData: {
                     'system.status.fortune.value': newFortune,
@@ -514,7 +514,7 @@ export class FortuneFateTools {
         this.logger.info('Burning Fate', { characterName, circumstance });
 
         try {
-            const character = await this.foundryClient.query('foundry-mcp-bridge.getCharacterInfo', {
+            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
                 characterName: characterName,
             });
 
@@ -543,7 +543,7 @@ export class FortuneFateTools {
             const newFateMax = fateMax - 1; // Fate max permanently reduces
 
             // Update the character
-            await this.foundryClient.query('foundry-mcp-bridge.updateActor', {
+            await this.foundryClient.query('warhammer-mcp.updateActor', {
                 actorId: character.id,
                 updateData: {
                     'system.status.fate.value': newFate,
@@ -630,7 +630,7 @@ export class FortuneFateTools {
         this.logger.info('Refreshing Fortune', { characterName });
 
         try {
-            const character = await this.foundryClient.query('foundry-mcp-bridge.getCharacterInfo', {
+            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
                 characterName: characterName,
             });
 
@@ -664,7 +664,7 @@ export class FortuneFateTools {
             }
 
             // Update the character
-            await this.foundryClient.query('foundry-mcp-bridge.updateActor', {
+            await this.foundryClient.query('warhammer-mcp.updateActor', {
                 actorId: character.id,
                 updateData: {
                     'system.status.fortune.value': fortuneMax,
@@ -716,7 +716,7 @@ export class FortuneFateTools {
         this.logger.info('Adding Fortune points', { characterName, amount, reason });
 
         try {
-            const character = await this.foundryClient.query('foundry-mcp-bridge.getCharacterInfo', {
+            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
                 characterName: characterName,
             });
 
@@ -752,7 +752,7 @@ export class FortuneFateTools {
             }
 
             // Update the character
-            await this.foundryClient.query('foundry-mcp-bridge.updateActor', {
+            await this.foundryClient.query('warhammer-mcp.updateActor', {
                 actorId: character.id,
                 updateData: {
                     'system.status.fortune.value': newFortune,
@@ -816,7 +816,7 @@ export class FortuneFateTools {
         this.logger.info('Adding Fate point (RARE EVENT)', { characterName, amount, reason });
 
         try {
-            const character = await this.foundryClient.query('foundry-mcp-bridge.getCharacterInfo', {
+            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
                 characterName: characterName,
             });
 
@@ -840,7 +840,7 @@ export class FortuneFateTools {
             const newFateMax = fateMax + amount;
 
             // Update the character with new Fate
-            await this.foundryClient.query('foundry-mcp-bridge.updateActor', {
+            await this.foundryClient.query('warhammer-mcp.updateActor', {
                 actorId: character.id,
                 updateData: {
                     'system.status.fate.value': newFate,
@@ -938,7 +938,7 @@ export class FortuneFateTools {
         this.logger.info('Getting Resilience/Resolve status', { characterName });
 
         try {
-            const character = await this.foundryClient.query('foundry-mcp-bridge.getCharacterInfo', {
+            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
                 characterName: characterName,
             });
 
@@ -1052,7 +1052,7 @@ export class FortuneFateTools {
         this.logger.info('Spending Resolve', { characterName, purpose, usageType });
 
         try {
-            const character = await this.foundryClient.query('foundry-mcp-bridge.getCharacterInfo', {
+            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
                 characterName: characterName,
             });
 
@@ -1077,7 +1077,7 @@ export class FortuneFateTools {
 
             const newResolve = resolveCurrent - 1;
 
-            await this.foundryClient.query('foundry-mcp-bridge.updateActor', {
+            await this.foundryClient.query('warhammer-mcp.updateActor', {
                 actorId: character.id,
                 updateData: {
                     'system.status.resolve.value': newResolve,
@@ -1143,7 +1143,7 @@ export class FortuneFateTools {
         this.logger.info('Spending Resilience (PERMANENT)', { characterName, circumstance, usageType });
 
         try {
-            const character = await this.foundryClient.query('foundry-mcp-bridge.getCharacterInfo', {
+            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
                 characterName: characterName,
             });
 
@@ -1168,7 +1168,7 @@ export class FortuneFateTools {
             const newResilience = resilienceCurrent - 1;
             const newResilienceMax = resilienceMax - 1;
 
-            await this.foundryClient.query('foundry-mcp-bridge.updateActor', {
+            await this.foundryClient.query('warhammer-mcp.updateActor', {
                 actorId: character.id,
                 updateData: {
                     'system.status.resilience.value': newResilience,
@@ -1258,7 +1258,7 @@ export class FortuneFateTools {
         this.logger.info('Refreshing Resolve', { characterName, motivationAction });
 
         try {
-            const character = await this.foundryClient.query('foundry-mcp-bridge.getCharacterInfo', {
+            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
                 characterName: characterName,
             });
 
@@ -1287,7 +1287,7 @@ export class FortuneFateTools {
                 return `${character.name}'s Resolve is already at maximum.\n\nCurrent Status:\n- Resilience: ${resilienceCurrent}\n- Resolve: ${resolveCurrent} / ${resolveMax}\n\nNo refresh needed.`;
             }
 
-            await this.foundryClient.query('foundry-mcp-bridge.updateActor', {
+            await this.foundryClient.query('warhammer-mcp.updateActor', {
                 actorId: character.id,
                 updateData: {
                     'system.status.resolve.value': resolveMax,
@@ -1340,7 +1340,7 @@ export class FortuneFateTools {
         this.logger.info('Adding Resolve points', { characterName, amount, reason });
 
         try {
-            const character = await this.foundryClient.query('foundry-mcp-bridge.getCharacterInfo', {
+            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
                 characterName: characterName,
             });
 
@@ -1372,7 +1372,7 @@ export class FortuneFateTools {
                 return `❌ **Cannot Add Resolve**\n\n${character.name}'s Resolve is already at maximum.\n\nCurrent Status:\n- Resilience: ${resilienceCurrent}\n- Resolve: ${resolveCurrent} / ${resolveMax}\n\nResolve cannot exceed Resilience value. To increase Resolve capacity, the character must gain Resilience points (very rare).`;
             }
 
-            await this.foundryClient.query('foundry-mcp-bridge.updateActor', {
+            await this.foundryClient.query('warhammer-mcp.updateActor', {
                 actorId: character.id,
                 updateData: {
                     'system.status.resolve.value': newResolve,
@@ -1433,7 +1433,7 @@ export class FortuneFateTools {
         this.logger.info('Adding Resilience point (RARE EVENT)', { characterName, amount, reason });
 
         try {
-            const character = await this.foundryClient.query('foundry-mcp-bridge.getCharacterInfo', {
+            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
                 characterName: characterName,
             });
 
@@ -1455,7 +1455,7 @@ export class FortuneFateTools {
             const newResilience = resilienceCurrent + amount;
             const newResilienceMax = resilienceMax + amount;
 
-            await this.foundryClient.query('foundry-mcp-bridge.updateActor', {
+            await this.foundryClient.query('warhammer-mcp.updateActor', {
                 actorId: character.id,
                 updateData: {
                     'system.status.resilience.value': newResilience,

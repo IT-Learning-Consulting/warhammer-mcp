@@ -151,7 +151,7 @@ export class CharacterTools {
     this.logger.info('Getting character information', { identifier });
 
     try {
-      const characterData = await this.foundryClient.query('foundry-mcp-bridge.getCharacterInfo', {
+      const characterData = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
         characterName: identifier,
       });
 
@@ -179,7 +179,7 @@ export class CharacterTools {
     this.logger.info('Listing characters', { type });
 
     try {
-      const actors = await this.foundryClient.query('foundry-mcp-bridge.listActors', { type });
+      const actors = await this.foundryClient.query('warhammer-mcp.listActors', { type });
 
       this.logger.debug('Successfully retrieved character list', { count: actors.length });
 
@@ -484,7 +484,7 @@ export class CharacterTools {
 
     try {
       // First, find the character by name or ID
-      const characterData = await this.foundryClient.query('foundry-mcp-bridge.getCharacterInfo', {
+      const characterData = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
         characterName: identifier,
       });
 
@@ -494,19 +494,46 @@ export class CharacterTools {
 
       // Map user-friendly field names to Foundry data paths
       const updateData: Record<string, any> = {};
+      const warnings: string[] = [];
 
       // Characteristic mapping (updates the INITIAL value, not advances)
+      // Keys are lowercase to match the lowerKey conversion below
+      // Supports both full names (weaponskill) and abbreviations (ws)
       const charMap: Record<string, string> = {
-        weaponSkill: 'ws',
-        ballisticSkill: 'bs',
+        weaponskill: 'ws',
+        ws: 'ws',
+        ballisticskill: 'bs',
+        bs: 'bs',
         strength: 's',
+        s: 's',
         toughness: 't',
+        t: 't',
         initiative: 'i',
+        i: 'i',
         agility: 'ag',
+        ag: 'ag',
         dexterity: 'dex',
+        dex: 'dex',
         intelligence: 'int',
+        int: 'int',
         willpower: 'wp',
+        wp: 'wp',
         fellowship: 'fel',
+        fel: 'fel',
+      };
+
+      // Readable characteristic names for warnings
+      const charNames: Record<string, string> = {
+        ws: 'Weapon Skill',
+        bs: 'Ballistic Skill',
+        s: 'Strength',
+        t: 'Toughness',
+        i: 'Initiative',
+        ag: 'Agility',
+        dex: 'Dexterity',
+        int: 'Intelligence',
+        wp: 'Willpower',
+        fel: 'Fellowship',
       };
 
       for (const [key, value] of Object.entries(updates)) {
@@ -515,24 +542,54 @@ export class CharacterTools {
         // Handle characteristics - update initial value
         if (charMap[lowerKey]) {
           const charKey = charMap[lowerKey];
+
+          // Validation: Reject negative characteristics
+          if (typeof value === 'number' && value < 0) {
+            throw new Error(`Cannot set ${charNames[charKey]} to ${value}. Characteristics cannot be negative as this will cause calculation errors in WFRP4e. Minimum value is 0.`);
+          }
+
           updateData[`system.characteristics.${charKey}.initial`] = value;
           this.logger.debug(`Mapping ${key} to system.characteristics.${charKey}.initial = ${value}`);
+
+          // Warning for unusual but valid values
+          if (typeof value === 'number') {
+            if (value === 0) {
+              warnings.push(`⚠️ ${charNames[charKey]} set to 0 - This is unusual in WFRP4e. The character will have no baseline in this characteristic (only advances will contribute to tests).`);
+            } else if (value > 100) {
+              warnings.push(`⚠️ ${charNames[charKey]} set to ${value} - Values above 100 are exceptionally rare in WFRP4e (beyond legendary).`);
+            }
+          }
         }
         // Handle status values
         else if (lowerKey === 'currentwounds') {
           updateData['system.status.wounds.value'] = value;
+          if (typeof value === 'number' && value < 0) {
+            warnings.push(`⚠️ Current Wounds set to ${value} - Negative wounds indicate the character should be dead or dying.`);
+          }
         }
         else if (lowerKey === 'fortune') {
           updateData['system.status.fortune.value'] = value;
+          if (typeof value === 'number' && value < 0) {
+            warnings.push(`⚠️ Fortune set to ${value} - Negative Fortune is not standard in WFRP4e.`);
+          }
         }
         else if (lowerKey === 'fate') {
           updateData['system.status.fate.value'] = value;
+          if (typeof value === 'number' && value < 0) {
+            warnings.push(`⚠️ Fate set to ${value} - Negative Fate is not standard in WFRP4e.`);
+          }
         }
         else if (lowerKey === 'resilience') {
           updateData['system.status.resilience.value'] = value;
+          if (typeof value === 'number' && value < 0) {
+            warnings.push(`⚠️ Resilience set to ${value} - Negative Resilience is not standard in WFRP4e.`);
+          }
         }
         else if (lowerKey === 'resolve') {
           updateData['system.status.resolve.value'] = value;
+          if (typeof value === 'number' && value < 0) {
+            warnings.push(`⚠️ Resolve set to ${value} - Negative Resolve is not standard in WFRP4e.`);
+          }
         }
         else {
           this.logger.warn(`Unknown update field: ${key}`, { value });
@@ -544,16 +601,24 @@ export class CharacterTools {
       }
 
       // Execute the update
-      const result = await this.foundryClient.query('foundry-mcp-bridge.updateActor', {
+      const result = await this.foundryClient.query('warhammer-mcp.updateActor', {
         actorId: characterData.id,
         updateData,
+        warnings: warnings.length > 0 ? warnings : undefined,
       });
 
       this.logger.info('Successfully updated character', {
         characterId: characterData.id,
         characterName: characterData.name,
         fieldsUpdated: Object.keys(updateData),
+        warnings: warnings.length > 0 ? warnings : undefined,
       });
+
+      // Build success message with warnings if present
+      let message = `Successfully updated ${Object.keys(updateData).length} field(s) for ${characterData.name}`;
+      if (warnings.length > 0) {
+        message += `\n\n**Warnings:**\n${warnings.join('\n')}`;
+      }
 
       return {
         success: true,
@@ -562,7 +627,8 @@ export class CharacterTools {
           name: characterData.name,
         },
         updated: updateData,
-        message: `Successfully updated ${Object.keys(updateData).length} field(s) for ${characterData.name}`,
+        warnings: warnings.length > 0 ? warnings : undefined,
+        message,
       };
 
     } catch (error) {
@@ -585,7 +651,7 @@ export class CharacterTools {
 
     try {
       // Get character
-      const character = await this.foundryClient.query('foundry-mcp-bridge.getCharacterInfo', {
+      const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
         characterName: characterName,
       });
 
@@ -605,7 +671,7 @@ export class CharacterTools {
       const oldAdvances = item.system?.advances?.value || 0;
 
       // Update the item directly (no XP cost)
-      await this.foundryClient.query('foundry-mcp-bridge.updateItem', {
+      await this.foundryClient.query('warhammer-mcp.updateItem', {
         actorId: character.id,
         itemId: item.id,
         updateData: {
@@ -646,7 +712,7 @@ export class CharacterTools {
     this.logger.info('Adding skill/talent from compendium', { characterName, itemName, itemType });
 
     try {
-      const character = await this.foundryClient.query('foundry-mcp-bridge.getCharacterInfo', {
+      const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
         characterName: characterName,
       });
 
@@ -669,7 +735,7 @@ export class CharacterTools {
       let compendiumItem = null;
       let compendiumUuid = null;
       try {
-        const searchResults = await this.foundryClient.query('foundry-mcp-bridge.searchCompendium', {
+        const searchResults = await this.foundryClient.query('warhammer-mcp.searchCompendium', {
           query: itemName,
           packType: 'Item',
         });
@@ -713,7 +779,7 @@ export class CharacterTools {
       // STEP 2: Add from compendium OR create basic entry
       if (compendiumItem && compendiumUuid) {
         // Add official compendium item with all effects
-        await this.foundryClient.query('foundry-mcp-bridge.addItemFromCompendium', {
+        await this.foundryClient.query('warhammer-mcp.addItemFromCompendium', {
           actorId: character.id,
           compendiumId: compendiumUuid,
         });
@@ -756,7 +822,7 @@ export class CharacterTools {
           itemData.system.max = { value: 1 };
         }
 
-        await this.foundryClient.query('foundry-mcp-bridge.createItem', {
+        await this.foundryClient.query('warhammer-mcp.createItem', {
           actorId: character.id,
           itemData: itemData,
         });

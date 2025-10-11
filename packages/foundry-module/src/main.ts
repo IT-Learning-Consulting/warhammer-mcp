@@ -39,14 +39,14 @@ class FoundryMCPBridge {
    */
   async initialize(): Promise<void> {
     try {
-      console.log(`[${MODULE_ID}] Initializing Foundry MCP Bridge...`);
+      console.log(`[${MODULE_ID}] Initializing Warhammer MCP...`);
 
       // Register module settings
       this.settings.registerSettings();
 
       // Register query handlers
       this.queryHandlers.registerHandlers();
-      
+
       // Register campaign hooks for interactive dashboards
       this.campaignHooks.register();
 
@@ -58,7 +58,7 @@ class FoundryMCPBridge {
 
     } catch (error) {
       console.error(`[${MODULE_ID}] Failed to initialize:`, error);
-      ui.notifications.error('Failed to initialize Foundry MCP Bridge');
+      ui.notifications.error('Failed to initialize Warhammer MCP');
       throw error;
     }
   }
@@ -87,7 +87,7 @@ class FoundryMCPBridge {
 
       // Auto-connect when enabled (always automatic)
       const enabled = this.settings.getSetting('enabled');
-      
+
       if (enabled) {
         await this.start();
       }
@@ -124,11 +124,11 @@ class FoundryMCPBridge {
       try {
         const browseResult = await (foundry as any).applications.apps.FilePicker.implementation.browse('data', `worlds/${game.world.id}`);
         const indexExists = browseResult.files.some((f: any) => f.endsWith(indexFilename));
-        
+
         if (!indexExists) {
           console.log(`[${MODULE_ID}] Enhanced creature index not found, building automatically for better UX...`);
           ui.notifications?.info('Building enhanced creature index for faster searches...');
-          
+
           // Trigger index build through data access
           if (this.queryHandlers?.dataAccess?.rebuildEnhancedCreatureIndex) {
             await this.queryHandlers.dataAccess.rebuildEnhancedCreatureIndex();
@@ -167,10 +167,10 @@ class FoundryMCPBridge {
     this.isConnecting = true;
 
     try {
-      console.log(`[${MODULE_ID}] Starting MCP bridge...`);
+      console.log(`[${MODULE_ID}] Starting Warhammer MCP...`);
 
       const config = this.settings.getBridgeConfig();
-      
+
       // Validate configuration
       const validation = this.settings.validateSettings();
       if (!validation.valid) {
@@ -184,41 +184,41 @@ class FoundryMCPBridge {
       await this.settings.setSetting('lastConnectionState', 'connected');
       await this.settings.setSetting('lastActivity', new Date().toISOString());
       this.updateLastActivity();
-      
+
       // Update settings display with connection status
       this.settings.updateConnectionStatusDisplay(true, 17); // 17 MCP tools
-      
+
       console.log(`[${MODULE_ID}] Bridge started successfully`);
-      
+
       // Start heartbeat monitoring if enabled
       this.startHeartbeat();
-      
+
       // Show connection notification based on user preference
       if (this.settings.getSetting('enableNotifications')) {
-        ui.notifications.info('🔗 MCP Bridge connected successfully');
+        ui.notifications.info('🔗 Warhammer MCP connected successfully');
       }
       console.log(`[${MODULE_ID}] GM connection established - Bridge active for user: ${game.user?.name}`);
 
     } catch (error) {
       // Log as warning instead of error for initial connection failures
       console.warn(`[${MODULE_ID}] Failed to start bridge:`, error);
-      
+
       // Show helpful message for GM users when MCP server isn't available
       if (this.isGMUser()) {
         const errorMessage = error instanceof Error ? error.message : String(error);
-        
+
         // Check if it's a connection refusal (MCP server not running)
         if (errorMessage.includes('ECONNREFUSED') || errorMessage.includes('connect ECONNREFUSED')) {
           // Only show this notification if it's been more than 30 seconds since last shown
           const lastShown = this.settings.getSetting('lastMCPServerNotification') as string;
           const now = new Date().getTime();
           const thirtySecondsAgo = now - (30 * 1000);
-          
+
           if (!lastShown || new Date(lastShown).getTime() < thirtySecondsAgo) {
             ui.notifications?.warn(
               'MCP Server not found. Install it from https://github.com/adambdooley/foundry-vtt-mcp'
             );
-            
+
             // Remember when we showed this notification
             this.settings.setSetting('lastMCPServerNotification', new Date().toISOString()).catch(() => {
               // Ignore settings save errors during startup
@@ -226,7 +226,7 @@ class FoundryMCPBridge {
           }
         }
       }
-      
+
       await this.settings.setSetting('lastConnectionState', 'error');
       throw error;
     } finally {
@@ -244,7 +244,7 @@ class FoundryMCPBridge {
     }
 
     try {
-      console.log(`[${MODULE_ID}] Stopping MCP bridge...`);
+      console.log(`[${MODULE_ID}] Stopping Warhammer MCP...`);
 
       // Stop heartbeat monitoring
       this.stopHeartbeat();
@@ -253,15 +253,15 @@ class FoundryMCPBridge {
       this.socketBridge = null;
 
       await this.settings.setSetting('lastConnectionState', 'disconnected');
-      
+
       // Update settings display with disconnected status
       this.settings.updateConnectionStatusDisplay(false, 0);
 
       console.log(`[${MODULE_ID}] Bridge stopped`);
-      
+
       // Show disconnection notification based on user preference
       if (this.settings.getSetting('enableNotifications')) {
-        ui.notifications.info('MCP Bridge disconnected');
+        ui.notifications.info('Warhammer MCP disconnected');
       }
 
     } catch (error) {
@@ -274,12 +274,12 @@ class FoundryMCPBridge {
    */
   async restart(): Promise<void> {
     console.log(`[${MODULE_ID}] Restarting bridge...`);
-    
+
     await this.stop();
-    
+
     // Small delay to ensure clean disconnect
     await new Promise(resolve => setTimeout(resolve, 1000));
-    
+
     if (this.settings.getSetting('enabled')) {
       await this.start();
     }
@@ -308,13 +308,13 @@ class FoundryMCPBridge {
    */
   private startHeartbeat(): void {
     this.stopHeartbeat(); // Ensure no duplicate intervals
-    
+
     const interval = this.settings.getSetting('heartbeatInterval') * 1000; // Convert to milliseconds
-    
+
     this.heartbeatInterval = window.setInterval(async () => {
       await this.performHeartbeat();
     }, interval);
-    
+
     console.log(`[${MODULE_ID}] Heartbeat monitoring started (${interval}ms interval)`);
   }
 
@@ -339,7 +339,7 @@ class FoundryMCPBridge {
         // Only log once per disconnection to avoid spam
         if (this.lastActivity && new Date().getTime() - this.lastActivity.getTime() > 60000) {
           console.warn(`[${MODULE_ID}] Heartbeat: Connection lost`);
-          
+
           // Attempt auto-reconnection if enabled (with backoff)
           if (this.settings.getSetting('autoReconnectEnabled')) {
             console.log(`[${MODULE_ID}] Attempting auto-reconnection...`);
@@ -352,7 +352,7 @@ class FoundryMCPBridge {
       // Just update activity timestamp - no actual network ping needed
       // The socket bridge already handles connection state monitoring
       this.updateLastActivity();
-      
+
     } catch (error) {
       // Only attempt reconnect once per failure cycle
       if (this.settings.getSetting('autoReconnectEnabled')) {
@@ -466,7 +466,7 @@ class FoundryMCPBridge {
     await this.stop();
     this.queryHandlers.unregisterHandlers();
     this.campaignHooks.unregister();
-    
+
     console.log(`[${MODULE_ID}] Cleanup complete`);
   }
 
@@ -490,15 +490,15 @@ Hooks.once('init', async () => {
 Hooks.once('ready', async () => {
   try {
     await foundryMCPBridge.onReady();
-    
+
     // Register socket listener for roll state management (after game.user is available)
 
-    game.socket?.on('module.foundry-mcp-bridge', async (data) => {
-      
+    game.socket?.on('module.warhammer-mcp', async (data) => {
+
       try {
         // Handle ChatMessage update requests (GM only)
         if (data.type === 'requestMessageUpdate' && data.buttonId && data.messageId) {
-          
+
           // Only GM can update ChatMessages for other users
           if (game.user?.isGM) {
             try {
@@ -521,7 +521,7 @@ Hooks.once('ready', async () => {
 
         // Handle roll state save requests (GM only) - LEGACY
         if (data.type === 'requestRollStateSave' && data.buttonId && data.rollState) {
-          
+
           // Only GM can save to world settings
           if (game.user?.isGM) {
             try {
@@ -552,7 +552,7 @@ Hooks.once('ready', async () => {
         console.error(`[${MODULE_ID}] Error handling socket message:`, error);
       }
     });
-    
+
   } catch (error) {
     console.error(`[${MODULE_ID}] Ready failed:`, error);
   }
@@ -563,7 +563,7 @@ Hooks.on('closeSettingsConfig', () => {
   try {
     const enabled = foundryMCPBridge.getStatus().enabled;
     const connected = foundryMCPBridge.getStatus().connected;
-    
+
     if (enabled && !connected) {
       // Setting was enabled but not connected, try to start
       foundryMCPBridge.start().catch(error => {
@@ -586,38 +586,38 @@ Hooks.on('renderChatMessageHTML', (message: any, html: HTMLElement) => {
   try {
     // Convert HTMLElement to jQuery for compatibility with existing handler code
     const $html = $(html);
-    
+
     // Check if this message has MCP roll button flags
     const rollButtons = message.getFlag?.(MODULE_ID, 'rollButtons');
-    
+
     if (rollButtons) {
-      
+
       // Get the data access instance
       const queryHandlers = foundryMCPBridge['queryHandlers'] as any;
       if (queryHandlers && queryHandlers.dataAccess) {
-        
+
         // Check if any buttons in this message are already rolled
         for (const [_buttonId, buttonData] of Object.entries(rollButtons as any)) {
           if (buttonData && typeof buttonData === 'object' && (buttonData as any).rolled) {
             break;
           }
         }
-        
+
         // If message has rolled buttons, the content should already be updated
         // Just attach any necessary handlers for active buttons
         if ($html.find('.mcp-roll-button').length > 0) {
           // Only attach handlers to active (non-rolled) buttons
           queryHandlers.dataAccess.attachRollButtonHandlers($html);
         }
-        
+
       }
     } else if ($html.find('.mcp-roll-button').length > 0) {
       // Legacy message without flags - fall back to old behavior
-      
+
       const queryHandlers = foundryMCPBridge['queryHandlers'] as any;
       if (queryHandlers && queryHandlers.dataAccess) {
         queryHandlers.dataAccess.attachRollButtonHandlers($html);
-        
+
         // Check for legacy roll states
         setTimeout(() => {
           queryHandlers.dataAccess.ensureButtonStatesForMessage($html);

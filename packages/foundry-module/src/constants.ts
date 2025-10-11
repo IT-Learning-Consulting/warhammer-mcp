@@ -1,10 +1,10 @@
-// Constants for Foundry MCP Bridge Module
+// Constants for Warhammer MCP Module
 
 /**
  * Module constants
  */
-export const MODULE_ID = 'foundry-mcp-bridge';
-export const MODULE_TITLE = 'Foundry MCP Bridge';
+export const MODULE_ID = 'warhammer-mcp';
+export const MODULE_TITLE = 'Warhammer MCP';
 
 /**
  * Socket event names

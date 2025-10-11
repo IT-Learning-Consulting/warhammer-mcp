@@ -198,7 +198,7 @@ Note: Some chronic diseases may recur or have permanent effects even after remov
         this.logger.info("Getting diseases", { characterName: args.characterName });
 
         const response = await this.foundryClient.query(
-            "foundry-mcp-bridge.getCharacterInfo",
+            "warhammer-mcp.getCharacterInfo",
             { characterName: args.characterName }
         );
 
@@ -316,7 +316,7 @@ ${character.name} is currently free from disease and infection. Their immune sys
 
         // Get character to find actor ID
         const charResponse = await this.foundryClient.query(
-            "foundry-mcp-bridge.getCharacterInfo",
+            "warhammer-mcp.getCharacterInfo",
             { characterName: args.characterName }
         );
 
@@ -334,7 +334,7 @@ ${character.name} is currently free from disease and infection. Their immune sys
         const character = charResponse.data;
 
         const response = await this.foundryClient.query(
-            "foundry-mcp-bridge.createItem",
+            "warhammer-mcp.createItem",
             {
                 actorId: character.id,
                 itemData: {
@@ -415,7 +415,7 @@ Use \`check-infection-resilience\` to attempt recovery tests.`,
 
         // Get character and disease info
         const charResponse = await this.foundryClient.query(
-            "foundry-mcp-bridge.getCharacterInfo",
+            "warhammer-mcp.getCharacterInfo",
             { characterName: args.characterName }
         );
 
@@ -462,7 +462,7 @@ Use \`check-infection-resilience\` to attempt recovery tests.`,
 
         // Make the Resilience (Toughness) test
         const rollResponse = await this.foundryClient.query(
-            "foundry-mcp-bridge.rollCharacteristic",
+            "warhammer-mcp.rollCharacteristic",
             {
                 characterName: args.characterName,
                 characteristic: "t", // Toughness for Resilience
@@ -571,7 +571,7 @@ Use \`check-infection-resilience\` to attempt recovery tests.`,
 
         // Get character to find actor ID and disease item ID
         const charResponse = await this.foundryClient.query(
-            "foundry-mcp-bridge.getCharacterInfo",
+            "warhammer-mcp.getCharacterInfo",
             { characterName: args.characterName }
         );
 
@@ -605,7 +605,7 @@ Use \`check-infection-resilience\` to attempt recovery tests.`,
         }
 
         const response = await this.foundryClient.query(
-            "foundry-mcp-bridge.deleteItem",
+            "warhammer-mcp.deleteItem",
             {
                 actorId: character.id,
                 itemId: disease.id,

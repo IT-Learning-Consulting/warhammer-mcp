@@ -164,7 +164,7 @@ export class CareerAdvancementTools {
 
         try {
             // Get character data using the same method as character.ts
-            const character = await this.foundryClient.query('foundry-mcp-bridge.getCharacterInfo', {
+            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
                 characterName: characterName,
             });
 
@@ -470,7 +470,7 @@ export class CareerAdvancementTools {
         this.logger.info('Advancing characteristic', { characterName, characteristic, advances });
 
         try {
-            const character = await this.foundryClient.query('foundry-mcp-bridge.getCharacterInfo', {
+            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
                 characterName: characterName,
             });
 
@@ -517,7 +517,7 @@ export class CareerAdvancementTools {
                 'system.details.experience.spent': (system.details?.experience?.spent || 0) + totalCost,
             };
 
-            await this.foundryClient.query('foundry-mcp-bridge.updateActor', {
+            await this.foundryClient.query('warhammer-mcp.updateActor', {
                 actorId: character.id,
                 updateData: updateData,
             });
@@ -545,7 +545,7 @@ export class CareerAdvancementTools {
         this.logger.info('Advancing skill', { characterName, skillName, advances });
 
         try {
-            const character = await this.foundryClient.query('foundry-mcp-bridge.getCharacterInfo', {
+            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
                 characterName: characterName,
             });
 
@@ -590,7 +590,7 @@ export class CareerAdvancementTools {
 
             // Update the skill advances
             const newAdvances = currentAdvances + advances;
-            await this.foundryClient.query('foundry-mcp-bridge.updateItem', {
+            await this.foundryClient.query('warhammer-mcp.updateItem', {
                 actorId: character.id,
                 itemId: skillItem.id,
                 updateData: {
@@ -599,7 +599,7 @@ export class CareerAdvancementTools {
             });
 
             // Update character XP
-            await this.foundryClient.query('foundry-mcp-bridge.updateActor', {
+            await this.foundryClient.query('warhammer-mcp.updateActor', {
                 actorId: character.id,
                 updateData: {
                     'system.details.experience.current': availableXP - totalCost,
@@ -630,7 +630,7 @@ export class CareerAdvancementTools {
         this.logger.info('Advancing talent', { characterName, talentName, ranks });
 
         try {
-            const character = await this.foundryClient.query('foundry-mcp-bridge.getCharacterInfo', {
+            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
                 characterName: characterName,
             });
 
@@ -678,7 +678,7 @@ export class CareerAdvancementTools {
             }
 
             // Update the talent ranks
-            await this.foundryClient.query('foundry-mcp-bridge.updateItem', {
+            await this.foundryClient.query('warhammer-mcp.updateItem', {
                 actorId: character.id,
                 itemId: talentItem.id,
                 updateData: {
@@ -687,7 +687,7 @@ export class CareerAdvancementTools {
             });
 
             // Update character XP
-            await this.foundryClient.query('foundry-mcp-bridge.updateActor', {
+            await this.foundryClient.query('warhammer-mcp.updateActor', {
                 actorId: character.id,
                 updateData: {
                     'system.details.experience.current': availableXP - totalCost,
@@ -718,7 +718,7 @@ export class CareerAdvancementTools {
 
         try {
             // Get character data
-            const character = await this.foundryClient.query('foundry-mcp-bridge.getCharacterInfo', {
+            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
                 characterName: characterName,
             });
 
@@ -760,7 +760,7 @@ export class CareerAdvancementTools {
             }
 
             // Search compendium for the new career
-            const compendiumResults = await this.foundryClient.query('foundry-mcp-bridge.searchCompendium', {
+            const compendiumResults = await this.foundryClient.query('warhammer-mcp.searchCompendium', {
                 query: newCareerName,
                 types: ['career'],
             });
@@ -809,7 +809,7 @@ export class CareerAdvancementTools {
             }
 
             // Step 1: Add new career from compendium using UUID (do this FIRST)
-            const addResult = await this.foundryClient.query('foundry-mcp-bridge.addItemFromCompendium', {
+            const addResult = await this.foundryClient.query('warhammer-mcp.addItemFromCompendium', {
                 actorId: character.id,
                 compendiumId: careerUuid,
             });
@@ -819,7 +819,7 @@ export class CareerAdvancementTools {
             }
 
             // Step 2: Mark the newly added career as current (before unmarking old one)
-            await this.foundryClient.query('foundry-mcp-bridge.updateItem', {
+            await this.foundryClient.query('warhammer-mcp.updateItem', {
                 actorId: character.id,
                 itemId: addResult.itemId,
                 updateData: {
@@ -828,7 +828,7 @@ export class CareerAdvancementTools {
             });
 
             // Step 3: Unmark old career as "current" (do this AFTER marking new one)
-            await this.foundryClient.query('foundry-mcp-bridge.updateItem', {
+            await this.foundryClient.query('warhammer-mcp.updateItem', {
                 actorId: character.id,
                 itemId: currentCareer.id,
                 updateData: {
@@ -840,7 +840,7 @@ export class CareerAdvancementTools {
             const newAvailableXP = availableXP - xpCost;
             const newSpentXP = (system.details?.experience?.spent || 0) + xpCost;
 
-            await this.foundryClient.query('foundry-mcp-bridge.updateActor', {
+            await this.foundryClient.query('warhammer-mcp.updateActor', {
                 actorId: character.id,
                 updateData: {
                     'system.details.experience.current': newAvailableXP,

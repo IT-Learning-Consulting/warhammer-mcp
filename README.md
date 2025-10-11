@@ -1,4 +1,4 @@
-# Warhammer Fantasy Roleplay MCP Bridge
+# Warhammer MCP
 
 **AI-Powered Game Master Assistant for WFRP 4e in Foundry VTT**
 
@@ -53,25 +53,32 @@ See [CHANGES_2025-10-05.md](CHANGES_2025-10-05.md) for detailed technical inform
 
 ## About This Project
 
-This is a fork of the original [Foundry VTT MCP Bridge](https://github.com/adambdooley/foundry-vtt-mcp) by **Adam Dooley**, adapted and enhanced specifically for **Warhammer Fantasy Roleplay 4th Edition**.
+This project is a **fork and enhancement** of the original [Foundry VTT MCP Bridge](https://github.com/adambdooley/foundry-vtt-mcp) by **Adam Dooley**, adapted and specialized exclusively for **Warhammer Fantasy Roleplay 4th Edition**.
 
+### Credits
+
+**Original Project**: [Foundry VTT MCP Bridge](https://github.com/adambdooley/foundry-vtt-mcp)  
 **Original Author**: Adam Dooley ([Patreon](https://www.patreon.com/c/Adambdooley) | [YouTube](https://www.youtube.com/channel/UCVrSC-FzuAk5AgvfboJj0WA))  
-**Fork Maintainer**: Danny ([IT-Learning-Consulting](https://github.com/IT-Learning-Consulting))  
+**Fork Maintainer**: Danny Castillo ([IT Learning Consulting](https://github.com/IT-Learning-Consulting))  
 **License**: MIT License (see [LICENSE](LICENSE) for details)
 
-### What's New in This Fork
+*Special thanks to Adam Dooley for creating the original MCP Bridge infrastructure that made this WFRP-focused fork possible.*
 
-- **WFRP 4e Focus**: Removed D&D references, now exclusively WFRP-focused
-- **Custom NPC Generator**: Create balanced NPCs with XP-based advancement and species-specific talents
-- **Species-Specific Features**: Accurate wounds calculation and innate talents for Humans, Dwarfs, Elves, and Halflings
-- **RollTable Tools**: Create and manage random tables for encounters, loot, events, and more
-- **Enhanced Documentation**: Comprehensive WFRP 4e guides and examples
+### What Makes This Fork Different
+
+- **WFRP 4e Exclusive**: Removed D&D support, now 100% focused on Warhammer Fantasy Roleplay
+- **65+ WFRP-Specific Tools**: Career advancement, corruption, mutations, Fortune/Fate, Resilience/Resolve
+- **Custom NPC Generator**: Create balanced NPCs with XP-based advancement and species-specific traits
+- **Species-Accurate Mechanics**: Proper wounds calculation and innate talents for Humans, Dwarfs, Elves, and Halflings
+- **RollTable System**: Create and manage random tables for encounters, loot, events, and Old World flavor
+- **Enhanced WFRP Documentation**: Comprehensive guides, examples, and test results specific to WFRP 4e mechanics
+- **UI Notifications**: Real-time toast notifications in Foundry when Claude makes changes
 
 ---
 
 ## Overview
 
-The Warhammer MCP Bridge enables natural AI conversations with your WFRP 4e game data in Foundry VTT. Claude Desktop becomes your intelligent assistant for:
+The Warhammer MCP connects Claude Desktop to your WFRP 4e game in Foundry VTT, turning Claude into your intelligent game master assistant. Through natural language conversations, Claude can:
 
 - **Character & NPC Management**: Access characteristics, skills, talents, corruption, fortune/fate
 - **Content Generation**: Create custom NPCs, quests, and campaign content with WFRP flavor
@@ -191,13 +198,13 @@ The Warhammer MCP Bridge enables natural AI conversations with your WFRP 4e game
 
 [Video Guide](https://youtu.be/Se04A21wrbE) (from original project - basic process is the same)
 
-1. Download the latest `FoundryMCPServer-Setup.exe` from [Releases](https://github.com/IT-Learning-Consulting/warhammer-mcp/releases)
+1. Download the latest `WarhammerMCP-Setup.exe` from [Releases](https://github.com/IT-Learning-Consulting/warhammer-mcp/releases)
 2. Run the installer - it will:
    - Install the MCP server with bundled Node.js
    - Configure Claude Desktop automatically
    - Optionally install the Foundry module
 3. Restart Claude Desktop
-4. In Foundry VTT, enable **"Foundry MCP Bridge"** in Module Management
+4. In Foundry VTT, enable **"Warhammer MCP"** in Module Management
 5. Start playing!
 
 ### Option 2: Manual Installation
@@ -207,7 +214,7 @@ The Warhammer MCP Bridge enables natural AI conversations with your WFRP 4e game
 **Method A: From Manifest URL**
 1. In Foundry VTT, go to Add-on Modules
 2. Click "Install Module"
-3. Paste this URL: `https://github.com/IT-Learning-Consulting/warhammer-mcp/blob/main/packages/foundry-module/module.json`
+3. Paste this URL: `https://raw.githubusercontent.com/IT-Learning-Consulting/warhammer-mcp/main/packages/foundry-module/module.json`
 4. Click Install
 5. Enable the module in your world
 
@@ -224,7 +231,7 @@ npm install
 npm run build
 
 # Copy module to Foundry
-cp -r packages/foundry-module/dist/* /path/to/foundry/Data/modules/foundry-mcp-bridge/
+cp -r packages/foundry-module/* /path/to/foundry/Data/modules/warhammer-mcp/
 ```
 
 #### Step 2: Install the MCP Server
@@ -270,7 +277,7 @@ Add this to your Claude Desktop configuration file:
 #### Step 4: Start Everything
 
 1. Start Foundry VTT and load your WFRP 4e world
-2. Enable the **"Foundry MCP Bridge"** module
+2. Enable the **"Warhammer MCP"** module
 3. Start Claude Desktop (the MCP server starts automatically)
 4. Look for the 🔌 hammer icon in Claude Desktop (indicates connected)
 
@@ -477,10 +484,10 @@ Once connected, you can ask Claude Desktop about your WFRP campaign:
 
 ## Module Settings
 
-In Foundry VTT, go to **Module Settings > Foundry MCP Bridge** to configure:
+In Foundry VTT, go to **Module Settings > Warhammer MCP** to configure:
 
 ### Connection Settings
-- **Enable MCP Bridge**: Toggle the connection on/off without disabling the module
+- **Enable Warhammer MCP**: Toggle the connection on/off without disabling the module
 - **Server Host**: IP address of the MCP server (default: `localhost`)
 - **Server Port**: Port for communication (default: `31415`)
 - **Auto-Reconnect**: Automatically reconnect if connection is lost

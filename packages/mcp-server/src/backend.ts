@@ -1456,6 +1456,12 @@ async function startBackend(): Promise<void> {
 
                   break;
 
+                case 'roll-critical-wound':
+
+                  result = await criticalWoundsTools.handleRollCriticalWound(args);
+
+                  break;
+
                 case 'remove-critical-wound':
 
                   result = await criticalWoundsTools.handleRemoveCriticalWound(args);

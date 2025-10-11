@@ -321,7 +321,7 @@ Some blessings fade gradually:
         this.logger.info("Getting active blessings", { characterName: args.characterName });
 
         const response = await this.foundryClient.query(
-            "foundry-mcp-bridge.getCharacterInfo",
+            "warhammer-mcp.getCharacterInfo",
             { characterName: args.characterName }
         );
 
@@ -455,7 +455,7 @@ ${character.name} has no active divine blessings or prayers currently affecting 
 
         // Get character info
         const charResponse = await this.foundryClient.query(
-            "foundry-mcp-bridge.getCharacterInfo",
+            "warhammer-mcp.getCharacterInfo",
             { characterName: args.characterName }
         );
 
@@ -521,7 +521,7 @@ Use \`perform-penance\` to seek redemption!`,
 
         // Make the Pray test
         const rollResponse = await this.foundryClient.query(
-            "foundry-mcp-bridge.rollSkill",
+            "warhammer-mcp.rollSkill",
             {
                 characterName: args.characterName,
                 skillName: "Pray",
@@ -586,7 +586,7 @@ Use \`perform-penance\` to seek redemption!`,
             // Add blessing to character (if target is self or ally)
             const target = args.target || args.characterName;
             await this.foundryClient.query(
-                "foundry-mcp-bridge.addItemToActor",
+                "warhammer-mcp.addItemToActor",
                 {
                     actorName: target,
                     itemData: {
@@ -642,7 +642,7 @@ Use \`perform-penance\` to seek redemption!`,
         this.logger.info("Checking divine favor", { characterName: args.characterName });
 
         const response = await this.foundryClient.query(
-            "foundry-mcp-bridge.getCharacterInfo",
+            "warhammer-mcp.getCharacterInfo",
             { characterName: args.characterName }
         );
 
@@ -776,7 +776,7 @@ Use \`perform-penance\` to seek redemption!`,
         });
 
         const response = await this.foundryClient.query(
-            "foundry-mcp-bridge.getCharacterInfo",
+            "warhammer-mcp.getCharacterInfo",
             { characterName: args.characterName }
         );
 
@@ -797,7 +797,7 @@ Use \`perform-penance\` to seek redemption!`,
 
         // Update sin points
         const updateResponse = await this.foundryClient.query(
-            "foundry-mcp-bridge.updateActor",
+            "warhammer-mcp.updateActor",
             {
                 actorId: character.id,
                 updateData: {
@@ -884,7 +884,7 @@ Use \`perform-penance\` to seek redemption!`,
         });
 
         const response = await this.foundryClient.query(
-            "foundry-mcp-bridge.getCharacterInfo",
+            "warhammer-mcp.getCharacterInfo",
             { characterName: args.characterName }
         );
 
@@ -905,7 +905,7 @@ Use \`perform-penance\` to seek redemption!`,
 
         // Update sin points
         const updateResponse = await this.foundryClient.query(
-            "foundry-mcp-bridge.updateActor",
+            "warhammer-mcp.updateActor",
             {
                 actorId: character.id,
                 updateData: {
@@ -1007,7 +1007,7 @@ Use \`perform-penance\` to seek redemption!`,
         });
 
         const response = await this.foundryClient.query(
-            "foundry-mcp-bridge.removeItemFromActor",
+            "warhammer-mcp.removeItemFromActor",
             {
                 actorName: args.characterName,
                 itemName: args.blessingName,

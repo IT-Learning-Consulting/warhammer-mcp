@@ -275,6 +275,9 @@ export class QueryHandlers {
 
       const createdItem = createdItems[0];
 
+      // Show notification to GM
+      ui.notifications?.info(`MCP: Added ${createdItem.name} to ${actor.name} (from compendium)`);
+
       return {
         success: true,
         itemId: createdItem.id,

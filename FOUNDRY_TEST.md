@@ -155,6 +155,415 @@ Prompt: "Set Test Character's Strength to 999"
 
 ---
 
+#### Test Case 1.6: Update Multiple Characteristics
+```
+Prompt: "Update Test Character: Strength to 35, Toughness to 40, Initiative to 30"
+```
+**Expected Result**:
+- All three characteristics updated to initial values
+- Each characteristic shows new value
+- Advances remain at 0 for all
+- XP unchanged (no cost)
+- Confirmation for each change
+
+**Success Criteria**: ✅ Multiple characteristics updated simultaneously
+
+---
+
+#### Test Case 1.7: Update Status Values
+```
+Prompt: "Update Test Character: current wounds to 15, fortune to 3, resolve to 2"
+```
+**Expected Result**:
+- Current wounds set to 15
+- Fortune set to 3 (must be ≤ Fate maximum)
+- Resolve set to 2 (must be ≤ Resilience maximum)
+- All values visible in character sheet
+- If values exceed maximums, should be capped
+
+**Success Criteria**: ✅ All status values updated correctly
+
+---
+
+#### Test Case 1.8: Update Single Characteristic to Zero
+```
+Prompt: "Set Test Character's Strength initial to 0"
+```
+**Expected Result**:
+- Strength initial value set to 0
+- Warning: "Setting characteristic to 0 is unusual"
+- Character sheet shows Strength: 0 + advances
+- Mechanical implications noted
+
+**Success Criteria**: ✅ Zero value accepted with warning
+
+---
+
+#### Test Case 1.9: Update Characteristic Below Zero
+```
+Prompt: "Set Test Character's Agility to -10"
+```
+**Expected Result**:
+- Error: "Characteristic cannot be negative"
+- OR: Value clamped to 0
+- No changes made to character
+- Validation message displayed
+
+**Success Criteria**: ✅ Negative values rejected or clamped
+
+---
+
+#### Test Case 1.10: Update Wounds Above Maximum
+```
+Prompt: "Set Test Character's current wounds to 100"
+```
+**Expected Result**:
+- Current wounds set to 100
+- OR: Capped at maximum wounds value
+- Warning if value exceeds calculated maximum
+- Character sheet reflects change
+
+**Success Criteria**: ✅ Wounds updated with appropriate validation
+
+---
+
+#### Test Case 1.11: Update Fortune Above Fate Maximum
+```
+Prompt: "Give Test Character 10 fortune points"
+```
+**Expected Result**:
+- Fortune increased
+- If exceeds Fate value: capped at Fate maximum
+- Warning: "Fortune cannot exceed Fate"
+- Current fortune ≤ Fate value
+
+**Success Criteria**: ✅ Fortune capped at Fate maximum
+
+---
+
+#### Test Case 1.12: Update Resolve Above Resilience Maximum
+```
+Prompt: "Set Test Character's resolve to 10"
+```
+**Expected Result**:
+- Resolve increased
+- If exceeds Resilience value: capped at Resilience maximum
+- Warning: "Resolve cannot exceed Resilience"
+- Current resolve ≤ Resilience value
+
+**Success Criteria**: ✅ Resolve capped at Resilience maximum
+
+---
+
+#### Test Case 1.13: Get Character Info - Complete Details
+```
+Prompt: "Show me complete information for Test Character"
+```
+**Expected Result**:
+- **Identity**: Name, species, class, career
+- **Characteristics**: All 10 with initial + advances + total
+- **Status**: Wounds (current/max), Fortune (current/max), Fate, Resolve (current/max), Resilience
+- **Skills**: All skills with advances and total value
+- **Talents**: All talents with description
+- **Traits**: Special abilities and traits
+- **Items**: Weapons, armor, equipment with quantities
+- **Conditions**: Active conditions and effects
+- **Experience**: Total XP, spent XP, available XP
+- **Biography**: Motivation, short/long term ambitions
+- **Corruption**: Current corruption and mutations
+- **Critical Wounds**: Count and list
+
+**Success Criteria**: ✅ Comprehensive character data dump
+
+---
+
+#### Test Case 1.14: Get Character Info - Specific Sections
+```
+Prompt: "Show me Test Character's skills and talents only"
+```
+**Expected Result**:
+- Filtered output showing only requested sections
+- Skills list with all advances
+- Talents list with descriptions
+- Other sections omitted for brevity
+- Well-formatted output
+
+**Success Criteria**: ✅ Selective information retrieval
+
+---
+
+#### Test Case 1.15: Get Character With No Items
+```
+Prompt: "Get info for Test Character"
+Setup: Character has no items in inventory
+```
+**Expected Result**:
+- All other data displayed normally
+- Items section shows: "No items"
+- No errors about missing items
+- Clean empty state handling
+
+**Success Criteria**: ✅ Graceful handling of empty inventory
+
+---
+
+#### Test Case 1.16: Get Character With Conditions
+```
+Prompt: "Show Test Character's status"
+Setup: Character has active conditions (Bleeding, Stunned, etc.)
+```
+**Expected Result**:
+- Conditions section lists all active effects
+- Each condition shows: name, value/level, duration
+- Status effects clearly displayed
+- Mechanical implications noted
+
+**Success Criteria**: ✅ Conditions properly listed
+
+---
+
+#### Test Case 1.17: Update Characteristic - Partial Name Match
+```
+Prompt: "Update Test Character's WS to 45"
+```
+**Expected Result**:
+- Tool recognizes "WS" as "Weapon Skill"
+- Weapon Skill initial updated to 45
+- Confirmation uses full characteristic name
+- Abbreviation handling works
+
+**Success Criteria**: ✅ Abbreviations recognized
+
+---
+
+#### Test Case 1.18: Update Multiple Stats - Some Invalid
+```
+Prompt: "Update Test Character: Strength to 35, InvalidStat to 50, Toughness to 40"
+```
+**Expected Result**:
+- Strength updated successfully
+- Toughness updated successfully
+- Error for "InvalidStat": "Unknown stat name"
+- Valid updates applied, invalid ones rejected
+- Partial success reported
+
+**Success Criteria**: ✅ Mixed validation handled gracefully
+
+---
+
+#### Test Case 1.19: Get Character - Case Insensitive Name
+```
+Prompt: "Get info for test character"
+```
+**Expected Result**:
+- Character found despite lowercase
+- Full information returned
+- Case-insensitive search works
+- Exact name displayed in response
+
+**Success Criteria**: ✅ Case insensitive character lookup
+
+---
+
+#### Test Case 1.20: Update Character - Verify Persistence
+```
+Scenario: Update and verify persistence across tool calls
+1. "Update Test Character's Strength to 42"
+2. "Get Test Character's info"
+3. Verify Strength shows 42
+4. Refresh Foundry VTT
+5. "Get Test Character's info" again
+6. Verify Strength still shows 42
+```
+**Expected Result**:
+- Updates persist immediately
+- Values survive Foundry refresh
+- No data loss between tool calls
+- Changes written to database
+
+**Success Criteria**: ✅ Data persistence verified
+
+---
+
+### 🧪 Integration Test Scenarios
+
+#### Test Case 1.21: Character Creation Flow
+```
+Scenario: Set up new character with multiple updates
+1. "Update Test Character: Strength to 30, Toughness to 35, Agility to 33"
+2. "Update Test Character: Initiative to 32, Willpower to 28, Fellowship to 35"
+3. "Set Test Character's wounds to 13, fortune to 2, fate to 2"
+4. "Show me Test Character's complete information"
+```
+**Expected Result**:
+- All characteristics set to initial values
+- All status values configured
+- Complete character sheet populated
+- Ready for game play
+
+**Success Criteria**: ✅ Full character setup workflow
+
+---
+
+#### Test Case 1.22: Combat Damage Flow
+```
+Scenario: Character takes damage and recovers
+1. "Get Test Character's current wounds" → e.g., 15/15
+2. "Update Test Character's current wounds to 8" → Took 7 damage
+3. "Get Test Character's info" → Verify 8/15 wounds
+4. "Update Test Character's current wounds to 15" → Healed
+5. "Get Test Character's info" → Verify 15/15 wounds
+```
+**Expected Result**:
+- Wounds update correctly
+- Damage tracking works
+- Healing restores wounds
+- Max wounds unchanged
+
+**Success Criteria**: ✅ Wounds management workflow
+
+---
+
+#### Test Case 1.23: Fortune/Fate Management Flow
+```
+Scenario: Using and refreshing Fortune points
+1. "Get Test Character's fortune" → e.g., 3/3
+2. "Spend a fortune point for Test Character" → 2/3
+3. "Get Test Character's info" → Verify 2/3
+4. "Add a fortune point to Test Character" → 3/3
+5. "Burn a fate point for Test Character" → Fate reduced, Fortune max reduced
+6. "Get Test Character's info" → Verify Fate and Fortune both reduced
+```
+**Expected Result**:
+- Fortune spending tracked
+- Fortune restoration works
+- Fate burning affects maximum
+- Persistent changes verified
+
+**Success Criteria**: ✅ Fortune/Fate system workflow
+
+---
+
+### 📊 Technical Validation Tests
+
+#### Test Case 1.24: WFRP 4e Data Structure Verification
+```
+Technical check: Verify correct data paths
+1. Update characteristic - check `system.characteristics.s.initial`
+2. Update wounds - check `system.status.wounds.value`
+3. Update fortune - check `system.status.fortune.value`
+4. Get character - verify all paths return data
+```
+**Expected Result**:
+- All WFRP 4e data paths correct
+- Initial vs advances separation maintained
+- Status values in correct locations
+- No data path errors
+
+**Success Criteria**: ✅ Data structure compliance
+
+---
+
+#### Test Case 1.25: Update vs Advance Tool Selection
+```
+Technical check: Verify tool routing
+1. "Update Test Character's Strength to 40" → Uses update-character-info
+2. "Advance Test Character's Strength by 5" → Uses advance-characteristic
+3. "Set Test Character's WP to 35" → Uses update-character-info
+4. "Increase Test Character's WP by 10" → Uses advance-characteristic
+```
+**Expected Result**:
+- Correct tool selected based on phrasing
+- "Update/set/change" triggers update tool
+- "Advance/increase" triggers advancement tool
+- No tool confusion
+
+**Success Criteria**: ✅ Tool routing works correctly
+
+---
+
+#### Test Case 1.26: Character Type Validation
+```
+Technical check: Verify WFRP character type
+1. Get character info for WFRP character → Success
+2. Get character info for non-WFRP actor → Error or warning
+3. Update WFRP character → Success
+4. Update non-WFRP actor → Validation error
+```
+**Expected Result**:
+- WFRP characters work normally
+- Non-WFRP characters handled gracefully
+- Type validation prevents errors
+- Clear messages about system requirements
+
+**Success Criteria**: ✅ Type validation enforced
+
+---
+
+#### Test Case 1.27: Concurrent Update Handling
+```
+Technical check: Multiple rapid updates
+1. "Update Test Character: Strength to 30, Toughness to 35, Agility to 32, Dexterity to 30, Initiative to 28, Willpower to 33, Intelligence to 32, Fellowship to 35"
+```
+**Expected Result**:
+- All 8 characteristics updated
+- No race conditions
+- All changes persist
+- Single transaction if possible
+
+**Success Criteria**: ✅ Bulk updates handled safely
+
+---
+
+#### Test Case 1.28: Empty Character Name Handling
+```
+Technical check: Edge case handling
+1. "Get info for ''" (empty string)
+2. "Update character '' strength to 40"
+```
+**Expected Result**:
+- Clear error: "Character name cannot be empty"
+- No crashes or undefined behavior
+- Helpful message about providing name
+
+**Success Criteria**: ✅ Empty input validated
+
+---
+
+#### Test Case 1.29: Special Characters in Names
+```
+Technical check: Character name edge cases
+1. "Get info for Test-Character" (hyphen)
+2. "Get info for Test Character!" (exclamation)
+3. "Get info for Test's Character" (apostrophe)
+```
+**Expected Result**:
+- Special characters handled
+- Exact match search works
+- No SQL injection or errors
+- Names with punctuation supported
+
+**Success Criteria**: ✅ Special character handling
+
+---
+
+#### Test Case 1.30: Maximum Data Load Test
+```
+Technical check: Character with extensive data
+Setup: Character with 50+ skills, 30+ talents, 100+ items
+Prompt: "Get complete info for Test Character"
+```
+**Expected Result**:
+- All data retrieved successfully
+- No truncation of long lists
+- Reasonable response time (<5 seconds)
+- No memory errors
+- Well-formatted despite size
+
+**Success Criteria**: ✅ Large dataset handling
+
+---
+
 ## 2. CAREER ADVANCEMENT TOOLS
 
 ### Tool: `advance-characteristic` (and related advancement tools)
@@ -263,6 +672,643 @@ Prompt: "Change Test Character's career to Sergeant"
 
 ---
 
+#### Test Case 2.5: Advance Skill - First Advance
+```
+Prompt: "Advance Test Character's Melee (Basic) skill from 0 to 1"
+```
+**Expected Result**:
+- XP cost: 5 XP (Tier 0: advances 0-4)
+- Skill advances: 0 → 1
+- Total skill value: characteristic + 1
+- XP deducted from available
+- Confirmation shows new skill value
+
+**Success Criteria**: ✅ First skill advance costs 5 XP
+
+**Technical Details**: Uses Math.floor(0 / 5) = 0, cost = 5 XP
+
+---
+
+#### Test Case 2.6: Advance Skill - Tier Boundary (5th Advance)
+```
+Setup: Skill has 4 advances
+Prompt: "Advance Test Character's Melee (Basic) skill"
+```
+**Expected Result**:
+- Current advances: 4
+- XP cost: 5 XP (still Tier 0)
+- New advances: 5
+- Next advance will cost 10 XP (Tier 1)
+- Confirmation shows tier transition warning
+
+**Success Criteria**: ✅ 5th advance costs 5 XP, 6th will cost 10 XP
+
+**Technical Details**: Math.floor(4 / 5) = 0 → 5 XP
+
+---
+
+#### Test Case 2.7: Advance Skill - Tier Boundary (6th Advance)
+```
+Setup: Skill has 5 advances
+Prompt: "Advance Test Character's Melee (Basic) skill"
+```
+**Expected Result**:
+- Current advances: 5
+- XP cost: 10 XP (Tier 1: advances 5-9)
+- New advances: 6
+- Cost increased from previous tier
+- Message: "Skill entered Tier 1 (10 XP per advance)"
+
+**Success Criteria**: ✅ 6th advance costs 10 XP (tier change)
+
+**Technical Details**: Math.floor(5 / 5) = 1 → 10 XP
+
+---
+
+#### Test Case 2.8: Advance Skill - Tier 2 (11th Advance)
+```
+Setup: Skill has 10 advances
+Prompt: "Advance Test Character's Melee (Basic) skill"
+```
+**Expected Result**:
+- Current advances: 10
+- XP cost: 20 XP (Tier 2: advances 10-14)
+- New advances: 11
+- Message: "Skill in Tier 2 (20 XP per advance)"
+
+**Success Criteria**: ✅ 11th advance costs 20 XP
+
+**Technical Details**: Math.floor(10 / 5) = 2 → 20 XP
+**CRITICAL**: This was the bug - used to cost 220 XP (array[10] instead of tier)
+
+---
+
+#### Test Case 2.9: Advance Skill - Tier 3 (16th Advance)
+```
+Setup: Skill has 15 advances
+Prompt: "Advance Test Character's Melee (Basic) skill"
+```
+**Expected Result**:
+- Current advances: 15
+- XP cost: 30 XP (Tier 3: advances 15-19)
+- New advances: 16
+- Message: "Skill in Tier 3 (30 XP per advance)"
+
+**Success Criteria**: ✅ 16th advance costs 30 XP
+
+**Technical Details**: Math.floor(15 / 5) = 3 → 30 XP
+
+---
+
+#### Test Case 2.10: Advance Skill - Tier 4 (21st Advance)
+```
+Setup: Skill has 20 advances
+Prompt: "Advance Test Character's Melee (Basic) skill"
+```
+**Expected Result**:
+- Current advances: 20
+- XP cost: 40 XP (Tier 4: advances 20+)
+- New advances: 21
+- Warning: "High skill level - advancing becomes very expensive"
+
+**Success Criteria**: ✅ 21st advance costs 40 XP
+
+**Technical Details**: Math.floor(20 / 5) = 4 → 40 XP
+
+---
+
+#### Test Case 2.11: Advance Multiple Skills
+```
+Prompt: "Advance Test Character's Melee (Basic), Dodge, and Perception skills"
+```
+**Expected Result**:
+- Each skill advanced by 1
+- XP costs calculated individually per skill's tier
+- Total XP cost shown
+- If insufficient XP: error before any changes
+- All three confirmations displayed
+
+**Success Criteria**: ✅ Multiple skills advanced in single request
+
+---
+
+#### Test Case 2.12: Advance Skill - Insufficient XP
+```
+Setup: Character has 3 XP available, skill advance costs 5 XP
+Prompt: "Advance Test Character's Melee (Basic) skill"
+```
+**Expected Result**:
+- Error: "Insufficient XP"
+- Current XP: 3
+- Required XP: 5
+- Shortage: 2 XP
+- No changes made to character
+- Skill advances unchanged
+
+**Success Criteria**: ✅ Insufficient XP prevents advancement
+
+---
+
+#### Test Case 2.13: Advance Skill - Exact XP Amount
+```
+Setup: Character has exactly 5 XP available
+Prompt: "Advance Test Character's Melee (Basic) skill"
+```
+**Expected Result**:
+- XP cost: 5 XP
+- Skill advanced successfully
+- Available XP: 5 → 0
+- Message: "All available XP spent"
+- Advance confirmed
+
+**Success Criteria**: ✅ Exact XP amount works
+
+---
+
+#### Test Case 2.14: Advance Characteristic - In-Career
+```
+Setup: Weapon Skill is in character's current career
+Prompt: "Advance Test Character's Weapon Skill characteristic"
+```
+**Expected Result**:
+- XP cost: 25 XP (in-career cost)
+- Characteristic advances increased by 1
+- Initial value unchanged
+- Total = initial + advances
+- Career-based discount applied
+- Confirmation shows "in-career advance"
+
+**Success Criteria**: ✅ In-career characteristic costs 25 XP
+
+---
+
+#### Test Case 2.15: Advance Characteristic - Out-of-Career
+```
+Setup: Intelligence is NOT in character's current career
+Prompt: "Advance Test Character's Intelligence characteristic"
+```
+**Expected Result**:
+- XP cost: 30 XP (out-of-career cost)
+- Characteristic advances increased by 1
+- Initial value unchanged
+- Higher cost than in-career
+- Confirmation shows "out-of-career advance (more expensive)"
+
+**Success Criteria**: ✅ Out-of-career characteristic costs 30 XP
+
+---
+
+#### Test Case 2.16: Advance Characteristic - Tier Boundaries
+```
+Setup: Test advances at different levels
+1. Advance WS from 0 → 1 advance (25 XP)
+2. Advance WS from 4 → 5 advances (25 XP, still Tier 0)
+3. Advance WS from 5 → 6 advances (50 XP, Tier 1)
+4. Advance WS from 10 → 11 advances (100 XP, Tier 2)
+```
+**Expected Result**:
+- Tier 0 (0-4 advances): 25 XP in-career
+- Tier 1 (5-9 advances): 50 XP in-career
+- Tier 2 (10-14 advances): 100 XP in-career
+- Each tier doubles the cost
+- Clear tier transition messages
+
+**Success Criteria**: ✅ Characteristic tiers work correctly
+
+**Technical Details**: Uses Math.floor(advances / 5) formula
+
+---
+
+#### Test Case 2.17: Advance Characteristic - Multiple Advances
+```
+Prompt: "Advance Test Character's Strength by 3 advances"
+```
+**Expected Result**:
+- Calculates cost for 3 separate advances
+- If crossing tier boundary, costs change
+- Example: 0→1 (25), 1→2 (25), 2→3 (25) = 75 XP total
+- All 3 advances applied if sufficient XP
+- Confirmation shows total XP spent
+
+**Success Criteria**: ✅ Multiple advances calculated correctly
+
+---
+
+#### Test Case 2.18: Advance Characteristic - Insufficient XP Mid-Advancement
+```
+Setup: Character has 60 XP, try to advance 3 times (25+25+25=75 XP)
+Prompt: "Advance Test Character's Strength by 3"
+```
+**Expected Result**:
+- Error: "Insufficient XP"
+- Need: 75 XP
+- Have: 60 XP
+- No partial advances applied (all-or-nothing)
+- Character unchanged
+
+**Success Criteria**: ✅ Insufficient XP prevents partial advancement
+
+---
+
+#### Test Case 2.19: Advance Talent - Basic Talent
+```
+Prompt: "Advance Test Character's Combat Reflexes talent"
+```
+**Expected Result**:
+- Talent found in compendium
+- XP cost: 100 XP (standard talent cost)
+- Talent added to character
+- XP deducted
+- Talent appears in character sheet
+- Confirmation with talent effects
+
+**Success Criteria**: ✅ Talent purchased successfully
+
+---
+
+#### Test Case 2.20: Advance Talent - Already Owned
+```
+Setup: Character already has Combat Reflexes
+Prompt: "Advance Test Character's Combat Reflexes talent"
+```
+**Expected Result**:
+- Error: "Character already has this talent"
+- OR: If talent has ranks, increase rank
+- No duplicate talents created
+- Clear message about current status
+
+**Success Criteria**: ✅ Duplicate talents prevented
+
+---
+
+#### Test Case 2.21: Career Change - Incomplete Career
+```
+Setup: Current career is NOT complete
+Prompt: "Change Test Character's career to Sergeant"
+```
+**Expected Result**:
+- Current career: Soldier (incomplete)
+- XP cost: 200 XP (incomplete penalty)
+- Warning: "Changing from incomplete career costs 200 XP"
+- New career added and marked current
+- Old career unmarked but preserved
+- Confirmation shows cost reason
+
+**Success Criteria**: ✅ Incomplete career change costs 200 XP
+
+---
+
+#### Test Case 2.22: Career Change - Complete Career
+```
+Setup: Current career IS complete (all advances done)
+Prompt: "Change Test Character's career to Sergeant"
+```
+**Expected Result**:
+- Current career: Soldier (complete)
+- XP cost: 100 XP (completed discount)
+- Message: "Completed career - reduced cost"
+- New career added
+- Career history preserved
+- Confirmation shows completion benefit
+
+**Success Criteria**: ✅ Complete career change costs 100 XP
+
+---
+
+#### Test Case 2.23: Career Change - Insufficient XP
+```
+Setup: Character has 50 XP, change requires 100/200 XP
+Prompt: "Change Test Character's career to Sergeant"
+```
+**Expected Result**:
+- Error: "Insufficient XP for career change"
+- Current XP: 50
+- Required: 100 or 200
+- No changes made
+- Suggestion to earn more XP
+
+**Success Criteria**: ✅ Career change prevented by XP shortage
+
+---
+
+#### Test Case 2.24: Career Change - Career Not Found
+```
+Prompt: "Change Test Character's career to NonExistentCareer"
+```
+**Expected Result**:
+- Error: "Career 'NonExistentCareer' not found in compendium"
+- Suggestion to check spelling
+- Examples of available careers
+- No changes made
+- Current career remains
+
+**Success Criteria**: ✅ Invalid career name handled
+
+---
+
+#### Test Case 2.25: Career Change - No Current Career
+```
+Setup: Character has no career marked as current
+Prompt: "Change Test Character's career to Sergeant"
+```
+**Expected Result**:
+- Error: "No current career found"
+- Instructions to set a current career first
+- Reference to setup guide
+- No changes made
+
+**Success Criteria**: ✅ Missing current career detected
+
+---
+
+#### Test Case 2.26: Get Career Advancement Progress
+```
+Prompt: "Show Test Character's career advancement progress"
+```
+**Expected Result**:
+- Current career name
+- Career level/tier
+- Advances in each career attribute:
+  - Characteristics: which ones, how many advances
+  - Skills: which ones, advances in each
+  - Talents: which ones acquired
+- Completion percentage
+- XP spent on current career
+- Career completion status
+
+**Success Criteria**: ✅ Complete career progress overview
+
+---
+
+#### Test Case 2.27: Get Career Advancement Costs
+```
+Prompt: "What would it cost to advance Test Character's career?"
+```
+**Expected Result**:
+- List of available career advances
+- Characteristics with costs (25 XP in-career)
+- Skills with current tier costs
+- Talents with costs (100 XP each)
+- Total XP needed for full completion
+- Current XP available
+- Recommendations for next advance
+
+**Success Criteria**: ✅ Cost breakdown displayed
+
+---
+
+#### Test Case 2.28: XP Calculation Verification
+```
+Technical check: Verify XP formula correctness
+1. Skill at 0 advances → costs 5 XP (Tier 0)
+2. Skill at 5 advances → costs 10 XP (Tier 1)
+3. Skill at 10 advances → costs 20 XP (Tier 2)
+4. Skill at 15 advances → costs 30 XP (Tier 3)
+5. Skill at 20 advances → costs 40 XP (Tier 4)
+```
+**Expected Result**:
+- All costs match formula: (Math.floor(advances / 5) + 1) * 5
+- No array index errors
+- Consistent across all skill types
+- Bug from v0.2.2.1 fixed (11th advance = 20 XP, not 220 XP)
+
+**Success Criteria**: ✅ XP formula working correctly
+
+**Reference**: See FIX_XP_COST_CALCULATION.md for bug details
+
+---
+
+### 🧪 Integration Test Scenarios
+
+#### Test Case 2.29: Full Career Progression Flow
+```
+Scenario: Character advances through career
+1. "Show Test Character's career progress"
+2. "Advance Test Character's Weapon Skill" (in-career)
+3. "Advance Test Character's Melee (Basic) skill"
+4. "Advance Test Character's Dodge skill"
+5. "Purchase Combat Reflexes talent for Test Character"
+6. "Show Test Character's career progress"
+```
+**Expected Result**:
+- Each advance successful
+- XP deducted progressively
+- Career progress increases
+- All changes persist
+- Final status shows progression
+
+**Success Criteria**: ✅ Career advancement workflow
+
+---
+
+#### Test Case 2.30: Career Change Workflow
+```
+Scenario: Complete career and change
+1. "Show Test Character's Soldier career progress"
+2. [Complete all required advances]
+3. "Check if Test Character's Soldier career is complete"
+4. "Change Test Character's career to Sergeant" (100 XP)
+5. "Show Test Character's career history"
+```
+**Expected Result**:
+- Career completion tracked
+- Career change applies correct cost
+- Both careers in character history
+- New career marked as current
+- Old career preserved
+
+**Success Criteria**: ✅ Career change progression
+
+---
+
+#### Test Case 2.31: Multi-Tier Skill Advancement
+```
+Scenario: Advance skill from 0 to 11 advances
+1. Note starting XP (need 115 XP: 5+5+5+5+5+10+10+10+10+10+20)
+2. "Advance Test Character's Melee (Basic) skill 11 times"
+```
+**Expected Result**:
+- Advances 0→1 through 10→11
+- Costs transition through tiers:
+  - Tier 0 (0-4): 5 XP × 5 = 25 XP
+  - Tier 1 (5-9): 10 XP × 5 = 50 XP
+  - Tier 2 (10): 20 XP × 1 = 20 XP
+  - Total: 95 XP
+- Final skill advances: 11
+- XP deducted: 95 XP
+- Clear progression messages
+
+**Success Criteria**: ✅ Multi-tier progression works
+
+---
+
+#### Test Case 2.32: XP Management Flow
+```
+Scenario: Track XP spending across multiple advances
+1. "Show Test Character's XP" → e.g., 500 total, 100 spent, 400 available
+2. "Advance WS" → 400 - 25 = 375 available
+3. "Advance Melee (Basic)" → 375 - 5 = 370 available
+4. "Purchase Combat Reflexes" → 370 - 100 = 270 available
+5. "Show Test Character's XP" → Verify 270 available
+```
+**Expected Result**:
+- XP tracking accurate
+- Spent XP accumulates
+- Available XP decreases
+- Total XP unchanged
+- Math adds up correctly
+
+**Success Criteria**: ✅ XP accounting correct
+
+---
+
+### 📊 Technical Validation Tests
+
+#### Test Case 2.33: UUID Construction for Career Change
+```
+Technical check: Verify career UUID pattern
+1. Change career to Sergeant
+2. Check Foundry logs for UUID
+3. Verify format: `Compendium.${pack}.${id}`
+4. Confirm uses pack + id (not uuid field)
+```
+**Expected Result**:
+- UUID: `Compendium.wfrp4e-core.careers.abc123`
+- Same pattern as critical wounds fix (v0.2.2)
+- Career successfully added from compendium
+- No UUID errors
+
+**Success Criteria**: ✅ UUID construction correct
+
+---
+
+#### Test Case 2.34: Career Completion Status Check
+```
+Technical check: Verify completion detection
+1. Check career with partial advances → incomplete
+2. Check career with all required advances → complete
+3. Verify completion affects XP cost
+4. Test edge cases (all but one advance)
+```
+**Expected Result**:
+- Completion detected accurately
+- 100 XP cost when complete
+- 200 XP cost when incomplete
+- Status clearly indicated
+
+**Success Criteria**: ✅ Completion logic works
+
+---
+
+#### Test Case 2.35: In-Career vs Out-of-Career Detection
+```
+Technical check: Verify career attribute checking
+1. Advance characteristic in career plan → 25 XP
+2. Advance characteristic not in career plan → 30 XP
+3. Advance skill in career → lower cost
+4. Advance skill not in career → higher cost
+```
+**Expected Result**:
+- Correct career membership detection
+- Appropriate costs applied
+- Clear indication of in/out status
+- Career plan respected
+
+**Success Criteria**: ✅ Career attribute detection correct
+
+---
+
+#### Test Case 2.36: Advances vs Initial Separation
+```
+Technical check: Verify update vs advance distinction
+1. Update WS to 40 → sets initial, 0 advances, 0 XP
+2. Advance WS by 5 → keeps initial, adds 5 advances, costs XP
+3. Result: total = initial + advances
+4. Verify both systems work independently
+```
+**Expected Result**:
+- Update tool: changes initial value
+- Advance tool: changes advances value
+- No interference between tools
+- Total calculated correctly
+
+**Success Criteria**: ✅ Two systems independent
+
+---
+
+#### Test Case 2.37: Concurrent Advancement Prevention
+```
+Technical check: Test race condition handling
+1. Attempt to advance same skill twice simultaneously
+2. Attempt to change career while advancing
+```
+**Expected Result**:
+- Operations serialized
+- No double-spending XP
+- No data corruption
+- Clear operation order
+
+**Success Criteria**: ✅ No race conditions
+
+---
+
+#### Test Case 2.38: Career History Preservation
+```
+Technical check: Verify career tracking
+1. Start with Soldier career
+2. Change to Sergeant
+3. Change to Captain
+4. Get character info
+5. Verify all three careers in items
+6. Only Captain marked as current
+```
+**Expected Result**:
+- All past careers preserved
+- Only one current career
+- Career progression history intact
+- No careers lost
+
+**Success Criteria**: ✅ Career history maintained
+
+---
+
+#### Test Case 2.39: XP Total Recalculation
+```
+Technical check: Verify XP math
+1. Award 100 XP to character
+2. Spend 25 XP on advance
+3. Verify: spent = 25, available = 75, total = 100
+4. Award 50 more XP
+5. Verify: spent = 25, available = 125, total = 150
+```
+**Expected Result**:
+- Total XP = spent + available (always)
+- XP accounting consistent
+- Awards increase total and available
+- Spending increases spent, decreases available
+
+**Success Criteria**: ✅ XP math correct
+
+---
+
+#### Test Case 2.40: Maximum Advancement Limits
+```
+Technical check: Test high advancement levels
+1. Advance skill to 50+ advances
+2. Advance characteristic to 30+ advances
+3. Verify costs scale correctly
+4. No overflow errors
+```
+**Expected Result**:
+- No maximum limit enforced (or very high)
+- Costs continue scaling by tier
+- No integer overflow
+- System handles high values
+
+**Success Criteria**: ✅ High advancement levels work
+
+---
+
 ## 3. CORRUPTION & MUTATION TOOLS
 
 ### Tool: `foundry-add-corruption`
@@ -322,6 +1368,541 @@ Prompt: "Remove 2 corruption points from Test Character"
 - Confirmation message
 
 **Success Criteria**: ✅ Corruption value decreases appropriately
+
+---
+
+#### Test Case 3.5: Add Corruption - Threshold Check
+```
+Setup: Character has 2 corruption, Toughness Bonus = 4
+Prompt: "Add 2 corruption points to Test Character for reading forbidden texts"
+```
+**Expected Result**:
+- Corruption: 2 → 4
+- Threshold reached: 4 (= TB)
+- Warning: "Corruption at threshold! Roll on Mutation Table!"
+- Mutation roll suggested
+- Reason logged if supported
+- No automatic mutation (GM decides)
+
+**Success Criteria**: ✅ Threshold warning triggered
+
+**Technical Details**: Threshold typically = Toughness Bonus in WFRP 4e
+
+---
+
+#### Test Case 3.6: Add Corruption - Exceed Threshold
+```
+Setup: Character has 4 corruption, Toughness Bonus = 4
+Prompt: "Add 1 corruption point to Test Character"
+```
+**Expected Result**:
+- Corruption: 4 → 5
+- Exceeds threshold: 5 > 4
+- ⚠️ "MUTATION REQUIRED! Corruption exceeded Toughness Bonus!"
+- Strong warning to roll mutation
+- Character marked for mutation
+- Corruption continues to increase
+
+**Success Criteria**: ✅ Threshold exceeded warning
+
+---
+
+#### Test Case 3.7: Add Corruption - Multiple Thresholds
+```
+Setup: Character has 7 corruption, TB = 4
+Prompt: "Add 1 corruption point to Test Character"
+```
+**Expected Result**:
+- Corruption: 7 → 8
+- Threshold: 8 = 2 × TB (second threshold)
+- Warning: "Second mutation threshold! Roll again!"
+- Multiple mutations possible
+- Escalating corruption severity
+
+**Success Criteria**: ✅ Multiple thresholds tracked
+
+---
+
+#### Test Case 3.8: Add Corruption - With Reason
+```
+Prompt: "Add 3 corruption to Test Character because they made a dark pact with chaos"
+```
+**Expected Result**:
+- Corruption increased by 3
+- Reason recorded: "made a dark pact with chaos"
+- Reason visible in character log/journal
+- Source tracking for narrative purposes
+- Confirmation includes reason
+
+**Success Criteria**: ✅ Corruption reason logged
+
+---
+
+#### Test Case 3.9: Add Corruption - Large Amount
+```
+Prompt: "Add 10 corruption points to Test Character for prolonged chaos exposure"
+```
+**Expected Result**:
+- Corruption increased by 10
+- Multiple threshold warnings
+- Suggestion for multiple mutations
+- Character heavily corrupted
+- Dramatic warnings about corruption level
+
+**Success Criteria**: ✅ Large corruption increase handled
+
+---
+
+#### Test Case 3.10: Add Corruption - Zero Amount
+```
+Prompt: "Add 0 corruption points to Test Character"
+```
+**Expected Result**:
+- Error: "Corruption amount must be greater than 0"
+- OR: No change, confirmation of no change
+- No corruption added
+- Current corruption unchanged
+
+**Success Criteria**: ✅ Zero amount handled
+
+---
+
+#### Test Case 3.11: Add Corruption - Negative Amount
+```
+Prompt: "Add -5 corruption points to Test Character"
+```
+**Expected Result**:
+- Error: "Use remove-corruption to reduce corruption"
+- OR: Automatic conversion to remove operation
+- Prevents confusion between add/remove
+- Clear guidance on correct tool
+
+**Success Criteria**: ✅ Negative amount rejected
+
+---
+
+#### Test Case 3.12: Remove Corruption - Partial Removal
+```
+Setup: Character has 5 corruption points
+Prompt: "Remove 2 corruption points from Test Character"
+```
+**Expected Result**:
+- Corruption: 5 → 3
+- Confirmation of removal
+- Reason: cleansing, prayer, ritual, etc. (if logged)
+- Character still has corruption
+- Progress toward cleansing noted
+
+**Success Criteria**: ✅ Partial corruption removed
+
+---
+
+#### Test Case 3.13: Remove Corruption - Complete Cleansing
+```
+Setup: Character has 3 corruption points
+Prompt: "Remove 3 corruption points from Test Character"
+```
+**Expected Result**:
+- Corruption: 3 → 0
+- ✅ "Character fully cleansed of corruption!"
+- Dramatic confirmation
+- Threshold status reset
+- Character pure again
+
+**Success Criteria**: ✅ Full corruption removal
+
+---
+
+#### Test Case 3.14: Remove Corruption - More Than Current
+```
+Setup: Character has 2 corruption
+Prompt: "Remove 5 corruption points from Test Character"
+```
+**Expected Result**:
+- Corruption: 2 → 0 (clamped at minimum)
+- Warning: "Only had 2 corruption to remove"
+- Cannot go negative
+- Character cleansed fully
+- Confirmation shows actual amount removed
+
+**Success Criteria**: ✅ Excess removal clamped to zero
+
+---
+
+#### Test Case 3.15: Remove Corruption - At Zero
+```
+Setup: Character has 0 corruption
+Prompt: "Remove 1 corruption point from Test Character"
+```
+**Expected Result**:
+- Error: "Character has no corruption to remove"
+- Current corruption: 0
+- No change made
+- Message: "Character is already pure"
+
+**Success Criteria**: ✅ Zero corruption state handled
+
+---
+
+#### Test Case 3.16: Remove Corruption - Below Threshold
+```
+Setup: Character has 5 corruption (above TB of 4)
+Prompt: "Remove 2 corruption points from Test Character"
+```
+**Expected Result**:
+- Corruption: 5 → 3
+- Now below threshold: 3 < 4
+- Message: "Corruption reduced below mutation threshold"
+- Note: Mutations already gained remain
+- Threshold status updated
+
+**Success Criteria**: ✅ Threshold crossing downward handled
+
+---
+
+#### Test Case 3.17: Add Mutation - Mental Type
+```
+Prompt: "Add mutation 'Animalistic Legs' to Test Character, type mental"
+```
+**Expected Result**:
+- Mutation "Animalistic Legs" added
+- Type: Mental
+- Description and effects from compendium
+- Mutation count incremented
+- Visible in character mutations list
+- Mechanical effects noted
+
+**Success Criteria**: ✅ Mental mutation added
+
+---
+
+#### Test Case 3.18: Add Mutation - Physical Type
+```
+Prompt: "Add mutation 'Warped Face' to Test Character, type physical"
+```
+**Expected Result**:
+- Mutation "Warped Face" added
+- Type: Physical
+- Description includes appearance changes
+- Fellowship penalties noted
+- Social implications described
+- Mutation visible on character
+
+**Success Criteria**: ✅ Physical mutation added
+
+---
+
+#### Test Case 3.19: Add Mutation - UUID Construction
+```
+Technical check: Verify mutation added from compendium
+1. Add mutation "Animalistic Legs"
+2. Check Foundry logs for UUID
+3. Verify format: `Compendium.${pack}.${id}`
+4. Confirm uses pack + id pattern
+```
+**Expected Result**:
+- UUID: `Compendium.wfrp4e-core.mutations.abc123`
+- Same pattern as career change (v0.2.2)
+- Mutation successfully added from compendium
+- Official effects from compendium applied
+
+**Success Criteria**: ✅ UUID construction correct
+
+**Reference**: Third tool using this pattern (career, critical wounds, mutations)
+
+---
+
+#### Test Case 3.20: Add Mutation - Not Found
+```
+Prompt: "Add mutation 'NonExistentMutation123' to Test Character"
+```
+**Expected Result**:
+- Error: "Mutation 'NonExistentMutation123' not found in compendium"
+- Suggestion to check spelling
+- Examples of common mutations listed
+- No changes to character
+- Search suggestions provided
+
+**Success Criteria**: ✅ Invalid mutation name handled
+
+---
+
+#### Test Case 3.21: Add Mutation - Duplicate Check
+```
+Setup: Character already has "Animalistic Legs"
+Prompt: "Add mutation 'Animalistic Legs' to Test Character"
+```
+**Expected Result**:
+- Warning: "Character already has this mutation"
+- OR: If stackable, increase severity
+- No exact duplicates
+- Mutation list remains clean
+- Current status shown
+
+**Success Criteria**: ✅ Duplicate mutations prevented
+
+---
+
+#### Test Case 3.22: Add Mutation - Auto-Assignment from Corruption
+```
+Scenario: Corruption triggers mutation
+1. "Add 5 corruption to Test Character" (exceeds threshold)
+2. "Roll random mutation for Test Character"
+```
+**Expected Result**:
+- Corruption increase triggers warning
+- Mutation rolled from appropriate table
+- Random mutation added
+- Type (mental/physical) determined
+- Full integration of corruption and mutation
+
+**Success Criteria**: ✅ Corruption-to-mutation flow
+
+---
+
+#### Test Case 3.23: Remove Mutation
+```
+Setup: Character has mutation "Animalistic Legs"
+Prompt: "Remove mutation 'Animalistic Legs' from Test Character"
+```
+**Expected Result**:
+- Mutation found and removed
+- Mutation count decremented
+- Effects no longer apply
+- Confirmation message
+- Note: Usually permanent in WFRP 4e
+- Warning about rarity of mutation removal
+
+**Success Criteria**: ✅ Mutation removed (if tool exists)
+
+---
+
+#### Test Case 3.24: Get Corruption Status
+```
+Prompt: "Show Test Character's corruption and mutations"
+```
+**Expected Result**:
+- Current corruption points
+- Toughness Bonus threshold
+- Distance to next threshold
+- Visual indicator (e.g., 🔴 if above threshold)
+- List of all mutations:
+  - Name
+  - Type (mental/physical)
+  - Effects
+  - Description
+- Corruption history (if tracked)
+- Cleansing recommendations
+
+**Success Criteria**: ✅ Complete corruption overview
+
+---
+
+#### Test Case 3.25: Corruption and Toughness Bonus Interaction
+```
+Scenario: Character's Toughness changes
+Setup: Character has 5 corruption, TB = 4 (above threshold)
+1. "Show corruption status" → Above threshold
+2. "Advance Test Character's Toughness by 5" → TB increases to 5
+3. "Show corruption status" → Now at threshold (5 = 5)
+```
+**Expected Result**:
+- Threshold dynamically calculated from current TB
+- Threshold status updates when TB changes
+- Corruption value unchanged
+- Relative status changes (above → at threshold)
+
+**Success Criteria**: ✅ Dynamic threshold calculation
+
+---
+
+### 🧪 Integration Test Scenarios
+
+#### Test Case 3.26: Corruption Accumulation Over Campaign
+```
+Scenario: Character gains corruption from multiple sources
+1. "Add 1 corruption to Test Character for witnessing dark magic"
+2. "Add 2 corruption to Test Character for entering chaos shrine"
+3. "Add 1 corruption to Test Character for touching warpstone"
+4. "Show Test Character's corruption" → Total: 4
+5. "Add 1 corruption to Test Character" → Threshold exceeded
+6. "Add mutation 'Warped Face' to Test Character, physical"
+```
+**Expected Result**:
+- Corruption accumulates over time
+- Each source tracked (if supported)
+- Threshold warning at appropriate point
+- Mutation added when threshold exceeded
+- Complete narrative tracking
+
+**Success Criteria**: ✅ Corruption campaign tracking
+
+---
+
+#### Test Case 3.27: Multiple Mutations Workflow
+```
+Scenario: Character gains multiple mutations
+1. "Add 4 corruption to Test Character" (first threshold)
+2. "Add mutation 'Animalistic Legs' mental"
+3. "Add 4 more corruption" (8 total, second threshold)
+4. "Add mutation 'Warped Face' physical"
+5. "Show Test Character's mutations"
+```
+**Expected Result**:
+- Both mutations added
+- Corruption at 8 (2× threshold)
+- Mutation list shows both
+- Types correctly categorized
+- Cumulative effects described
+
+**Success Criteria**: ✅ Multiple mutations tracked
+
+---
+
+#### Test Case 3.28: Cleansing Ritual Workflow
+```
+Scenario: Character undergoes cleansing
+Setup: Character has 8 corruption, 2 mutations
+1. "Show Test Character's corruption" → 8 corruption
+2. "Remove 4 corruption from Test Character" → 4 remaining
+3. "Show corruption status" → Below second threshold
+4. Note: Mutations remain (permanent)
+```
+**Expected Result**:
+- Corruption reduced
+- Threshold status improves
+- Mutations persist (as per WFRP rules)
+- Partial redemption achieved
+- Character less likely to gain more mutations
+
+**Success Criteria**: ✅ Cleansing reduces future risk
+
+---
+
+#### Test Case 3.29: Corruption Death Spiral
+```
+Scenario: Character becomes heavily corrupted
+1. Add corruption to 12+ points (3× TB)
+2. Add 3+ mutations
+3. Show status → Severely mutated
+```
+**Expected Result**:
+- High corruption tracked
+- Multiple thresholds crossed
+- Many mutations listed
+- Character transformation evident
+- Warnings about chaos influence
+
+**Success Criteria**: ✅ Extreme corruption handled
+
+---
+
+### 📊 Technical Validation Tests
+
+#### Test Case 3.30: Corruption Data Persistence
+```
+Technical check: Verify corruption saves
+1. Add 5 corruption points
+2. Get character info → Verify 5 corruption
+3. Refresh Foundry VTT
+4. Get character info again → Still 5 corruption
+```
+**Expected Result**:
+- Corruption persists across sessions
+- No data loss
+- Value stored in character data
+- Mutations also persist
+
+**Success Criteria**: ✅ Data persistence verified
+
+---
+
+#### Test Case 3.31: Mutation Compendium Integration
+```
+Technical check: Verify compendium access
+1. Search for mutation "Animalistic Legs"
+2. Verify found in compendium
+3. Check UUID construction
+4. Verify effects loaded from compendium
+```
+**Expected Result**:
+- Compendium search works
+- Mutations found by name
+- UUID pattern correct
+- Official data used
+
+**Success Criteria**: ✅ Compendium integration working
+
+---
+
+#### Test Case 3.32: Threshold Calculation Accuracy
+```
+Technical check: Verify threshold math
+1. Character with TB = 3 → thresholds at 3, 6, 9, 12
+2. Character with TB = 5 → thresholds at 5, 10, 15, 20
+3. Character with TB = 0 → threshold at 0 (immediate mutation)
+```
+**Expected Result**:
+- Thresholds = TB × multiplier
+- First threshold at TB
+- Subsequent thresholds at multiples
+- TB = 0 handled as edge case
+
+**Success Criteria**: ✅ Threshold formula correct
+
+---
+
+#### Test Case 3.33: Corruption Type Handling
+```
+Technical check: Verify data types
+1. Add corruption with integer → works
+2. Add corruption with decimal → rounded or error
+3. Add corruption with string → error
+4. Add corruption with negative → error or remove operation
+```
+**Expected Result**:
+- Integer values accepted
+- Type validation prevents errors
+- Clear error messages for wrong types
+- Robust input handling
+
+**Success Criteria**: ✅ Type validation working
+
+---
+
+#### Test Case 3.34: Mutation Type Validation
+```
+Technical check: Verify mutation types
+1. Add mutation with type "mental" → accepted
+2. Add mutation with type "physical" → accepted
+3. Add mutation with type "invalid" → error
+4. Add mutation with no type → default or error
+```
+**Expected Result**:
+- Only "mental" and "physical" accepted
+- Invalid types rejected
+- Clear error messages
+- Type enforcement working
+
+**Success Criteria**: ✅ Mutation type validation
+
+---
+
+#### Test Case 3.35: Corruption and Mutation Separation
+```
+Technical check: Verify independent tracking
+1. Add corruption without mutation → corruption increases
+2. Add mutation without corruption → mutation added
+3. Remove corruption → mutations remain
+4. Remove mutation → corruption remains
+```
+**Expected Result**:
+- Corruption and mutations independent
+- Can have corruption without mutations
+- Can have mutations without high corruption
+- Separate data fields
+
+**Success Criteria**: ✅ Independent tracking verified
 
 ---
 
@@ -464,50 +2045,1352 @@ Prompt: "Test Character refreshes their resolve points by acting on their Motiva
 
 ---
 
+#### Test Case 4.11: Add Fortune - At Maximum
+```
+Setup: Character has Fortune = Fate (e.g., 3/3)
+Prompt: "Add 1 fortune point to Test Character"
+```
+**Expected Result**:
+- Error: "Fortune already at maximum (Fate value)"
+- Current: 3/3
+- Cannot exceed Fate value
+- No change made
+- Message explains Fortune cap
+
+**Success Criteria**: ✅ Fortune capped at Fate maximum
+
+---
+
+#### Test Case 4.12: Add Fortune - Below Maximum
+```
+Setup: Character has Fortune = 1, Fate = 3 (1/3)
+Prompt: "Add 1 fortune point to Test Character"
+```
+**Expected Result**:
+- Fortune: 1 → 2
+- Still below maximum (2/3)
+- Confirmation message
+- Can continue adding until reaches Fate
+
+**Success Criteria**: ✅ Fortune increased below maximum
+
+---
+
+#### Test Case 4.13: Add Multiple Fortune Points
+```
+Setup: Character has Fortune = 0, Fate = 3 (0/3)
+Prompt: "Add 3 fortune points to Test Character"
+```
+**Expected Result**:
+- Fortune: 0 → 3
+- Now at maximum (3/3)
+- Confirmation of full restoration
+- Ready for challenges
+
+**Success Criteria**: ✅ Multiple fortune points added
+
+---
+
+#### Test Case 4.14: Add Fortune - Exceed Maximum
+```
+Setup: Character has Fortune = 2, Fate = 3 (2/3)
+Prompt: "Add 5 fortune points to Test Character"
+```
+**Expected Result**:
+- Fortune: 2 → 3 (capped)
+- Warning: "Fortune capped at Fate value (3)"
+- Only added 1 point (to maximum)
+- Excess ignored
+- Message shows actual amount added
+
+**Success Criteria**: ✅ Excess fortune capped at maximum
+
+---
+
+#### Test Case 4.15: Spend Fortune - Normal Use
+```
+Setup: Character has Fortune = 3/3
+Prompt: "Test Character spends a fortune point to reroll a failed Weapon Skill test"
+```
+**Expected Result**:
+- Fortune: 3 → 2
+- Reason logged: "reroll failed Weapon Skill test"
+- Confirmation message
+- Mechanical guidance on reroll
+- Fortune still available (2 remaining)
+
+**Success Criteria**: ✅ Fortune spent with reason
+
+---
+
+#### Test Case 4.16: Spend Fortune - Last Point
+```
+Setup: Character has Fortune = 1/3
+Prompt: "Test Character spends fortune to add +1 SL"
+```
+**Expected Result**:
+- Fortune: 1 → 0
+- Warning: "No fortune points remaining!"
+- Reason logged
+- Message about being vulnerable
+- Suggestion to rest or find blessing
+
+**Success Criteria**: ✅ Last fortune point spent
+
+---
+
+#### Test Case 4.17: Spend Fortune - Already at Zero
+```
+Setup: Character has Fortune = 0/3
+Prompt: "Test Character spends a fortune point"
+```
+**Expected Result**:
+- Error: "No fortune points available to spend"
+- Current: 0/3
+- No change made
+- Suggestion to rest or earn fortune
+- Cannot spend what you don't have
+
+**Success Criteria**: ✅ Cannot spend zero fortune
+
+---
+
+#### Test Case 4.18: Spend Fortune - Multiple Uses
+```
+Setup: Character has Fortune = 3/3
+Scenario: Combat encounter
+1. "Spend fortune to reroll attack" → 2/3
+2. "Spend fortune to ignore wound" → 1/3
+3. "Spend fortune to add +1 SL" → 0/3
+```
+**Expected Result**:
+- Each use decrements by 1
+- Each reason logged separately
+- Progressive depletion
+- All uses valid
+- Final state: 0/3
+
+**Success Criteria**: ✅ Multiple fortune expenditures
+
+---
+
+#### Test Case 4.19: Add Fate - Permanent Increase
+```
+Prompt: "Increase Test Character's fate by 1 for their heroic sacrifice"
+```
+**Expected Result**:
+- Fate: e.g., 3 → 4
+- Fortune maximum: also 4
+- Current fortune unchanged (unless auto-filled)
+- ⭐ Dramatic confirmation: "Fate permanently increased!"
+- Reason logged: "heroic sacrifice"
+- Rare and significant event
+
+**Success Criteria**: ✅ Fate permanently increased
+
+---
+
+#### Test Case 4.20: Add Fate - Multiple Increases (Rare)
+```
+Prompt: "Increase Test Character's fate by 2 for legendary deeds"
+```
+**Expected Result**:
+- Fate: e.g., 3 → 5
+- Fortune maximum: also 5
+- Warning: "Multiple Fate increases are extremely rare!"
+- Epic confirmation message
+- Requires exceptional circumstances
+
+**Success Criteria**: ✅ Multiple fate increases handled
+
+---
+
+#### Test Case 4.21: Spend Fate - Cheat Death
+```
+Prompt: "Test Character burns a fate point to survive certain death from critical wounds"
+```
+**Expected Result**:
+- Fate: e.g., 3 → 2 (permanent reduction)
+- Fortune maximum: also reduced to 2
+- Current fortune: reduced if above new maximum
+- ☠️➡️✅ Dramatic message: "FATE POINT BURNED! Character survives death!"
+- Reason logged: "survive certain death from critical wounds"
+- Mechanical explanation of survival
+- Warning: Permanent loss
+
+**Success Criteria**: ✅ Fate point burned, character survives
+
+---
+
+#### Test Case 4.22: Spend Fate - At Zero Fate
+```
+Setup: Character has Fate = 0
+Prompt: "Test Character burns a fate point"
+```
+**Expected Result**:
+- Error: "No fate points remaining to burn"
+- Current: 0
+- Character cannot cheat death
+- ☠️ "Character has no fate points left - death is final!"
+- Grave warning
+- No change made
+
+**Success Criteria**: ✅ Cannot burn zero fate
+
+---
+
+#### Test Case 4.23: Spend Fate - Fortune Adjustment
+```
+Setup: Character has Fate = 3, Fortune = 3/3
+Prompt: "Test Character burns a fate point"
+```
+**Expected Result**:
+- Fate: 3 → 2
+- Fortune maximum: 3 → 2
+- Current fortune: 3 → 2 (auto-adjusted)
+- Both values decrease together
+- Fortune cannot exceed new maximum
+- Clear explanation of both changes
+
+**Success Criteria**: ✅ Fortune adjusted with fate burn
+
+---
+
+#### Test Case 4.24: Add Resolve - Below Maximum
+```
+Setup: Character has Resolve = 1, Resilience = 3 (1/3)
+Prompt: "Add 1 resolve point to Test Character"
+```
+**Expected Result**:
+- Resolve: 1 → 2
+- Still below Resilience maximum (2/3)
+- Confirmation message
+- Can continue adding until reaches Resilience
+
+**Success Criteria**: ✅ Resolve increased below maximum
+
+---
+
+#### Test Case 4.25: Add Resolve - At Maximum
+```
+Setup: Character has Resolve = 3, Resilience = 3 (3/3)
+Prompt: "Add 1 resolve point to Test Character"
+```
+**Expected Result**:
+- Error: "Resolve already at maximum (Resilience value)"
+- Current: 3/3
+- Cannot exceed Resilience
+- No change made
+- Explanation of resolve cap
+
+**Success Criteria**: ✅ Resolve capped at Resilience maximum
+
+---
+
+#### Test Case 4.26: Add Resolve - Multiple Points
+```
+Setup: Character has Resolve = 0, Resilience = 3 (0/3)
+Prompt: "Add 3 resolve points to Test Character"
+```
+**Expected Result**:
+- Resolve: 0 → 3
+- Now at maximum (3/3)
+- Full restoration
+- Ready for mental challenges
+
+**Success Criteria**: ✅ Multiple resolve points added
+
+---
+
+#### Test Case 4.27: Spend Resolve - Ignore Psychology
+```
+Setup: Character has Resolve = 3/3
+Prompt: "Test Character spends a resolve point to ignore Fear from the Daemon"
+```
+**Expected Result**:
+- Resolve: 3 → 2
+- Usage type: "ignore-psychology"
+- Reason: "ignore Fear from the Daemon"
+- Mechanical guidance: automatically pass Fear test
+- Confirmation with rules explanation
+- Resolve still available (2 remaining)
+
+**Success Criteria**: ✅ Resolve spent for psychology
+
+---
+
+#### Test Case 4.28: Spend Resolve - Remove Condition
+```
+Setup: Character has Resolve = 2/3, has Broken condition
+Prompt: "Test Character spends resolve to remove Broken condition"
+```
+**Expected Result**:
+- Resolve: 2 → 1
+- Usage type: "remove-condition"
+- Broken condition removed immediately
+- Character can act again
+- Powerful recovery option
+- Confirmation of condition removal
+
+**Success Criteria**: ✅ Resolve spent to remove condition
+
+---
+
+#### Test Case 4.29: Spend Resolve - At Zero
+```
+Setup: Character has Resolve = 0/3
+Prompt: "Test Character spends a resolve point"
+```
+**Expected Result**:
+- Error: "No resolve points available to spend"
+- Current: 0/3
+- No change made
+- Suggestion to refresh resolve via Motivation
+- Cannot spend without points
+
+**Success Criteria**: ✅ Cannot spend zero resolve
+
+---
+
+#### Test Case 4.30: Add Resilience - Permanent Increase
+```
+Prompt: "Increase Test Character's resilience by 1 for nourishing their soul through Motivation"
+```
+**Expected Result**:
+- Resilience: e.g., 3 → 4
+- Resolve maximum: also 4
+- Current resolve unchanged (unless auto-filled)
+- ⭐ Dramatic confirmation: "Resilience permanently increased!"
+- Reason: "nourishing soul through Motivation"
+- Rare event, tied to character growth
+
+**Success Criteria**: ✅ Resilience permanently increased
+
+---
+
+#### Test Case 4.31: Spend Resilience - Deny Mutation
+```
+Prompt: "Test Character spends a resilience point to deny a Chaos mutation"
+```
+**Expected Result**:
+- Resilience: e.g., 3 → 2 (permanent reduction)
+- Resolve maximum: also reduced to 2
+- Current resolve: reduced if above new maximum
+- Usage type: "deny-mutation"
+- ☠️➡️✅ "RESILIENCE BURNED! Mutation denied!"
+- Mutation NOT added to character
+- Reason logged: "deny Chaos mutation"
+- Permanent sacrifice for purity
+
+**Success Criteria**: ✅ Resilience burned, mutation prevented
+
+---
+
+#### Test Case 4.32: Spend Resilience - Auto-Succeed
+```
+Prompt: "Test Character spends resilience to automatically succeed at Cool test against Terror"
+```
+**Expected Result**:
+- Resilience: e.g., 3 → 2 (permanent)
+- Resolve maximum: also reduced to 2
+- Usage type: "auto-succeed"
+- Test automatically passed
+- No roll needed
+- Dramatic confirmation
+- Warning about permanent loss
+
+**Success Criteria**: ✅ Resilience burned for auto-success
+
+---
+
+#### Test Case 4.33: Spend Resilience - At Zero
+```
+Setup: Character has Resilience = 0
+Prompt: "Test Character spends a resilience point"
+```
+**Expected Result**:
+- Error: "No resilience points remaining to burn"
+- Current: 0
+- Cannot burn resilience
+- ☠️ "Character has no resilience left!"
+- Grave warning about vulnerability
+- No change made
+
+**Success Criteria**: ✅ Cannot burn zero resilience
+
+---
+
+#### Test Case 4.34: Spend Resilience - Resolve Adjustment
+```
+Setup: Character has Resilience = 3, Resolve = 3/3
+Prompt: "Test Character burns resilience to deny mutation"
+```
+**Expected Result**:
+- Resilience: 3 → 2
+- Resolve maximum: 3 → 2
+- Current resolve: 3 → 2 (auto-adjusted)
+- Both values decrease together
+- Resolve cannot exceed new maximum
+- Clear explanation of both changes
+
+**Success Criteria**: ✅ Resolve adjusted with resilience burn
+
+---
+
+#### Test Case 4.35: Refresh Resolve - To Maximum
+```
+Setup: Character has Resolve = 0, Resilience = 3 (0/3)
+Prompt: "Test Character refreshes their resolve by acting on their Motivation"
+```
+**Expected Result**:
+- Resolve: 0 → 3 (full restoration)
+- Message: "Resolve fully refreshed!"
+- Thematic text about Motivation
+- Character ready for challenges
+- Encouragement to roleplay Motivation
+
+**Success Criteria**: ✅ Resolve fully refreshed
+
+---
+
+#### Test Case 4.36: Refresh Resolve - Partial Use
+```
+Setup: Character has Resolve = 1, Resilience = 3 (1/3)
+Prompt: "Refresh Test Character's resolve"
+```
+**Expected Result**:
+- Resolve: 1 → 3
+- Message: "Resolve refreshed to maximum!"
+- 2 points restored
+- Motivation-based recovery
+- Confirmation of full restoration
+
+**Success Criteria**: ✅ Resolve refreshed from partial
+
+---
+
+#### Test Case 4.37: Refresh Resolve - Already at Maximum
+```
+Setup: Character has Resolve = 3, Resilience = 3 (3/3)
+Prompt: "Refresh Test Character's resolve"
+```
+**Expected Result**:
+- Resolve: 3 (unchanged)
+- Message: "Resolve already at maximum"
+- No change needed
+- Confirmation of full resolve
+- No waste of action
+
+**Success Criteria**: ✅ Refresh at maximum handled
+
+---
+
+#### Test Case 4.38: Refresh Resolve - After Resilience Burn
+```
+Setup: Character burned resilience, now has Resilience = 2, Resolve = 0/2
+Prompt: "Refresh Test Character's resolve"
+```
+**Expected Result**:
+- Resolve: 0 → 2 (to new maximum)
+- Refreshes to current Resilience value
+- Permanent resilience loss reflected
+- Can only restore to new maximum
+- Clear explanation of limits
+
+**Success Criteria**: ✅ Refresh respects lowered maximum
+
+---
+
+### 🧪 Integration Test Scenarios
+
+#### Test Case 4.39: Fortune/Fate Cycle - Complete Flow
+```
+Scenario: Character uses and restores Fortune
+1. "Show Test Character's fortune" → 3/3
+2. "Spend fortune to reroll" → 2/3
+3. "Spend fortune to ignore wound" → 1/3
+4. "Spend fortune for +1 SL" → 0/3
+5. "Add 3 fortune points" → 3/3 (after rest)
+6. "Show fortune status" → Verify 3/3
+```
+**Expected Result**:
+- Fortune depletes through use
+- Can be restored to maximum
+- Fate maximum unchanged
+- Complete cycle functional
+- Ready for next adventure
+
+**Success Criteria**: ✅ Fortune cycle works
+
+---
+
+#### Test Case 4.40: Fate Point Burn - Death and Survival
+```
+Scenario: Character dies and burns Fate
+Setup: Character at 0 wounds, would die from critical
+1. "Check Test Character's death status" → Would die
+2. "Test Character burns a fate point to survive" → Fate reduced
+3. "Show Test Character's fate" → Permanent reduction
+4. Character survives, wounds set to 1
+```
+**Expected Result**:
+- Death prevented by Fate burn
+- Fate permanently reduced
+- Fortune maximum also reduced
+- Character survives but scarred
+- Dramatic survival narration
+
+**Success Criteria**: ✅ Fate burn saves life
+
+---
+
+#### Test Case 4.41: Resolve/Resilience Cycle - Complete Flow
+```
+Scenario: Character uses and refreshes Resolve
+1. "Show Test Character's resolve" → 3/3
+2. "Spend resolve to ignore Fear" → 2/3
+3. "Spend resolve to remove Broken" → 1/3
+4. "Spend resolve to ignore Terror" → 0/3
+5. "Refresh Test Character's resolve" → 3/3
+6. "Show resolve status" → Verify 3/3
+```
+**Expected Result**:
+- Resolve depletes through challenges
+- Can be refreshed via Motivation
+- Resilience maximum unchanged
+- Complete cycle functional
+- Psychological resilience maintained
+
+**Success Criteria**: ✅ Resolve cycle works
+
+---
+
+#### Test Case 4.42: Resilience Burn - Mutation Prevention
+```
+Scenario: Character prevents mutation via Resilience
+Setup: Character at corruption threshold, would gain mutation
+1. "Add corruption to trigger mutation" → Threshold exceeded
+2. "Test Character burns resilience to deny mutation" → Resilience reduced
+3. "Show Test Character's resilience" → Permanent reduction
+4. "Show mutations" → No new mutation added
+```
+**Expected Result**:
+- Mutation prevented by Resilience burn
+- Resilience permanently reduced
+- Resolve maximum also reduced
+- Corruption remains but no mutation
+- Character preserves purity
+
+**Success Criteria**: ✅ Resilience burn prevents mutation
+
+---
+
+#### Test Case 4.43: Multiple Resource Management
+```
+Scenario: Character manages all four resources
+1. "Show Test Character's Fortune, Fate, Resolve, Resilience"
+2. "Spend fortune" → Fortune decreases
+3. "Spend resolve" → Resolve decreases
+4. "Burn fate" → Fate & Fortune max decrease
+5. "Burn resilience" → Resilience & Resolve max decrease
+6. "Show all resources" → Verify all changes
+```
+**Expected Result**:
+- All four resources tracked independently
+- Burning affects maximums appropriately
+- Spending affects current values
+- Complete resource economy visible
+- Strategic decision-making supported
+
+**Success Criteria**: ✅ All resources managed correctly
+
+---
+
+#### Test Case 4.44: Fortune Restoration After Fate Burn
+```
+Scenario: Fate burn reduces Fortune maximum
+Setup: Fate = 3, Fortune = 3/3
+1. "Burn fate point" → Fate = 2, Fortune max = 2
+2. Current Fortune = 2/2 (auto-adjusted)
+3. "Spend fortune" → 1/2
+4. "Add fortune" → 2/2 (to new maximum)
+```
+**Expected Result**:
+- Fortune can be restored to new maximum
+- Cannot exceed reduced Fate value
+- System adapts to new limits
+- No attempting to restore above cap
+
+**Success Criteria**: ✅ Fortune respects new maximum
+
+---
+
+#### Test Case 4.45: Resolve Restoration After Resilience Burn
+```
+Scenario: Resilience burn reduces Resolve maximum
+Setup: Resilience = 3, Resolve = 3/3
+1. "Burn resilience" → Resilience = 2, Resolve max = 2
+2. Current Resolve = 2/2 (auto-adjusted)
+3. "Spend resolve" → 1/2
+4. "Refresh resolve" → 2/2 (to new maximum)
+```
+**Expected Result**:
+- Resolve refreshes to new maximum
+- Cannot exceed reduced Resilience value
+- System adapts to permanent loss
+- Refresh still functional
+
+**Success Criteria**: ✅ Resolve respects new maximum
+
+---
+
+### 📊 Technical Validation Tests
+
+#### Test Case 4.46: Fortune-Fate Maximum Linkage
+```
+Technical check: Verify Fortune capped by Fate
+1. Set Fate = 2
+2. Try to add Fortune to 3 → Capped at 2
+3. Increase Fate to 4
+4. Add Fortune to 4 → Success
+5. Verify Fortune ≤ Fate always
+```
+**Expected Result**:
+- Fortune maximum = Fate value
+- Hard cap enforced
+- Dynamic adjustment when Fate changes
+- No Fortune > Fate ever
+
+**Success Criteria**: ✅ Fortune-Fate linkage correct
+
+---
+
+#### Test Case 4.47: Resolve-Resilience Maximum Linkage
+```
+Technical check: Verify Resolve capped by Resilience
+1. Set Resilience = 2
+2. Try to add Resolve to 3 → Capped at 2
+3. Increase Resilience to 4
+4. Add Resolve to 4 → Success
+5. Verify Resolve ≤ Resilience always
+```
+**Expected Result**:
+- Resolve maximum = Resilience value
+- Hard cap enforced
+- Dynamic adjustment when Resilience changes
+- No Resolve > Resilience ever
+
+**Success Criteria**: ✅ Resolve-Resilience linkage correct
+
+---
+
+#### Test Case 4.48: Data Persistence Across Sessions
+```
+Technical check: Verify persistence
+1. Spend Fortune to 1/3
+2. Burn Fate to 2
+3. Spend Resolve to 1/3
+4. Burn Resilience to 2
+5. Refresh Foundry VTT
+6. Verify all values persist
+```
+**Expected Result**:
+- All current values persist
+- All maximum values persist
+- No data loss on refresh
+- Permanent burns remain permanent
+
+**Success Criteria**: ✅ All data persists
+
+---
+
+#### Test Case 4.49: Negative Value Prevention
+```
+Technical check: Verify cannot go negative
+1. Try to spend Fortune at 0 → Error
+2. Try to spend Resolve at 0 → Error
+3. Try to remove Fate at 0 → Error
+4. Try to remove Resilience at 0 → Error
+```
+**Expected Result**:
+- All values clamped at 0 minimum
+- Clear errors when attempting negative
+- No undefined behavior
+- Zero state handled gracefully
+
+**Success Criteria**: ✅ Negative values prevented
+
+---
+
+#### Test Case 4.50: Reason Logging Verification
+```
+Technical check: Verify reasons tracked
+1. Spend Fortune with reason → Logged
+2. Burn Fate with reason → Logged
+3. Spend Resolve with reason → Logged
+4. Burn Resilience with reason → Logged
+5. Query logs → All reasons visible
+```
+**Expected Result**:
+- Reasons stored in character data
+- Retrievable for narrative review
+- Helps track character story
+- GM can review usage history
+
+**Success Criteria**: ✅ Reason logging functional
+
+---
+
 ## 5. CRITICAL WOUNDS TOOLS
 
-### Tool: `foundry-add-critical-wound`
-
-#### Test Case 5.1: Add Head Critical
-```
-Prompt: "Test Character takes a critical wound to the head with value 35"
-```
-**Expected Result**:
-- Critical wound item created
-- Type: 'critical' (not 'injury')
-- Location: head
-- Severity/value: 35
-- Description from WFRP4e critical tables
-
-**Success Criteria**: ✅ Critical wound appears in Foundry with correct details
+**WFRP 4e Critical Wounds System Overview**:
+- Critical wounds are **separate from regular Wounds** (health pool)
+- Triggered by: (1) Taking damage at 0 Wounds, or (2) Suffering a Critical Hit
+- Four Critical Tables: Head, Body, Arm, Leg (each with d100 results)
+- Each critical has specific name, effects, and penalties from compendium
+- Character dies when **critical wounds > Toughness Bonus**
+- **IMPORTANT**: Critical wounds do NOT subtract from wound pool
 
 ---
 
-#### Test Case 5.2: Add Multiple Criticals
+### Tool: `get-critical-wounds`
+
+**Purpose**: Check a character's critical wound status, count, and all active criticals.
+
+#### Test Case 5.1: Check Character With No Criticals
 ```
-Prompt: "Test Character takes arm critical value 22 and leg critical value 41"
+Prompt: "Check Test Character's critical wounds"
 ```
 **Expected Result**:
-- Two separate critical wound items created
-- Each with correct location and severity
-- Both visible on character
+- Status: ✅ Healthy
+- Critical wound count: 0 / [Toughness Bonus]
+- Visual bar showing empty slots
+- Message: "No critical wounds"
+- Shows how many criticals character can survive
 
-**Success Criteria**: ✅ Both criticals tracked independently
+**Success Criteria**: ✅ Clean status report with threshold information
 
 ---
 
-### Tool: `foundry-heal-critical-wound`
-
-#### Test Case 5.3: Heal Critical Wound
+#### Test Case 5.2: Check Character With Multiple Criticals
 ```
-Prompt: "Heal Test Character's head critical wound"
+Prompt: "Show me Test Character's injuries"
+```
+**Expected Result** (assuming character has criticals):
+- Status icon based on severity (🩹 Injured / 🔴 Critical / 💀 Dying)
+- Current count vs Toughness Bonus threshold
+- Visual bar: `███░░` (filled = current criticals)
+- List of all active criticals grouped by location:
+  - Head: [list criticals]
+  - Body: [list criticals]
+  - Left Arm: [list criticals]
+  - Right Arm: [list criticals]
+  - Left Leg: [list criticals]
+  - Right Leg: [list criticals]
+- Each critical shows: name, description, penalties, duration
+- Recovery guidance and recommendations
+
+**Success Criteria**: ✅ Complete overview of all critical wounds with details
+
+---
+
+### Tool: `add-critical-wound`
+
+**Purpose**: Add a specific critical wound from the WFRP 4e compendium (GM already rolled on table).
+
+**⚠️ SETUP REQUIRED**: 
+- Character must be WFRP 4e type
+- Character needs available capacity (criticals < Toughness Bonus)
+- Critical wound name must match compendium entry
+
+#### Test Case 5.3: Add Specific Head Critical
+```
+Prompt: "Add Minor Head Injury to Test Character at the Head"
 ```
 **Expected Result**:
-- Critical wound removed from character
-- Confirmation of healing
-- Location specified in message
+- Tool searches compendium for "Minor Head Injury"
+- Critical found and UUID constructed
+- Item added from compendium with all official effects
+- Location set to "Head"
+- Critical wound count incremented by 1
+- Visual bar updated
+- Confirmation shows:
+  - Character name
+  - Critical name
+  - Location
+  - New count vs Toughness Bonus
+  - Remaining capacity before death
+- **Character's Wounds stat unchanged** (NOT subtracted)
 
-**Success Criteria**: ✅ Critical wound no longer appears on sheet
+**Success Criteria**: 
+- ✅ Critical visible in Foundry character sheet
+- ✅ Location correctly set
+- ✅ Count incremented
+- ✅ Wounds NOT reduced
+- ✅ Official effects from compendium present
+
+**Common Errors**:
+- ❌ "Critical wound not found" - Check spelling matches table exactly
+- ❌ "Not WFRP character" - Character must use WFRP 4e system
+
+---
+
+#### Test Case 5.4: Add Body Critical
+```
+Prompt: "Test Character suffers Cracked Ribs to the Body"
+```
+**Expected Result**:
+- Critical "Cracked Ribs" found in compendium
+- Added to character with Body location
+- Count incremented
+- All penalties from compendium applied
+- Wounds unchanged
+
+**Success Criteria**: ✅ Body critical added with correct location
+
+---
+
+#### Test Case 5.5: Add Left Arm Critical
+```
+Prompt: "Add Badly Jarred Arm to Test Character's Left Arm"
+```
+**Expected Result**:
+- Critical found in compendium
+- Location set to "Left Arm" (specific side)
+- Count incremented
+- Arm-specific penalties applied
+
+**Success Criteria**: ✅ Left arm critical added, not generic "Arm"
+
+---
+
+#### Test Case 5.6: Add Right Leg Critical
+```
+Prompt: "Test Character takes Torn Thigh to the Right Leg"
+```
+**Expected Result**:
+- Critical from compendium
+- Location: "Right Leg"
+- Leg-specific movement penalties applied
+- Count incremented
+
+**Success Criteria**: ✅ Right leg critical with correct side
+
+---
+
+#### Test Case 5.7: Add Critical at Death Threshold
+```
+Setup: Set character to have criticals = Toughness Bonus - 1
+Prompt: "Add Minor Head Injury to Test Character at Head"
+```
+**Expected Result**:
+- Critical added successfully
+- New count = Toughness Bonus (exactly)
+- ⚠️ Warning: "CRITICAL! One more critical wound will be fatal!"
+- Character still alive but at threshold
+
+**Success Criteria**: ✅ Warning displayed, character at death's door
+
+---
+
+#### Test Case 5.8: Add Critical Beyond Death Threshold
+```
+Setup: Set character to have criticals = Toughness Bonus
+Prompt: "Add Minor Head Injury to Test Character at Head"
+```
+**Expected Result**:
+- Critical added
+- New count > Toughness Bonus
+- ☠️ "DEATH!" message
+- "Character DIES IMMEDIATELY"
+- "Only burning a Fate point can save them now!"
+
+**Success Criteria**: ✅ Death message displayed, count exceeds threshold
+
+---
+
+#### Test Case 5.9: Add Non-Existent Critical
+```
+Prompt: "Add FakeWoundName123 to Test Character at Head"
+```
+**Expected Result**:
+- Error: "Critical wound 'FakeWoundName123' not found in compendium"
+- Helpful message: "Please check spelling or use exact name from Critical Tables"
+- Examples of common criticals provided
+- No changes to character
+
+**Success Criteria**: ✅ Clear error with guidance
+
+---
+
+#### Test Case 5.10: Verify Wounds NOT Subtracted
+```
+Setup: Note character's current Wounds value (e.g., 12/15)
+Prompt: "Add Minor Head Injury to Test Character at Head"
+```
+**Expected Result**:
+- Critical added successfully
+- **Current Wounds: Still 12/15** (unchanged!)
+- Only critical wound count increased
+- Wounds stat completely separate
+
+**Success Criteria**: ✅ Wounds value identical before and after
+
+**Technical Verification**:
+- Check `system.status.wounds.value` before and after
+- Check `system.status.criticalWounds.value` increments by 1
+- Confirm tool does NOT call updateActor with wounds changes
+
+---
+
+### Tool: `roll-critical-wound`
+
+**Purpose**: Automatically roll d100 on a Critical Table and add the result (automates GM rolling).
+
+**⚠️ SETUP REQUIRED**:
+- Character must be WFRP 4e type
+- Character needs capacity (criticals < Toughness Bonus)
+- Compendium must have Critical Tables loaded
+
+#### Test Case 5.11: Roll Head Critical (No Modifier)
+```
+Prompt: "Roll a head critical for Test Character"
+```
+**Expected Result**:
+- Tool rolls d100 (1-100)
+- Searches compendium for Head criticals
+- Attempts to match roll to table range (01-10, 11-20, etc.)
+- If no range match, picks random Head critical
+- Adds critical using add-critical-wound logic
+- Response shows:
+  - Roll result (e.g., "Rolled: 47")
+  - Critical selected
+  - Location: Head
+  - Count incremented
+  - Effects from compendium
+
+**Success Criteria**: ✅ Random Head critical added based on roll
+
+---
+
+#### Test Case 5.12: Roll Body Critical With Modifier
+```
+Prompt: "Roll a body critical for Test Character with -20 modifier"
+```
+**Expected Result**:
+- Base roll: d100 (e.g., 35)
+- Modifier applied: 35 + (-20) = 15
+- Final roll clamped to 1-100
+- Body critical matching roll 15 found
+- Critical added to character
+- Response shows base roll, modifier, and final roll
+
+**Success Criteria**: ✅ Modifier correctly applied to roll
+
+**Technical Details**:
+- Formula: `Math.floor(Math.random() * 100) + 1 + modifier`
+- Clamped: `Math.max(1, Math.min(100, roll))`
+- -20 modifier typical when damage < Toughness Bonus in negative wounds
+
+---
+
+#### Test Case 5.13: Roll Arm Critical (Random L/R)
+```
+Prompt: "Roll an arm critical for Test Character"
+```
+**Expected Result**:
+- Roll d100 for Arm table
+- Find matching Arm critical in compendium
+- **Random determination**: Left Arm OR Right Arm (50/50)
+- Specific side set on critical
+- Response shows which arm was determined
+
+**Success Criteria**: ✅ Random left/right selection, critical added
+
+**Technical Details**:
+- Tool uses: `Math.random() < 0.5 ? 'Left' : 'Right'`
+- Run test multiple times to verify randomness
+- Both Left Arm and Right Arm outcomes should occur
+
+---
+
+#### Test Case 5.14: Roll Leg Critical (Random L/R)
+```
+Prompt: "Test Character takes a random leg critical"
+```
+**Expected Result**:
+- Roll d100 for Leg table
+- Find matching Leg critical
+- Random determination: Left Leg OR Right Leg (50/50)
+- Specific leg set on critical
+- Both legs possible outcomes
+
+**Success Criteria**: ✅ Random left/right selection for leg
+
+---
+
+#### Test Case 5.15: Roll With High Modifier (Over 100)
+```
+Prompt: "Roll a head critical for Test Character with +80 modifier"
+```
+**Expected Result**:
+- Base roll: e.g., 75
+- Modified: 75 + 80 = 155
+- Clamped to maximum: 100
+- Critical matching roll 100 found
+- Highest severity critical from table
+
+**Success Criteria**: ✅ Roll capped at 100, highest critical selected
+
+---
+
+#### Test Case 5.16: Roll With Low Modifier (Below 1)
+```
+Prompt: "Roll a body critical for Test Character with -50 modifier"
+```
+**Expected Result**:
+- Base roll: e.g., 30
+- Modified: 30 + (-50) = -20
+- Clamped to minimum: 1
+- Critical matching roll 1 found
+- Lowest severity critical from table
+
+**Success Criteria**: ✅ Roll capped at 1, lowest critical selected
+
+---
+
+#### Test Case 5.17: Roll When Compendium Empty
+```
+Setup: Test with world that has no critical table compendium loaded
+Prompt: "Roll a head critical for Test Character"
+```
+**Expected Result**:
+- Error: "No critical wounds found for location: Head"
+- Message suggests compendium isn't loaded
+- No changes to character
+
+**Success Criteria**: ✅ Clear error about missing compendium data
+
+---
+
+### Tool: `remove-critical-wound`
+
+**Purpose**: Remove a healed critical wound from character after recovery time.
+
+#### Test Case 5.18: Remove Specific Critical
+```
+Setup: Character has "Minor Head Injury" critical
+Prompt: "Remove Minor Head Injury from Test Character"
+```
+**Expected Result**:
+- Critical wound found in character's items
+- Item deleted from character sheet
+- Critical wound count decremented by 1
+- Visual bar updated
+- Response shows:
+  - Healed critical name
+  - Location
+  - Previous count
+  - New count
+  - Status update (healthy/injured)
+  - Next steps and recommendations
+
+**Success Criteria**: 
+- ✅ Critical removed from Foundry
+- ✅ Count decremented
+- ✅ Confirmation message
+
+---
+
+#### Test Case 5.19: Remove Last Critical (Recovery Complete)
+```
+Setup: Character has exactly 1 critical wound
+Prompt: "Heal Test Character's [critical name]"
+```
+**Expected Result**:
+- Critical removed
+- Count reduced to 0
+- Status: ✅ Healthy
+- Message: "Fully recovered from all critical wounds!"
+- Visual bar empty
+
+**Success Criteria**: ✅ Character returned to healthy state
+
+---
+
+#### Test Case 5.20: Remove Non-Existent Critical
+```
+Prompt: "Remove FakeWound123 from Test Character"
+```
+**Expected Result**:
+- Error: "Critical wound 'FakeWound123' not found"
+- Lists all current criticals character has
+- Suggests exact names to use
+- No changes to character
+
+**Success Criteria**: ✅ Helpful error with current critical list
+
+---
+
+#### Test Case 5.21: Remove Critical From Wrong Character
+```
+Prompt: "Remove Minor Head Injury from NonExistentCharacter"
+```
+**Expected Result**:
+- Error: "Character 'NonExistentCharacter' not found"
+- No changes to any character
+
+**Success Criteria**: ✅ Character validation error
+
+---
+
+### Tool: `check-death-from-criticals`
+
+**Purpose**: Explicitly check if character's critical count exceeds death threshold.
+
+#### Test Case 5.22: Check Healthy Character
+```
+Setup: Character has 0 critical wounds
+Prompt: "Check if Test Character dies from criticals"
+```
+**Expected Result**:
+- Status: ✅ ALIVE
+- Current criticals: 0
+- Death threshold: [Toughness Bonus]
+- Visual bar empty
+- Message: "No critical wounds. Character is healthy."
+- Can survive [TB] criticals before dying
+
+**Success Criteria**: ✅ Clean bill of health
+
+---
+
+#### Test Case 5.23: Check Injured Character (Below Threshold)
+```
+Setup: Character has 2 criticals, Toughness Bonus = 4
+Prompt: "Check death threshold for Test Character"
+```
+**Expected Result**:
+- Status: 🩹 INJURED
+- Current: 2 criticals
+- Threshold: 4 (Toughness Bonus)
+- Visual: `██░░`
+- Message: "Character has 2 critical wounds. Can survive 2 more."
+- Tactical advice provided
+
+**Success Criteria**: ✅ Safe below threshold
+
+---
+
+#### Test Case 5.24: Check At Death Threshold (Equal)
+```
+Setup: Character has criticals = Toughness Bonus
+Prompt: "Check if Test Character dies from criticals"
+```
+**Expected Result**:
+- Status: 🔴 AT DEATH THRESHOLD
+- Current: 4 criticals
+- Threshold: 4 (exactly equal)
+- Visual: `████` (full bar)
+- ⚠️ "Character is at death threshold. Still alive but one more kills them!"
+- Urgent warnings about avoiding combat
+
+**Success Criteria**: ✅ Clear warning, still alive
+
+---
+
+#### Test Case 5.25: Check Dead Character (Exceeded Threshold)
+```
+Setup: Character has criticals > Toughness Bonus
+Prompt: "Check death status for Test Character"
+```
+**Expected Result**:
+- Status: ☠️ DEAD
+- Current: 5 criticals
+- Threshold: 4 (exceeded!)
+- Visual: `████X` (over limit)
+- ☠️ "CHARACTER IS DEAD"
+- "Critical wounds exceeded Toughness Bonus"
+- "Only Fate point can save them"
+- Dramatic death confirmation
+
+**Success Criteria**: ✅ Death status clearly indicated
+
+---
+
+#### Test Case 5.26: Check Non-WFRP Character
+```
+Setup: Character is not WFRP 4e type
+Prompt: "Check if D&D Character dies from criticals"
+```
+**Expected Result**:
+- Error: "Character is not using WFRP 4e system"
+- Message: "Critical wound tracking only available for WFRP"
+
+**Success Criteria**: ✅ System type validation
+
+---
+
+### 🧪 Integration Test Scenarios
+
+#### Test Case 5.27: Full Combat Critical Flow
+```
+Scenario: Character at 0 wounds takes damage
+1. "Test Character is at 0 wounds"
+2. "Roll a body critical for Test Character with -20 modifier"
+3. "Check Test Character's critical wounds"
+4. "Show me Test Character's injuries"
+```
+**Expected Result**:
+- Random body critical added
+- Modifier applied to roll
+- Full status report shows the new critical
+- Detailed injury information displayed
+
+**Success Criteria**: ✅ Complete combat critical workflow
+
+---
+
+#### Test Case 5.28: Multiple Criticals, Multiple Locations
+```
+Scenario: Character accumulates various injuries
+1. "Add Minor Head Injury to Test Character at Head"
+2. "Add Cracked Ribs to Test Character at Body"
+3. "Roll an arm critical for Test Character"
+4. "Check Test Character's critical wounds"
+```
+**Expected Result**:
+- Three criticals added (two specific, one rolled)
+- Each at different location
+- Status shows all three grouped by location
+- Count: 3 / [TB]
+- Full details for each critical
+
+**Success Criteria**: ✅ Multiple criticals tracked correctly
+
+---
+
+#### Test Case 5.29: Critical Death Sequence
+```
+Scenario: Character dies from accumulated criticals
+Setup: Character has criticals = Toughness Bonus - 1
+1. "Check death threshold for Test Character"
+   - Shows: One away from death
+2. "Add Minor Head Injury to Test Character at Head"
+   - Result: At threshold, still alive
+3. "Check if Test Character dies from criticals"
+   - Shows: At threshold
+4. "Roll a leg critical for Test Character"
+   - Result: ☠️ DEATH
+5. "Check death status for Test Character"
+   - Confirms: Dead
+```
+**Expected Result**:
+- Progressive warnings as death approaches
+- Clear death indication when exceeded
+- Threshold mechanics work correctly
+
+**Success Criteria**: ✅ Death threshold properly enforced
+
+---
+
+#### Test Case 5.30: Recovery Over Time
+```
+Scenario: Character heals multiple criticals
+Setup: Character has 3 criticals
+1. "Show Test Character's injuries"
+   - Lists all 3 criticals
+2. "Remove [Critical 1] from Test Character"
+   - Count: 3 → 2
+3. "Remove [Critical 2] from Test Character"
+   - Count: 2 → 1
+4. "Remove [Critical 3] from Test Character"
+   - Count: 1 → 0, Status: Healthy
+5. "Check Test Character's critical wounds"
+   - Result: No criticals, fully recovered
+```
+**Expected Result**:
+- Each removal decrements count
+- Last removal returns to healthy
+- Status updates at each stage
+
+**Success Criteria**: ✅ Full recovery progression
+
+---
+
+### 📊 Technical Validation Tests
+
+#### Test Case 5.31: UUID Construction Verification
+```
+Technical check: Verify UUID pattern
+1. Add critical and check Foundry logs
+2. Verify UUID format: `Compendium.${pack}.${id}`
+3. Confirm UUID construction uses pack + id (not uuid field)
+4. Verify same pattern as career change fix (v0.2.2)
+```
+**Expected Result**:
+- UUID correctly constructed from pack and id
+- Pattern: `Compendium.wfrp4e-core.criticals.abc123`
+- Item successfully added from compendium
+
+**Success Criteria**: ✅ UUID construction matches v0.2.2 pattern
+
+---
+
+#### Test Case 5.32: Compendium Search Validation
+```
+Technical check: Verify compendium search
+1. Search for "Minor Head Injury" - should find
+2. Search for "minoR HeAd injURY" - case insensitive
+3. Search for partial match - finds closest
+4. Search for non-existent - error
+```
+**Expected Result**:
+- Exact matches found
+- Case-insensitive search works
+- Best match logic functions
+- Clear errors for no matches
+
+**Success Criteria**: ✅ Robust compendium search
+
+---
+
+#### Test Case 5.33: Wounds vs Critical Wounds Separation
+```
+Technical check: Verify complete separation
+1. Character at 10/15 Wounds, 0 Criticals
+2. Add critical
+3. Check: Wounds still 10/15, Criticals now 1
+4. Add another critical
+5. Check: Wounds still 10/15, Criticals now 2
+```
+**Expected Result**:
+- Wounds stat NEVER changes when adding criticals
+- Critical count tracked separately
+- Two completely independent systems
+
+**Success Criteria**: ✅ Wounds and criticals are separate
+
+---
+
+#### Test Case 5.34: Location String Handling
+```
+Technical check: Verify all location variations
+1. Test "Head" - works
+2. Test "Body" - works
+3. Test "Left Arm" - works
+4. Test "Right Arm" - works
+5. Test "Left Leg" - works
+6. Test "Right Leg" - works
+7. Test "Arm" (for rolling) - randomly becomes L/R
+8. Test "Leg" (for rolling) - randomly becomes L/R
+```
+**Expected Result**:
+- All specific locations handled
+- General locations (Arm/Leg) randomized correctly
+- Location stored in system.location.value
+
+**Success Criteria**: ✅ All location types work
 
 ---
 

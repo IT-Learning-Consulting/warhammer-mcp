@@ -275,7 +275,7 @@ Returns breakdown showing:
                 }
 
                 // Create the actor
-                const actor = await this.foundryClient.query('foundry-mcp-bridge.createActor', {
+                const actor = await this.foundryClient.query('warhammer-mcp.createActor', {
                     actorData: actorData
                 });
 
@@ -312,7 +312,7 @@ Returns breakdown showing:
                             }
                         };
 
-                        await this.foundryClient.query('foundry-mcp-bridge.createItem', {
+                        await this.foundryClient.query('warhammer-mcp.createItem', {
                             actorId: createdActorId,
                             itemData: skillData
                         });
@@ -341,7 +341,7 @@ Returns breakdown showing:
                             }
                         };
 
-                        await this.foundryClient.query('foundry-mcp-bridge.createItem', {
+                        await this.foundryClient.query('warhammer-mcp.createItem', {
                             actorId: createdActorId,
                             itemData: talentData
                         });
