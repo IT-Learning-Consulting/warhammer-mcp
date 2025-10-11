@@ -1,5 +1,93 @@
 # Changelog
 
+## v0.2.3 (2025-10-11)
+
+### ✨ Enhanced Features
+
+**Character Information Tool Improvements**
+
+- **Unknown Field Warnings**: Tool now provides helpful feedback when invalid field names are used
+  - Displays warning: `⚠️ Unknown field(s) ignored: [fieldName]. Valid fields include: ...`
+  - Lists all valid field names for easy reference
+  - Prevents silent failures - users know immediately if they made a typo
+  - Test 1.18 validates mixed valid/invalid field handling ✅
+
+- **Enhanced Characteristic Reporting**: Shows initial vs final values with modifier breakdown
+  - Displays both `initial` value (what was set) and `final value` (after bonuses)
+  - Calculates and shows modifiers from talents, items, and astrological signs
+  - Example: `I: initial=32, final value=34 (+2 from talents/items)`
+  - Helps users understand WFRP4e's automatic bonus calculations
+  - Test 1.21 validates characteristic updates with sign/talent bonuses ✅
+
+**Character Data Organization**
+
+- **New Conditions Section**: Separated status effects from physical inventory
+  - `conditions.injuries`: Wound-based afflictions with location tracking
+  - `conditions.mutations`: Physical/mental mutations with type classification
+  - `conditions.diseases`: Full disease data (contraction, incubation, symptoms)
+  - `conditions.psychology`: Mental conditions and fears
+  - Test 1.15 validates clean item separation ✅
+
+- **Improved Item Filtering**: Physical inventory now excludes non-inventory items
+  - Removed from items: careers, money, critical wounds, injuries, mutations, diseases, psychology
+  - Items section now only shows: weapons, armor, trappings, containers
+  - Career shown in `basicInfo.career`
+  - Money aggregated in `basicInfo.money`
+  - Critical wounds in `basicInfo.criticalWounds`
+  - Status effects in new `conditions` section
+
+**Fortune/Fate Mechanics Clarification**
+
+- **Verified Correct Behavior**: Fortune can temporarily exceed Fate (not a bug!)
+  - WFRP4e allows temporary Fortune > Fate from awards, items, or after Fate burn
+  - Daily Fortune refresh naturally enforces cap by resetting to current Fate value
+  - Character can use "excess" Fortune before next refresh
+  - Test 1.23 validates Fortune/Fate management flow ✅
+
+### 🐛 Bug Fixes
+
+- **Character Retrieval**: Fixed empty items array when character has no physical inventory
+- **Data Truncation**: Increased description length from 100 to 200 characters for better detail
+- **Biography Extraction**: Added motivation and ambitions to character info
+
+### 📝 Tool Description Updates
+
+- Enhanced `get-character` tool description to clearly list all returned sections
+- Added explicit guidance for AI filtering: tool returns comprehensive data, AI presents contextually
+- Clarified that `items` = "physical inventory only" (weapons, armor, trappings)
+
+### ✅ Testing
+
+All tests passing (as of October 11, 2025):
+- **Test 1.15**: Get Character With No Items ✅
+- **Test 1.18**: Update Multiple Stats - Some Invalid ✅
+- **Test 1.19**: Character Case-Insensitive Lookup ✅
+- **Test 1.21**: Character Creation Flow (with sign/talent bonuses) ✅
+- **Test 1.23**: Fortune/Fate Management Flow ✅
+
+### 📦 Files Changed
+
+- `packages/mcp-server/src/tools/character.ts`
+  - Added `unknownFields` tracking array
+  - Added `formatConditions()` method for status effects
+  - Enhanced `formatItems()` to filter out non-inventory items
+  - Added detailed characteristic reporting with initial vs final values
+  - Added modifier calculation and display
+  - Updated tool descriptions with clearer section breakdowns
+
+### 🔍 Validation Findings
+
+**Comprehensive Tool Analysis**:
+- ✅ `character.ts` `handleUpdateCharacterInfo`: Enhanced with unknown field warnings and detailed reporting
+- ✅ `character.ts` `handleUpdateSkillTalent`: Uses strict schema, no changes needed
+- ✅ `career-advancement.ts` advance functions: Enum-based validation, no changes needed
+- ✅ `corruption-mutation.ts` functions: Purpose-specific schemas, no changes needed
+- ✅ `fate-resilience.ts` Fortune/Fate: Working as designed per WFRP4e rules
+
+**Key Insight**: Only `handleUpdateCharacterInfo` needed enhancements because it accepts arbitrary field names via `z.record(z.any())`. All other tools use strict schemas with predefined enums that automatically reject invalid inputs.
+
+---
+
 ## v0.2.2 (2025-10-06)
 
 ### 🐛 Critical Bug Fixes

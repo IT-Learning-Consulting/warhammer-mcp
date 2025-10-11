@@ -25,7 +25,7 @@ export class CharacterTools {
     return [
       {
         name: 'get-character',
-        description: 'Retrieve detailed information about a specific character by name or ID. WFRP 4e specific (characteristics, wounds, toughness, skills, talents, traits).',
+        description: 'Retrieve comprehensive character information for a WFRP 4e character. Returns complete character data including: identity (name, species, status), characteristics (WS, BS, S, T, I, Ag, Dex, Int, WP, Fel), status (wounds, fortune, fate, resilience, resolve, corruption, money, toughness), critical wounds (count and details), biography (motivation, ambitions), skills (with advances and totals), talents (with descriptions), traits (creature traits), conditions (injuries, mutations, diseases, psychology), items (physical inventory only - weapons, armor, trappings), and experience. Use this tool when the user asks for character info - you can then present only the sections they requested (e.g., if they ask for "skills and talents only", retrieve all data but present only those sections in your response).',
         inputSchema: {
           type: 'object',
           properties: {
@@ -208,6 +208,7 @@ export class CharacterTools {
       type: characterData.type,
       basicInfo: this.extractBasicInfo(characterData),
       stats: this.extractStats(characterData),
+      conditions: this.formatConditions(characterData.items || []),
       items: this.formatItems(characterData.items || []),
       effects: this.formatEffects(characterData.effects || []),
       hasImage: !!characterData.img,
@@ -263,17 +264,15 @@ export class CharacterTools {
 
       // Critical Wounds (count critical wound items)
       const criticalWounds = items.filter((item: any) => item.type === 'critical');
-      if (criticalWounds.length > 0) {
-        basicInfo.criticalWounds = {
-          count: criticalWounds.length,
-          wounds: criticalWounds.map((crit: any) => ({
-            name: crit.name,
-            location: crit.system?.location?.value || 'unknown',
-            severity: crit.system?.wounds?.value || 0,
-            description: this.truncateText(crit.system?.description?.value || '', 100),
-          })),
-        };
-      }
+      basicInfo.criticalWounds = {
+        count: criticalWounds.length,
+        wounds: criticalWounds.map((crit: any) => ({
+          name: crit.name,
+          location: crit.system?.location?.value || 'unknown',
+          severity: crit.system?.wounds?.value || 0,
+          description: this.truncateText(crit.system?.description?.value || '', 200),
+        })),
+      };
 
       // Money (filter and sum money items correctly)
       const moneyItems = items.filter((item: any) => item.type === 'money');
@@ -321,6 +320,20 @@ export class CharacterTools {
           total: system.details.experience.total || 0,
           spent: system.details.experience.spent || 0,
         };
+      }
+
+      // Biography - Motivation and Ambitions (WFRP 4e specific)
+      if (system.details?.biography) {
+        basicInfo.biography = {};
+        if (system.details.biography.personalMotivation?.value) {
+          basicInfo.biography.motivation = system.details.biography.personalMotivation.value;
+        }
+        if (system.details.biography.shortTermAmbition?.value) {
+          basicInfo.biography.shortTermAmbition = system.details.biography.shortTermAmbition.value;
+        }
+        if (system.details.biography.longTermAmbition?.value) {
+          basicInfo.biography.longTermAmbition = system.details.biography.longTermAmbition.value;
+        }
       }
 
     } else {
@@ -424,7 +437,18 @@ export class CharacterTools {
           name: talent.name,
           advances: talent.system?.advances?.value || 1,
           tests: talent.system?.tests?.value || '',
-          description: this.truncateText(talent.system?.description?.value || '', 100)
+          description: this.truncateText(talent.system?.description?.value || '', 200)
+        }));
+      }
+
+      // WFRP Traits - Extract creature traits
+      const traitItems = items.filter((item: any) => item.type === 'trait');
+
+      if (traitItems.length > 0) {
+        stats.traits = traitItems.map((trait: any) => ({
+          name: trait.name,
+          specification: trait.system?.specification?.value || '',
+          description: this.truncateText(trait.system?.description?.value || '', 200)
         }));
       }
     }
@@ -433,9 +457,23 @@ export class CharacterTools {
   }
 
   private formatItems(items: any[]): any[] {
-    // Filter out skills and talents as they're handled separately in stats
+    // Filter out non-inventory items:
+    // - skills, talents, traits: handled in stats section
+    // - career: shown in basicInfo.career
+    // - money: aggregated in basicInfo.money
+    // - critical: shown in basicInfo.criticalWounds
+    // - injury, mutation, disease, psychology: status effects, not inventory
     const inventoryItems = items.filter((item: any) =>
-      item.type !== 'skill' && item.type !== 'talent'
+      item.type !== 'skill' &&
+      item.type !== 'talent' &&
+      item.type !== 'trait' &&
+      item.type !== 'career' &&
+      item.type !== 'money' &&
+      item.type !== 'critical' &&
+      item.type !== 'injury' &&
+      item.type !== 'mutation' &&
+      item.type !== 'disease' &&
+      item.type !== 'psychology'
     );
 
     return inventoryItems.slice(0, 50).map(item => ({ // Increased to 50 items for better inventory visibility
@@ -447,6 +485,51 @@ export class CharacterTools {
       description: this.truncateText(item.system?.description?.value || '', 200),
       hasImage: !!item.img,
     }));
+  }
+
+  private formatConditions(items: any[]): any {
+    // Extract status condition items (injuries, mutations, diseases, psychology)
+    const conditions: any = {};
+
+    const injuries = items.filter((item: any) => item.type === 'injury');
+    if (injuries.length > 0) {
+      conditions.injuries = injuries.map((injury: any) => ({
+        name: injury.name,
+        location: injury.system?.location?.value || '',
+        description: this.truncateText(injury.system?.description?.value || '', 200),
+      }));
+    }
+
+    const mutations = items.filter((item: any) => item.type === 'mutation');
+    if (mutations.length > 0) {
+      conditions.mutations = mutations.map((mutation: any) => ({
+        name: mutation.name,
+        type: mutation.system?.mutationType?.value || '',
+        description: this.truncateText(mutation.system?.description?.value || '', 200),
+      }));
+    }
+
+    const diseases = items.filter((item: any) => item.type === 'disease');
+    if (diseases.length > 0) {
+      conditions.diseases = diseases.map((disease: any) => ({
+        name: disease.name,
+        contraction: disease.system?.contraction?.value || '',
+        incubation: disease.system?.incubation?.value || '',
+        duration: disease.system?.duration?.value || '',
+        symptoms: disease.system?.symptoms?.value || '',
+        description: this.truncateText(disease.system?.description?.value || '', 200),
+      }));
+    }
+
+    const psychology = items.filter((item: any) => item.type === 'psychology');
+    if (psychology.length > 0) {
+      conditions.psychology = psychology.map((psych: any) => ({
+        name: psych.name,
+        description: this.truncateText(psych.system?.description?.value || '', 200),
+      }));
+    }
+
+    return conditions;
   }
 
   private formatEffects(effects: any[]): any[] {
@@ -495,6 +578,7 @@ export class CharacterTools {
       // Map user-friendly field names to Foundry data paths
       const updateData: Record<string, any> = {};
       const warnings: string[] = [];
+      const unknownFields: string[] = [];
 
       // Characteristic mapping (updates the INITIAL value, not advances)
       // Keys are lowercase to match the lowerKey conversion below
@@ -592,8 +676,15 @@ export class CharacterTools {
           }
         }
         else {
+          // Unknown field - track it for user feedback
+          unknownFields.push(key);
           this.logger.warn(`Unknown update field: ${key}`, { value });
         }
+      }
+
+      // Add warning for unknown fields
+      if (unknownFields.length > 0) {
+        warnings.push(`⚠️ Unknown field(s) ignored: ${unknownFields.join(', ')}. Valid fields include: characteristic names (ws, bs, s, t, i, ag, dex, int, wp, fel), currentWounds, fortune, fate, resilience, resolve.`);
       }
 
       if (Object.keys(updateData).length === 0) {
@@ -607,15 +698,54 @@ export class CharacterTools {
         warnings: warnings.length > 0 ? warnings : undefined,
       });
 
+      // Retrieve updated character data to show final calculated values
+      const updatedCharacter = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
+        characterName: identifier,
+      });
+
+      // Build detailed update summary showing initial vs final values for characteristics
+      const characteristicUpdates: Record<string, any> = {};
+      for (const [path, value] of Object.entries(updateData)) {
+        if (path.startsWith('system.characteristics.')) {
+          const match = path.match(/system\.characteristics\.(\w+)\.initial/);
+          if (match) {
+            const charKey = match[1];
+            const charData = updatedCharacter.system?.characteristics?.[charKey];
+            if (charData) {
+              characteristicUpdates[charKey] = {
+                requestedInitial: value,
+                actualInitial: charData.initial,
+                finalValue: charData.value,
+                modifier: charData.value - charData.initial,
+              };
+            }
+          }
+        }
+      }
+
       this.logger.info('Successfully updated character', {
         characterId: characterData.id,
         characterName: characterData.name,
         fieldsUpdated: Object.keys(updateData),
+        characteristicUpdates,
         warnings: warnings.length > 0 ? warnings : undefined,
       });
 
-      // Build success message with warnings if present
+      // Build success message with characteristic details
       let message = `Successfully updated ${Object.keys(updateData).length} field(s) for ${characterData.name}`;
+
+      // Add characteristic update details if any
+      if (Object.keys(characteristicUpdates).length > 0) {
+        message += '\n\n**Characteristic Updates:**';
+        for (const [key, data] of Object.entries(characteristicUpdates)) {
+          const charName = key.toUpperCase();
+          message += `\n- ${charName}: initial=${data.actualInitial}, final value=${data.finalValue}`;
+          if (data.modifier !== 0) {
+            message += ` (${data.modifier > 0 ? '+' : ''}${data.modifier} from talents/items)`;
+          }
+        }
+      }
+
       if (warnings.length > 0) {
         message += `\n\n**Warnings:**\n${warnings.join('\n')}`;
       }

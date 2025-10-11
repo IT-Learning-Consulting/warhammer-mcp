@@ -1,6 +1,6 @@
 {
   "name": "@foundry-mcp/module",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Warhammer Fantasy Roleplay 4e MCP bridge module for Foundry VTT",
   "type": "module",
   "scripts": {

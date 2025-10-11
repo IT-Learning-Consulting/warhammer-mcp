@@ -2,18 +2,51 @@
 
 **AI-Powered Game Master Assistant for WFRP 4e in Foundry VTT**
 
-**Current Version**: 0.2.2 | [Changelog](docs/CHANGELOG.md) | [Release Notes](RELEASE_v0.2.2.md)
+**Current Version**: 0.2.3 | [Changelog](docs/CHANGELOG.md)
 
 Connect Claude Desktop to your Foundry VTT game for intelligent campaign management, NPC generation, and Old World content creation through the Model Context Protocol (MCP).
 
 ---
 
-## 🆕 What's New in v0.2.2 (October 6, 2025)
+## 🆕 What's New in v0.2.3 (October 11, 2025)
+
+### Enhanced Features
+- **Unknown Field Warnings**: Character update tool now provides helpful feedback for invalid field names
+  - Shows which fields were ignored and lists all valid options
+  - Prevents silent failures - users know immediately if they made a typo
+  
+- **Enhanced Characteristic Reporting**: Shows initial vs final values with modifier breakdown
+  - Displays both requested initial value and calculated final value
+  - Shows modifiers from talents, items, and astrological signs
+  - Example: `I: initial=32, final value=34 (+2 from talents/items)`
+  - Helps understand WFRP4e's automatic bonus calculations
+
+- **Improved Character Data Organization**: New `conditions` section separates status effects from inventory
+  - Injuries, mutations, diseases, and psychology now in dedicated section
+  - Items section now only shows physical inventory (weapons, armor, trappings)
+  - Cleaner, more intuitive data structure matching WFRP4e concepts
+
+- **Fortune/Fate Mechanics Clarified**: Verified that Fortune can temporarily exceed Fate (not a bug!)
+  - WFRP4e allows temporary excess from awards or after Fate burn
+  - Daily refresh naturally enforces cap
+
+### Bug Fixes
+- Fixed empty items array handling
+- Enhanced description truncation (200 chars)
+- Added biography extraction (motivation, ambitions)
+
+### Testing
+All tests passing: Character retrieval (1.15), mixed validation (1.18), case-insensitive lookup (1.19), creation flow (1.21), Fortune/Fate management (1.23) ✅
+
+See [CHANGELOG.md](docs/CHANGELOG.md) for complete details.
+
+---
+
+## 🔄 Previous Release: v0.2.2 (October 6, 2025)
 
 ### Critical Bug Fixes
 - **Fixed Career Change Tool UUID Bug**: Career changes now work correctly - tool properly constructs UUIDs from compendium pack/id data
 - **Fixed Career Change Operation Order**: Atomic operation order prevents characters from having no current career during career changes
-- **Operation Order**: Now adds new career first, then marks it current, then unmarks old career (better error recovery)
 
 ### New Features
 - **Resilience & Resolve System**: Complete NPC resource management system mirroring Fortune/Fate (6 new tools)
