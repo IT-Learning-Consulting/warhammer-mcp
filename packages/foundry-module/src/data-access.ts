@@ -341,11 +341,11 @@ class PersistentCreatureIndex {
     }
 
     // Check each pack fingerprint
-    const actorPacks = Array.from(game.packs.values()).filter(pack => pack.metadata.type === 'Actor');
+    const actorPacks = Array.from(game.packs?.values() || []).filter((pack: any) => pack.metadata?.type === 'Actor');
 
     for (const pack of actorPacks) {
-      const currentFingerprint = this.generatePackFingerprint(pack);
-      const savedFingerprint = existingIndex.metadata.packFingerprints.get(pack.metadata.id);
+      const currentFingerprint = this.generatePackFingerprint(pack as any);
+      const savedFingerprint = existingIndex.metadata.packFingerprints.get((pack as any).metadata?.id);
 
       if (!savedFingerprint) {
         return false;
@@ -446,13 +446,13 @@ class PersistentCreatureIndex {
   private generatePackFingerprint(pack: any): PackFingerprint {
     // Get actual modification time if available
     let lastModified = Date.now();
-    if (pack.metadata.lastModified) {
+    if (pack.metadata?.lastModified) {
       lastModified = new Date(pack.metadata.lastModified).getTime();
     }
 
     return {
-      packId: pack.metadata.id,
-      packLabel: pack.metadata.label,
+      packId: pack.metadata?.id || '',
+      packLabel: pack.metadata?.label || '',
       lastModified: lastModified,
       documentCount: pack.index?.size || 0,
       checksum: this.generatePackChecksum(pack)
@@ -464,7 +464,7 @@ class PersistentCreatureIndex {
    */
   private generatePackChecksum(pack: any): string {
     // Simple checksum based on pack metadata and size
-    const data = `${pack.metadata.id}-${pack.metadata.label}-${pack.index?.size || 0}`;
+    const data = `${pack.metadata?.id || ''}-${pack.metadata?.label || ''}-${pack.index?.size || 0}`;
     return btoa(data).slice(0, 16); // Simple hash for demonstration
   }
 
@@ -492,7 +492,7 @@ class PersistentCreatureIndex {
 
     try {
 
-      const actorPacks = Array.from(game.packs.values()).filter(pack => pack.metadata.type === 'Actor');
+      const actorPacks = Array.from(game.packs?.values() || []).filter((pack: any) => pack.metadata?.type === 'Actor');
       const enhancedCreatures: EnhancedCreatureIndex[] = [];
       const packFingerprints = new Map<string, PackFingerprint>();
 
@@ -500,16 +500,16 @@ class PersistentCreatureIndex {
       ui.notifications?.info(`Starting enhanced creature index build from ${actorPacks.length} packs...`);
 
       for (let i = 0; i < actorPacks.length; i++) {
-        const pack = actorPacks[i];
+        const pack = actorPacks[i] as any;
         const progressPercent = Math.round((i / actorPacks.length) * 100);
 
         // Update progress notification every few packs or for important packs
-        if (i % 3 === 0 || pack.metadata.label.toLowerCase().includes('monster')) {
+        if (i % 3 === 0 || pack.metadata?.label?.toLowerCase().includes('monster')) {
           if (progressNotification) {
             progressNotification.remove();
           }
           progressNotification = ui.notifications?.info(
-            `Building creature index... ${progressPercent}% (${i + 1}/${actorPacks.length}) Processing: ${pack.metadata.label}`
+            `Building creature index... ${progressPercent}% (${i + 1}/${actorPacks.length}) Processing: ${pack.metadata?.label || 'Unknown'}`
           );
         }
 
@@ -521,7 +521,7 @@ class PersistentCreatureIndex {
           }
 
           // Generate pack fingerprint for change detection
-          packFingerprints.set(pack.metadata.id, this.generatePackFingerprint(pack));
+          packFingerprints.set(pack.metadata?.id || '', this.generatePackFingerprint(pack));
 
           // Show pack processing details for large packs
           const packSize = pack.index?.size || 0;
@@ -810,15 +810,15 @@ export class FoundryDataAccess {
    */
   async getCharacterInfo(identifier: string): Promise<CharacterInfo> {
 
-    let actor: Actor | undefined;
+    let actor: any | undefined;
 
     // Try to find by ID first, then by name
     if (identifier.length === 16) { // Foundry ID length
-      actor = game.actors.get(identifier);
+      actor = game.actors?.get(identifier);
     }
 
     if (!actor) {
-      actor = game.actors.find(a =>
+      actor = game.actors?.find((a: any) =>
         a.name?.toLowerCase() === identifier.toLowerCase()
       );
     }
@@ -833,26 +833,27 @@ export class FoundryDataAccess {
       name: actor.name || '',
       type: actor.type,
       ...(actor.img ? { img: actor.img } : {}),
-      system: this.sanitizeData((actor as any).system),
-      items: actor.items.map(item => ({
+      system: this.sanitizeData(actor.system),
+      items: Array.from(actor.items || []).map((item: any) => ({
         id: item.id,
         name: item.name,
         type: item.type,
         ...(item.img ? { img: item.img } : {}),
         system: this.sanitizeData(item.system),
       })),
-      effects: actor.effects.map(effect => ({
+      effects: Array.from(actor.effects || []).map((effect: any) => ({
         id: effect.id,
-        name: (effect as any).name || (effect as any).label || 'Unknown Effect',
-        ...((effect as any).icon ? { icon: (effect as any).icon } : {}),
-        disabled: (effect as any).disabled,
-        ...(((effect as any).duration) ? {
+        name: effect.name || effect.label || 'Unknown Effect',
+        ...(effect.icon ? { icon: effect.icon } : {}),
+        disabled: effect.disabled,
+        ...(effect.duration ? {
           duration: {
             type: (effect as any).duration.type || 'none',
             duration: (effect as any).duration.duration,
             remaining: (effect as any).duration.remaining,
           }
         } : {}),
+        ...(effect.flags ? { flags: effect.flags } : {}),
       })),
     };
 
@@ -935,22 +936,22 @@ export class FoundryDataAccess {
     }
 
     // Filter packs by type if specified
-    const packs = Array.from(game.packs.values()).filter(pack => {
-      if (packType && pack.metadata.type !== packType) {
+    const packs = Array.from(game.packs?.values() || []).filter((pack: any) => {
+      if (packType && pack.metadata?.type !== packType) {
         return false;
       }
-      return pack.metadata.type !== 'Scene'; // Exclude scene packs for safety
+      return pack.metadata?.type !== 'Scene'; // Exclude scene packs for safety
     });
 
     for (const pack of packs) {
       try {
         // Ensure pack index is loaded
-        if (!pack.indexed) {
-          await pack.getIndex({});
+        if (!(pack as any).indexed) {
+          await (pack as any).getIndex({});
         }
 
         // Use basic compendium index for all searches
-        const entriesToSearch = Array.from(pack.index.values());
+        const entriesToSearch = Array.from((pack as any).index?.values() || []);
 
         for (const entry of entriesToSearch) {
           try {
@@ -2191,7 +2192,7 @@ export class FoundryDataAccess {
           }
 
           // Create the actor
-          const newActor = await Actor.create(actorData);
+          const newActor = await (Actor as any).create(actorData);
           if (!newActor) {
             throw new Error(`Failed to create actor "${customName}"`);
           }
@@ -2416,7 +2417,7 @@ export class FoundryDataAccess {
 
     try {
       // Clone the source data
-      const actorData = foundry.utils.deepClone(sourceDoc.fullData) as any;
+      const actorData = (foundry.utils as any).duplicate(sourceDoc.fullData) as any;
 
       // Apply customizations
       actorData.name = customName;
@@ -2444,7 +2445,7 @@ export class FoundryDataAccess {
       }
 
       // Create the new actor
-      const createdDocs = await Actor.createDocuments([actorData]);
+      const createdDocs = await (Actor as any).createDocuments([actorData]);
       if (!createdDocs || createdDocs.length === 0) {
         throw new Error('Failed to create actor document');
       }
@@ -2550,7 +2551,7 @@ export class FoundryDataAccess {
       const rollFormula = this.buildRollFormula(data.rollType, data.rollTarget, data.rollModifier, playerInfo.character);
 
       // Generate roll button HTML
-      const buttonId = foundry.utils.randomID();
+      const buttonId = (foundry.utils as any).randomID();
       const buttonLabel = this.buildRollButtonLabel(data.rollType, data.rollTarget, data.isPublic);
 
       // Check if this type of roll was already performed (optional: could check for duplicate recent rolls)
@@ -2943,7 +2944,7 @@ export class FoundryDataAccess {
    * Attach click handlers to roll buttons and handle visibility
    * Called by global renderChatMessageHTML hook in main.ts
    */
-  public attachRollButtonHandlers(html: JQuery): void {
+  public attachRollButtonHandlers(html: any): void {
     const currentUserId = game.user?.id;
     const isGM = game.user?.isGM;
 
@@ -2951,7 +2952,7 @@ export class FoundryDataAccess {
 
     // Handle button visibility and styling based on permissions and public/private status
     // IMPORTANT: Skip styling for buttons that are already in rolled state
-    html.find('.mcp-roll-button').each((_index, element) => {
+    html.find('.mcp-roll-button').each((_index: number, element: any) => {
       const button = $(element);
       const targetUserId = button.data('target-user-id');
       const isPublicRollRaw = button.data('is-public');
@@ -2992,7 +2993,7 @@ export class FoundryDataAccess {
     });
 
     // Attach click handlers to roll buttons
-    html.find('.mcp-roll-button').on('click', async (event) => {
+    html.find('.mcp-roll-button').on('click', async (event: any) => {
       const button = $(event.currentTarget);
 
       // Ignore clicks on disabled buttons
@@ -3056,7 +3057,6 @@ export class FoundryDataAccess {
         const character = characterId ? game.actors?.get(characterId) : null;
 
         // Use the modern Foundry v13 approach with roll.toMessage()
-        const rollMode = isPublic ? 'publicroll' : 'whisper';
         const whisperTargets: string[] = [];
 
         if (!isPublic) {
@@ -3083,10 +3083,7 @@ export class FoundryDataAccess {
 
 
         // Use roll.toMessage() with proper rollMode
-        await roll.toMessage(messageData, {
-          create: true,
-          rollMode: rollMode
-        });
+        await roll.toMessage(messageData);
 
         // Update the ChatMessage to reflect rolled state
         const buttonId = button.data('button-id');
@@ -3460,7 +3457,7 @@ export class FoundryDataAccess {
   private findActorByIdentifier(identifier: string): any {
     return game.actors?.get(identifier) ||
       game.actors?.getName(identifier) ||
-      Array.from(game.actors || []).find(a =>
+      Array.from(game.actors?.values() || []).find((a: any) =>
         a.name?.toLowerCase().includes(identifier.toLowerCase())
       );
   }
@@ -3498,11 +3495,11 @@ export class FoundryDataAccess {
     this.validateFoundryState();
 
     try {
-      const partyCharacters = Array.from(game.actors || []).filter(actor =>
+      const partyCharacters = Array.from(game.actors?.values() || []).filter((actor: any) =>
         actor.hasPlayerOwner && actor.type === 'character'
       );
 
-      return partyCharacters.map(actor => ({
+      return partyCharacters.map((actor: any) => ({
         id: actor.id || '',
         name: actor.name || 'Unknown',
       })).filter(c => c.id);
@@ -3519,11 +3516,11 @@ export class FoundryDataAccess {
     this.validateFoundryState();
 
     try {
-      const connectedPlayers = Array.from(game.users || []).filter(user =>
+      const connectedPlayers = Array.from(game.users?.values() || []).filter((user: any) =>
         user.active && !user.isGM
       );
 
-      return connectedPlayers.map(user => ({
+      return connectedPlayers.map((user: any) => ({
         id: user.id || '',
         name: user.name || 'Unknown',
       })).filter(u => u.id);
@@ -3545,29 +3542,29 @@ export class FoundryDataAccess {
       const players = [];
 
       // Direct user name matching
-      for (const user of game.users || []) {
-        if (user.isGM) continue;
+      for (const user of Array.from(game.users?.values() || [])) {
+        if ((user as any).isGM) continue;
 
-        const userName = user.name?.toLowerCase() || '';
+        const userName = (user as any).name?.toLowerCase() || '';
         if (userName === searchTerm || (allowPartialMatch && userName.includes(searchTerm))) {
-          players.push({ id: user.id || '', name: user.name || 'Unknown' });
+          players.push({ id: (user as any).id || '', name: (user as any).name || 'Unknown' });
         }
       }
 
       // Character name matching (find owner of character)
       if (includeCharacterOwners && players.length === 0) {
-        for (const actor of game.actors || []) {
-          if (actor.type !== 'character') continue;
+        for (const actor of Array.from(game.actors?.values() || [])) {
+          if ((actor as any).type !== 'character') continue;
 
-          const actorName = actor.name?.toLowerCase() || '';
+          const actorName = (actor as any).name?.toLowerCase() || '';
           if (actorName === searchTerm || (allowPartialMatch && actorName.includes(searchTerm))) {
             // Find the player owner of this character
-            const owner = game.users?.find(user =>
-              actor.testUserPermission(user, 'OWNER') && !user.isGM
+            const owner = Array.from(game.users?.values() || []).find((user: any) =>
+              (actor as any).testUserPermission(user, 'OWNER') && !user.isGM
             );
 
-            if (owner && !players.some(p => p.id === owner.id)) {
-              players.push({ id: owner.id || '', name: owner.name || 'Unknown' });
+            if (owner && !players.some(p => p.id === (owner as any).id)) {
+              players.push({ id: (owner as any).id || '', name: (owner as any).name || 'Unknown' });
             }
           }
         }
@@ -3778,7 +3775,7 @@ export class FoundryDataAccess {
     this.validateFoundryState();
 
     try {
-      const actor = await Actor.create(data.actorData as any);
+      const actor = await (Actor as any).create(data.actorData as any);
 
       if (!actor) {
         throw new Error('Failed to create actor');
@@ -3811,7 +3808,9 @@ export class FoundryDataAccess {
         throw new Error(`Actor not found with ID: ${data.actorId}`);
       }
 
-      await actor.update(data.updateData);
+      // Pass skipDialog option to bypass WFRP4e confirmation dialogs
+      // This prevents timeouts when advancing characteristics/skills via MCP
+      await actor.update(data.updateData, { skipDialog: true } as any);
 
       // Show notification to GM with warnings if present
       const updateFields = Object.keys(data.updateData).join(', ');

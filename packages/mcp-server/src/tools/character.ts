@@ -334,6 +334,40 @@ export class CharacterTools {
         if (system.details.biography.longTermAmbition?.value) {
           basicInfo.biography.longTermAmbition = system.details.biography.longTermAmbition.value;
         }
+        // Add full biography text if available
+        if (system.details.biography.value) {
+          basicInfo.biography.notes = system.details.biography.value;
+        }
+      }
+
+      // Movement (WFRP 4e)
+      if (system.details?.move) {
+        basicInfo.movement = system.details.move.value || system.details.move;
+      }
+
+      // Physical Description
+      if (system.details?.gender?.value) {
+        basicInfo.gender = system.details.gender.value;
+      }
+      if (system.details?.age?.value) {
+        basicInfo.age = system.details.age.value;
+      }
+      if (system.details?.height?.value) {
+        basicInfo.height = system.details.height.value;
+      }
+      if (system.details?.hair?.value) {
+        basicInfo.hair = system.details.hair.value;
+      }
+      if (system.details?.eyes?.value) {
+        basicInfo.eyes = system.details.eyes.value;
+      }
+      if (system.details?.distinguishingMarks?.value) {
+        basicInfo.distinguishingMarks = system.details.distinguishingMarks.value;
+      }
+
+      // Experience log (if available)
+      if (system.details?.experience?.log) {
+        basicInfo.experienceLog = system.details.experience.log;
       }
 
     } else {
@@ -529,20 +563,36 @@ export class CharacterTools {
       }));
     }
 
+    // Note: Active effects-based conditions (Fatigued, Poisoned, etc.) with counts
+    // are handled by extracting from character.effects, not items.
+    // Those will need to be added to formatEffects to show condition values.
+
     return conditions;
   }
 
   private formatEffects(effects: any[]): any[] {
-    return effects.map(effect => ({
-      id: effect.id,
-      name: effect.name,
-      disabled: effect.disabled,
-      duration: effect.duration ? {
-        type: effect.duration.type,
-        remaining: effect.duration.remaining,
-      } : null,
-      hasIcon: !!effect.icon,
-    }));
+    return effects.map(effect => {
+      const formattedEffect: any = {
+        id: effect.id,
+        name: effect.name,
+        disabled: effect.disabled,
+        duration: effect.duration ? {
+          type: effect.duration.type,
+          remaining: effect.duration.remaining,
+        } : null,
+        hasIcon: !!effect.icon,
+      };
+
+      // Add condition value if this is a WFRP condition (Fatigued, Poisoned, etc.)
+      // WFRP conditions store their count in flags.wfrp4e.conditionValue
+      if (effect.flags?.wfrp4e?.conditionValue) {
+        formattedEffect.conditionValue = effect.flags.wfrp4e.conditionValue;
+        // Update name to include count for better readability
+        formattedEffect.displayName = `${effect.name} (${effect.flags.wfrp4e.conditionValue})`;
+      }
+
+      return formattedEffect;
+    });
   }
 
   private truncateText(text: string, maxLength: number): string {
@@ -627,9 +677,14 @@ export class CharacterTools {
         if (charMap[lowerKey]) {
           const charKey = charMap[lowerKey];
 
-          // Validation: Reject negative characteristics
-          if (typeof value === 'number' && value < 0) {
-            throw new Error(`Cannot set ${charNames[charKey]} to ${value}. Characteristics cannot be negative as this will cause calculation errors in WFRP4e. Minimum value is 0.`);
+          // Validation: Reject negative characteristics and cap at 250
+          if (typeof value === 'number') {
+            if (value < 0) {
+              throw new Error(`Cannot set ${charNames[charKey]} to ${value}. Characteristics cannot be negative as this will cause calculation errors in WFRP4e. Minimum value is 0.`);
+            }
+            if (value > 250) {
+              throw new Error(`Cannot set ${charNames[charKey]} to ${value}. Values above 250 are not allowed as they would cause game-breaking issues. Maximum value is 250.`);
+            }
           }
 
           updateData[`system.characteristics.${charKey}.initial`] = value;
@@ -638,41 +693,74 @@ export class CharacterTools {
           // Warning for unusual but valid values
           if (typeof value === 'number') {
             if (value === 0) {
-              warnings.push(`⚠️ ${charNames[charKey]} set to 0 - This is unusual in WFRP4e. The character will have no baseline in this characteristic (only advances will contribute to tests).`);
+              warnings.push(`WARNING: ${charNames[charKey]} set to 0. This is unusual in WFRP4e. The character will have no baseline in this characteristic (only advances will contribute to tests).`);
             } else if (value > 100) {
-              warnings.push(`⚠️ ${charNames[charKey]} set to ${value} - Values above 100 are exceptionally rare in WFRP4e (beyond legendary).`);
+              warnings.push(`WARNING: ${charNames[charKey]} set to ${value}. Values above 100 are exceptionally rare in WFRP4e (beyond legendary).`);
             }
           }
         }
         // Handle status values
         else if (lowerKey === 'currentwounds') {
-          updateData['system.status.wounds.value'] = value;
+          // Cap wounds at maximum
+          if (typeof value === 'number' && characterData.system?.status?.wounds?.max) {
+            const maxWounds = characterData.system.status.wounds.max;
+            if (value > maxWounds) {
+              updateData['system.status.wounds.value'] = maxWounds;
+              warnings.push(`WARNING: Current Wounds capped at maximum (${maxWounds}). Cannot exceed max wounds.`);
+            } else {
+              updateData['system.status.wounds.value'] = value;
+            }
+          } else {
+            updateData['system.status.wounds.value'] = value;
+          }
           if (typeof value === 'number' && value < 0) {
-            warnings.push(`⚠️ Current Wounds set to ${value} - Negative wounds indicate the character should be dead or dying.`);
+            warnings.push(`WARNING: Current Wounds set to ${value}. Negative wounds indicate the character should be dead or dying.`);
           }
         }
         else if (lowerKey === 'fortune') {
-          updateData['system.status.fortune.value'] = value;
+          // Cap Fortune at Fate maximum
+          if (typeof value === 'number' && characterData.system?.status?.fate?.value) {
+            const maxFortune = characterData.system.status.fate.value;
+            if (value > maxFortune) {
+              updateData['system.status.fortune.value'] = maxFortune;
+              warnings.push(`WARNING: Fortune capped at Fate maximum (${maxFortune}). Fortune cannot exceed Fate.`);
+            } else {
+              updateData['system.status.fortune.value'] = value;
+            }
+          } else {
+            updateData['system.status.fortune.value'] = value;
+          }
           if (typeof value === 'number' && value < 0) {
-            warnings.push(`⚠️ Fortune set to ${value} - Negative Fortune is not standard in WFRP4e.`);
+            warnings.push(`WARNING: Fortune set to ${value}. Negative Fortune is not standard in WFRP4e.`);
           }
         }
         else if (lowerKey === 'fate') {
           updateData['system.status.fate.value'] = value;
           if (typeof value === 'number' && value < 0) {
-            warnings.push(`⚠️ Fate set to ${value} - Negative Fate is not standard in WFRP4e.`);
+            warnings.push(`WARNING: Fate set to ${value}. Negative Fate is not standard in WFRP4e.`);
           }
         }
         else if (lowerKey === 'resilience') {
           updateData['system.status.resilience.value'] = value;
           if (typeof value === 'number' && value < 0) {
-            warnings.push(`⚠️ Resilience set to ${value} - Negative Resilience is not standard in WFRP4e.`);
+            warnings.push(`WARNING: Resilience set to ${value}. Negative Resilience is not standard in WFRP4e.`);
           }
         }
         else if (lowerKey === 'resolve') {
-          updateData['system.status.resolve.value'] = value;
+          // Cap Resolve at Resilience maximum
+          if (typeof value === 'number' && characterData.system?.status?.resilience?.value) {
+            const maxResolve = characterData.system.status.resilience.value;
+            if (value > maxResolve) {
+              updateData['system.status.resolve.value'] = maxResolve;
+              warnings.push(`WARNING: Resolve capped at Resilience maximum (${maxResolve}). Resolve cannot exceed Resilience.`);
+            } else {
+              updateData['system.status.resolve.value'] = value;
+            }
+          } else {
+            updateData['system.status.resolve.value'] = value;
+          }
           if (typeof value === 'number' && value < 0) {
-            warnings.push(`⚠️ Resolve set to ${value} - Negative Resolve is not standard in WFRP4e.`);
+            warnings.push(`WARNING: Resolve set to ${value}. Negative Resolve is not standard in WFRP4e.`);
           }
         }
         else {
@@ -684,7 +772,7 @@ export class CharacterTools {
 
       // Add warning for unknown fields
       if (unknownFields.length > 0) {
-        warnings.push(`⚠️ Unknown field(s) ignored: ${unknownFields.join(', ')}. Valid fields include: characteristic names (ws, bs, s, t, i, ag, dex, int, wp, fel), currentWounds, fortune, fate, resilience, resolve.`);
+        warnings.push(`WARNING: Unknown field(s) ignored: ${unknownFields.join(', ')}. Valid fields include: characteristic names (ws, bs, s, t, i, ag, dex, int, wp, fel), currentWounds, fortune, fate, resilience, resolve.`);
       }
 
       if (Object.keys(updateData).length === 0) {

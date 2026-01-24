@@ -1,0 +1,50 @@
+# TokenSegmentizeMovementWaypoint
+
+**Interface**
+
+```typescript
+interface TokenSegmentizeMovementWaypoint {
+  action?: string;
+  elevation?: number;
+  height?: number;
+  shape?: TokenShapeType;
+  snapped?: boolean;
+  terrain?: null | DataModel<object, DataModelConstructionContext>;
+  width?: number;
+  x?: number;
+  y?: number;
+}
+```
+
+## Properties
+
+- **action?**: `string`  
+  The movement action from the previous to this waypoint. Default: the previous or prepared movement action.
+
+- **elevation?**: `number`  
+  The elevation in grid units. Default: the previous or source elevation.
+
+- **height?**: `number`  
+  The height in grid spaces (positive). Default: the previous or source height.
+
+- **shape?**: [`TokenShapeType`](https://foundryvtt.com/api/types/CONST.TokenShapeType.html)  
+  The shape type (see [CONST.TOKEN_SHAPES](https://foundryvtt.com/api/variables/CONST.TOKEN_SHAPES.html)). Default: the previous or source shape.
+
+- **snapped?**: `boolean`  
+  Was this waypoint snapped to the grid? Default: `false`.
+
+- **terrain?**: `null | DataModel<object, DataModelConstructionContext>`  
+  The terrain data of this segment. Default: `null`.
+
+- **width?**: `number`  
+  The width in grid spaces (positive). Default: the previous or source width.
+
+- **x?**: `number`  
+  The x-coordinate in pixels (integer). Default: the previous or source x-coordinate.
+
+- **y?**: `number`  
+  The y-coordinate in pixels (integer). Default: the previous or source y-coordinate.
+
+---
+
+[Foundry Virtual Tabletop - API Documentation - Version 13](https://foundryvtt.com/api/index.html)

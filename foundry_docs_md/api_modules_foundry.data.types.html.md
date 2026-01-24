@@ -1,0 +1,47 @@
+# Namespace `types`
+
+## Interfaces
+
+- [_ArrayFieldOptions](https://foundryvtt.com/api/interfaces/foundry.data.types._ArrayFieldOptions.html)
+- [_DocumentUUIDFieldOptions](https://foundryvtt.com/api/interfaces/foundry.data.types._DocumentUUIDFieldOptions.html)
+- [_FilePathFieldOptions](https://foundryvtt.com/api/interfaces/foundry.data.types._FilePathFieldOptions.html)
+- [_JavaScriptFieldOptions](https://foundryvtt.com/api/interfaces/foundry.data.types._JavaScriptFieldOptions.html)
+- [_NumberFieldOptions](https://foundryvtt.com/api/interfaces/foundry.data.types._NumberFieldOptions.html)
+- [_StringFieldOptions](https://foundryvtt.com/api/interfaces/foundry.data.types._StringFieldOptions.html)
+- [CalendarConfig](https://foundryvtt.com/api/interfaces/foundry.data.types.CalendarConfig.html)
+- [CalendarConfigDay](https://foundryvtt.com/api/interfaces/foundry.data.types.CalendarConfigDay.html)
+- [CalendarConfigDays](https://foundryvtt.com/api/interfaces/foundry.data.types.CalendarConfigDays.html)
+- [CalendarConfigLeapYear](https://foundryvtt.com/api/interfaces/foundry.data.types.CalendarConfigLeapYear.html)
+- [CalendarConfigMonth](https://foundryvtt.com/api/interfaces/foundry.data.types.CalendarConfigMonth.html)
+- [CalendarConfigMonths](https://foundryvtt.com/api/interfaces/foundry.data.types.CalendarConfigMonths.html)
+- [CalendarConfigSeason](https://foundryvtt.com/api/interfaces/foundry.data.types.CalendarConfigSeason.html)
+- [CalendarConfigSeasons](https://foundryvtt.com/api/interfaces/foundry.data.types.CalendarConfigSeasons.html)
+- [CalendarConfigYears](https://foundryvtt.com/api/interfaces/foundry.data.types.CalendarConfigYears.html)
+- [ChoiceInputConfig](https://foundryvtt.com/api/interfaces/foundry.data.types.ChoiceInputConfig.html)
+- [CodeMirrorInputConfig](https://foundryvtt.com/api/interfaces/foundry.data.types.CodeMirrorInputConfig.html)
+- [CombatConfigurationData](https://foundryvtt.com/api/interfaces/foundry.data.types.CombatConfigurationData.html)
+- [DataFieldContext](https://foundryvtt.com/api/interfaces/foundry.data.types.DataFieldContext.html)
+- [DataFieldOptions](https://foundryvtt.com/api/interfaces/foundry.data.types.DataFieldOptions.html)
+- [DataFieldValidationOptions](https://foundryvtt.com/api/interfaces/foundry.data.types.DataFieldValidationOptions.html)
+- [DocumentStats](https://foundryvtt.com/api/interfaces/foundry.data.types.DocumentStats.html)
+- [ElementValidationFailure](https://foundryvtt.com/api/interfaces/foundry.data.types.ElementValidationFailure.html)
+- [FormGroupConfig](https://foundryvtt.com/api/interfaces/foundry.data.types.FormGroupConfig.html)
+- [FormInputConfig](https://foundryvtt.com/api/interfaces/foundry.data.types.FormInputConfig.html)
+- [LightAnimationData](https://foundryvtt.com/api/interfaces/foundry.data.types.LightAnimationData.html)
+- [StringFieldInputConfig](https://foundryvtt.com/api/interfaces/foundry.data.types.StringFieldInputConfig.html)
+- [TimeComponents](https://foundryvtt.com/api/interfaces/foundry.data.types.TimeComponents.html)
+
+[Foundry Virtual Tabletop - API Documentation - Version 13](https://foundryvtt.com/api/index.html)
+
+## Type Aliases
+
+- [ArrayFieldOptions](https://foundryvtt.com/api/types/foundry.data.types.ArrayFieldOptions.html)
+- [CodeMirrorLanguage](https://foundryvtt.com/api/types/foundry.data.types.CodeMirrorLanguage.html)
+- [DataFieldValidator](https://foundryvtt.com/api/types/foundry.data.types.DataFieldValidator.html)
+- [DocumentFlags](https://foundryvtt.com/api/types/foundry.data.types.DocumentFlags.html)
+- [DocumentUUIDFieldOptions](https://foundryvtt.com/api/types/foundry.data.types.DocumentUUIDFieldOptions.html)
+- [FilePathFieldOptions](https://foundryvtt.com/api/types/foundry.data.types.FilePathFieldOptions.html)
+- [JavaScriptFieldOptions](https://foundryvtt.com/api/types/foundry.data.types.JavaScriptFieldOptions.html)
+- [NumberFieldOptions](https://foundryvtt.com/api/types/foundry.data.types.NumberFieldOptions.html)
+- [StringFieldOptions](https://foundryvtt.com/api/types/foundry.data.types.StringFieldOptions.html)
+- [TimeFormatter](https://foundryvtt.com/api/types/foundry.data.types.TimeFormatter.html)

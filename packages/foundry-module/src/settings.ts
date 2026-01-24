@@ -432,7 +432,7 @@ export class ModuleSettings {
       enabled: this.getSetting('enabled'),
       serverHost: this.getSetting('serverHost'),
       serverPort: this.getSetting('serverPort'),
-      namespace: '/foundry-mcp', // Fixed namespace - no user configuration needed
+      namespace: '/warhammer-mcp', // Fixed namespace - no user configuration needed
       reconnectAttempts: DEFAULT_CONFIG.RECONNECT_ATTEMPTS, // Use sensible default
       reconnectDelay: DEFAULT_CONFIG.RECONNECT_DELAY, // Use sensible default
       connectionTimeout: DEFAULT_CONFIG.CONNECTION_TIMEOUT, // Use sensible default
