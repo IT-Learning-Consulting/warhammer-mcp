@@ -81,6 +81,15 @@ export class CharacterTools {
                 fate: { type: 'number', description: 'Fate points current value (direct set - for epic achievements with ceremony, use foundry-add-fate-point)' },
                 resilience: { type: 'number', description: 'Resilience points (max value)' },
                 resolve: { type: 'number', description: 'Resolve points (max value)' },
+                // Physical details
+                age: { type: 'number', description: 'Character age in years' },
+                height: { type: 'string', description: 'Character height (e.g., "185 cm", "6 feet")' },
+                weight: { type: 'string', description: 'Character weight or build (e.g., "Fat", "Fit", "Thin", "70 kg")' },
+                hair: { type: 'string', description: 'Hair color (e.g., "Blond", "Black", "Brown")' },
+                eyes: { type: 'string', description: 'Eye color (e.g., "Blue", "Green", "Brown")' },
+                gender: { type: 'string', description: 'Character gender' },
+                distinguishingMarks: { type: 'string', description: 'Distinguishing marks or features (e.g., "Black Teeth", "Scar on left cheek")' },
+                starSign: { type: 'string', description: 'Astrological star sign (e.g., "The Ghoul", "The Witchling Star")' },
               },
             },
           },
@@ -136,6 +145,60 @@ export class CharacterTools {
             },
           },
           required: ['characterName', 'itemName', 'itemType'],
+        },
+      },
+      {
+        name: 'foundry-update-character-notes',
+        description: 'Update GM Notes, Biography, or both for a character. These are text fields that can contain formatted content (HTML). Use this to add narrative details, GM reminders, backstory, or character personality notes. Example: "Add to Test Character\'s GM notes that he hates beer" or "Update Hans\' biography with his backstory"',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            identifier: {
+              type: 'string',
+              description: 'Character name or ID to update',
+            },
+            gmNotes: {
+              type: 'string',
+              description: 'Text to set for GM Notes (HTML allowed). Leave empty to not update GM Notes.',
+            },
+            biography: {
+              type: 'string',
+              description: 'Text to set for Biography (HTML allowed). Leave empty to not update Biography.',
+            },
+            appendMode: {
+              type: 'boolean',
+              description: 'If true, append the text to existing content instead of replacing it. Default: false',
+              default: false,
+            },
+          },
+          required: ['identifier'],
+        },
+      },
+      {
+        name: 'foundry-add-experience-log-entry',
+        description: 'Add an entry to a character\'s experience log. The experience log tracks XP awards and expenditures with reasons. Use this to document why XP was gained or spent. Example: "Log that Hans spent 100 XP on Strong Back talent" or "Award 50 XP to Gustav for defeating the troll"',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            identifier: {
+              type: 'string',
+              description: 'Character name or ID',
+            },
+            amount: {
+              type: 'number',
+              description: 'XP amount (positive for awards, negative for spending)',
+            },
+            reason: {
+              type: 'string',
+              description: 'Reason for the XP change (e.g., "Strong Back talent", "Defeated troll", "Session reward")',
+            },
+            type: {
+              type: 'string',
+              description: 'Type of log entry: "spent" or "total". Default: "spent" for negative amounts, "total" for positive',
+              enum: ['spent', 'total'],
+            },
+          },
+          required: ['identifier', 'amount', 'reason'],
         },
       },
     ];
@@ -340,6 +403,11 @@ export class CharacterTools {
         }
       }
 
+      // GM Notes (WFRP 4e)
+      if (system.details?.gmnotes?.value) {
+        basicInfo.gmNotes = system.details.gmnotes.value;
+      }
+
       // Movement (WFRP 4e)
       if (system.details?.move) {
         basicInfo.movement = system.details.move.value || system.details.move;
@@ -363,6 +431,16 @@ export class CharacterTools {
       }
       if (system.details?.distinguishingMarks?.value) {
         basicInfo.distinguishingMarks = system.details.distinguishingMarks.value;
+      }
+      // Weight (WFRP 4e)
+      if (system.details?.weight?.value) {
+        basicInfo.weight = system.details.weight.value;
+      }
+      // Star Sign (WFRP 4e - handle both camelCase and lowercase)
+      if (system.details?.starsign?.value) {
+        basicInfo.starSign = system.details.starsign.value;
+      } else if (system.details?.starSign?.value) {
+        basicInfo.starSign = system.details.starSign.value;
       }
 
       // Experience log (if available)
@@ -763,6 +841,31 @@ export class CharacterTools {
             warnings.push(`WARNING: Resolve set to ${value}. Negative Resolve is not standard in WFRP4e.`);
           }
         }
+        // Physical detail fields
+        else if (lowerKey === 'age') {
+          updateData['system.details.age.value'] = value;
+        }
+        else if (lowerKey === 'height') {
+          updateData['system.details.height.value'] = value;
+        }
+        else if (lowerKey === 'weight') {
+          updateData['system.details.weight.value'] = value;
+        }
+        else if (lowerKey === 'hair') {
+          updateData['system.details.hair.value'] = value;
+        }
+        else if (lowerKey === 'eyes') {
+          updateData['system.details.eyes.value'] = value;
+        }
+        else if (lowerKey === 'gender') {
+          updateData['system.details.gender.value'] = value;
+        }
+        else if (lowerKey === 'distinguishingmarks') {
+          updateData['system.details.distinguishingMarks.value'] = value;
+        }
+        else if (lowerKey === 'starsign') {
+          updateData['system.details.starsign.value'] = value;
+        }
         else {
           // Unknown field - track it for user feedback
           unknownFields.push(key);
@@ -772,7 +875,7 @@ export class CharacterTools {
 
       // Add warning for unknown fields
       if (unknownFields.length > 0) {
-        warnings.push(`WARNING: Unknown field(s) ignored: ${unknownFields.join(', ')}. Valid fields include: characteristic names (ws, bs, s, t, i, ag, dex, int, wp, fel), currentWounds, fortune, fate, resilience, resolve.`);
+        warnings.push(`WARNING: Unknown field(s) ignored: ${unknownFields.join(', ')}. Valid fields include: characteristic names (ws, bs, s, t, i, ag, dex, int, wp, fel), currentWounds, fortune, fate, resilience, resolve, age, height, weight, hair, eyes, gender, distinguishingMarks, starSign.`);
       }
 
       if (Object.keys(updateData).length === 0) {
@@ -1062,6 +1165,166 @@ export class CharacterTools {
     } catch (error) {
       this.logger.error('Failed to add skill/talent', error);
       throw new Error(`Failed to add ${itemType}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  async handleUpdateCharacterNotes(args: any): Promise<any> {
+    const schema = z.object({
+      identifier: z.string().min(1, 'Character identifier cannot be empty'),
+      gmNotes: z.string().optional(),
+      biography: z.string().optional(),
+      appendMode: z.boolean().optional().default(false),
+    });
+
+    const { identifier, gmNotes, biography, appendMode } = schema.parse(args);
+
+    this.logger.info('Updating character notes/biography', {
+      identifier,
+      hasGmNotes: !!gmNotes,
+      hasBiography: !!biography,
+      appendMode
+    });
+
+    try {
+      // Get current character data
+      const characterData = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
+        characterName: identifier,
+      });
+
+      if (!characterData || !characterData.id) {
+        throw new Error(`Character "${identifier}" not found`);
+      }
+
+      const updateData: Record<string, any> = {};
+
+      // Handle GM Notes update
+      if (gmNotes !== undefined) {
+        if (appendMode && characterData.system?.details?.gmnotes?.value) {
+          // Append to existing GM Notes
+          const existingNotes = characterData.system.details.gmnotes.value;
+          updateData['system.details.gmnotes.value'] = `${existingNotes}\n${gmNotes}`;
+        } else {
+          // Replace GM Notes
+          updateData['system.details.gmnotes.value'] = gmNotes;
+        }
+      }
+
+      // Handle Biography update
+      if (biography !== undefined) {
+        if (appendMode && characterData.system?.details?.biography?.value) {
+          // Append to existing Biography
+          const existingBiography = characterData.system.details.biography.value;
+          updateData['system.details.biography.value'] = `${existingBiography}\n${biography}`;
+        } else {
+          // Replace Biography
+          updateData['system.details.biography.value'] = biography;
+        }
+      }
+
+      if (Object.keys(updateData).length === 0) {
+        throw new Error('No updates provided. Please specify gmNotes or biography to update.');
+      }
+
+      // Execute the update
+      await this.foundryClient.query('warhammer-mcp.updateActor', {
+        actorId: characterData.id,
+        updateData,
+      });
+
+      this.logger.info('Successfully updated character notes/biography', {
+        characterId: characterData.id,
+        characterName: characterData.name,
+        fieldsUpdated: Object.keys(updateData),
+      });
+
+      const updatedFields = [];
+      if (gmNotes !== undefined) updatedFields.push('GM Notes');
+      if (biography !== undefined) updatedFields.push('Biography');
+
+      return {
+        success: true,
+        character: {
+          id: characterData.id,
+          name: characterData.name,
+        },
+        updated: updatedFields,
+        mode: appendMode ? 'appended' : 'replaced',
+        message: `Successfully ${appendMode ? 'appended to' : 'updated'} ${updatedFields.join(' and ')} for ${characterData.name}`,
+      };
+
+    } catch (error) {
+      this.logger.error('Failed to update character notes/biography', error);
+      throw new Error(`Failed to update notes/biography for "${identifier}": ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  async handleAddExperienceLogEntry(args: any): Promise<any> {
+    const schema = z.object({
+      identifier: z.string().min(1, 'Character identifier cannot be empty'),
+      amount: z.number(),
+      reason: z.string().min(1, 'Reason cannot be empty'),
+      type: z.enum(['spent', 'total']).optional(),
+    });
+
+    const parsed = schema.parse(args);
+    const { identifier, amount, reason } = parsed;
+    // Auto-determine type based on amount if not specified
+    const type = parsed.type || (amount < 0 ? 'spent' : 'total');
+
+    this.logger.info('Adding experience log entry', { identifier, amount, reason, type });
+
+    try {
+      // Get current character data
+      const characterData = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
+        characterName: identifier,
+      });
+
+      if (!characterData || !characterData.id) {
+        throw new Error(`Character "${identifier}" not found`);
+      }
+
+      // Get existing log or initialize empty array
+      const existingLog = characterData.system?.details?.experience?.log || [];
+
+      // Create new log entry
+      const newEntry = {
+        amount: Math.abs(amount), // WFRP stores as absolute value
+        reason: reason,
+        type: type,
+        // WFRP might have additional fields, but these are the essentials
+      };
+
+      // Add new entry to the log
+      const updatedLog = [...existingLog, newEntry];
+
+      // Update the experience log
+      await this.foundryClient.query('warhammer-mcp.updateActor', {
+        actorId: characterData.id,
+        updateData: {
+          'system.details.experience.log': updatedLog,
+        },
+      });
+
+      this.logger.info('Successfully added experience log entry', {
+        characterId: characterData.id,
+        characterName: characterData.name,
+        entry: newEntry,
+      });
+
+      return {
+        success: true,
+        character: {
+          id: characterData.id,
+          name: characterData.name,
+        },
+        logEntry: newEntry,
+        totalLogEntries: updatedLog.length,
+        message: `Added experience log entry to ${characterData.name}: ${amount > 0 ? '+' : ''}${amount} XP - ${reason}`,
+      };
+
+    } catch (error) {
+      this.logger.error('Failed to add experience log entry', error);
+      throw new Error(`Failed to add experience log for "${identifier}": ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 }

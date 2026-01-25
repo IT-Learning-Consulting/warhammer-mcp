@@ -3813,14 +3813,31 @@ export class FoundryDataAccess {
       await actor.update(data.updateData, { skipDialog: true } as any);
 
       // Show notification to GM with warnings if present
-      const updateFields = Object.keys(data.updateData).join(', ');
+      // Format field names in a human-readable way
+      const fieldNames = Object.keys(data.updateData).map(key => {
+        // Extract readable field name from path like "system.characteristics.s.initial"
+        const parts = key.split('.');
+        if (parts.includes('characteristics')) {
+          const char = parts[parts.indexOf('characteristics') + 1];
+          return `${char.toUpperCase()} characteristic`;
+        } else if (parts.includes('status')) {
+          const stat = parts[parts.indexOf('status') + 1];
+          return stat.charAt(0).toUpperCase() + stat.slice(1);
+        }
+        return key;
+      }).join(', ');
+
       if (data.warnings && data.warnings.length > 0) {
-        // Show warning notification with details
-        ui.notifications?.warn(`MCP: Updated ${actor.name} (${updateFields}) - ${data.warnings.length} warning(s)`);
+        // Show each warning as a separate notification for clarity
+        data.warnings.forEach(warning => {
+          ui.notifications?.warn(`MCP: ${warning}`);
+        });
+        // Also show summary
+        ui.notifications?.info(`MCP: Updated ${actor.name} - ${fieldNames}`);
         // Log warnings to console for GM review
         console.warn(`[Warhammer MCP] Warnings for ${actor.name}:`, data.warnings);
       } else {
-        ui.notifications?.info(`MCP: Updated ${actor.name} (${updateFields})`);
+        ui.notifications?.info(`MCP: Updated ${actor.name} - ${fieldNames}`);
       }
 
       return {

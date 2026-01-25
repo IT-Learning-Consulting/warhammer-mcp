@@ -41,9 +41,9 @@ export class FoundryConnector {
 
     // Create HTTP server for WebSocket upgrade
     this.httpServer = createServer();
-    
+
     // Create WebSocket server
-    this.wss = new WebSocketServer({ 
+    this.wss = new WebSocketServer({
       server: this.httpServer,
       path: this.config.namespace || '/'
     });
@@ -191,7 +191,7 @@ export class FoundryConnector {
       const timeout = setTimeout(() => {
         this.pendingQueries.delete(queryId);
         reject(new Error(`Query timeout: ${method}`));
-      }, 10000); // 10 second timeout
+      }, 180000); // 180 second timeout (increased for WFRP4e advancement dialogs)
 
       this.pendingQueries.set(queryId, { resolve, reject, timeout });
 

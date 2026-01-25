@@ -1298,6 +1298,18 @@ async function startBackend(): Promise<void> {
 
                   break;
 
+                case 'foundry-update-character-notes':
+
+                  result = await characterTools.handleUpdateCharacterNotes(args);
+
+                  break;
+
+                case 'foundry-add-experience-log-entry':
+
+                  result = await characterTools.handleAddExperienceLogEntry(args);
+
+                  break;
+
                 // Career advancement tools
 
                 case 'get-career-advancement':
