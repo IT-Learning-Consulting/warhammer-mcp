@@ -385,21 +385,17 @@ export class CharacterTools {
         };
       }
 
-      // Biography - Motivation and Ambitions (WFRP 4e specific)
-      if (system.details?.biography) {
+      // Biography - WFRP 4e stores motivation and ambitions as separate fields
+      if (system.details?.motivation?.value || system.details?.["personal-ambitions"]) {
         basicInfo.biography = {};
-        if (system.details.biography.personalMotivation?.value) {
-          basicInfo.biography.motivation = system.details.biography.personalMotivation.value;
+        if (system.details.motivation?.value) {
+          basicInfo.biography.motivation = system.details.motivation.value;
         }
-        if (system.details.biography.shortTermAmbition?.value) {
-          basicInfo.biography.shortTermAmbition = system.details.biography.shortTermAmbition.value;
+        if (system.details["personal-ambitions"]?.["short-term"]) {
+          basicInfo.biography.shortTermAmbition = system.details["personal-ambitions"]["short-term"];
         }
-        if (system.details.biography.longTermAmbition?.value) {
-          basicInfo.biography.longTermAmbition = system.details.biography.longTermAmbition.value;
-        }
-        // Add full biography text if available
-        if (system.details.biography.value) {
-          basicInfo.biography.notes = system.details.biography.value;
+        if (system.details["personal-ambitions"]?.["long-term"]) {
+          basicInfo.biography.longTermAmbition = system.details["personal-ambitions"]["long-term"];
         }
       }
 
@@ -423,14 +419,15 @@ export class CharacterTools {
       if (system.details?.height?.value) {
         basicInfo.height = system.details.height.value;
       }
-      if (system.details?.hair?.value) {
-        basicInfo.hair = system.details.hair.value;
+      // WFRP4e uses haircolour (not hair), eyecolour (not eyes), distinguishingmark (not distinguishingMarks)
+      if (system.details?.haircolour?.value) {
+        basicInfo.hair = system.details.haircolour.value;
       }
-      if (system.details?.eyes?.value) {
-        basicInfo.eyes = system.details.eyes.value;
+      if (system.details?.eyecolour?.value) {
+        basicInfo.eyes = system.details.eyecolour.value;
       }
-      if (system.details?.distinguishingMarks?.value) {
-        basicInfo.distinguishingMarks = system.details.distinguishingMarks.value;
+      if (system.details?.distinguishingmark?.value) {
+        basicInfo.distinguishingMarks = system.details.distinguishingmark.value;
       }
       // Weight (WFRP 4e)
       if (system.details?.weight?.value) {
@@ -851,17 +848,20 @@ export class CharacterTools {
         else if (lowerKey === 'weight') {
           updateData['system.details.weight.value'] = value;
         }
-        else if (lowerKey === 'hair') {
-          updateData['system.details.hair.value'] = value;
+        // Hair - support both user-friendly and WFRP4e field names
+        else if (lowerKey === 'hair' || lowerKey === 'haircolour') {
+          updateData['system.details.haircolour.value'] = value;
         }
-        else if (lowerKey === 'eyes') {
-          updateData['system.details.eyes.value'] = value;
+        // Eyes - support both user-friendly and WFRP4e field names
+        else if (lowerKey === 'eyes' || lowerKey === 'eyecolour') {
+          updateData['system.details.eyecolour.value'] = value;
         }
         else if (lowerKey === 'gender') {
           updateData['system.details.gender.value'] = value;
         }
-        else if (lowerKey === 'distinguishingmarks') {
-          updateData['system.details.distinguishingMarks.value'] = value;
+        // Distinguishing Marks - support both user-friendly and WFRP4e field names
+        else if (lowerKey === 'distinguishingmarks' || lowerKey === 'distinguishingmark') {
+          updateData['system.details.distinguishingmark.value'] = value;
         }
         else if (lowerKey === 'starsign') {
           updateData['system.details.starsign.value'] = value;

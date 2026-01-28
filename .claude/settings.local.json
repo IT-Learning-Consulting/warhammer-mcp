@@ -40,7 +40,9 @@
       "Bash(\"C:/Program Files (x86)/NSIS/makensis.exe\" /V2 /DVERSION=v0.5.0 /DOUTFILE=\"D:/Projects/foundry-vtt-mcp/installer/build/FoundryMCPServer-Setup-v0.5.0.exe\" \"D:/Projects/foundry-vtt-mcp/installer/nsis/foundry-mcp-server.nsi\")",
       "Bash(\"C:/Program Files (x86)/NSIS/makensis.exe\" -DVERSION=v0.5.0 -DOUTFILE=\"D:/Projects/foundry-vtt-mcp/installer/build/FoundryMCPServer-Setup-v0.5.0.exe\" \"D:/Projects/foundry-vtt-mcp/installer/nsis/foundry-mcp-server.nsi\")",
       "Bash(npm run installer:stage:*)",
-      "Bash(\"C:/Program Files (x86)/NSIS/makensis.exe\" -DVERSION=v0.5.0 -DOUTFILE=\"D:/Projects/foundry-vtt-mcp/installer/build/FoundryMCPServer-Setup-v0.5.0.exe\" \"D:/Projects/foundry-vtt-mcp/installer/build/installer-files/foundry-mcp-server.nsi\")"
+      "Bash(\"C:/Program Files (x86)/NSIS/makensis.exe\" -DVERSION=v0.5.0 -DOUTFILE=\"D:/Projects/foundry-vtt-mcp/installer/build/FoundryMCPServer-Setup-v0.5.0.exe\" \"D:/Projects/foundry-vtt-mcp/installer/build/installer-files/foundry-mcp-server.nsi\")",
+      "Bash(npm run build:deploy:*)",
+      "Bash(ls:*)"
     ],
     "deny": [],
     "ask": [],

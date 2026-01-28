@@ -3812,32 +3812,187 @@ export class FoundryDataAccess {
       // This prevents timeouts when advancing characteristics/skills via MCP
       await actor.update(data.updateData, { skipDialog: true } as any);
 
-      // Show notification to GM with warnings if present
-      // Format field names in a human-readable way
-      const fieldNames = Object.keys(data.updateData).map(key => {
-        // Extract readable field name from path like "system.characteristics.s.initial"
-        const parts = key.split('.');
-        if (parts.includes('characteristics')) {
-          const char = parts[parts.indexOf('characteristics') + 1];
-          return `${char.toUpperCase()} characteristic`;
-        } else if (parts.includes('status')) {
-          const stat = parts[parts.indexOf('status') + 1];
-          return stat.charAt(0).toUpperCase() + stat.slice(1);
-        }
-        return key;
-      }).join(', ');
+      // Debug: Log the updateData structure to help diagnose issues
+      console.log(`[Warhammer MCP] Update data structure:`, {
+        actorName: actor.name,
+        updateDataKeys: Object.keys(data.updateData || {}),
+        hasWarnings: !!(data.warnings && data.warnings.length),
+        warningCount: data.warnings?.length || 0,
+        firstWarning: data.warnings?.[0]
+      });
 
-      if (data.warnings && data.warnings.length > 0) {
-        // Show each warning as a separate notification for clarity
-        data.warnings.forEach(warning => {
-          ui.notifications?.warn(`MCP: ${warning}`);
+      // Format field names in a human-readable way
+      const formatFieldName = (key: string): string => {
+        // Ensure key is a string
+        if (typeof key !== 'string') {
+          console.warn(`[Warhammer MCP] Non-string field key:`, key);
+          return String(key);
+        }
+
+        try {
+          const parts = key.split('.');
+
+          if (parts.includes('characteristics')) {
+            const charIndex = parts.indexOf('characteristics');
+
+            // Validate array bounds
+            if (charIndex + 1 >= parts.length) {
+              return 'Unknown Characteristic';
+            }
+
+            const char = parts[charIndex + 1];
+
+            // Validate char exists and is string
+            if (!char || typeof char !== 'string') {
+              return 'Unknown Characteristic';
+            }
+
+            const charName: Record<string, string> = {
+              'ws': 'Weapon Skill',
+              'bs': 'Ballistic Skill',
+              's': 'Strength',
+              't': 'Toughness',
+              'i': 'Initiative',
+              'ag': 'Agility',
+              'dex': 'Dexterity',
+              'int': 'Intelligence',
+              'wp': 'Willpower',
+              'fel': 'Fellowship'
+            };
+
+            const result = charName[char];
+            return result || `${char.toUpperCase()} characteristic`;
+          } else if (parts.includes('status')) {
+            const statIndex = parts.indexOf('status');
+
+            // Validate array bounds
+            if (statIndex + 1 >= parts.length) {
+              return 'Unknown Status';
+            }
+
+            const stat = parts[statIndex + 1];
+
+            if (!stat || typeof stat !== 'string') {
+              return 'Unknown Status';
+            }
+
+            const statName: Record<string, string> = {
+              'wounds': 'Wounds',
+              'fortune': 'Fortune',
+              'fate': 'Fate',
+              'resilience': 'Resilience',
+              'resolve': 'Resolve',
+              'corruption': 'Corruption',
+              'armour': 'Armor Points'
+            };
+
+            const result = statName[stat];
+            return result || stat;
+          } else if (parts.includes('details')) {
+            const detailIndex = parts.indexOf('details');
+
+            // Validate array bounds
+            if (detailIndex + 1 >= parts.length) {
+              return 'Unknown Detail';
+            }
+
+            const detail = parts[detailIndex + 1];
+
+            if (!detail || typeof detail !== 'string') {
+              return 'Unknown Detail';
+            }
+
+            const detailName: Record<string, string> = {
+              'age': 'Age',
+              'height': 'Height',
+              'weight': 'Weight',
+              'gender': 'Gender',
+              'haircolour': 'Hair Colour',
+              'eyecolour': 'Eye Colour',
+              'distinguishingmark': 'Distinguishing Mark',
+              'starsign': 'Star Sign',
+              'move': 'Movement',
+              'motivation': 'Motivation',
+              'gmnotes': 'GM Notes',
+              'personal-ambitions': 'Ambitions',
+              'biography': 'Biography'
+            };
+
+            const result = detailName[detail];
+            return result || detail;
+          }
+
+          // Default: return last part of path
+          const lastPart = parts[parts.length - 1];
+          return lastPart || 'Unknown Field';
+        } catch (error) {
+          console.warn(`[Warhammer MCP] Error formatting field name "${key}":`, error);
+          return 'Unknown Field';
+        }
+      };
+
+      // Create a clear, readable summary of what was updated
+      const fieldDescriptions = Object.keys(data.updateData || {}).map((key, index) => {
+        try {
+          const formatted = formatFieldName(key);
+
+          // Ensure we always return a string
+          if (typeof formatted === 'string') {
+            return formatted;
+          } else {
+            console.warn(`[Warhammer MCP] formatFieldName returned non-string at index ${index}:`, typeof formatted, formatted);
+            return String(formatted);
+          }
+        } catch (error) {
+          console.warn(`[Warhammer MCP] Error formatting field at index ${index} (key: "${key}"):`, error);
+          return String(key);
+        }
+      });
+
+      // Filter out any non-strings just in case
+      const cleanDescriptions = fieldDescriptions.filter(d => typeof d === 'string');
+
+      const updateSummary = cleanDescriptions.length > 0
+        ? cleanDescriptions.join(', ')
+        : 'various fields';
+
+      // Show notifications to GM
+      if (data.warnings && Array.isArray(data.warnings) && data.warnings.length > 0) {
+        // Show each warning as a separate, clear notification
+        data.warnings.forEach((warning: any, index: number) => {
+          // Ensure warning is converted to readable string
+          let warningText: string;
+
+          if (typeof warning === 'string') {
+            warningText = warning;
+          } else if (warning === null || warning === undefined) {
+            warningText = 'Unknown warning';
+          } else if (typeof warning === 'object') {
+            // Try to extract message from object
+            warningText = warning.message || warning.text || JSON.stringify(warning);
+          } else {
+            warningText = String(warning);
+          }
+
+          // Clean up the warning text - remove "WARNING:" prefix if present
+          warningText = warningText.replace(/^WARNING:\s*/i, '').trim();
+
+          // Ensure we have a non-empty string
+          if (!warningText) {
+            warningText = `Warning ${index + 1}`;
+          }
+
+          ui.notifications?.warn(`MCP: ${warningText}`);
         });
-        // Also show summary
-        ui.notifications?.info(`MCP: Updated ${actor.name} - ${fieldNames}`);
-        // Log warnings to console for GM review
+
+        // Show summary notification
+        ui.notifications?.info(`MCP: Updated ${actor.name} - ${updateSummary}`);
+
+        // Log to console for GM review
         console.warn(`[Warhammer MCP] Warnings for ${actor.name}:`, data.warnings);
       } else {
-        ui.notifications?.info(`MCP: Updated ${actor.name} - ${fieldNames}`);
+        // Simple success notification
+        ui.notifications?.info(`MCP: Updated ${actor.name} - ${updateSummary}`);
       }
 
       return {

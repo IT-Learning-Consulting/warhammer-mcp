@@ -1,0 +1,1285 @@
+# Warhammer MCP - Claude Testing & Development Guide
+
+**Project**: Warhammer Fantasy Roleplay 4th Edition MCP Bridge for Foundry VTT
+**Version**: 0.2.3
+**Last Updated**: January 24, 2026
+**Purpose**: Internal development and testing guide for Claude
+
+---
+
+## 🎯 Your Role as Testing Assistant
+
+You are assisting with **systematic testing** of an MCP server that bridges Claude Desktop to Foundry VTT for WFRP 4e. Your responsibilities:
+
+1. **Understand test failures** when the user reports results
+2. **Diagnose root causes** using Foundry v13 API docs and WFRP system knowledge
+3. **Propose fixes** before manual retesting
+4. **Track progress** in test_result.md
+5. **Never guess** - always reference documentation
+
+---
+
+## 📁 Critical Resource Locations
+
+**IMPORTANT**: The actual development repository is at `/d/foundry-vtt-mcp`. You may be running in a Claude worktree, but all terminal commands and edits should target the original repository.
+
+### Repository Structure
+- **Source Repository**: `/d/foundry-vtt-mcp/` (main development location)
+- **Foundry Deployment**: `E:\foundry_v13\data\Data\modules\warhammer-mcp\` (where module runs)
+- **Worktree** (if used): `C:\Users\danil0\.claude-worktrees\warhammer-mcp\<branch-name>\`
+
+### 🔄 Navigating from Worktree to Main Repository
+
+**CRITICAL**: Claude Code sessions often start in a git worktree. You MUST navigate to the main repository at `/d/foundry-vtt-mcp` for all development work.
+
+#### How to Navigate
+
+**Step 1: Identify Where You Are**
+```bash
+pwd
+# Example output: C:\Users\danil0\.claude-worktrees\warhammer-mcp\compassionate-montalcini
+```
+
+**Step 2: Navigate to Main Repository**
+```bash
+cd /d/foundry-vtt-mcp
+# Verify you're in the right place
+pwd
+# Should output: /d/foundry-vtt-mcp
+```
+
+**Step 3: Verify Repository Structure**
+```bash
+ls -la packages/
+# Should show: foundry-module/, mcp-server/, shared/
+```
+
+#### Why This Matters
+
+- **Worktree**: Git worktrees are temporary working directories created by Claude Code. They contain a checkout of the repository but are NOT the main development location.
+- **Main Repository**: `/d/foundry-vtt-mcp` is where all source files, node_modules, build artifacts, and deployment scripts live.
+- **All edits, builds, and deployments** must be done from `/d/foundry-vtt-mcp`, NOT from the worktree.
+
+#### Quick Reference
+
+```bash
+# WRONG - working in worktree
+cd C:\Users\danil0\.claude-worktrees\warhammer-mcp\compassionate-montalcini
+npm run build  # This won't work correctly!
+
+# CORRECT - working in main repository
+cd /d/foundry-vtt-mcp
+npm run build  # This works!
+```
+
+### Test Documentation
+- **`test/mcp.test (1).md`** - Complete test suite (5184 lines, 22 categories, ~200+ test cases)
+- **`test/test_result.md`** - Live test results (user updates after each test)
+
+### API Documentation
+- **`foundry_docs_md/`** - Foundry VTT v13 API documentation (~1659 files)
+  - Actor/Document/Collection classes
+  - Update methods and data structures
+  - Embedded documents handling
+  - Key files:
+    - `api_classes_foundry.abstract.Document.html.md`
+    - `api_classes_foundry.applications.sheets.ActorSheetV2.html.md`
+
+### WFRP System
+- **`warhammer_system/wfrp_system.js`** - WFRP 4e system code (6.4MB)
+- **`warhammer_system/wfrp.js`** - WFRP module code (1.8MB)
+  - Data structures: characteristics, skills, talents, careers
+  - Auto-calculations: bonuses, wounds, derived stats
+  - Compendium structures
+
+### Source Code
+- **`packages/mcp-server/src/tools/`** - 48+ MCP tool files
+- **`packages/foundry-module/src/queries.ts`** - Query handler implementations (3930+ lines)
+- **`packages/foundry-module/src/data-access.ts`** - Foundry API wrappers (3900+ lines)
+
+### Documentation
+- **`docs/INSTRUCTIONS.md`** - Development workflow, tool patterns, version history
+- **`docs/WFRP4E_SYSTEM_GUIDE.md`** - WFRP 4e mechanics, tool descriptions
+
+---
+
+## 🏗️ Project Architecture
+
+### Overview
+This project bridges Claude Desktop with Foundry VTT for Warhammer Fantasy Roleplay 4th Edition. It consists of three main packages:
+
+```
+/d/foundry-vtt-mcp/
+├── packages/
+│   ├── mcp-server/          # Backend MCP server (runs in Claude Desktop)
+│   │   ├── src/
+│   │   │   ├── backend.ts   # MCP server entry point
+│   │   │   ├── foundry-client.ts  # WebSocket client to Foundry
+│   │   │   └── tools/       # 48+ MCP tool definitions
+│   │   └── dist/            # Compiled JavaScript
+│   │
+│   ├── foundry-module/      # Foundry VTT module (runs in Foundry browser)
+│   │   ├── src/
+│   │   │   ├── main.ts      # Module entry point
+│   │   │   ├── queries.ts   # Query handler implementations
+│   │   │   └── data-access.ts  # Foundry API wrappers
+│   │   ├── dist/            # Compiled JavaScript
+│   │   ├── lang/            # Localization files
+│   │   ├── styles/          # CSS
+│   │   ├── templates/       # Handlebars templates
+│   │   └── module.json      # Foundry manifest
+│   │
+│   └── shared/              # Shared TypeScript types
+│       └── src/types.ts     # Common interfaces
+│
+├── scripts/
+│   └── deploy-foundry.js    # Auto-deployment to Foundry modules
+│
+├── test/
+│   ├── mcp.test (1).md      # Complete test suite (5184 lines)
+│   └── test_result.md       # Live test results
+│
+├── foundry_docs_md/         # Foundry v13 API docs (~1659 files)
+├── warhammer_system/        # WFRP 4e system code reference
+│   ├── wfrp_system.js       # System mechanics (6.4MB)
+│   └── wfrp.js              # Module code (1.8MB)
+│
+└── docs/
+    ├── INSTRUCTIONS.md      # Development workflow
+    └── WFRP4E_SYSTEM_GUIDE.md  # Game mechanics guide
+```
+
+### Data Flow
+
+```
+┌─────────────────┐         WebSocket (31415)        ┌──────────────────┐
+│  Claude Desktop │ ◄────────────────────────────► │  Foundry VTT     │
+│                 │                                  │  (Browser)       │
+│  MCP Server     │         Query/Response           │                  │
+│  (Node.js)      │ ◄────────────────────────────► │  Foundry Module  │
+│                 │                                  │  (JavaScript)    │
+└─────────────────┘                                  └──────────────────┘
+       │                                                       │
+       │ Calls MCP Tools                                      │ Accesses
+       ▼                                                       ▼
+  Tool Handlers                                      Foundry API (game.actors, etc.)
+       │                                                       │
+       │ Sends Query                                          │ Updates
+       ▼                                                       ▼
+  foundry-client.ts                                   Actor Documents
+       │                                                       │
+       └───────────────► queryFoundry() ──────────────────────┘
+```
+
+### Communication Protocol
+
+1. **Claude Desktop** → User asks question about WFRP character
+2. **MCP Server** → Receives tool call, executes handler
+3. **Handler** → Calls `queryFoundry(queryType, data)`
+4. **foundry-client.ts** → Sends query via WebSocket to Foundry
+5. **Foundry Module** → Receives query in `main.ts`, routes to `queries.ts`
+6. **queries.ts** → Executes handler, calls `data-access.ts` functions
+7. **data-access.ts** → Calls Foundry API (`actor.update()`, etc.)
+8. **Foundry API** → Updates game data, returns result
+9. **Response** → Travels back through chain to Claude Desktop
+
+### Key Files and Responsibilities
+
+| File | Lines | Purpose |
+|------|-------|---------|
+| `packages/mcp-server/src/backend.ts` | 1500+ | MCP server entry, tool registration |
+| `packages/mcp-server/src/tools/*.ts` | 50-200 each | Individual tool definitions (48+ tools) |
+| `packages/foundry-module/src/main.ts` | 200+ | WebSocket server, query routing |
+| `packages/foundry-module/src/queries.ts` | 3930+ | Query handler implementations |
+| `packages/foundry-module/src/data-access.ts` | 3900+ | Foundry API wrappers |
+| `shared/src/types.ts` | 500+ | Shared TypeScript interfaces |
+
+---
+
+## 🧪 Testing Workflow
+
+### When User Reports a Test
+
+**User says**: "Test 1.3 - FAIL"
+
+**Your immediate actions**:
+
+1. **Find test in `test/mcp.test (1).md`**
+   ```bash
+   # Search for Test Case 1.3
+   grep -A 20 "Test Case 1.3:" test/mcp.test\ \(1\).md
+   ```
+
+2. **Understand what it's testing**
+   - What tool is being used?
+   - What data should change?
+   - What's the expected Foundry API path?
+
+3. **Check implementation**
+   - Find the tool in `packages/mcp-server/src/tools/`
+   - Find the handler in `packages/foundry-module/src/queries.ts`
+   - Verify the data path being updated
+
+4. **Reference documentation**
+   - Check Foundry v13 API for correct update method
+   - Check WFRP system for data structure
+   - Verify if embedded documents need special handling
+
+5. **Diagnose the issue**
+   - Is it using the wrong API method? (e.g., `update()` vs `updateSource()`)
+   - Is the data path correct? (e.g., `system.characteristics.s.initial`)
+   - Is it handling embedded documents correctly?
+   - Is validation preventing the update?
+
+6. **Propose a fix**
+   - Show exact code changes needed
+   - Explain WHY the change fixes it
+   - Reference Foundry v13 API documentation
+
+7. **Update test_result.md**
+   - Document the failure
+   - Document the fix applied
+   - Note for retesting
+
+### User Says: "Test 1.3 - PASS"
+
+**Your actions**:
+1. Acknowledge success
+2. Ask for next test
+3. Stay alert for patterns
+
+---
+
+## 📋 Test Categories (22 Total)
+
+### Complete Test Structure
+
+1. **CHARACTER TOOLS** (30 test cases)
+   - Character retrieval (get-character)
+   - Direct updates (foundry-update-character-info)
+   - Data validation and edge cases
+
+2. **CAREER ADVANCEMENT TOOLS** (40+ test cases)
+   - XP-based advancement (advance-characteristic, advance-skill, advance-talent)
+   - Career changes
+   - XP cost calculations (tiered formula)
+
+3. **CORRUPTION & MUTATION TOOLS** (15 test cases)
+   - Corruption tracking
+   - Mutation application and removal
+   - Threshold calculations
+
+4. **FORTUNE & FATE TOOLS** (20 test cases)
+   - Player resources (Fortune/Fate)
+   - NPC resources (Resolve/Resilience)
+   - Burning and refreshing
+
+5. **CRITICAL WOUNDS TOOLS** (12 test cases)
+   - Wound tracking by location
+   - Death threshold checks
+   - Healing mechanics
+
+6. **ADVANTAGE TRACKER TOOLS** (10 test cases)
+   - Combat advantage tracking
+   - Modifier calculations
+
+7. **DISEASE & INFECTION TOOLS** (10 test cases)
+   - Disease progression
+   - Resilience tests
+
+8. **INVENTORY MANAGEMENT TOOLS** (15 test cases)
+   - Item management
+   - Encumbrance calculations
+
+9. **ITEM CREATOR TOOLS** (12 test cases)
+   - Weapon creation
+   - Armor creation
+   - Custom items
+
+10. **PRAYER & BLESSING TOOLS** (10 test cases)
+    - Divine magic
+    - Sin tracking
+    - Penance
+
+11. **SPELL & MAGIC TOOLS** (15 test cases)
+    - Arcane magic
+    - Channelling
+    - Miscasts
+
+12. **SOCIAL STATUS TOOLS** (8 test cases)
+    - Status tiers
+    - Income calculations
+
+13. **CUSTOM NPC GENERATOR TOOLS** (10 test cases)
+    - Species-specific generation
+    - XP budgets
+    - Career assignment
+
+14. **COMPENDIUM TOOLS** (12 test cases)
+    - Search functionality
+    - UUID construction
+    - Item retrieval
+
+15. **SCENE TOOLS** (6 test cases)
+    - Scene management
+    - Token placement
+
+16. **ACTOR CREATION TOOLS** (8 test cases)
+    - Actor instantiation
+    - Compendium actors
+
+17. **QUEST CREATION TOOLS** (10 test cases)
+    - Journal entries
+    - Quest tracking
+
+18. **DICE ROLL TOOLS** (8 test cases)
+    - d100 rolls
+    - Skill tests
+    - Characteristic tests
+
+19. **CAMPAIGN MANAGEMENT TOOLS** (6 test cases)
+    - Campaign tracking
+    - Progress dashboards
+
+20. **OWNERSHIP TOOLS** (8 test cases)
+    - Player permissions
+    - Actor ownership
+
+21. **MAP GENERATION TOOLS** (6 test cases)
+    - AI map generation
+    - ComfyUI integration
+
+22. **ROLLTABLE MANAGEMENT TOOLS** (10 test cases)
+    - Table creation
+    - Random rolls
+    - d100 ranges
+
+---
+
+## 🔍 Critical WFRP 4e Data Structures
+
+### Characteristics Path
+```javascript
+actor.system.characteristics = {
+  ws: { initial: 30, advances: 5, modifier: 0, value: 35, bonus: 3 },
+  bs: { initial: 25, advances: 0, modifier: 0, value: 25, bonus: 2 },
+  s:  { initial: 35, advances: 0, modifier: 0, value: 35, bonus: 3 },
+  t:  { initial: 30, advances: 0, modifier: 0, value: 30, bonus: 3 },
+  i:  { initial: 25, advances: 0, modifier: 0, value: 25, bonus: 2 },
+  ag: { initial: 30, advances: 0, modifier: 0, value: 30, bonus: 3 },
+  dex:{ initial: 30, advances: 0, modifier: 0, value: 30, bonus: 3 },
+  int:{ initial: 25, advances: 0, modifier: 0, value: 25, bonus: 2 },
+  wp: { initial: 30, advances: 0, modifier: 0, value: 30, bonus: 3 },
+  fel:{ initial: 25, advances: 0, modifier: 0, value: 25, bonus: 2 }
+}
+```
+
+**Key Fields**:
+- `initial` - Base value before advances
+- `advances` - Number of times advanced (costs XP)
+- `modifier` - Temporary modifiers (items, effects)
+- `value` - Calculated: initial + advances + modifier
+- `bonus` - Tens digit of value (auto-calculated)
+
+### Status Values Path
+```javascript
+actor.system.status = {
+  wounds: {
+    value: 15,      // Current wounds
+    max: 16         // Maximum wounds
+  },
+  fortune: {
+    value: 3,       // Current Fortune points
+    max: 4          // Maximum (equals Fate)
+  },
+  fate: {
+    value: 4,       // Current Fate points
+    max: 4          // Maximum Fate
+  },
+  resilience: {
+    value: 2,       // NPC equivalent of Fate
+    max: 2
+  },
+  resolve: {
+    value: 2,       // NPC equivalent of Fortune
+    max: 2
+  },
+  corruption: {
+    value: 0        // Corruption points
+  }
+}
+```
+
+### XP Structure
+```javascript
+actor.system.details.experience = {
+  current: 1500,   // Available XP
+  total: 2000,     // Total XP earned
+  spent: 500       // XP spent on advances
+}
+```
+
+### Career Structure (Embedded Document)
+```javascript
+// Career is an Item embedded in Actor
+actor.items.find(i => i.type === 'career' && i.system.current.value === true)
+
+// Career item structure
+{
+  name: "Soldier",
+  type: "career",
+  system: {
+    current: { value: true },  // Is this the active career?
+    level: { value: 2 },       // Career level
+    status: { tier: "Silver", standing: 3 },
+    careergroup: { value: "Warriors" },
+    class: "Warrior"
+  }
+}
+```
+
+### Skills (Embedded Documents)
+```javascript
+// Skills are Items embedded in Actor
+actor.items.filter(i => i.type === 'skill')
+
+// Skill item structure
+{
+  name: "Melee (Basic)",
+  type: "skill",
+  system: {
+    advances: { value: 10 },     // Number of advances
+    characteristic: { value: "ws" }, // Linked characteristic
+    total: { value: 40 }         // Calculated: char value + advances
+  }
+}
+```
+
+### Talents (Embedded Documents)
+```javascript
+// Talents are Items embedded in Actor
+actor.items.filter(i => i.type === 'talent')
+
+// Talent item structure
+{
+  name: "Combat Reflexes",
+  type: "talent",
+  system: {
+    advances: { value: 1 },      // Talent rank/times taken
+    tests: { value: "+10 Initiative" }
+  }
+}
+```
+
+---
+
+## 🛠️ Foundry VTT v13 API Critical Methods
+
+### Updating Actor Data
+
+**Direct property updates**:
+```javascript
+// CORRECT for Foundry v13
+await actor.update({
+  "system.characteristics.s.initial": 40
+});
+
+// Updates multiple fields
+await actor.update({
+  "system.characteristics.s.initial": 40,
+  "system.status.wounds.value": 15,
+  "system.status.fortune.value": 3
+});
+```
+
+**DON'T use direct assignment**:
+```javascript
+// WRONG - doesn't persist
+actor.system.characteristics.s.initial = 40;
+```
+
+### Embedded Documents (Items on Actors)
+
+**Creating embedded documents**:
+```javascript
+// Add item to actor
+await actor.createEmbeddedDocuments("Item", [itemData]);
+
+// Add multiple items
+await actor.createEmbeddedDocuments("Item", [item1Data, item2Data]);
+```
+
+**Updating embedded documents**:
+```javascript
+// Find the item first
+const skill = actor.items.find(i => i.name === "Melee (Basic)");
+
+// Update it
+await skill.update({
+  "system.advances.value": 10
+});
+
+// Or update via actor
+await actor.updateEmbeddedDocuments("Item", [{
+  _id: skill.id,
+  "system.advances.value": 10
+}]);
+```
+
+**Deleting embedded documents**:
+```javascript
+await actor.deleteEmbeddedDocuments("Item", [itemId]);
+```
+
+### Compendium Operations
+
+**Search compendium**:
+```javascript
+const pack = game.packs.get("wfrp4e-core.items");
+const index = await pack.getIndex();
+
+// Search by name
+const results = index.filter(i => i.name.includes("Melee"));
+```
+
+**Get document from compendium**:
+```javascript
+const pack = game.packs.get("wfrp4e-core.items");
+const document = await pack.getDocument(itemId);
+```
+
+**Add compendium item to actor**:
+```javascript
+// Construct UUID
+const uuid = `Compendium.${packName}.${itemId}`;
+
+// Get document
+const doc = await fromUuid(uuid);
+
+// Add to actor
+await actor.createEmbeddedDocuments("Item", [doc.toObject()]);
+```
+
+**CRITICAL**: Search results return `{pack, id}` not `{uuid}`. Always construct UUID manually:
+```javascript
+const uuid = `Compendium.${result.pack}.${result.id || result._id}`;
+```
+
+---
+
+## ⚠️ Common Pitfalls & Solutions
+
+### Issue: Updates Don't Persist
+
+**Symptom**: Changes appear in code but not in Foundry UI
+**Cause**: Using direct assignment instead of `update()`
+**Fix**:
+```javascript
+// WRONG
+actor.system.characteristics.s.initial = 40;
+
+// CORRECT
+await actor.update({"system.characteristics.s.initial": 40});
+```
+
+### Issue: Embedded Document Not Found
+
+**Symptom**: "Item not found" errors
+**Cause**: Trying to update items without finding them first
+**Fix**:
+```javascript
+// Find the item
+const item = actor.items.find(i => i.name === "Melee (Basic)");
+if (!item) {
+  throw new Error("Skill not found");
+}
+
+// Update it
+await item.update({"system.advances.value": 10});
+```
+
+### Issue: UUID Construction Fails
+
+**Symptom**: "Cannot add item from compendium"
+**Cause**: Assuming `searchResult.uuid` exists (it doesn't)
+**Fix**:
+```javascript
+// WRONG
+const uuid = searchResult.uuid; // undefined!
+
+// CORRECT
+const uuid = `Compendium.${searchResult.pack}.${searchResult.id}`;
+```
+
+### Issue: XP Costs Wrong
+
+**Symptom**: Charging too much/too little XP
+**Cause**: Using wrong tier calculation
+**Fix**:
+```javascript
+// CORRECT tiered formula
+const tier = Math.floor(currentAdvances / 5);
+const TIER_COSTS = [10, 15, 20, 30, 40, 50, 70, 90, 110, 130];
+const xpCost = TIER_COSTS[tier];
+
+// Example: 11th advance = tier 2 = 20 XP
+// Math.floor(10 / 5) = 2, TIER_COSTS[2] = 20
+```
+
+### Issue: Characteristics Not Updating Properly
+
+**Symptom**: Updating advances instead of initial value
+**Cause**: Wrong data path
+**Fix**:
+```javascript
+// For DIRECT SET (foundry-update-character-info)
+await actor.update({"system.characteristics.s.initial": 40});
+
+// For XP ADVANCE (advance-characteristic)
+const char = actor.system.characteristics.s;
+await actor.update({
+  "system.characteristics.s.advances": char.advances + 1,
+  "system.details.experience.current": xp - cost
+});
+```
+
+### Issue: Career Not Detected as Current
+
+**Symptom**: "No current career found"
+**Cause**: Career item `system.current.value` not true
+**Fix**:
+```javascript
+const currentCareer = actor.items.find(i =>
+  i.type === 'career' &&
+  i.system.current.value === true
+);
+
+if (!currentCareer) {
+  throw new Error("No current career marked");
+}
+```
+
+### Issue: Dialog Timeouts on Actor Updates (CRITICAL FOR WFRP4e)
+
+**Symptom**: `Error: Query timeout: warhammer-mcp.updateActor` when advancing characteristics
+**Cause**: WFRP4e system shows confirmation dialog: "Do you wish to proceed?" which blocks update
+**Root Cause**: Missing `{ skipDialog: true }` option in `actor.update()` calls
+**Fix**:
+```javascript
+// WRONG - causes timeout
+await actor.update(updateData);
+
+// CORRECT - bypasses WFRP4e confirmation dialogs
+await actor.update(updateData, { skipDialog: true });
+```
+
+**Location**: `/d/foundry-vtt-mcp/packages/foundry-module/src/data-access.ts` line 3812
+
+**Why This Matters**: WFRP4e adds custom dialogs for characteristic/skill advances. Without `skipDialog`, the MCP query waits forever for user to click "OK" in Foundry, causing timeouts.
+
+### Issue: Condition Counts Not Showing
+
+**Symptom**: Character has 3 Fatigued conditions but only shows "Fatigued" without count
+**Cause**: Effect flags not being passed from data-access.ts to character.ts
+**Root Cause**: Missing `flags` in effects mapping
+**Fix**:
+```javascript
+// In data-access.ts effects mapping (line 844-856)
+effects: Array.from(actor.effects || []).map((effect: any) => ({
+  id: effect.id,
+  name: effect.name || effect.label || 'Unknown Effect',
+  ...(effect.icon ? { icon: effect.icon } : {}),
+  disabled: effect.disabled,
+  ...(effect.duration ? {
+    duration: {
+      type: (effect as any).duration.type || 'none',
+      duration: (effect as any).duration.duration,
+      remaining: (effect as any).duration.remaining,
+    }
+  } : {}),
+  ...(effect.flags ? { flags: effect.flags } : {}),  // CRITICAL: Added
+})),
+```
+
+**Why This Matters**: WFRP4e stores condition counts in `effect.flags.wfrp4e.conditionValue`. Without passing flags, character.ts can't format as "Fatigued (3)".
+
+---
+
+## 🛠️ Tool Implementation Patterns
+
+### Adding a New MCP Tool
+
+**Step 1: Create Tool File** (`packages/mcp-server/src/tools/your-tool.ts`)
+```typescript
+import { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { queryFoundry } from '../foundry-client.js';
+
+export const yourToolDefinition: Tool = {
+  name: 'warhammer-mcp__your-tool-name',
+  description: 'Clear description of what this tool does',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      characterName: {
+        type: 'string',
+        description: 'Name of the character'
+      },
+      value: {
+        type: 'number',
+        description: 'Value to set'
+      }
+    },
+    required: ['characterName']
+  }
+};
+
+export async function handleYourTool(args: {
+  characterName: string;
+  value?: number;
+}) {
+  const result = await queryFoundry('foundry-mcp-bridge.yourHandler', {
+    characterName: args.characterName,
+    value: args.value
+  });
+
+  return {
+    content: [{
+      type: 'text',
+      text: JSON.stringify(result, null, 2)
+    }]
+  };
+}
+```
+
+**Step 2: Register Tool** (`packages/mcp-server/src/backend.ts`)
+```typescript
+// Import the tool
+import { yourToolDefinition, handleYourTool } from './tools/your-tool.js';
+
+// Add to tools list (around line 100)
+server.setRequestHandler(ListToolsRequestSchema, async () => ({
+  tools: [
+    // ... existing tools
+    yourToolDefinition,
+  ]
+}));
+
+// Add handler (around line 1300-1450)
+server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  const { name, arguments: args } = request.params;
+
+  switch (name) {
+    // ... existing cases
+
+    case 'warhammer-mcp__your-tool-name':
+      return await handleYourTool(args);
+
+    // ... rest of cases
+  }
+});
+```
+
+**Step 3: Add Foundry Handler** (`packages/foundry-module/src/queries.ts`)
+```typescript
+// Add case in handleQuery function (line ~100-3900)
+case 'foundry-mcp-bridge.yourHandler': {
+  const { characterName, value } = data;
+
+  // Get actor
+  const actor = await dataAccess.getActorByName(characterName);
+  if (!actor) {
+    return {
+      success: false,
+      error: `Character "${characterName}" not found`
+    };
+  }
+
+  // Perform update (ALWAYS use skipDialog for WFRP4e)
+  await actor.update({
+    "system.your.path": value
+  }, { skipDialog: true });
+
+  return {
+    success: true,
+    message: `Updated ${characterName}`
+  };
+}
+```
+
+### XP Tiered Cost Formula (CRITICAL)
+
+WFRP 4e uses tiered XP costs for advances:
+```typescript
+const TIER_COSTS = [10, 15, 20, 30, 40, 50, 70, 90, 110, 130];
+
+// Calculate tier based on current advances
+const tier = Math.floor(currentAdvances / 5);
+const xpCost = TIER_COSTS[Math.min(tier, TIER_COSTS.length - 1)];
+
+// Examples:
+// Advance 1-5:   tier 0 = 10 XP each
+// Advance 6-10:  tier 1 = 15 XP each
+// Advance 11-15: tier 2 = 20 XP each
+// Advance 50+:   tier 9 = 130 XP each
+```
+
+### Compendium UUID Construction (CRITICAL)
+
+**Search results DO NOT include UUID** - you must construct it manually:
+```typescript
+// WRONG - searchResult.uuid doesn't exist!
+const uuid = searchResult.uuid;
+
+// CORRECT - construct manually
+const uuid = `Compendium.${searchResult.pack}.${searchResult.id || searchResult._id}`;
+
+// Example:
+const packName = "wfrp4e-core.skills";
+const itemId = "abc123";
+const uuid = `Compendium.wfrp4e-core.skills.abc123`;
+
+// Then get document
+const doc = await fromUuid(uuid);
+```
+
+### Validation and Capping
+
+**Always validate and cap values**:
+```typescript
+// Cap characteristics (reasonable max: 100, warn if >250)
+if (value > 250) {
+  return {
+    success: false,
+    error: `Value ${value} is unreasonably high (max recommended: 100)`
+  };
+}
+
+// Cap Fortune to Fate maximum
+const fateMax = actor.system.status.fate.max;
+const fortuneValue = Math.min(value, fateMax);
+
+if (value > fateMax) {
+  // Still apply capped value but warn user
+  await actor.update({
+    "system.status.fortune.value": fortuneValue
+  }, { skipDialog: true });
+
+  return {
+    success: true,
+    warning: `Fortune capped at Fate maximum (${fateMax})`,
+    value: fortuneValue
+  };
+}
+```
+
+---
+
+## 🔧 Diagnostic Workflow
+
+### Step 1: Identify the Tool
+
+When test fails, find which tool is involved:
+```bash
+grep -B 5 -A 15 "Test Case X.Y" test/mcp.test\ \(1\).md
+```
+
+Look for:
+- Tool name (e.g., `foundry-update-character-info`)
+- Expected behavior
+- Data that should change
+
+### Step 2: Find Tool Implementation
+
+**MCP Server side** (`packages/mcp-server/src/tools/`):
+```bash
+grep -r "name: 'tool-name'" packages/mcp-server/src/tools/
+```
+
+Find the handler method (e.g., `handleUpdateCharacterInfo`)
+
+**Foundry Module side** (`packages/foundry-module/src/queries.ts`):
+```bash
+grep -A 30 "case 'foundry-mcp-bridge.handlerName'" packages/foundry-module/src/queries.ts
+```
+
+### Step 3: Check Data Path
+
+Reference WFRP system structure:
+- Characteristics: `system.characteristics.[abbrev].initial` or `.advances`
+- Status: `system.status.wounds.value` etc.
+- XP: `system.details.experience.current`
+- Items: Embedded documents - need special handling
+
+Search WFRP system files:
+```bash
+grep -n "characteristics" warhammer_system/wfrp_system.js | head -20
+```
+
+### Step 4: Verify Foundry API Usage
+
+Check Foundry v13 docs:
+```bash
+ls foundry_docs_md/ | grep -i "actor\|document\|update"
+```
+
+Verify:
+- Is `actor.update()` being used correctly?
+- Are embedded documents handled properly?
+- Is the data path valid?
+
+### Step 5: Propose Fix
+
+Show:
+1. Current code (what's wrong)
+2. Fixed code (what should be)
+3. Explanation (why it fixes it)
+4. Reference (Foundry API doc or WFRP system)
+
+Example:
+```javascript
+// CURRENT (WRONG)
+actor.system.characteristics.s.initial = 40;
+
+// FIXED
+await actor.update({"system.characteristics.s.initial": 40});
+
+// WHY: Foundry v13 requires update() for persistence
+// REF: foundry_docs_md/api_classes_foundry.abstract.Document.html.md
+```
+
+---
+
+## 📝 Test Result Documentation Format
+
+After diagnosing, update `test/test_result.md`:
+
+```markdown
+### Test Case X.Y: Test Name
+**Date**: 2026-01-24
+**Status**: ❌ FAIL / ✅ PASS
+
+**Expected**: [What should happen]
+**Actual**: [What actually happened]
+
+**Issue**: [Root cause]
+**Fix Applied**: [Code changes made]
+**Reference**: [Foundry API doc or WFRP system file]
+
+**Retest Required**: Yes/No
+**Notes**: [Additional context]
+```
+
+---
+
+## 🎯 Response Protocol
+
+### When User Says: "Test 1.3 - FAIL"
+
+```markdown
+I'll diagnose Test 1.3. Let me check the test definition and implementation.
+
+[Search test file]
+[Find tool implementation]
+[Check Foundry API]
+[Check WFRP system]
+
+**Test Case 1.3**: Update Single Characteristic (Direct Set)
+- **Tool**: `foundry-update-character-info`
+- **Expected**: Set Strength initial to 40
+- **Data Path**: `system.characteristics.s.initial`
+
+**Diagnosis**:
+[Explain what's wrong based on code inspection]
+
+**Root Cause**:
+[Why it's failing - reference specific code line]
+
+**Fix**:
+```javascript
+// In packages/foundry-module/src/queries.ts, line XXX
+// Change from:
+[wrong code]
+
+// To:
+[correct code]
+```
+
+**Reason**: [Explain with Foundry v13 API reference]
+
+**Retest After**: Rebuild and restart MCP server
+```
+
+### When User Says: "Test 1.3 - PASS"
+
+```markdown
+✅ Test 1.3 passed! Character update working correctly.
+
+Ready for next test.
+```
+
+---
+
+## 🚀 Development Workflow
+
+### Directory Context
+**CRITICAL**: Always work in `/d/foundry-vtt-mcp`, not the worktree.
+
+**If you start in a worktree** (e.g., `C:\Users\danil0\.claude-worktrees\warhammer-mcp\<branch-name>\`):
+1. Immediately navigate to `/d/foundry-vtt-mcp` using `cd /d/foundry-vtt-mcp`
+2. Verify with `pwd` - should output `/d/foundry-vtt-mcp`
+3. All subsequent commands run from this directory
+
+### Build & Deploy Process
+```bash
+# FIRST: Ensure you're in the main repository
+cd /d/foundry-vtt-mcp
+pwd  # Should output: /d/foundry-vtt-mcp
+
+# Build all packages (TypeScript compilation)
+npm run build
+
+# Build and auto-deploy to Foundry modules directory
+npm run build:deploy
+
+# Deploy only (without building)
+npm run deploy:foundry
+
+# Build specific workspaces
+npm run build:server    # MCP server only
+npm run build:foundry   # Foundry module only
+npm run build:shared    # Shared types only
+```
+
+### After Code Changes
+
+**For Foundry Module Changes**:
+1. Edit files in `/d/foundry-vtt-mcp/packages/foundry-module/src/`
+2. Run `npm run build:deploy`
+3. Press F5 in Foundry VTT browser to reload
+
+**For MCP Server Changes**:
+1. Edit files in `/d/foundry-vtt-mcp/packages/mcp-server/src/`
+2. Run `npm run build`
+3. Close and reopen Claude Desktop (restarts MCP server)
+
+**For Both**:
+1. Run `npm run build:deploy`
+2. Press F5 in Foundry VTT
+3. Restart Claude Desktop
+
+### Deployment Script
+The deployment is automated via `/d/foundry-vtt-mcp/scripts/deploy-foundry.js`:
+- Copies `dist/`, `lang/`, `styles/`, `templates/`, `scripts/`, `module.json`
+- From: `/d/foundry-vtt-mcp/packages/foundry-module/`
+- To: `E:\foundry_v13\data\Data\modules\warhammer-mcp\`
+
+### Search Commands
+```bash
+# Find test case
+grep -A 20 "Test Case X.Y" test/mcp.test\ \(1\).md
+
+# Find tool
+grep -r "name: 'tool-name'" packages/mcp-server/src/tools/
+
+# Find handler
+grep -A 30 "case 'foundry-mcp-bridge" packages/foundry-module/src/queries.ts
+
+# Check Foundry API
+ls foundry_docs_md/ | grep -i "keyword"
+
+# Check WFRP structure
+grep -n "keyword" warhammer_system/wfrp_system.js | head -20
+```
+
+### File Locations
+- **Tests**: `test/mcp.test (1).md` (source) & `test/test_result.md` (results)
+- **Tools**: `packages/mcp-server/src/tools/*.ts`
+- **Handlers**: `packages/foundry-module/src/queries.ts`
+- **Foundry Docs**: `foundry_docs_md/*.md`
+- **WFRP System**: `warhammer_system/wfrp_system.js` & `wfrp.js`
+
+---
+
+## 📊 Testing Strategy
+
+### Test Order Priority
+
+1. **Start with Character Tools** (Test 1.x) - Foundation for everything
+2. **Career Advancement** (Test 2.x) - XP system critical
+3. **Fortune/Fate** (Test 4.x) - Resource management
+4. **Then specialized tools** (3.x, 5.x-22.x)
+
+### Success Metrics
+
+- ✅ **PASS**: Feature works as expected, data persists, visible in Foundry
+- ⚠️ **PARTIAL**: Feature works but has minor issues (warnings, edge cases)
+- ❌ **FAIL**: Feature doesn't work, errors thrown, data not persisting
+
+### After Each Test
+
+1. User reports: "Test X.Y - STATUS"
+2. You diagnose if FAIL
+3. You acknowledge if PASS
+4. User moves to next test
+5. You track patterns for systemic issues
+
+---
+
+## 🧠 Remember
+
+1. **NEVER GUESS** - Always check documentation
+2. **Reference sources** - Cite Foundry docs or WFRP system files
+3. **Show code** - Provide exact fixes with line references
+4. **Explain why** - Don't just fix, educate
+5. **Track patterns** - Multiple similar failures = systemic issue
+6. **Stay focused** - One test at a time
+7. **Be precise** - Exact data paths, no approximations
+
+---
+
+---
+
+## 🚀 Quick Start Checklist
+
+When starting a new Claude session, follow these steps:
+
+### 1. Navigate to Main Repository (CRITICAL FIRST STEP)
+
+**You are likely in a git worktree**. Navigate to the main repository immediately:
+
+```bash
+# Check where you are
+pwd
+
+# Navigate to main repository
+cd /d/foundry-vtt-mcp
+
+# Verify you're in the correct location
+pwd
+# Should output: /d/foundry-vtt-mcp
+
+# Verify repository structure
+ls -la packages/
+# Should show: foundry-module/, mcp-server/, shared/
+```
+
+**From this point forward, ALL commands must be run from `/d/foundry-vtt-mcp`.**
+
+### 2. Read This File
+```bash
+# You're already reading it - good!
+# Location: /d/foundry-vtt-mcp/CLAUDE.md
+```
+
+### 3. Check Build Status
+```bash
+# Make sure you're in /d/foundry-vtt-mcp first!
+npm run build
+```
+Should complete with 0 errors.
+
+### 4. Understand Current Test Progress
+Read `test/test_result.md` to see which tests are passing/failing.
+
+### 5. Wait for User Instructions
+User will either:
+- Report test results: "Test X.Y - PASS/FAIL"
+- Request feature work: "Add new tool for..."
+- Request bug fixes: "Fix issue with..."
+
+### What You Know Now
+
+✅ **Project Purpose**: MCP bridge between Claude Desktop and Foundry VTT for WFRP 4e
+✅ **Repository**: `/d/foundry-vtt-mcp` (main development)
+✅ **Deployment**: `E:\foundry_v13\data\Data\modules\warhammer-mcp\`
+✅ **Build Command**: `npm run build:deploy`
+✅ **Test Suite**: `test/mcp.test (1).md` (200+ test cases)
+✅ **API Docs**: `foundry_docs_md/` (~1659 files)
+✅ **WFRP System**: `warhammer_system/wfrp_system.js` & `wfrp.js`
+✅ **Critical Fix**: Always use `{ skipDialog: true }` in WFRP4e actor.update()
+✅ **Critical Pattern**: Construct UUIDs manually: `Compendium.${pack}.${id}`
+✅ **XP Formula**: Tiered costs using `Math.floor(advances / 5)`
+
+---
+
+## 📞 Common User Requests & Responses
+
+### "Test 1.X - FAIL"
+→ Find test in `test/mcp.test (1).md`, diagnose, propose fix with code references
+
+### "Test 1.X - PASS"
+→ Acknowledge success, ask for next test
+
+### "Add new tool for [feature]"
+→ Follow Tool Implementation Patterns section, create tool file, register in backend.ts, add handler in queries.ts
+
+### "Fix [issue]"
+→ Use Diagnostic Workflow, reference Foundry docs, check WFRP system, propose fix
+
+### "Build is failing"
+→ Check TypeScript errors, verify imports, check tsconfig.json
+
+### "Why isn't my change showing in Foundry?"
+→ Did you run `npm run build:deploy` and press F5 in Foundry browser?
+
+### "MCP server not responding"
+→ Did you restart Claude Desktop after building?
+
+### "I can't find the packages/ directory"
+→ You're in the worktree, not the main repository. Run: `cd /d/foundry-vtt-mcp`
+
+### "npm run build fails with missing dependencies"
+→ You're in the worktree. Navigate to main repository: `cd /d/foundry-vtt-mcp`
+
+### "Changes I made aren't showing up"
+→ Verify you're editing files in `/d/foundry-vtt-mcp`, not the worktree
+
+---
+
+## 🔧 Troubleshooting: Worktree vs Main Repository
+
+### How to Tell Where You Are
+
+```bash
+pwd
+```
+
+**If output contains `.claude-worktrees`**: You're in a worktree ❌
+```
+C:/Users/danil0/.claude-worktrees/warhammer-mcp/compassionate-montalcini
+```
+
+**If output is `/d/foundry-vtt-mcp`**: You're in the main repository ✅
+```
+/d/foundry-vtt-mcp
+```
+
+### Common Mistakes
+
+❌ **WRONG**: Editing files in worktree
+```bash
+# Bad - you're in the worktree
+C:\Users\danil0\.claude-worktrees\warhammer-mcp\compassionate-montalcini\packages\mcp-server\src\tools\character.ts
+```
+
+✅ **CORRECT**: Editing files in main repository
+```bash
+# Good - you're in the main repository
+/d/foundry-vtt-mcp/packages/mcp-server/src/tools/character.ts
+```
+
+### Quick Fix
+
+If you realize you're in the wrong place:
+```bash
+# Navigate to main repository
+cd /d/foundry-vtt-mcp
+
+# Verify
+pwd
+# Should show: /d/foundry-vtt-mcp
+```
+
+---
+
+**You are ready to assist with testing and development. Wait for the user to begin.**
