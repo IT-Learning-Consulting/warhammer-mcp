@@ -3,7 +3,7 @@
     "foundry-mcp": {
       "command": "node",
       "args": [
-        "D:/Projects/FVTTMCP/packages/mcp-server/dist/index.js"
+        "/path/to/foundry-vtt-mcp/packages/mcp-server/dist/index.js"
       ],
       "env": {
         "LOG_LEVEL": "info",

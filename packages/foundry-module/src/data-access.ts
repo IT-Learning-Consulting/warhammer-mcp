@@ -854,6 +854,7 @@ export class FoundryDataAccess {
           }
         } : {}),
         ...(effect.flags ? { flags: effect.flags } : {}),
+        ...(effect.system ? { system: effect.system } : {}),
       })),
     };
 
@@ -3808,6 +3809,17 @@ export class FoundryDataAccess {
         throw new Error(`Actor not found with ID: ${data.actorId}`);
       }
 
+      // Capture previous values before update for better notifications
+      const previousValues: Record<string, any> = {};
+      for (const key of Object.keys(data.updateData || {})) {
+        try {
+          previousValues[key] = foundry.utils.getProperty(actor, key);
+        } catch (error) {
+          // If we can't get previous value, just skip it
+          previousValues[key] = undefined;
+        }
+      }
+
       // Pass skipDialog option to bypass WFRP4e confirmation dialogs
       // This prevents timeouts when advancing characteristics/skills via MCP
       await actor.update(data.updateData, { skipDialog: true } as any);
@@ -3915,11 +3927,27 @@ export class FoundryDataAccess {
               'motivation': 'Motivation',
               'gmnotes': 'GM Notes',
               'personal-ambitions': 'Ambitions',
-              'biography': 'Biography'
+              'biography': 'Biography',
+              'experience': 'Experience'
             };
 
             const result = detailName[detail];
             return result || detail;
+          } else if (parts.includes('experience') || key.includes('experience')) {
+            // Handle experience-related fields
+            if (parts.includes('log')) {
+              return 'Experience Log';
+            }
+            if (parts.includes('total')) {
+              return 'Total XP';
+            }
+            if (parts.includes('spent')) {
+              return 'Spent XP';
+            }
+            if (parts.includes('current')) {
+              return 'Available XP';
+            }
+            return 'Experience';
           }
 
           // Default: return last part of path
@@ -3931,30 +3959,109 @@ export class FoundryDataAccess {
         }
       };
 
-      // Create a clear, readable summary of what was updated
-      const fieldDescriptions = Object.keys(data.updateData || {}).map((key, index) => {
+      // Helper function to format a value for display
+      const formatValue = (value: any): string => {
+        if (value === null || value === undefined) return 'null';
+        if (typeof value === 'boolean') return value ? 'true' : 'false';
+        if (typeof value === 'number') return String(value);
+        if (typeof value === 'string') {
+          // Truncate long strings
+          return value.length > 30 ? value.substring(0, 27) + '...' : value;
+        }
+        if (Array.isArray(value)) {
+          return `[${value.length} items]`;
+        }
+        if (typeof value === 'object') {
+          // For objects, just show "updated" rather than JSON dump
+          return '[object]';
+        }
+        return String(value);
+      };
+
+      // Filter out internal fields that shouldn't be shown in notifications
+      const isInternalField = (key: string): boolean => {
+        const internalPatterns = ['_id', 'type', 'flags', 'ownership', 'folder', 'sort', 'permission'];
+        const lowerKey = key.toLowerCase();
+        return internalPatterns.some(pattern => lowerKey === pattern || lowerKey.endsWith('.' + pattern));
+      };
+
+      // Helper function to flatten nested objects into dot-notation paths
+      const flattenObject = (obj: Record<string, any>, prefix = ''): Record<string, any> => {
+        const result: Record<string, any> = {};
+
+        for (const key of Object.keys(obj)) {
+          const fullKey = prefix ? `${prefix}.${key}` : key;
+          const value = obj[key];
+
+          // Skip internal fields
+          if (isInternalField(key) || isInternalField(fullKey)) {
+            continue;
+          }
+
+          // If value is a plain object (not array, not null), recurse
+          if (value && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date)) {
+            // Check if it's a "leaf" value object (has 'value' property that's primitive)
+            if ('value' in value && (typeof value.value !== 'object' || value.value === null)) {
+              // This is likely a WFRP field like {value: 15}, extract the value
+              result[fullKey + '.value'] = value.value;
+            } else {
+              // Recurse into nested object
+              Object.assign(result, flattenObject(value, fullKey));
+            }
+          } else {
+            // Primitive value or array - keep as is
+            result[fullKey] = value;
+          }
+        }
+
+        return result;
+      };
+
+      // Flatten the updateData to get actual field paths
+      const flattenedUpdates = flattenObject(data.updateData || {});
+      const flattenedPrevious = flattenObject(previousValues || {});
+
+      // Create a clear, readable summary of what was updated with before/after values
+      const allKeys = Object.keys(flattenedUpdates);
+      const userFacingKeys = allKeys.filter(key => !isInternalField(key));
+
+      const fieldDescriptions = userFacingKeys.map((key, index) => {
         try {
           const formatted = formatFieldName(key);
+          const oldValue = flattenedPrevious[key];
+          const newValue = flattenedUpdates[key];
 
-          // Ensure we always return a string
-          if (typeof formatted === 'string') {
-            return formatted;
+          // Show before → after format
+          let description: string;
+          if (oldValue !== undefined && oldValue !== newValue) {
+            description = `${formatted}: ${formatValue(oldValue)} → ${formatValue(newValue)}`;
           } else {
-            console.warn(`[Warhammer MCP] formatFieldName returned non-string at index ${index}:`, typeof formatted, formatted);
-            return String(formatted);
+            // If we don't have previous value or it's the same, just show new value
+            description = `${formatted}: ${formatValue(newValue)}`;
           }
+
+          return description;
         } catch (error) {
           console.warn(`[Warhammer MCP] Error formatting field at index ${index} (key: "${key}"):`, error);
-          return String(key);
+          return `${String(key)}: ${formatValue(flattenedUpdates[key])}`;
         }
       });
 
       // Filter out any non-strings just in case
       const cleanDescriptions = fieldDescriptions.filter(d => typeof d === 'string');
 
-      const updateSummary = cleanDescriptions.length > 0
-        ? cleanDescriptions.join(', ')
-        : 'various fields';
+      // Limit to first 4 items if there are many updates
+      const maxItemsToShow = 4;
+      let updateSummary: string;
+      if (cleanDescriptions.length === 0) {
+        updateSummary = 'various fields';
+      } else if (cleanDescriptions.length <= maxItemsToShow) {
+        updateSummary = cleanDescriptions.join(', ');
+      } else {
+        const shown = cleanDescriptions.slice(0, maxItemsToShow).join(', ');
+        const remaining = cleanDescriptions.length - maxItemsToShow;
+        updateSummary = `${shown}, and ${remaining} more field${remaining > 1 ? 's' : ''}`;
+      }
 
       // Show notifications to GM
       if (data.warnings && Array.isArray(data.warnings) && data.warnings.length > 0) {

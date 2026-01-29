@@ -659,11 +659,21 @@ export class CharacterTools {
       };
 
       // Add condition value if this is a WFRP condition (Fatigued, Poisoned, etc.)
-      // WFRP conditions store their count in flags.wfrp4e.conditionValue
-      if (effect.flags?.wfrp4e?.conditionValue) {
-        formattedEffect.conditionValue = effect.flags.wfrp4e.conditionValue;
-        // Update name to include count for better readability
-        formattedEffect.displayName = `${effect.name} (${effect.flags.wfrp4e.conditionValue})`;
+      // WFRP4e stores condition values in:
+      // - Primary: effect.system.condition.value
+      // - Fallback: effect.flags.wfrp4e.value
+      const conditionValue = effect.system?.condition?.value ?? effect.flags?.wfrp4e?.value;
+
+      if (conditionValue !== undefined && conditionValue !== null) {
+        formattedEffect.conditionValue = conditionValue;
+
+        // Stackable conditions (value > 1): show count
+        // Binary conditions (value = 1 or 0): just show name
+        if (conditionValue > 1) {
+          formattedEffect.displayName = `${effect.name} ${conditionValue}`;
+        } else {
+          formattedEffect.displayName = effect.name;
+        }
       }
 
       return formattedEffect;

@@ -76,3 +76,29 @@ test-*.ps1
 config.local.json
 .claude/foundry-mcp-server-*.zip
 foundry-vtt-mcp.zip
+
+# Additional ignores (auto-added)
+.env.example
+*.local.json
+*.md.fullproject
+*.test (1).md
+*.d.ts.map
+*.js.map
+packages/*/dist/
+packages/*/build/
+packages/*/node_modules/
+packages/*/tsconfig.tsbuildinfo
+packages/*/package-lock.json
+shared/dist/
+shared/tsconfig.tsbuildinfo
+.claude/settings.local.json
+test_result.md
+test-results/
+*.zip
+!installer/build/*.zip
+!installer/nsis/*.zip
+*.exe
+!installer/build/*.exe
+!installer/nsis/*.exe
+*.log
+*.log*
