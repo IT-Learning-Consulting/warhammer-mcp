@@ -485,24 +485,38 @@ export class CareerAdvancementTools {
                 throw new Error(`Characteristic "${characteristic}" not found on ${character.name}`);
             }
 
-            // WFRP4e XP cost table - costs are per tier of 5 advances
+            // Get current career's allowed characteristics
+            const currentCareer = character.items?.find((item: any) =>
+                item.type === 'career' && item.system?.current === true
+            );
+            const careerCharacteristics = currentCareer?.system?.characteristics || {};
+            const isInCareer = careerCharacteristics[characteristic] !== undefined && careerCharacteristics[characteristic] > 0;
+
+            // WFRP4e XP cost table - base costs per tier of 5 advances
             // Advances 0-4: 25 XP, 5-9: 30 XP, 10-14: 40 XP, etc.
+            // Out-of-career characteristics cost +5 XP per advance
             const characteristicXPCosts = [25, 30, 40, 50, 70, 90, 120, 150, 190, 230, 280, 330, 390, 450, 520];
             const currentAdvances = currentChar.advances || 0;
             const availableXP = system.details?.experience?.current || 0;
 
             // Calculate total XP cost using WFRP4e formula: index = Math.floor(currentAdvances / 5)
+            // Apply +5 XP penalty for out-of-career characteristics
             let totalCost = 0;
             for (let i = 0; i < advances; i++) {
                 const advanceNumber = currentAdvances + i;
                 const tierIndex = Math.floor(advanceNumber / 5);
 
+                let baseCost: number;
                 if (tierIndex >= characteristicXPCosts.length) {
                     // Use the last tier cost if beyond the table
-                    totalCost += characteristicXPCosts[characteristicXPCosts.length - 1];
+                    baseCost = characteristicXPCosts[characteristicXPCosts.length - 1];
                 } else {
-                    totalCost += characteristicXPCosts[tierIndex];
+                    baseCost = characteristicXPCosts[tierIndex];
                 }
+
+                // Apply out-of-career penalty
+                const cost = isInCareer ? baseCost : baseCost + 5;
+                totalCost += cost;
             }
 
             if (availableXP < totalCost) {
@@ -522,9 +536,11 @@ export class CareerAdvancementTools {
                 updateData: updateData,
             });
 
+            const careerStatus = isInCareer ? '(in-career)' : '(out-of-career, +5 XP penalty per advance)';
             return `✅ Successfully advanced ${characteristic.toUpperCase()} by ${advances} advance(s) for ${character.name}!\n` +
                 `- Previous advances: ${currentAdvances}\n` +
                 `- New advances: ${newAdvances}\n` +
+                `- Career status: ${careerStatus}\n` +
                 `- XP spent: ${totalCost}\n` +
                 `- Remaining XP: ${availableXP - totalCost}`;
         } catch (error) {
@@ -760,23 +776,46 @@ export class CareerAdvancementTools {
             }
 
             // Search compendium for the new career
-            const compendiumResults = await this.foundryClient.query('warhammer-mcp.searchCompendium', {
+            const compendiumResponse = await this.foundryClient.query('warhammer-mcp.searchCompendium', {
                 query: newCareerName,
-                types: ['career'],
             });
 
-            if (!compendiumResults || compendiumResults.length === 0) {
-                throw new Error(`Career "${newCareerName}" not found in compendium. Please check the spelling.`);
+            // Extract results array from response
+            const compendiumResults = compendiumResponse?.results || compendiumResponse || [];
+
+            console.log('[CAREER DEBUG] Raw compendium response:', JSON.stringify(compendiumResponse, null, 2));
+            console.log('[CAREER DEBUG] Extracted results:', JSON.stringify(compendiumResults, null, 2));
+
+            // Filter to only PC career items (type === 'career') from items packs, not NPC templates
+            // Careers in WFRP4e are stored in .items packs (e.g., wfrp4e-core.items), not separate .careers packs
+            // Note: pack can be either a string "wfrp4e-core.items" or an object {id: "...", label: "..."}
+            const filteredResults = Array.isArray(compendiumResults)
+                ? compendiumResults.filter((result: any) => {
+                    const packId = typeof result.pack === 'string' ? result.pack : result.pack?.id;
+                    const matches = result.type === 'career' && packId?.includes('.items');
+                    console.log('[CAREER DEBUG] Filter check:', { name: result.name, type: result.type, packId, matches });
+                    return matches;
+                })
+                : [];
+
+            console.log('[CAREER DEBUG] Filtered results count:', filteredResults.length);
+            console.log('[CAREER DEBUG] Filtered results:', JSON.stringify(filteredResults, null, 2));
+
+            if (!filteredResults || filteredResults.length === 0) {
+                throw new Error(
+                    `Career "${newCareerName}" not found in compendiums.\n` +
+                    `Please check the spelling or verify it's a valid PC career (not an NPC template or actor).`
+                );
             }
 
             // Find exact or best match
-            let newCareer = compendiumResults.find(
+            let newCareer = filteredResults.find(
                 (item: any) => item.name.toLowerCase() === newCareerName.toLowerCase()
             );
 
             if (!newCareer) {
                 // No exact match, use the first result
-                newCareer = compendiumResults[0];
+                newCareer = filteredResults[0];
                 this.logger.info('No exact match found, using closest match', {
                     searched: newCareerName,
                     found: newCareer.name
@@ -784,21 +823,28 @@ export class CareerAdvancementTools {
             }
 
             // Construct UUID from pack and id
-            // Format: Compendium.{packId}.{itemId}
+            // Format: Compendium.{packId}.Item.{itemId}
             let careerUuid: string | null = null;
             if (newCareer.uuid) {
                 // If UUID is already present, use it
                 careerUuid = newCareer.uuid;
-            } else if (newCareer.pack && (newCareer.id || newCareer._id)) {
-                // Construct UUID from pack and id
+            } else {
+                // Get pack ID - handle both string and object formats
+                const packId = typeof newCareer.pack === 'string'
+                    ? newCareer.pack
+                    : newCareer.pack?.id;
                 const itemId = newCareer.id || newCareer._id;
-                careerUuid = `Compendium.${newCareer.pack}.${itemId}`;
-                this.logger.info('Constructed UUID for career', {
-                    career: newCareer.name,
-                    pack: newCareer.pack,
-                    id: itemId,
-                    uuid: careerUuid
-                });
+
+                if (packId && itemId) {
+                    // WFRP4e compendium UUID format: Compendium.{packId}.Item.{itemId}
+                    careerUuid = `Compendium.${packId}.Item.${itemId}`;
+                    this.logger.info('Constructed UUID for career', {
+                        career: newCareer.name,
+                        pack: packId,
+                        id: itemId,
+                        uuid: careerUuid
+                    });
+                }
             }
 
             if (!careerUuid) {

@@ -29,7 +29,14 @@
     "audit:deps": "npm audit && npm run audit --workspaces --if-present",
     "audit:unused": "npx knip",
     "audit:circular": "npx madge --circular --extensions ts packages/mcp-server/src packages/foundry-module/src shared/src",
-    "size:analyze": "npm run bundle:server && npx esbuild-analyzer packages/mcp-server/dist/backend.bundle.cjs"
+    "size:analyze": "npm run bundle:server && npx esbuild-analyzer packages/mcp-server/dist/backend.bundle.cjs",
+    "mcp:start": "cd packages/mcp-server && node dist/backend.js",
+    "mcp:start:bundle": "cd packages/mcp-server && node dist/backend.bundle.cjs",
+    "mcp:pm2:start": "pm2 start ecosystem.config.cjs",
+    "mcp:pm2:stop": "pm2 stop foundry-mcp-backend",
+    "mcp:pm2:restart": "pm2 restart foundry-mcp-backend",
+    "mcp:pm2:logs": "pm2 logs foundry-mcp-backend",
+    "mcp:pm2:status": "pm2 status"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

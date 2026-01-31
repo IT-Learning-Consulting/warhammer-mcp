@@ -126,7 +126,7 @@ export class CharacterTools {
       },
       {
         name: 'add-skill-talent',
-        description: 'Add a skill or talent to a character from the WFRP 4e compendium. Searches compendiums for the skill/talent by name and adds it with all official effects and mechanics. Use this when a character learns a new skill or gains a talent. For custom skills/talents not in compendiums, will create a basic entry if search fails. Example: "Add Melee (Basic) skill to Hans" or "Add Warrior Born talent to Gustav"',
+        description: 'Add a skill or talent to a character from the WFRP 4e compendium (GM adjustment - no XP cost). Searches compendiums for the skill/talent by name and adds it with all official effects and mechanics. For XP-based advancement, use advance-skill or advance-talent tools instead. Use this for GM adjustments, starting character skills/talents, or rewards. Example: "Add Melee (Basic) skill to Hans" or "Add Warrior Born talent to Gustav"',
         inputSchema: {
           type: 'object',
           properties: {
