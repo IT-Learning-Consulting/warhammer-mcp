@@ -1,6 +1,6 @@
 {
   "name": "foundry-mcp-integration",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "MCP server that bridges Foundry VTT game data with Claude Desktop",
   "private": true,
   "workspaces": [

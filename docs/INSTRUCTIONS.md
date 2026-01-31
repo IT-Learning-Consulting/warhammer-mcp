@@ -1,7 +1,7 @@
 # Development Instructions & Context
 
-**Last Updated**: October 6, 2025  
-**Current Version**: 0.2.2  
+**Last Updated**: January 31, 2025  
+**Current Version**: 0.2.4  
 **Project**: Warhammer Fantasy Roleplay MCP Bridge for Foundry VTT
 
 ---
@@ -14,7 +14,7 @@ This is a **fork** of the Foundry VTT MCP Bridge, adapted specifically for **War
 - **MCP Server** (`packages/mcp-server/`) - Node.js server handling Claude Desktop communication
 - **Foundry Module** (`packages/foundry-module/`) - Runs inside Foundry VTT, provides data access
 - **Shared Library** (`shared/`) - Common types and schemas
-- **65+ Tools** - Character management, career advancement, corruption, magic, NPCs, etc.
+- **36 Tools** - Character management, career advancement, corruption, magic, NPCs, etc.
 
 ---
 
@@ -104,13 +104,17 @@ Each tool file exports a class with:
 
 **Key Tool Files:**
 - `character.ts` - Character retrieval, direct updates, skills/talents
-- `career-advancement.ts` - XP-based advancement, career changes
-- `fate-resilience.ts` - Fortune/Fate & Resilience/Resolve (12 tools)
-- `corruption-mutation.ts` - Corruption tracking, mutations
-- `custom-npc-generator.ts` - Species-specific NPC creation
-- `spell-magic.ts` - Spell casting, channelling, miscasts
-- `prayer-blessing.ts` - Prayers, divine favor, sin
-- `rolltable-management.ts` - Random table creation and rolling
+- `manage-character.ts` - Consolidated character editing (update-stats, add-skill-talent, etc.)
+- `manage-career.ts` - XP-based advancement, career changes
+- `manage-fortune-fate.ts` - Fortune/Fate resources
+- `manage-resolve-resilience.ts` - Resilience/Resolve (NPC equivalent)
+- `manage-corruption.ts` - Corruption tracking
+- `manage-mutation.ts` - Physical/mental mutations
+- `manage-npc-generation.ts` - Species-specific NPC creation with archetypes
+- `manage-arcane-magic.ts` - Spell casting, channelling, miscasts
+- `manage-divine-magic.ts` - Prayers, divine favor, sin
+- `manage-rolltable.ts` - Random table creation and rolling
+- `manage-journal.ts` - Journal entries and quest management
 - `compendium.ts` - Compendium searches
 - `dice-roll.ts` - Player test requests
 

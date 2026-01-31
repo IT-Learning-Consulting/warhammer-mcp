@@ -1,5 +1,79 @@
 # Changelog
 
+## v0.2.4 (2025-01-31)
+
+### 🔧 Tool Consolidation Phase 2 Complete
+
+Major refactoring effort reducing tool count from 66 to **36 tools** (-30 tools, 45% reduction).
+
+**Phase 6 - Divine Magic Consolidation**
+- Created `manage-divine-magic.ts` (6 actions)
+- Actions: get-blessings, invoke, check-favor, add-sin, penance, end-blessing
+- Deleted: `prayer-blessing.ts` (~1048 lines)
+
+**Phase 7 - Arcane Magic Consolidation**
+- Created `manage-arcane-magic.ts` (6 actions)
+- Actions: get-spells, cast, channel, check-miscast, memorize, learn
+- Deleted: `spell-magic.ts` (~1265 lines)
+
+**Phase 8 - Ownership Consolidation**
+- Created `manage-ownership.ts` (3 actions)
+- Actions: assign, remove, list
+- Deleted: `ownership.ts` (~304 lines)
+
+**Phase 9 - NPC Generator Consolidation**
+- Created `manage-npc-generation.ts` (3 actions)
+- Actions: create, list-archetypes, preview
+- Deleted: `custom-npc-generator.ts` (~1198 lines)
+
+**Phase 10 - Roll Table Consolidation**
+- Created `manage-rolltable.ts` (5 actions)
+- Actions: create, list, get, roll, delete
+- Deleted: `rolltable-management.ts` (~404 lines)
+
+**Phase 11 - Journal/Quest Consolidation**
+- Created `manage-journal.ts` (5 actions)
+- Actions: create, update, link-npc, list, search
+- Deleted: `quest-creation.ts` (~1078 lines)
+
+### 📊 Results Summary
+
+| Metric | Before | After | Change |
+|--------|--------|-------|--------|
+| Total Tools | 66 | 36 | -30 (45%) |
+| Tool Files | 26 | 26 | 0 |
+| Lines Deleted | - | ~5,293 | - |
+
+### ✨ Benefits
+
+- **Reduced Context Window**: 45% fewer tool definitions to parse
+- **Cleaner API**: Action-based discriminated union pattern
+- **Better Discoverability**: Related functions grouped logically
+- **Maintainability**: Less code duplication, shared patterns
+
+### 📦 Files Changed
+
+**Created:**
+- `packages/mcp-server/src/tools/manage-divine-magic.ts`
+- `packages/mcp-server/src/tools/manage-arcane-magic.ts`
+- `packages/mcp-server/src/tools/manage-ownership.ts`
+- `packages/mcp-server/src/tools/manage-npc-generation.ts`
+- `packages/mcp-server/src/tools/manage-rolltable.ts`
+- `packages/mcp-server/src/tools/manage-journal.ts`
+
+**Deleted:**
+- `packages/mcp-server/src/tools/prayer-blessing.ts`
+- `packages/mcp-server/src/tools/spell-magic.ts`
+- `packages/mcp-server/src/tools/ownership.ts`
+- `packages/mcp-server/src/tools/custom-npc-generator.ts`
+- `packages/mcp-server/src/tools/rolltable-management.ts`
+- `packages/mcp-server/src/tools/quest-creation.ts`
+
+**Modified:**
+- `packages/mcp-server/src/backend.ts` - Updated imports and routing
+
+---
+
 ## v0.2.3 (2025-10-11)
 
 ### ✨ Enhanced Features
