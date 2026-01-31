@@ -44,7 +44,7 @@ import { ManageArcaneMagicTool } from './tools/manage-arcane-magic.js';
 
 import { ManageSocialStatusTool } from './tools/manage-social-status.js';
 
-import { CustomNPCGeneratorTools } from './tools/custom-npc-generator.js';
+import { ManageNPCGenerationTool } from './tools/manage-npc-generation.js';
 
 import { CompendiumTools } from './tools/compendium.js';
 
@@ -52,7 +52,7 @@ import { SceneTools } from './tools/scene.js';
 
 import { ActorCreationTools } from './tools/actor-creation.js';
 
-import { QuestCreationTools } from './tools/quest-creation.js';
+import { ManageJournalTool } from './tools/manage-journal.js';
 
 import { DiceRollTools } from './tools/dice-roll.js';
 
@@ -62,7 +62,7 @@ import { ManageOwnershipTool } from './tools/manage-ownership.js';
 
 import { MapGenerationTools } from './tools/map-generation.js';
 
-import { RollTableTools } from './tools/rolltable-management.js';
+import { ManageRollTableTool } from './tools/manage-rolltable.js';
 
 const CONTROL_HOST = '127.0.0.1';
 
@@ -954,7 +954,7 @@ async function startBackend(): Promise<void> {
 
   const manageSocialStatusTool = new ManageSocialStatusTool(foundryClient, logger);
 
-  const customNPCGeneratorTools = new CustomNPCGeneratorTools(foundryClient, logger);
+  const manageNPCGenerationTool = new ManageNPCGenerationTool(foundryClient, logger);
 
   const compendiumTools = new CompendiumTools({ foundryClient, logger });
 
@@ -962,7 +962,7 @@ async function startBackend(): Promise<void> {
 
   const actorCreationTools = new ActorCreationTools({ foundryClient, logger });
 
-  const questCreationTools = new QuestCreationTools({ foundryClient, logger });
+  const manageJournalTool = new ManageJournalTool(foundryClient, logger);
 
   const diceRollTools = new DiceRollTools({ foundryClient, logger });
 
@@ -970,7 +970,7 @@ async function startBackend(): Promise<void> {
 
   const manageOwnershipTool = new ManageOwnershipTool(foundryClient, logger);
 
-  const rollTableTools = new RollTableTools(foundryClient, logger);
+  const manageRollTableTool = new ManageRollTableTool(foundryClient, logger);
 
   // Initialize mapgen-style backend components for map generation
   let mapGenerationJobQueue: any = null;
@@ -1178,7 +1178,7 @@ async function startBackend(): Promise<void> {
 
     ...manageSocialStatusTool.getToolDefinitions(),
 
-    ...customNPCGeneratorTools.getToolDefinitions(),
+    ...manageNPCGenerationTool.getToolDefinitions(),
 
     ...compendiumTools.getToolDefinitions(),
 
@@ -1186,7 +1186,7 @@ async function startBackend(): Promise<void> {
 
     ...actorCreationTools.getToolDefinitions(),
 
-    ...questCreationTools.getToolDefinitions(),
+    ...manageJournalTool.getToolDefinitions(),
 
     ...diceRollTools.getToolDefinitions(),
 
@@ -1196,7 +1196,7 @@ async function startBackend(): Promise<void> {
 
     ...mapGenerationTools.getToolDefinitions(),
 
-    ...rollTableTools.getToolDefinitions(),
+    ...manageRollTableTool.getToolDefinitions(),
 
   ];
 
@@ -1414,22 +1414,11 @@ async function startBackend(): Promise<void> {
 
                   break;
 
-                // Custom NPC Generator tools
-                case 'create-custom-npc':
+                // NPC Generation tool (consolidated)
 
-                  result = await customNPCGeneratorTools.handleCreateCustomNPC(args);
+                case 'manage-npc-generation':
 
-                  break;
-
-                case 'list-npc-archetypes':
-
-                  result = await customNPCGeneratorTools.handleListNPCArchetypes(args);
-
-                  break;
-
-                case 'calculate-npc-xp-distribution':
-
-                  result = await customNPCGeneratorTools.handleCalculateXPDistribution(args);
+                  result = await manageNPCGenerationTool.execute(args);
 
                   break;
 
@@ -1487,35 +1476,11 @@ async function startBackend(): Promise<void> {
 
                   break;
 
-                // Quest creation tools
+                // Journal tool (consolidated)
 
-                case 'create-quest-journal':
+                case 'manage-journal':
 
-                  result = await questCreationTools.handleCreateQuestJournal(args);
-
-                  break;
-
-                case 'link-quest-to-npc':
-
-                  result = await questCreationTools.handleLinkQuestToNPC(args);
-
-                  break;
-
-                case 'update-quest-journal':
-
-                  result = await questCreationTools.handleUpdateQuestJournal(args);
-
-                  break;
-
-                case 'list-journals':
-
-                  result = await questCreationTools.handleListJournals(args);
-
-                  break;
-
-                case 'search-journals':
-
-                  result = await questCreationTools.handleSearchJournals(args);
+                  result = await manageJournalTool.execute(args);
 
                   break;
 
@@ -1575,35 +1540,11 @@ async function startBackend(): Promise<void> {
 
                   break;
 
-                // RollTable tools
+                // Roll Table tool (consolidated)
 
-                case 'create-rolltable':
+                case 'manage-rolltable':
 
-                  result = await rollTableTools.handleCreateRollTable(args);
-
-                  break;
-
-                case 'list-rolltables':
-
-                  result = await rollTableTools.handleListRollTables(args);
-
-                  break;
-
-                case 'get-rolltable':
-
-                  result = await rollTableTools.handleGetRollTable(args);
-
-                  break;
-
-                case 'roll-on-table':
-
-                  result = await rollTableTools.handleRollOnTable(args);
-
-                  break;
-
-                case 'delete-rolltable':
-
-                  result = await rollTableTools.handleDeleteRollTable(args);
+                  result = await manageRollTableTool.execute(args);
 
                   break;
 
