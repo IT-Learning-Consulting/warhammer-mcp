@@ -38,9 +38,9 @@ import { ManageInventoryTool } from './tools/manage-inventory.js';
 
 import { CreateItemTool } from './tools/create-item.js';
 
-import { PrayerBlessingTools } from './tools/prayer-blessing.js';
+import { ManageDivineMagicTool } from './tools/manage-divine-magic.js';
 
-import { SpellMagicTools } from './tools/spell-magic.js';
+import { ManageArcaneMagicTool } from './tools/manage-arcane-magic.js';
 
 import { ManageSocialStatusTool } from './tools/manage-social-status.js';
 
@@ -58,7 +58,7 @@ import { DiceRollTools } from './tools/dice-roll.js';
 
 import { CampaignManagementTools } from './tools/campaign-management.js';
 
-import { OwnershipTools } from './tools/ownership.js';
+import { ManageOwnershipTool } from './tools/manage-ownership.js';
 
 import { MapGenerationTools } from './tools/map-generation.js';
 
@@ -948,9 +948,9 @@ async function startBackend(): Promise<void> {
 
   const createItemTool = new CreateItemTool(foundryClient, logger);
 
-  const prayerBlessingTools = new PrayerBlessingTools(foundryClient, logger);
+  const manageDivineMagicTool = new ManageDivineMagicTool(foundryClient, logger);
 
-  const spellMagicTools = new SpellMagicTools(foundryClient, logger);
+  const manageArcaneMagicTool = new ManageArcaneMagicTool(foundryClient, logger);
 
   const manageSocialStatusTool = new ManageSocialStatusTool(foundryClient, logger);
 
@@ -968,7 +968,7 @@ async function startBackend(): Promise<void> {
 
   const campaignManagementTools = new CampaignManagementTools(foundryClient, logger);
 
-  const ownershipTools = new OwnershipTools({ foundryClient, logger });
+  const manageOwnershipTool = new ManageOwnershipTool(foundryClient, logger);
 
   const rollTableTools = new RollTableTools(foundryClient, logger);
 
@@ -1172,9 +1172,9 @@ async function startBackend(): Promise<void> {
 
     ...createItemTool.getToolDefinitions(),
 
-    ...prayerBlessingTools.getToolDefinitions(),
+    ...manageDivineMagicTool.getToolDefinitions(),
 
-    ...spellMagicTools.getToolDefinitions(),
+    ...manageArcaneMagicTool.getToolDefinitions(),
 
     ...manageSocialStatusTool.getToolDefinitions(),
 
@@ -1192,7 +1192,7 @@ async function startBackend(): Promise<void> {
 
     ...campaignManagementTools.getToolDefinitions(),
 
-    ...ownershipTools.getToolDefinitions(),
+    ...manageOwnershipTool.getToolDefinitions(),
 
     ...mapGenerationTools.getToolDefinitions(),
 
@@ -1390,79 +1390,19 @@ async function startBackend(): Promise<void> {
 
                   break;
 
-                // Prayer & Blessing tools
+                // Divine Magic tool (consolidated)
 
-                case 'get-active-blessings':
+                case 'manage-divine-magic':
 
-                  result = await prayerBlessingTools.handleGetActiveBlessings(args);
-
-                  break;
-
-                case 'invoke-prayer':
-
-                  result = await prayerBlessingTools.handleInvokePrayer(args);
+                  result = await manageDivineMagicTool.execute(args);
 
                   break;
 
-                case 'check-divine-favor':
+                // Arcane Magic tool (consolidated)
 
-                  result = await prayerBlessingTools.handleCheckDivineFavor(args);
+                case 'manage-arcane-magic':
 
-                  break;
-
-                case 'add-sin-point':
-
-                  result = await prayerBlessingTools.handleAddSinPoint(args);
-
-                  break;
-
-                case 'perform-penance':
-
-                  result = await prayerBlessingTools.handlePerformPenance(args);
-
-                  break;
-
-                case 'end-blessing':
-
-                  result = await prayerBlessingTools.handleEndBlessing(args);
-
-                  break;
-
-                // Spell & Magic tools
-
-                case 'get-known-spells':
-
-                  result = await spellMagicTools.handleGetKnownSpells(args);
-
-                  break;
-
-                case 'cast-spell':
-
-                  result = await spellMagicTools.handleCastSpell(args);
-
-                  break;
-
-                case 'channel-power':
-
-                  result = await spellMagicTools.handleChannelPower(args);
-
-                  break;
-
-                case 'check-miscast':
-
-                  result = await spellMagicTools.handleCheckMiscast(args);
-
-                  break;
-
-                case 'memorize-spell':
-
-                  result = await spellMagicTools.handleMemorizeSpell(args);
-
-                  break;
-
-                case 'learn-new-spell':
-
-                  result = await spellMagicTools.handleLearnNewSpell(args);
+                  result = await manageArcaneMagicTool.execute(args);
 
                   break;
 
@@ -1595,23 +1535,11 @@ async function startBackend(): Promise<void> {
 
                   break;
 
-                // Ownership tools
+                // Ownership tool (consolidated)
 
-                case 'assign-actor-ownership':
+                case 'manage-ownership':
 
-                  result = await ownershipTools.handleToolCall('assign-actor-ownership', args);
-
-                  break;
-
-                case 'remove-actor-ownership':
-
-                  result = await ownershipTools.handleToolCall('remove-actor-ownership', args);
-
-                  break;
-
-                case 'list-actor-ownership':
-
-                  result = await ownershipTools.handleToolCall('list-actor-ownership', args);
+                  result = await manageOwnershipTool.execute(args);
 
                   break;
 
