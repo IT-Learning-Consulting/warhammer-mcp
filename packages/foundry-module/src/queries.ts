@@ -89,6 +89,7 @@ export class QueryHandlers {
     CONFIG.queries[`${modulePrefix}.updateItem`] = this.handleUpdateItem.bind(this);
     CONFIG.queries[`${modulePrefix}.createItem`] = this.handleCreateItem.bind(this);
     CONFIG.queries[`${modulePrefix}.deleteItem`] = this.handleDeleteItem.bind(this);
+    CONFIG.queries[`${modulePrefix}.modifyItemQualities`] = this.handleModifyItemQualities.bind(this);
 
     // RollTable operations
     CONFIG.queries[`${modulePrefix}.createRollTable`] = this.handleCreateRollTable.bind(this);
@@ -1124,6 +1125,79 @@ export class QueryHandlers {
       return await this.dataAccess.deleteItem(data);
     } catch (error) {
       throw new Error(`Failed to delete item: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Handle modify item qualities request
+   */
+  private async handleModifyItemQualities(data: {
+    characterName: string;
+    itemName: string;
+    addQualities: Array<{ name: string; value?: number }>;
+    removeQualities: string[];
+    addFlaws: Array<{ name: string; value?: number }>;
+    removeFlaws: string[];
+  }): Promise<any> {
+    try {
+      // SECURITY: Silent GM validation
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) {
+        return { error: 'Access denied', success: false };
+      }
+
+      // Find character
+      const actor = game.actors?.find((a: any) =>
+        a.name.toLowerCase() === data.characterName.toLowerCase()
+      );
+
+      if (!actor) {
+        return { success: false, error: `Character "${data.characterName}" not found` };
+      }
+
+      // Find item
+      const item = actor.items?.find((i: any) =>
+        i.name.toLowerCase() === data.itemName.toLowerCase()
+      );
+
+      if (!item) {
+        return { success: false, error: `Item "${data.itemName}" not found on ${actor.name}` };
+      }
+
+      // Build update data
+      const currentQualities = item.system?.properties?.qualities || {};
+      const currentFlaws = item.system?.properties?.flaws || {};
+
+      const updateData: any = {
+        'system.properties.qualities': { ...currentQualities },
+        'system.properties.flaws': { ...currentFlaws }
+      };
+
+      // Add qualities
+      for (const quality of data.addQualities) {
+        updateData['system.properties.qualities'][quality.name] = quality.value || true;
+      }
+
+      // Remove qualities
+      for (const quality of data.removeQualities) {
+        delete updateData['system.properties.qualities'][quality];
+      }
+
+      // Add flaws
+      for (const flaw of data.addFlaws) {
+        updateData['system.properties.flaws'][flaw.name] = flaw.value || true;
+      }
+
+      // Remove flaws
+      for (const flaw of data.removeFlaws) {
+        delete updateData['system.properties.flaws'][flaw];
+      }
+
+      await item.update(updateData);
+
+      return { success: true, data: { itemName: item.name } };
+    } catch (error) {
+      throw new Error(`Failed to modify item qualities: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 

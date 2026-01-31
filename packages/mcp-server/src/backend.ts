@@ -15,28 +15,34 @@ import { Logger } from './logger.js';
 import { FoundryClient } from './foundry-client.js';
 
 import { CharacterTools } from './tools/character.js';
+import { ManageCharacterTool } from './tools/manage-character.js';
 
-import { CareerAdvancementTools } from './tools/career-advancement.js';
+import { ManageCareerTool } from './tools/manage-career.js';
 
-import { CorruptionMutationTools } from './tools/corruption-mutation.js';
+import { ManageCorruptionTools } from './tools/manage-corruption.js';
 
-import { FortuneFateTools } from './tools/fate-resilience.js';
+import { ManageMutationTools } from './tools/manage-mutation.js';
 
-import { CriticalWoundsTools } from './tools/critical-wounds.js';
+import { ManageFortuneFateTools } from './tools/manage-fortune-fate.js';
 
-import { AdvantageTools } from './tools/advantage-tracker.js';
+import { ManageResolveResilienceTools } from './tools/manage-resolve-resilience.js';
 
-import { DiseaseInfectionTools } from './tools/disease-infection.js';
+import { ManageCriticalWoundTool } from './tools/manage-critical-wound.js';
+import { RollCriticalWoundTool } from './tools/roll-critical-wound.js';
 
-import { InventoryManagementTools } from './tools/inventory-management.js';
+import { ManageAdvantageTools } from './tools/manage-advantage.js';
 
-import { ItemCreatorTools } from './tools/item-creator.js';
+import { ManageDiseaseTool } from './tools/manage-disease.js';
+
+import { ManageInventoryTool } from './tools/manage-inventory.js';
+
+import { CreateItemTool } from './tools/create-item.js';
 
 import { PrayerBlessingTools } from './tools/prayer-blessing.js';
 
 import { SpellMagicTools } from './tools/spell-magic.js';
 
-import { SocialStatusTools } from './tools/social-status.js';
+import { ManageSocialStatusTool } from './tools/manage-social-status.js';
 
 import { CustomNPCGeneratorTools } from './tools/custom-npc-generator.js';
 
@@ -919,28 +925,34 @@ async function startBackend(): Promise<void> {
   const foundryClient = new FoundryClient(config.foundry, logger);
 
   const characterTools = new CharacterTools({ foundryClient, logger });
+  const manageCharacterTool = new ManageCharacterTool(foundryClient, logger);
 
-  const careerAdvancementTools = new CareerAdvancementTools({ foundryClient, logger });
+  const manageCareerTool = new ManageCareerTool(foundryClient, logger);
 
-  const corruptionMutationTools = new CorruptionMutationTools({ foundryClient, logger });
+  const manageCorruptionTools = new ManageCorruptionTools({ foundryClient, logger });
 
-  const fortuneFateTools = new FortuneFateTools({ foundryClient, logger });
+  const manageMutationTools = new ManageMutationTools({ foundryClient, logger });
 
-  const criticalWoundsTools = new CriticalWoundsTools({ foundryClient, logger });
+  const manageFortuneFateTools = new ManageFortuneFateTools({ foundryClient, logger });
 
-  const advantageTools = new AdvantageTools({ foundryClient, logger });
+  const manageResolveResilienceTools = new ManageResolveResilienceTools({ foundryClient, logger });
 
-  const diseaseInfectionTools = new DiseaseInfectionTools(foundryClient, logger);
+  const manageCriticalWoundTool = new ManageCriticalWoundTool(foundryClient, logger);
+  const rollCriticalWoundTool = new RollCriticalWoundTool(foundryClient, logger);
 
-  const inventoryManagementTools = new InventoryManagementTools(foundryClient, logger);
+  const manageAdvantageTools = new ManageAdvantageTools({ foundryClient, logger });
 
-  const itemCreatorTools = new ItemCreatorTools({ foundryClient, logger });
+  const manageDiseaseTool = new ManageDiseaseTool(foundryClient, logger);
+
+  const manageInventoryTool = new ManageInventoryTool(foundryClient, logger);
+
+  const createItemTool = new CreateItemTool(foundryClient, logger);
 
   const prayerBlessingTools = new PrayerBlessingTools(foundryClient, logger);
 
   const spellMagicTools = new SpellMagicTools(foundryClient, logger);
 
-  const socialStatusTools = new SocialStatusTools(foundryClient, logger);
+  const manageSocialStatusTool = new ManageSocialStatusTool(foundryClient, logger);
 
   const customNPCGeneratorTools = new CustomNPCGeneratorTools(foundryClient, logger);
 
@@ -1137,28 +1149,34 @@ async function startBackend(): Promise<void> {
   const allTools = [
 
     ...characterTools.getToolDefinitions(),
+    ...manageCharacterTool.getToolDefinitions(),
 
-    ...careerAdvancementTools.getToolDefinitions(),
+    ...manageCareerTool.getToolDefinitions(),
 
-    ...corruptionMutationTools.getToolDefinitions(),
+    ...manageCorruptionTools.getToolDefinitions(),
 
-    ...fortuneFateTools.getToolDefinitions(),
+    ...manageMutationTools.getToolDefinitions(),
 
-    ...criticalWoundsTools.getToolDefinitions(),
+    ...manageFortuneFateTools.getToolDefinitions(),
 
-    ...advantageTools.getToolDefinitions(),
+    ...manageResolveResilienceTools.getToolDefinitions(),
 
-    ...diseaseInfectionTools.getToolDefinitions(),
+    ...manageCriticalWoundTool.getToolDefinitions(),
+    ...rollCriticalWoundTool.getToolDefinitions(),
 
-    ...inventoryManagementTools.getToolDefinitions(),
+    ...manageAdvantageTools.getToolDefinitions(),
 
-    ...itemCreatorTools.getToolDefinitions(),
+    ...manageDiseaseTool.getToolDefinitions(),
+
+    ...manageInventoryTool.getToolDefinitions(),
+
+    ...createItemTool.getToolDefinitions(),
 
     ...prayerBlessingTools.getToolDefinitions(),
 
     ...spellMagicTools.getToolDefinitions(),
 
-    ...socialStatusTools.getToolDefinitions(),
+    ...manageSocialStatusTool.getToolDefinitions(),
 
     ...customNPCGeneratorTools.getToolDefinitions(),
 
@@ -1280,343 +1298,95 @@ async function startBackend(): Promise<void> {
 
                   break;
 
-                case 'foundry-update-character-info':
+                // Character management (consolidated)
 
-                  result = await characterTools.handleUpdateCharacterInfo(args);
+                case 'manage-character':
 
-                  break;
-
-                case 'foundry-update-skill-talent':
-
-                  result = await characterTools.handleUpdateSkillTalent(args);
+                  result = await manageCharacterTool.handle(args);
 
                   break;
 
-                case 'add-skill-talent':
+                // Career advancement tools (consolidated)
 
-                  result = await characterTools.handleAddSkillTalent(args);
+                case 'manage-career':
 
-                  break;
-
-                case 'foundry-update-character-notes':
-
-                  result = await characterTools.handleUpdateCharacterNotes(args);
+                  result = await manageCareerTool.handle(args);
 
                   break;
 
-                case 'foundry-add-experience-log-entry':
+                // Corruption & Mutation tools (consolidated)
 
-                  result = await characterTools.handleAddExperienceLogEntry(args);
+                case 'manage-corruption':
 
-                  break;
-
-                // Career advancement tools
-
-                case 'get-career-advancement':
-
-                  result = await careerAdvancementTools.handleGetCareerAdvancement(args);
+                  result = await manageCorruptionTools.handle(args);
 
                   break;
 
-                case 'advance-characteristic':
+                case 'manage-mutation':
 
-                  result = await careerAdvancementTools.handleAdvanceCharacteristic(args);
-
-                  break;
-
-                case 'advance-skill':
-
-                  result = await careerAdvancementTools.handleAdvanceSkill(args);
+                  result = await manageMutationTools.handle(args);
 
                   break;
 
-                case 'advance-talent':
+                // Fortune & Fate tools (consolidated)
 
-                  result = await careerAdvancementTools.handleAdvanceTalent(args);
+                case 'manage-fortune-fate':
 
-                  break;
-
-                case 'change-career':
-
-                  result = await careerAdvancementTools.handleChangeCareer(args);
+                  result = await manageFortuneFateTools.handle(args);
 
                   break;
 
-                // Corruption & Mutation tools
+                // Resolve & Resilience tools (consolidated)
 
-                case 'get-corruption-status':
+                case 'manage-resolve-resilience':
 
-                  result = await corruptionMutationTools.handleGetCorruptionStatus(args);
-
-                  break;
-
-                case 'add-corruption':
-
-                  result = await corruptionMutationTools.handleAddCorruption(args);
+                  result = await manageResolveResilienceTools.handle(args);
 
                   break;
 
-                case 'remove-corruption':
+                // Critical Wounds tools (consolidated)
 
-                  result = await corruptionMutationTools.handleRemoveCorruption(args);
+                case 'manage-critical-wound':
 
-                  break;
-
-                case 'list-mutations':
-
-                  result = await corruptionMutationTools.handleListMutations(args);
-
-                  break;
-
-                case 'add-mutation':
-
-                  result = await corruptionMutationTools.handleAddMutation(args);
-
-                  break;
-
-                case 'remove-mutation':
-
-                  result = await corruptionMutationTools.handleRemoveMutation(args);
-
-                  break;
-
-                // Fortune & Fate tools
-
-                case 'get-fortune-fate-status':
-
-                  result = await fortuneFateTools.handleGetFortuneFateStatus(args);
-
-                  break;
-
-                case 'spend-fortune':
-
-                  result = await fortuneFateTools.handleSpendFortune(args);
-
-                  break;
-
-                case 'burn-fate':
-
-                  result = await fortuneFateTools.handleBurnFate(args);
-
-                  break;
-
-                case 'refresh-fortune':
-
-                  result = await fortuneFateTools.handleRefreshFortune(args);
-
-                  break;
-
-                case 'foundry-add-fortune-point':
-
-                  result = await fortuneFateTools.handleAddFortune(args);
-
-                  break;
-
-                case 'foundry-add-fate-point':
-
-                  result = await fortuneFateTools.handleAddFate(args);
-
-                  break;
-
-                case 'get-resilience-resolve-status':
-
-                  result = await fortuneFateTools.handleGetResilienceResolveStatus(args);
-
-                  break;
-
-                case 'spend-resolve':
-
-                  result = await fortuneFateTools.handleSpendResolve(args);
-
-                  break;
-
-                case 'spend-resilience':
-
-                  result = await fortuneFateTools.handleSpendResilience(args);
-
-                  break;
-
-                case 'refresh-resolve':
-
-                  result = await fortuneFateTools.handleRefreshResolve(args);
-
-                  break;
-
-                case 'foundry-add-resolve-point':
-
-                  result = await fortuneFateTools.handleAddResolve(args);
-
-                  break;
-
-                case 'foundry-add-resilience-point':
-
-                  result = await fortuneFateTools.handleAddResilience(args);
-
-                  break;
-
-                // Critical Wounds tools
-
-                case 'get-critical-wounds':
-
-                  result = await criticalWoundsTools.handleGetCriticalWounds(args);
-
-                  break;
-
-                case 'add-critical-wound':
-
-                  result = await criticalWoundsTools.handleAddCriticalWound(args);
+                  result = await manageCriticalWoundTool.handle(args);
 
                   break;
 
                 case 'roll-critical-wound':
 
-                  result = await criticalWoundsTools.handleRollCriticalWound(args);
+                  result = await rollCriticalWoundTool.handle(args);
 
                   break;
 
-                case 'remove-critical-wound':
+                // Advantage tools (consolidated)
 
-                  result = await criticalWoundsTools.handleRemoveCriticalWound(args);
+                case 'manage-advantage':
 
-                  break;
-
-                case 'check-death-from-criticals':
-
-                  result = await criticalWoundsTools.handleCheckDeathFromCriticals(args);
+                  result = await manageAdvantageTools.handle(args);
 
                   break;
 
-                // Advantage tools
+                // Disease & Infection tools (consolidated)
 
-                case 'get-advantage':
+                case 'manage-disease':
 
-                  result = await advantageTools.handleGetAdvantage(args);
-
-                  break;
-
-                case 'add-advantage':
-
-                  result = await advantageTools.handleAddAdvantage(args);
+                  result = await manageDiseaseTool.handle(args);
 
                   break;
 
-                case 'remove-advantage':
+                // Inventory Management tools (consolidated)
 
-                  result = await advantageTools.handleRemoveAdvantage(args);
+                case 'manage-inventory':
 
-                  break;
-
-                case 'calculate-advantage-bonus':
-
-                  result = await advantageTools.handleCalculateAdvantageBonus(args);
+                  result = await manageInventoryTool.handle(args);
 
                   break;
 
-                // Disease & Infection tools
+                // Item Creator tools (consolidated)
 
-                case 'get-diseases':
+                case 'create-item':
 
-                  result = await diseaseInfectionTools.handleGetDiseases(args);
-
-                  break;
-
-                case 'add-disease':
-
-                  result = await diseaseInfectionTools.handleAddDisease(args);
-
-                  break;
-
-                case 'check-infection-resilience':
-
-                  result = await diseaseInfectionTools.handleCheckInfectionResilience(args);
-
-                  break;
-
-                case 'remove-disease':
-
-                  result = await diseaseInfectionTools.handleRemoveDisease(args);
-
-                  break;
-
-                // Inventory Management tools
-
-                case 'get-inventory-status':
-
-                  result = await inventoryManagementTools.handleGetInventoryStatus(args);
-
-                  break;
-
-                case 'track-ammunition':
-
-                  result = await inventoryManagementTools.handleTrackAmmunition(args);
-
-                  break;
-
-                case 'check-encumbrance':
-
-                  result = await inventoryManagementTools.handleCheckEncumbrance(args);
-
-                  break;
-
-                case 'add-inventory-item':
-
-                  result = await inventoryManagementTools.handleAddInventoryItem(args);
-
-                  break;
-
-                case 'remove-inventory-item':
-
-                  result = await inventoryManagementTools.handleRemoveInventoryItem(args);
-
-                  break;
-
-                // Item Creator tools
-
-                case 'create-weapon':
-
-                  result = await itemCreatorTools.handleCreateWeapon(args);
-
-                  break;
-
-                case 'create-armour':
-
-                  result = await itemCreatorTools.handleCreateArmour(args);
-
-                  break;
-
-                case 'create-trapping':
-
-                  result = await itemCreatorTools.handleCreateTrapping(args);
-
-                  break;
-
-                case 'create-ammunition':
-
-                  result = await itemCreatorTools.handleCreateAmmunition(args);
-
-                  break;
-
-                case 'create-container':
-
-                  result = await itemCreatorTools.handleCreateContainer(args);
-
-                  break;
-
-                case 'modify-item-qualities':
-
-                  result = await itemCreatorTools.handleModifyItemQualities(args);
-
-                  break;
-
-                case 'add-item-to-character':
-
-                  result = await itemCreatorTools.handleAddItemToCharacter(args);
-
-                  break;
-
-                case 'remove-item-from-character':
-
-                  result = await itemCreatorTools.handleRemoveItemFromCharacter(args);
+                  result = await createItemTool.handle(args);
 
                   break;
 
@@ -1696,34 +1466,11 @@ async function startBackend(): Promise<void> {
 
                   break;
 
-                // Social Status Tools
-                case 'get-social-status':
+                // Social Status Tools (consolidated)
 
-                  result = await socialStatusTools.handleGetSocialStatus(args);
+                case 'manage-social-status':
 
-                  break;
-
-                case 'change-social-status':
-
-                  result = await socialStatusTools.handleChangeSocialStatus(args);
-
-                  break;
-
-                case 'make-social-test':
-
-                  result = await socialStatusTools.handleMakeSocialTest(args);
-
-                  break;
-
-                case 'calculate-income':
-
-                  result = await socialStatusTools.handleCalculateIncome(args);
-
-                  break;
-
-                case 'check-reputation':
-
-                  result = await socialStatusTools.handleCheckReputation(args);
+                  result = await manageSocialStatusTool.handle(args);
 
                   break;
 
