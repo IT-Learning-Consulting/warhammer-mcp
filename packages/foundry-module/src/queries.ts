@@ -1,14 +1,11 @@
 import { MODULE_ID } from './constants.js';
 import { FoundryDataAccess } from './data-access.js';
-import { ComfyUIManager } from './comfyui-manager.js';
 
 export class QueryHandlers {
   public dataAccess: FoundryDataAccess;
-  private comfyuiManager: ComfyUIManager;
 
   constructor() {
     this.dataAccess = new FoundryDataAccess();
-    this.comfyuiManager = new ComfyUIManager();
   }
 
   /**
@@ -65,10 +62,6 @@ export class QueryHandlers {
     // Enhanced creature index for campaign analysis
     CONFIG.queries[`${modulePrefix}.getEnhancedCreatureIndex`] = this.handleGetEnhancedCreatureIndex.bind(this);
 
-    // Campaign management queries
-    CONFIG.queries[`${modulePrefix}.updateCampaignProgress`] = this.handleUpdateCampaignProgress.bind(this);
-
-
     // Phase 6: Actor ownership management
     CONFIG.queries[`${modulePrefix}.setActorOwnership`] = this.handleSetActorOwnership.bind(this);
     CONFIG.queries[`${modulePrefix}.getActorOwnership`] = this.handleGetActorOwnership.bind(this);
@@ -77,11 +70,6 @@ export class QueryHandlers {
     CONFIG.queries[`${modulePrefix}.getConnectedPlayers`] = this.handleGetConnectedPlayers.bind(this);
     CONFIG.queries[`${modulePrefix}.findPlayers`] = this.handleFindPlayers.bind(this);
     CONFIG.queries[`${modulePrefix}.findActor`] = this.handleFindActor.bind(this);
-
-    // Map generation queries (hybrid architecture)
-    CONFIG.queries[`${modulePrefix}.generate-map`] = this.handleGenerateMap.bind(this);
-    CONFIG.queries[`${modulePrefix}.check-map-status`] = this.handleCheckMapStatus.bind(this);
-    CONFIG.queries[`${modulePrefix}.cancel-map-job`] = this.handleCancelMapJob.bind(this);
 
     // CRUD operations for items and actors
     CONFIG.queries[`${modulePrefix}.createActor`] = this.handleCreateActor.bind(this);
@@ -171,14 +159,7 @@ export class QueryHandlers {
 
       this.dataAccess.validateFoundryState();
 
-      const actors = await this.dataAccess.listActors();
-
-      // Filter by type if specified
-      if (data.type) {
-        return actors.filter(actor => actor.type === data.type);
-      }
-
-      return actors;
+      return await this.dataAccess.listActors(data.type);
     } catch (error) {
       throw new Error(`Failed to list actors: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
@@ -688,37 +669,6 @@ export class QueryHandlers {
   }
 
   /**
-   * Handle campaign progress update request
-   */
-  async handleUpdateCampaignProgress(data: { campaignId: string; partId: string; newStatus: string }): Promise<any> {
-    try {
-      // SECURITY: Silent GM validation
-      const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) {
-        return { error: 'Access denied', success: false };
-      }
-
-      this.dataAccess.validateFoundryState();
-
-      // For now, this is a pass-through to the MCP server
-      // In the future, campaign data might be stored in Foundry world flags
-      // Currently, the campaign dashboard regeneration happens server-side
-
-
-      return {
-        success: true,
-        message: `Campaign progress updated: ${data.partId} is now ${data.newStatus}`,
-        campaignId: data.campaignId,
-        partId: data.partId,
-        newStatus: data.newStatus
-      };
-
-    } catch (error) {
-      throw new Error(`Failed to update campaign progress: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
-
-  /**
    * Handle set actor ownership request
    */
   async handleSetActorOwnership(data: any): Promise<any> {
@@ -901,145 +851,6 @@ export class QueryHandlers {
       return await this.dataAccess.switchScene(data);
     } catch (error) {
       throw new Error(`Failed to switch scene: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
-
-  /**
-   * Handle map generation request - uses hybrid architecture
-   */
-  private async handleGenerateMap(data: any): Promise<any> {
-    try {
-      // SECURITY: Silent GM validation
-      const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) {
-        return { error: 'Access denied', success: false };
-      }
-
-      if (!data.prompt || typeof data.prompt !== 'string') {
-        throw new Error('Prompt is required and must be a string');
-      }
-
-      if (!data.scene_name || typeof data.scene_name !== 'string') {
-        throw new Error('Scene name is required and must be a string');
-      }
-
-      const params = {
-        prompt: data.prompt.trim(),
-        scene_name: data.scene_name.trim(),
-        size: data.size || 'medium',
-        grid_size: data.grid_size || 70
-      };
-
-      // Use ComfyUIManager to communicate with backend via WebSocket
-      const response = await this.comfyuiManager.generateMap(params);
-      const isSuccess = typeof response?.success === 'boolean' ? response.success : response?.status === 'success';
-
-      if (!isSuccess) {
-        const errorMessage = response?.error || response?.message || 'Map generation failed';
-        return {
-          error: errorMessage,
-          success: false,
-          status: response?.status ?? 'error'
-        };
-      }
-
-      return {
-        success: true,
-        status: response?.status ?? 'success',
-        jobId: response.jobId,
-        message: response.message || 'Map generation started',
-        estimatedTime: response.estimatedTime || '30-90 seconds'
-      };
-
-    } catch (error: any) {
-      return {
-        error: error.message,
-        success: false
-      };
-    }
-  }
-
-  /**
-   * Handle map status check request - uses hybrid architecture
-   */
-  private async handleCheckMapStatus(data: any): Promise<any> {
-    try {
-      // SECURITY: Silent GM validation
-      const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) {
-        return { error: 'Access denied', success: false };
-      }
-
-      if (!data.job_id) {
-        throw new Error('Job ID is required');
-      }
-
-      // Use ComfyUIManager to communicate with backend via WebSocket
-      const response = await this.comfyuiManager.checkMapStatus(data);
-      const isSuccess = typeof response?.success === 'boolean' ? response.success : response?.status === 'success';
-
-      if (!isSuccess) {
-        const errorMessage = response?.error || response?.message || 'Status check failed';
-        return {
-          error: errorMessage,
-          success: false,
-          status: response?.status ?? 'error'
-        };
-      }
-
-      return {
-        success: true,
-        status: response?.status ?? 'success',
-        job: response.job
-      };
-
-    } catch (error: any) {
-      return {
-        error: error.message,
-        success: false
-      };
-    }
-  }
-
-  /**
-   * Handle map job cancellation request - uses hybrid architecture
-   */
-  private async handleCancelMapJob(data: any): Promise<any> {
-    try {
-      // SECURITY: Silent GM validation
-      const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) {
-        return { error: 'Access denied', success: false };
-      }
-
-      if (!data.job_id) {
-        throw new Error('Job ID is required');
-      }
-
-      // Use ComfyUIManager to communicate with backend via WebSocket
-      const response = await this.comfyuiManager.cancelMapJob(data);
-      const isSuccess = typeof response?.success === 'boolean' ? response.success : response?.status === 'success';
-
-      if (!isSuccess) {
-        const errorMessage = response?.error || response?.message || 'Job cancellation failed';
-        return {
-          error: errorMessage,
-          success: false,
-          status: response?.status ?? 'error'
-        };
-      }
-
-      return {
-        success: true,
-        status: response?.status ?? 'success',
-        message: response.message || 'Job cancelled successfully'
-      };
-
-    } catch (error: any) {
-      return {
-        error: error.message,
-        success: false
-      };
     }
   }
 
