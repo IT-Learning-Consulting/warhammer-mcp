@@ -86,13 +86,10 @@ export class DiceRollTools {
         return 'You must determine the roll visibility before calling this function. Either: 1) The user already specified "public" or "private" in their request, or 2) You need to ask: "Do you want this to be a PUBLIC roll or PRIVATE roll?" Set userConfirmedVisibility to true only when you are confident about the visibility preference.';
       }
 
-      const response = await this.foundryClient.query('warhammer-mcp.request-player-rolls', params);
-
-      if (response.success) {
-        return `Roll request sent successfully! ${response.message}`;
-      } else {
-        throw new Error(response.error || 'Failed to request player rolls');
-      }
+      // Strip MCP-tool-only validation field; Foundry handler's strict schema rejects unknown keys.
+      const { userConfirmedVisibility: _uc, ...foundryPayload } = params;
+      const response = await this.foundryClient.query<any>('warhammer-mcp.request-player-rolls', foundryPayload);
+      return `Roll request sent successfully! ${response?.message ?? ''}`;
     } catch (error) {
       this.logger.error('Error requesting player rolls', error);
       if (error instanceof z.ZodError) {

@@ -3716,7 +3716,7 @@ export class FoundryDataAccess {
   /**
    * Switch to a different scene
    */
-  async switchScene(options: { scene_identifier: string; optimize_view?: boolean }): Promise<any> {
+  async switchScene(options: { scene_identifier: string; optimize_view?: boolean | undefined }): Promise<any> {
     this.validateFoundryState();
 
     try {
