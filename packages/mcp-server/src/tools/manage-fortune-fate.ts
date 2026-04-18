@@ -416,7 +416,6 @@ export class ManageFortuneFateTools {
                 actorId: character.id,
                 updateData: {
                     'system.status.fate.value': newFate,
-                    'system.status.fate.max': newFateMax,
                 },
             });
 
@@ -480,7 +479,6 @@ export class ManageFortuneFateTools {
                 actorId: character.id,
                 updateData: {
                     'system.status.fate.value': newFate,
-                    'system.status.fate.max': newFateMax,
                     'system.status.wounds.value': 1,
                 },
             });

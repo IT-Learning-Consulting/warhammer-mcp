@@ -1569,9 +1569,12 @@ export class FoundryDataAccess {
   /**
    * List all actors with basic information
    */
-  async listActors(): Promise<Array<{ id: string; name: string; type: string; img?: string }>> {
+  async listActors(type?: string): Promise<Array<{ id: string; name: string; type: string; img?: string }>> {
 
-    return game.actors.map(actor => ({
+    const source = type
+      ? (game.actors as any).filter((a: any) => a.type === type)
+      : game.actors;
+    return source.map((actor: any) => ({
       id: actor.id || '',
       name: actor.name || '',
       type: actor.type,

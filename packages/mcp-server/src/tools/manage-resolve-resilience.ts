@@ -424,7 +424,6 @@ export class ManageResolveResilienceTools {
                 actorId: character.id,
                 updateData: {
                     'system.status.resilience.value': newResilience,
-                    'system.status.resilience.max': newResilienceMax,
                 },
             });
 
@@ -488,7 +487,6 @@ export class ManageResolveResilienceTools {
                 actorId: character.id,
                 updateData: {
                     'system.status.resilience.value': newResilience,
-                    'system.status.resilience.max': newResilienceMax,
                 },
             });
 
