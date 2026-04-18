@@ -172,7 +172,7 @@ class FoundryMCPBridge {
       this.updateLastActivity();
 
       // Update settings display with connection status
-      this.settings.updateConnectionStatusDisplay(true, 17); // 17 MCP tools
+      this.settings.updateConnectionStatusDisplay(true, this.queryHandlers.getRegisteredMethods().length);
 
       console.log(`[${MODULE_ID}] Bridge started successfully`);
 
