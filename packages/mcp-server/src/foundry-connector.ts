@@ -160,21 +160,6 @@ export class FoundryConnector {
       return;
     }
 
-    const comfyHandlers = (globalThis as any).backendComfyUIHandlers;
-    if (comfyHandlers?.handleMessage) {
-      this.logger.debug('Routing message to backend ComfyUI handlers', { type: message.type });
-      try {
-        await comfyHandlers.handleMessage(message);
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        this.logger.error('Failed to forward message to backendComfyUIHandlers', {
-          type: message.type,
-          error: errorMessage
-        });
-      }
-      return;
-    }
-
     this.logger.debug('Received unknown message type', { type: message.type });
   }
 
