@@ -1,5 +1,6 @@
 import { MODULE_ID } from './constants.js';
 import { FoundryDataAccess } from './data-access.js';
+import { handleGetPartyCharacters, handleFindPlayers, handleFindActor } from './_staging/orphan-handlers.js';
 
 export class QueryHandlers {
   public dataAccess: FoundryDataAccess;
@@ -66,10 +67,10 @@ export class QueryHandlers {
     CONFIG.queries[`${modulePrefix}.setActorOwnership`] = this.handleSetActorOwnership.bind(this);
     CONFIG.queries[`${modulePrefix}.getActorOwnership`] = this.handleGetActorOwnership.bind(this);
     CONFIG.queries[`${modulePrefix}.getFriendlyNPCs`] = this.handleGetFriendlyNPCs.bind(this);
-    CONFIG.queries[`${modulePrefix}.getPartyCharacters`] = this.handleGetPartyCharacters.bind(this);
+    CONFIG.queries[`${modulePrefix}.getPartyCharacters`] = () => handleGetPartyCharacters(this.dataAccess);
     CONFIG.queries[`${modulePrefix}.getConnectedPlayers`] = this.handleGetConnectedPlayers.bind(this);
-    CONFIG.queries[`${modulePrefix}.findPlayers`] = this.handleFindPlayers.bind(this);
-    CONFIG.queries[`${modulePrefix}.findActor`] = this.handleFindActor.bind(this);
+    CONFIG.queries[`${modulePrefix}.findPlayers`] = (args: any) => handleFindPlayers(args, this.dataAccess);
+    CONFIG.queries[`${modulePrefix}.findActor`] = (args: any) => handleFindActor(args, this.dataAccess);
 
     // CRUD operations for items and actors
     CONFIG.queries[`${modulePrefix}.createActor`] = this.handleCreateActor.bind(this);
@@ -730,25 +731,6 @@ export class QueryHandlers {
   }
 
   /**
-   * Handle get party characters request
-   */
-  async handleGetPartyCharacters(): Promise<any> {
-    try {
-      // SECURITY: Silent GM validation
-      const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) {
-        return { error: 'Access denied', success: false };
-      }
-
-      this.dataAccess.validateFoundryState();
-
-      return await this.dataAccess.getPartyCharacters();
-    } catch (error) {
-      throw new Error(`Failed to get party characters: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
-
-  /**
    * Handle get connected players request
    */
   async handleGetConnectedPlayers(): Promise<any> {
@@ -764,52 +746,6 @@ export class QueryHandlers {
       return await this.dataAccess.getConnectedPlayers();
     } catch (error) {
       throw new Error(`Failed to get connected players: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
-
-  /**
-   * Handle find players request
-   */
-  async handleFindPlayers(data: any): Promise<any> {
-    try {
-      // SECURITY: Silent GM validation
-      const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) {
-        return { error: 'Access denied', success: false };
-      }
-
-      this.dataAccess.validateFoundryState();
-
-      if (!data.identifier) {
-        throw new Error('identifier is required');
-      }
-
-      return await this.dataAccess.findPlayers(data);
-    } catch (error) {
-      throw new Error(`Failed to find players: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
-
-  /**
-   * Handle find actor request
-   */
-  async handleFindActor(data: any): Promise<any> {
-    try {
-      // SECURITY: Silent GM validation
-      const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) {
-        return { error: 'Access denied', success: false };
-      }
-
-      this.dataAccess.validateFoundryState();
-
-      if (!data.identifier) {
-        throw new Error('identifier is required');
-      }
-
-      return await this.dataAccess.findActor(data);
-    } catch (error) {
-      throw new Error(`Failed to find actor: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
