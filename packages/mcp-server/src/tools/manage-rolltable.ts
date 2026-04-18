@@ -182,7 +182,7 @@ export class ManageRollTableTool {
     }) {
         this.logger.info("Creating roll table", { name: args.name });
 
-        const response = await this.foundryClient.query(
+        const response = await this.foundryClient.query<any>(
             "warhammer-mcp.createRollTable",
             {
                 name: args.name,
@@ -194,18 +194,7 @@ export class ManageRollTableTool {
             }
         );
 
-        if (!response.success) {
-            return {
-                content: [
-                    {
-                        type: "text",
-                        text: `❌ Failed to create roll table: ${response.error || "Unknown error"}`,
-                    },
-                ],
-            };
-        }
-
-        const table = response.data;
+        const table = response;
         return {
             content: [
                 {
@@ -219,23 +208,12 @@ export class ManageRollTableTool {
     private async handleList() {
         this.logger.info("Listing roll tables");
 
-        const response = await this.foundryClient.query(
+        const response = await this.foundryClient.query<any>(
             "warhammer-mcp.listRollTables",
             {}
         );
 
-        if (!response.success) {
-            return {
-                content: [
-                    {
-                        type: "text",
-                        text: `❌ Failed to list roll tables: ${response.error || "Unknown error"}`,
-                    },
-                ],
-            };
-        }
-
-        const tables = response.data || [];
+        const tables = response ?? [];
         if (tables.length === 0) {
             return {
                 content: [
@@ -268,23 +246,12 @@ export class ManageRollTableTool {
     private async handleGet(args: { tableId: string }) {
         this.logger.info("Getting roll table", { tableId: args.tableId });
 
-        const response = await this.foundryClient.query(
+        const response = await this.foundryClient.query<any>(
             "warhammer-mcp.getRollTable",
             { tableId: args.tableId }
         );
 
-        if (!response.success || !response.data) {
-            return {
-                content: [
-                    {
-                        type: "text",
-                        text: `❌ Failed to get roll table: ${response.error || "Unknown error"}`,
-                    },
-                ],
-            };
-        }
-
-        const table = response.data;
+        const table = response;
         let resultText = `🎲 **Roll Table Details**\n\n`;
         resultText += `**Name:** ${table.name}\n`;
         resultText += `**ID:** ${table.id}\n`;
@@ -316,7 +283,7 @@ export class ManageRollTableTool {
     }) {
         this.logger.info("Rolling on table", { tableId: args.tableId });
 
-        const response = await this.foundryClient.query(
+        const response = await this.foundryClient.query<any>(
             "warhammer-mcp.rollOnTable",
             {
                 tableId: args.tableId,
@@ -324,18 +291,7 @@ export class ManageRollTableTool {
             }
         );
 
-        if (!response.success || !response.data) {
-            return {
-                content: [
-                    {
-                        type: "text",
-                        text: `❌ Failed to roll on table: ${response.error || "Unknown error"}`,
-                    },
-                ],
-            };
-        }
-
-        const result = response.data;
+        const result = response;
         let resultText = `🎲 **Roll Table Result**\n\n`;
         if (result.tableName) {
             resultText += `**Table:** ${result.tableName}\n`;
@@ -354,21 +310,10 @@ export class ManageRollTableTool {
     private async handleDelete(args: { tableId: string }) {
         this.logger.info("Deleting roll table", { tableId: args.tableId });
 
-        const response = await this.foundryClient.query(
+        await this.foundryClient.query<any>(
             "warhammer-mcp.deleteRollTable",
             { tableId: args.tableId }
         );
-
-        if (!response.success) {
-            return {
-                content: [
-                    {
-                        type: "text",
-                        text: `❌ Failed to delete roll table: ${response.error || "Unknown error"}`,
-                    },
-                ],
-            };
-        }
 
         return {
             content: [

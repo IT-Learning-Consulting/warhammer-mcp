@@ -70,7 +70,7 @@ Note: Use manage-critical-wound with action="add" to add a specific known critic
         // Search compendium for criticals matching this location and roll range
         const searchLocation = location === 'Arm' ? 'arm' : location === 'Leg' ? 'leg' : location.toLowerCase();
 
-        const compendiumResults = await this.foundryClient.query('warhammer-mcp.searchCompendium', {
+        const compendiumResults = await this.foundryClient.query<any>('warhammer-mcp.searchCompendium', {
             query: searchLocation,
             types: ['critical'],
         });
@@ -134,7 +134,7 @@ Note: Use manage-critical-wound with action="add" to add a specific known critic
         }
 
         // Get character info
-        const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
+        const character = await this.foundryClient.query<any>('warhammer-mcp.getCharacterInfo', {
             characterName: characterName,
         });
 
@@ -162,7 +162,7 @@ Note: Use manage-critical-wound with action="add" to add a specific known critic
         }
 
         // Add the critical wound from compendium
-        const addResult = await this.foundryClient.query('warhammer-mcp.addItemFromCompendium', {
+        const addResult = await this.foundryClient.query<any>('warhammer-mcp.addItemFromCompendium', {
             actorId: character.id,
             compendiumId: criticalUuid,
         });
@@ -172,7 +172,7 @@ Note: Use manage-critical-wound with action="add" to add a specific known critic
         }
 
         // Update location
-        await this.foundryClient.query('warhammer-mcp.updateItem', {
+        await this.foundryClient.query<any>('warhammer-mcp.updateItem', {
             actorId: character.id,
             itemId: addResult.itemId,
             updateData: {
@@ -181,7 +181,7 @@ Note: Use manage-critical-wound with action="add" to add a specific known critic
         });
 
         // Update critical wound count
-        await this.foundryClient.query('warhammer-mcp.updateActor', {
+        await this.foundryClient.query<any>('warhammer-mcp.updateActor', {
             actorId: character.id,
             updateData: {
                 'system.status.criticalWounds.value': newCriticalCount,

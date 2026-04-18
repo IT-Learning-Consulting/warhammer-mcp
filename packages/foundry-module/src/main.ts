@@ -38,6 +38,14 @@ class FoundryMCPBridge {
       // Register module settings
       this.settings.registerSettings();
 
+      // HC1 / BUG-019: Hard system-id guard. Non-wfrp4e worlds register zero handlers.
+      const systemId = (game as any).system?.id;
+      if (systemId !== 'wfrp4e') {
+        console.log(`[${MODULE_ID}] Module requires wfrp4e system; detected ${systemId ?? 'unknown'}. Module inactive.`);
+        this.isInitialized = false;
+        return;
+      }
+
       // Register query handlers
       this.queryHandlers.registerHandlers();
 

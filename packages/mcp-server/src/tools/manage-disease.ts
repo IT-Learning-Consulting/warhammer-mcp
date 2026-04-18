@@ -124,16 +124,10 @@ Examples:
     private async handleList(args: { characterName: string }): Promise<string> {
         this.logger.info("Getting diseases", { characterName: args.characterName });
 
-        const response = await this.foundryClient.query(
+        const character = await this.foundryClient.query<any>(
             "warhammer-mcp.getCharacterInfo",
             { characterName: args.characterName }
         );
-
-        if (!response.success || !response.data) {
-            return `❌ Failed to get character info: ${response.error || "Unknown error"}`;
-        }
-
-        const character = response.data;
 
         const diseases = character.items?.filter(
             (item: any) => item.type === "disease"
@@ -208,7 +202,7 @@ Examples:
     }): Promise<string> {
         this.logger.info("Adding disease", args);
 
-        const response = await this.foundryClient.query(
+        await this.foundryClient.query<any>(
             "warhammer-mcp.addDisease",
             {
                 characterName: args.characterName,
@@ -222,10 +216,6 @@ Examples:
             }
         );
 
-        if (!response.success) {
-            return `❌ Failed to add disease: ${response.error || "Unknown error"}`;
-        }
-
         return `🦠 **${args.characterName}** contracted **${args.diseaseName}**!\n\n` +
             `**Type:** ${args.type.charAt(0).toUpperCase() + args.type.slice(1)}\n` +
             `**Incubation:** ${args.incubationDays} days\n` +
@@ -238,7 +228,7 @@ Examples:
     private async handleRemove(args: { characterName: string; diseaseName: string; reason: string }): Promise<string> {
         this.logger.info("Removing disease", args);
 
-        const response = await this.foundryClient.query(
+        await this.foundryClient.query<any>(
             "warhammer-mcp.removeDisease",
             {
                 characterName: args.characterName,
@@ -247,17 +237,13 @@ Examples:
             }
         );
 
-        if (!response.success) {
-            return `❌ Failed to remove disease: ${response.error || "Unknown error"}`;
-        }
-
         return `✅ **${args.characterName}** recovered from **${args.diseaseName}**!\n\nReason: ${args.reason}`;
     }
 
     private async handleCheckResilience(args: { characterName: string; diseaseName: string; testType: "resistance" | "recovery" }): Promise<string> {
         this.logger.info("Checking resilience", args);
 
-        const response = await this.foundryClient.query(
+        const response = await this.foundryClient.query<any>(
             "warhammer-mcp.checkInfectionResilience",
             {
                 characterName: args.characterName,
@@ -266,10 +252,6 @@ Examples:
             }
         );
 
-        if (!response.success) {
-            return `❌ Failed to check resilience: ${response.error || "Unknown error"}`;
-        }
-
-        return response.data || "Resilience test completed";
+        return response ?? "Resilience test completed";
     }
 }

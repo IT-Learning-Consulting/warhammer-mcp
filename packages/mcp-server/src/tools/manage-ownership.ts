@@ -131,7 +131,7 @@ export class ManageOwnershipTool {
 
         const permissionLevel = OwnershipLevels[args.level];
 
-        const response = await this.foundryClient.query(
+        await this.foundryClient.query<any>(
             "warhammer-mcp.setActorOwnership",
             {
                 actorName: args.actorName,
@@ -139,17 +139,6 @@ export class ManageOwnershipTool {
                 permission: permissionLevel,
             }
         );
-
-        if (!response.success) {
-            return {
-                content: [
-                    {
-                        type: "text",
-                        text: `❌ Failed to assign ownership: ${response.error || "Unknown error"}`,
-                    },
-                ],
-            };
-        }
 
         let levelIcon = "";
         let levelDesc = "";
@@ -192,7 +181,7 @@ export class ManageOwnershipTool {
             userId: args.userId,
         });
 
-        const response = await this.foundryClient.query(
+        await this.foundryClient.query<any>(
             "warhammer-mcp.setActorOwnership",
             {
                 actorName: args.actorName,
@@ -200,17 +189,6 @@ export class ManageOwnershipTool {
                 permission: 0, // NONE
             }
         );
-
-        if (!response.success) {
-            return {
-                content: [
-                    {
-                        type: "text",
-                        text: `❌ Failed to remove ownership: ${response.error || "Unknown error"}`,
-                    },
-                ],
-            };
-        }
 
         return {
             content: [
@@ -225,24 +203,13 @@ export class ManageOwnershipTool {
     private async handleList(args: { actorName: string }) {
         this.logger.info("Listing ownership", { actorName: args.actorName });
 
-        const response = await this.foundryClient.query(
+        const response = await this.foundryClient.query<any>(
             "warhammer-mcp.getActorOwnership",
             { actorName: args.actorName }
         );
 
-        if (!response.success || !response.data) {
-            return {
-                content: [
-                    {
-                        type: "text",
-                        text: `❌ Failed to get ownership info: ${response.error || "Unknown error"}`,
-                    },
-                ],
-            };
-        }
-
-        const ownership = response.data.ownership || {};
-        const defaultLevel = response.data.defaultLevel || 0;
+        const ownership = response?.ownership ?? {};
+        const defaultLevel = response?.defaultLevel ?? 0;
 
         let resultText = `📋 **Ownership for ${args.actorName}**\n\n`;
         resultText += `**Default Permission:** ${this.getLevelName(defaultLevel)}\n\n`;

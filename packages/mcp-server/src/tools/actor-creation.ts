@@ -145,7 +145,7 @@ export class ActorCreationTools {
       }
 
       // Create the actors via Foundry module using exact pack/item IDs
-      const result = await this.foundryClient.query('warhammer-mcp.createActorFromCompendium', {
+      const result = await this.foundryClient.query<any>('warhammer-mcp.createActorFromCompendium', {
         packId,
         itemId,
         customNames: customNames.slice(0, finalQuantity),
@@ -186,7 +186,7 @@ export class ActorCreationTools {
     this.logger.info('Getting full compendium entry', { packId, entryId });
 
     try {
-      const fullEntry = await this.foundryClient.query('warhammer-mcp.getCompendiumDocumentFull', {
+      const fullEntry = await this.foundryClient.query<any>('warhammer-mcp.getCompendiumDocumentFull', {
         packId,
         documentId: entryId,
       });

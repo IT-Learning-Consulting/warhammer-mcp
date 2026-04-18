@@ -123,16 +123,11 @@ Examples:
     private async handleGetStatus(args: { characterName: string }): Promise<string> {
         this.logger.info("Getting social status", { characterName: args.characterName });
 
-        const response = await this.foundryClient.query(
+        const character = await this.foundryClient.query<any>(
             "warhammer-mcp.getCharacterInfo",
             { characterName: args.characterName }
         );
 
-        if (!response.success || !response.data) {
-            return `❌ Failed to get character info: ${response.error || "Unknown error"}`;
-        }
-
-        const character = response.data;
         const status = character.system?.details?.status?.value || 0;
         const standing = character.system?.details?.status?.standing || status;
 
@@ -184,7 +179,7 @@ Examples:
     private async handleChangeStatus(args: { characterName: string; newStanding: number; reason: string }): Promise<string> {
         this.logger.info("Changing social status", args);
 
-        const response = await this.foundryClient.query(
+        await this.foundryClient.query<any>(
             "warhammer-mcp.updateCharacter",
             {
                 characterName: args.characterName,
@@ -194,10 +189,6 @@ Examples:
                 }
             }
         );
-
-        if (!response.success) {
-            return `❌ Failed to change status: ${response.error || "Unknown error"}`;
-        }
 
         // Determine old and new tiers
         const getTier = (standing: number) => {
@@ -221,7 +212,7 @@ Examples:
     }): Promise<string> {
         this.logger.info("Making social test", args);
 
-        const response = await this.foundryClient.query(
+        const response = await this.foundryClient.query<any>(
             "warhammer-mcp.makeSocialTest",
             {
                 characterName: args.characterName,
@@ -231,40 +222,28 @@ Examples:
             }
         );
 
-        if (!response.success) {
-            return `❌ Failed to make social test: ${response.error || "Unknown error"}`;
-        }
-
-        return response.data || "Social test completed";
+        return response ?? "Social test completed";
     }
 
     private async handleCalculateIncome(args: { characterName: string }): Promise<string> {
         this.logger.info("Calculating income", { characterName: args.characterName });
 
-        const response = await this.foundryClient.query(
+        const response = await this.foundryClient.query<any>(
             "warhammer-mcp.calculateIncome",
             { characterName: args.characterName }
         );
 
-        if (!response.success) {
-            return `❌ Failed to calculate income: ${response.error || "Unknown error"}`;
-        }
-
-        return response.data || "Income calculated";
+        return response ?? "Income calculated";
     }
 
     private async handleCheckReputation(args: { characterName: string }): Promise<string> {
         this.logger.info("Checking reputation", { characterName: args.characterName });
 
-        const response = await this.foundryClient.query(
+        const response = await this.foundryClient.query<any>(
             "warhammer-mcp.checkReputation",
             { characterName: args.characterName }
         );
 
-        if (!response.success) {
-            return `❌ Failed to check reputation: ${response.error || "Unknown error"}`;
-        }
-
-        return response.data || "Reputation checked";
+        return response ?? "Reputation checked";
     }
 }

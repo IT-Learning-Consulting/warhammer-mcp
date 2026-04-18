@@ -1,6 +1,4 @@
 import { MODULE_ID, ERROR_MESSAGES, TOKEN_DISPOSITIONS } from './constants.js';
-import { permissionManager } from './permissions.js';
-import { transactionManager } from './transaction-manager.js';
 // Local type definitions to avoid shared package import issues
 interface CharacterInfo {
   id: string;
@@ -682,10 +680,10 @@ class PersistentCreatureIndex {
       // Extract creature type with proper type checking
       let creatureType = 'unknown';
 
-      // WFRP uses species for creatures
+      // WFRP uses species for creatures; fall back to the Foundry doc type
       creatureType = system.details?.species?.value ??
         system.details?.species ??
-        system.details?.type ??
+        doc.type ??
         'unknown';
 
       // Handle null/undefined values properly
@@ -712,22 +710,19 @@ class PersistentCreatureIndex {
         system.wounds?.max || system.wounds?.value || 0;
 
       // Extract toughness bonus + armor (WFRP defense calculation)
+      // WFRP: armour comes from equipped armour Items, not system.* paths
       const toughnessBonus = Math.floor((system.characteristics?.t?.value ?? 0) / 10);
-      const armorPoints = system.status?.armour?.value ??
-        system.status?.armour?.head ??
-        system.armour?.value ?? 0;
+      const equippedArmour = (doc.items ?? []).filter((i: any) =>
+        i.type === 'armour' && i.system?.equipped?.value);
+      const armorPoints = equippedArmour.reduce((sum: number, a: any) =>
+        sum + (a.system?.currentAP?.value ?? 0), 0);
       const toughnessValue = toughnessBonus + armorPoints;
 
-      // Check for spells (WFRP magic detection)
-      const hasSpells = !!(system.flags?.wfrp4e?.spells ||
-        system.spells ||
-        (system.skills && Object.values(system.skills).some((s: any) =>
-          s.name?.toLowerCase().includes('magic') ||
-          s.name?.toLowerCase().includes('channelling'))));
-
-      // Check for special abilities (WFRP traits/abilities)
-      const hasSpecialAbilities = !!(system.traits?.length > 0 ||
-        system.flags?.wfrp4e?.traits?.length > 0);
+      // WFRP: spells/prayers/traits are embedded Items, not system subobjects
+      const hasSpells = doc.items?.some((i: any) =>
+        i.type === 'spell' || i.type === 'prayer') ?? false;
+      const hasSpecialAbilities = doc.items?.some((i: any) =>
+        i.type === 'trait') ?? false;
 
       // Successful extraction
       return {
@@ -869,7 +864,7 @@ export class FoundryDataAccess {
     creatureType?: string;
     size?: string;
     spellcaster?: boolean;
-  }): Promise<CompendiumSearchResult[]> {
+  }, itemType?: string): Promise<CompendiumSearchResult[]> {
 
     // Add defensive checks for query parameter
     if (!query || typeof query !== 'string' || query.trim().length < 2) {
@@ -1061,7 +1056,11 @@ export class FoundryDataAccess {
       return a.name.localeCompare(b.name);
     });
 
-    return results.slice(0, 50); // Final limit
+    // BUG-029 groundwork: post-filter by itemType when caller requested a specific type.
+    // Full per-subtype indexing is Phase 4; this filter stops cross-type results leaking.
+    const finalResults = itemType ? results.filter(r => r.type === itemType) : results;
+
+    return finalResults.slice(0, 50); // Final limit
   }
 
   /**
@@ -1078,83 +1077,10 @@ export class FoundryDataAccess {
   }
 
   /**
-   * Check if entry passes all specified filters
-   * @unused - Replaced with simple index-only approach
-   */
-  // @ts-ignore - Unused method kept for compatibility
-  private passesFilters(entry: any, filters: {
-    challengeRating?: number | { min?: number; max?: number };
-    creatureType?: string;
-    size?: string;
-    spellcaster?: boolean;
-  }): boolean {
-    const system = entry.system || {};
-
-
-    // WFRP: Challenge Rating filter not applicable
-    // (WFRP uses characteristics-based threat assessment, not CR)
-
-    // Creature Type filter
-    if (filters.creatureType) {
-      const entryType = system.details?.type?.value || system.type?.value || '';
-      if (entryType.toLowerCase() !== filters.creatureType.toLowerCase()) {
-        return false;
-      }
-    }
-
-    // Size filter
-    if (filters.size) {
-      const entrySize = system.traits?.size || system.size || '';
-      if (entrySize.toLowerCase() !== filters.size.toLowerCase()) {
-        return false;
-      }
-    }
-
-    // Spellcaster filter
-    if (filters.spellcaster !== undefined) {
-      const isSpellcaster = !!(system.spells || system.attributes?.spellcasting ||
-        (system.details?.spellLevel && system.details.spellLevel > 0));
-      if (isSpellcaster !== filters.spellcaster) {
-        return false;
-      }
-    }
-
-    return true;
-  }
-
-  /**
    * Calculate relevance score for search result ranking
    */
-  private calculateRelevanceScore(entry: any, filters: any, query: string): number {
+  private calculateRelevanceScore(entry: any, _filters: any, query: string): number {
     let score = 0;
-    const system = entry.system || {};
-
-    // Bonus for creature type match (high importance for encounter building)
-    if (filters.creatureType) {
-      const entryType = system.details?.type?.value || system.type?.value || '';
-      if (entryType.toLowerCase() === filters.creatureType.toLowerCase()) {
-        score += 20;
-      }
-    }
-
-    // Bonus for CR match (exact match gets higher score than range)
-    if (filters.challengeRating !== undefined) {
-      const entryCR = system.details?.cr || system.cr || 0;
-      if (typeof filters.challengeRating === 'number') {
-        if (entryCR === filters.challengeRating) score += 15;
-      } else if (typeof filters.challengeRating === 'object') {
-        const { min, max } = filters.challengeRating;
-        if (min !== undefined && max !== undefined) {
-          // Bonus for being in range, extra for being in middle of range
-          if (entryCR >= min && entryCR <= max) {
-            score += 10;
-            const rangeMid = (min + max) / 2;
-            const distFromMid = Math.abs(entryCR - rangeMid);
-            score += Math.max(0, 5 - distFromMid); // Up to 5 bonus for being near middle
-          }
-        }
-      }
-    }
 
     // Bonus for common creature names (better for encounters)
     const commonNames = ['knight', 'warrior', 'guard', 'soldier', 'mage', 'priest', 'bandit', 'orc', 'goblin', 'dragon'];
@@ -1455,78 +1381,6 @@ export class FoundryDataAccess {
     }
     // Default priority for unmatched packs
     return 50;
-  }
-
-  /**
-   * Check if creature entry passes the given criteria
-   * @unused - Legacy method replaced by passesEnhancedCriteria
-   */
-  // @ts-ignore - Legacy method kept for compatibility
-  private passesCriteria(entry: any, criteria: {
-    challengeRating?: number | { min?: number; max?: number };
-    creatureType?: string;
-    size?: string;
-    hasSpells?: boolean;
-    hasSpecialAbilities?: boolean;
-  }): boolean {
-    const system = entry.system || {};
-
-
-    // Challenge Rating filter - enhanced extraction
-    if (criteria.challengeRating !== undefined) {
-      // Try multiple possible CR locations in game system data structure
-      let entryCR = system.details?.cr?.value || system.details?.cr || system.cr?.value || system.cr || 0;
-
-      // Handle fractional CR values (common in some game systems)
-      if (typeof entryCR === 'string') {
-        if (entryCR === '1/8') entryCR = 0.125;
-        else if (entryCR === '1/4') entryCR = 0.25;
-        else if (entryCR === '1/2') entryCR = 0.5;
-        else entryCR = parseFloat(entryCR) || 0;
-      }
-
-      if (typeof criteria.challengeRating === 'number') {
-        if (entryCR !== criteria.challengeRating) {
-          return false;
-        }
-      } else if (typeof criteria.challengeRating === 'object') {
-        const { min = 0, max = 30 } = criteria.challengeRating;
-        if (entryCR < min || entryCR > max) {
-          return false;
-        }
-      }
-    }
-
-    // Creature Type filter - enhanced extraction
-    if (criteria.creatureType) {
-      // Try multiple possible type locations in game system data structure
-      const entryType = system.details?.type?.value || system.details?.type || system.type?.value || system.type || '';
-      if (entryType.toLowerCase() !== criteria.creatureType.toLowerCase()) {
-        return false;
-      }
-    }
-
-    // Size filter
-    if (criteria.size) {
-      const entrySize = system.traits?.size || system.size || '';
-      if (entrySize.toLowerCase() !== criteria.size.toLowerCase()) return false;
-    }
-
-    // Spellcaster filter
-    if (criteria.hasSpells !== undefined) {
-      const isSpellcaster = !!(system.spells || system.attributes?.spellcasting ||
-        (system.details?.spellLevel && system.details.spellLevel > 0));
-      if (isSpellcaster !== criteria.hasSpells) return false;
-    }
-
-    // Special Abilities filter (WFRP traits/abilities)
-    if (criteria.hasSpecialAbilities !== undefined) {
-      const hasSpecial = !!(system.traits?.special || system.special ||
-        (system.traits && Object.keys(system.traits).length > 0));
-      if (hasSpecial !== criteria.hasSpecialAbilities) return false;
-    }
-
-    return true;
   }
 
   /**
@@ -1854,15 +1708,6 @@ export class FoundryDataAccess {
   async createJournalEntry(request: { name: string; content: string; folderName?: string }): Promise<{ id: string; name: string }> {
     this.validateFoundryState();
 
-    // Use permission system for journal creation
-    const permissionCheck = permissionManager.checkWritePermission('createActor', {
-      quantity: 1, // Treat journal creation similar to actor creation for permissions
-    });
-
-    if (!permissionCheck.allowed) {
-      throw new Error(`Journal creation denied: ${permissionCheck.reason}`);
-    }
-
     try {
       // Create journal entry with proper Foundry v13 structure
       const journalData = {
@@ -1939,15 +1784,6 @@ export class FoundryDataAccess {
   async updateJournalContent(request: { journalId: string; content: string }): Promise<{ success: boolean }> {
     this.validateFoundryState();
 
-    // Use permission system for journal updates - treating as createActor permission level
-    const permissionCheck = permissionManager.checkWritePermission('createActor', {
-      quantity: 1, // Treat journal updates similar to actor creation for permissions
-    });
-
-    if (!permissionCheck.allowed) {
-      throw new Error(`Journal update denied: ${permissionCheck.reason}`);
-    }
-
     try {
 
       const journal = game.journal.get(request.journalId);
@@ -1990,25 +1826,8 @@ export class FoundryDataAccess {
   async createActorFromCompendium(request: ActorCreationRequest): Promise<ActorCreationResult> {
     this.validateFoundryState();
 
-    // Use new permission system
-    const permissionCheck = permissionManager.checkWritePermission('createActor', {
-      quantity: request.quantity || 1,
-    });
-
-    if (!permissionCheck.allowed) {
-      throw new Error(`${ERROR_MESSAGES.ACCESS_DENIED}: ${permissionCheck.reason}`);
-    }
-
-    // Audit the permission check
-    permissionManager.auditPermissionCheck('createActor', permissionCheck, request);
-
     const maxActors = game.settings.get(this.moduleId, 'maxActorsPerRequest') as number;
     const quantity = Math.min(request.quantity || 1, maxActors);
-
-    // Start transaction for rollback capability
-    const transactionId = transactionManager.startTransaction(
-      `Create ${quantity} actor(s) from compendium: ${request.creatureType}`
-    );
 
     try {
       // Find matching compendium entry
@@ -2035,11 +1854,6 @@ export class FoundryDataAccess {
 
           const newActor = await this.createActorFromSource(sourceDoc, customName);
 
-          // Track actor creation for rollback
-          transactionManager.addAction(transactionId,
-            transactionManager.createActorCreationAction(newActor.id)
-          );
-
           createdActors.push({
             id: newActor.id,
             name: newActor.name,
@@ -2056,40 +1870,25 @@ export class FoundryDataAccess {
 
       let tokensPlaced = 0;
 
-      // Add to scene if requested and permission allows
+      // Add to scene if requested
       if (request.addToScene && createdActors.length > 0) {
         try {
-          const scenePermissionCheck = permissionManager.checkWritePermission('modifyScene', {
-            targetIds: createdActors.map(a => a.id),
+          const tokenResult = await this.addActorsToScene({
+            actorIds: createdActors.map(a => a.id),
+            placement: 'random',
+            hidden: false,
           });
-
-          if (!scenePermissionCheck.allowed) {
-            errors.push(`Cannot add to scene: ${scenePermissionCheck.reason}`);
-          } else {
-            const tokenResult = await this.addActorsToScene({
-              actorIds: createdActors.map(a => a.id),
-              placement: 'random',
-              hidden: false,
-            }, transactionId);
-            tokensPlaced = tokenResult.tokensCreated;
-          }
+          tokensPlaced = tokenResult.tokensCreated;
         } catch (error) {
           errors.push(`Failed to add actors to scene: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
       }
 
-      // If we had partial failure, decide whether to rollback
-      if (errors.length > 0 && createdActors.length < quantity) {
-        // Rollback if we failed to create more than half the requested actors
-        if (createdActors.length < quantity / 2) {
-          console.warn(`[${this.moduleId}] Rolling back due to significant failures (${createdActors.length}/${quantity} created)`);
-          await transactionManager.rollbackTransaction(transactionId);
-          throw new Error(`Actor creation failed: ${errors.join(', ')}`);
-        }
+      // Partial-failure signal is carried back via `errors`; rollback is now
+      // performed by the handler-level wrappedWrite on throw.
+      if (errors.length > 0 && createdActors.length < quantity && createdActors.length < quantity / 2) {
+        throw new Error(`Actor creation failed: ${errors.join(', ')}`);
       }
-
-      // Commit transaction
-      transactionManager.commitTransaction(transactionId);
 
       const result: ActorCreationResult = {
         success: createdActors.length > 0,
@@ -2104,13 +1903,6 @@ export class FoundryDataAccess {
       return result;
 
     } catch (error) {
-      // Rollback on complete failure
-      try {
-        await transactionManager.rollbackTransaction(transactionId);
-      } catch (rollbackError) {
-        console.error(`[${this.moduleId}] Failed to rollback transaction:`, rollbackError);
-      }
-
       this.auditLog('createActorFromCompendium', request, 'failure', error instanceof Error ? error.message : 'Unknown error');
       throw error;
     }
@@ -2306,20 +2098,8 @@ export class FoundryDataAccess {
   /**
    * Add actors to the current scene as tokens
    */
-  async addActorsToScene(placement: SceneTokenPlacement, transactionId?: string): Promise<TokenPlacementResult> {
+  async addActorsToScene(placement: SceneTokenPlacement): Promise<TokenPlacementResult> {
     this.validateFoundryState();
-
-    // Use new permission system
-    const permissionCheck = permissionManager.checkWritePermission('modifyScene', {
-      targetIds: placement.actorIds,
-    });
-
-    if (!permissionCheck.allowed) {
-      throw new Error(`${ERROR_MESSAGES.ACCESS_DENIED}: ${permissionCheck.reason}`);
-    }
-
-    // Audit the permission check
-    permissionManager.auditPermissionCheck('modifyScene', permissionCheck, placement);
 
     const scene = (game.scenes as any).current;
     if (!scene) {
@@ -2363,15 +2143,6 @@ export class FoundryDataAccess {
       }
 
       const createdTokens = await scene.createEmbeddedDocuments('Token', tokenData);
-
-      // Track token creation for rollback if transaction is active
-      if (transactionId && createdTokens.length > 0) {
-        for (const token of createdTokens) {
-          transactionManager.addAction(transactionId,
-            transactionManager.createTokenCreationAction(token.id)
-          );
-        }
-      }
 
       const result: TokenPlacementResult = {
         success: createdTokens.length > 0,
@@ -2503,25 +2274,6 @@ export class FoundryDataAccess {
           y: Math.random() * (scene.height - gridSize),
         };
     }
-  }
-
-  /**
-   * Validate write operation permissions
-   */
-  async validateWritePermissions(operation: 'createActor' | 'modifyScene'): Promise<{ allowed: boolean; reason?: string; requiresConfirmation?: boolean; warnings?: string[] }> {
-    this.validateFoundryState();
-
-    const permissionCheck = permissionManager.checkWritePermission(operation);
-
-    // Audit the permission check
-    permissionManager.auditPermissionCheck(operation, permissionCheck);
-
-    return {
-      allowed: permissionCheck.allowed,
-      ...(permissionCheck.reason ? { reason: permissionCheck.reason } : {}),
-      ...(permissionCheck.requiresConfirmation ? { requiresConfirmation: permissionCheck.requiresConfirmation } : {}),
-      ...(permissionCheck.warnings ? { warnings: permissionCheck.warnings } : {}),
-    };
   }
 
   /**

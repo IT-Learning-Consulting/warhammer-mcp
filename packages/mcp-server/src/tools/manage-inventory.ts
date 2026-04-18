@@ -122,16 +122,10 @@ Examples:
     private async handleGetStatus(args: { characterName: string }): Promise<string> {
         this.logger.info("Getting inventory status", { characterName: args.characterName });
 
-        const response = await this.foundryClient.query(
+        const character = await this.foundryClient.query<any>(
             "warhammer-mcp.getCharacterInfo",
             { characterName: args.characterName }
         );
-
-        if (!response.success || !response.data) {
-            return `❌ Failed to get character info: ${response.error || "Unknown error"}`;
-        }
-
-        const character = response.data;
 
         // Get encumbrance values
         const strengthBonus = Math.floor((character.system?.characteristics?.s?.value || 0) / 10);
@@ -223,7 +217,7 @@ Examples:
 
         const quantity = args.quantity || 1;
 
-        const response = await this.foundryClient.query(
+        await this.foundryClient.query<any>(
             "warhammer-mcp.addItemToInventory",
             {
                 characterName: args.characterName,
@@ -234,10 +228,6 @@ Examples:
             }
         );
 
-        if (!response.success) {
-            return `❌ Failed to add item: ${response.error || "Unknown error"}`;
-        }
-
         const totalWeight = args.encumbrance * quantity;
         return `✅ Added ${quantity}x **${args.itemName}** to ${args.characterName}'s inventory (${totalWeight} Enc)`;
     }
@@ -247,7 +237,7 @@ Examples:
 
         const quantity = args.quantity || 1;
 
-        const response = await this.foundryClient.query(
+        await this.foundryClient.query<any>(
             "warhammer-mcp.removeItemFromInventory",
             {
                 characterName: args.characterName,
@@ -256,17 +246,13 @@ Examples:
             }
         );
 
-        if (!response.success) {
-            return `❌ Failed to remove item: ${response.error || "Unknown error"}`;
-        }
-
         return `✅ Removed ${quantity}x **${args.itemName}** from ${args.characterName}'s inventory`;
     }
 
     private async handleTrackAmmunition(args: { characterName: string; ammunitionType: string; amount: number }): Promise<string> {
         this.logger.info("Tracking ammunition", args);
 
-        const response = await this.foundryClient.query(
+        await this.foundryClient.query<any>(
             "warhammer-mcp.trackAmmunition",
             {
                 characterName: args.characterName,
@@ -274,10 +260,6 @@ Examples:
                 amount: args.amount
             }
         );
-
-        if (!response.success) {
-            return `❌ Failed to track ammunition: ${response.error || "Unknown error"}`;
-        }
 
         const action = args.amount > 0 ? "Added" : "Used";
         const absAmount = Math.abs(args.amount);
@@ -287,16 +269,10 @@ Examples:
     private async handleCheckEncumbrance(args: { characterName: string }): Promise<string> {
         this.logger.info("Checking encumbrance", { characterName: args.characterName });
 
-        const response = await this.foundryClient.query(
+        const character = await this.foundryClient.query<any>(
             "warhammer-mcp.getCharacterInfo",
             { characterName: args.characterName }
         );
-
-        if (!response.success || !response.data) {
-            return `❌ Failed to get character info: ${response.error || "Unknown error"}`;
-        }
-
-        const character = response.data;
 
         const strengthBonus = Math.floor((character.system?.characteristics?.s?.value || 0) / 10);
         const toughnessBonus = Math.floor((character.system?.characteristics?.t?.value || 0) / 10);

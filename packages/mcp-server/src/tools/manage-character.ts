@@ -212,7 +212,7 @@ Use for quick stat changes, character creation, testing, or corrections where yo
         this.logger.info("Updating character stats", { characterName: args.characterName });
 
         // Get character first
-        const character = await this.foundryClient.query("warhammer-mcp.getCharacterInfo", {
+        const character = await this.foundryClient.query<any>("warhammer-mcp.getCharacterInfo", {
             characterName: args.characterName
         });
 
@@ -290,7 +290,7 @@ Use for quick stat changes, character creation, testing, or corrections where yo
             }
         }
 
-        await this.foundryClient.query("warhammer-mcp.updateActor", {
+        await this.foundryClient.query<any>("warhammer-mcp.updateActor", {
             actorId: character.id,
             updateData
         });
@@ -312,7 +312,7 @@ Use for quick stat changes, character creation, testing, or corrections where yo
         this.logger.info("Updating skill/talent", { characterName: args.characterName, itemName: args.itemName });
 
         // Get character
-        const character = await this.foundryClient.query("warhammer-mcp.getCharacterInfo", {
+        const character = await this.foundryClient.query<any>("warhammer-mcp.getCharacterInfo", {
             characterName: args.characterName
         });
 
@@ -338,7 +338,7 @@ Use for quick stat changes, character creation, testing, or corrections where yo
             updateData['system.modifier.value'] = args.updates.modifier;
         }
 
-        await this.foundryClient.query("warhammer-mcp.updateItem", {
+        await this.foundryClient.query<any>("warhammer-mcp.updateItem", {
             actorId: character.id,
             itemId: item.id,
             updateData
@@ -360,7 +360,7 @@ Use for quick stat changes, character creation, testing, or corrections where yo
         this.logger.info("Adding skill/talent", { characterName: args.characterName, itemName: args.itemName });
 
         // Get character
-        const character = await this.foundryClient.query("warhammer-mcp.getCharacterInfo", {
+        const character = await this.foundryClient.query<any>("warhammer-mcp.getCharacterInfo", {
             characterName: args.characterName
         });
 
@@ -378,7 +378,7 @@ Use for quick stat changes, character creation, testing, or corrections where yo
         }
 
         // Search compendium
-        const searchResults = await this.foundryClient.query("warhammer-mcp.searchCompendium", {
+        const searchResults = await this.foundryClient.query<any>("warhammer-mcp.searchCompendium", {
             query: args.itemName,
             packType: "Item"
         });
@@ -403,7 +403,7 @@ Use for quick stat changes, character creation, testing, or corrections where yo
         const compendiumUuid = `Compendium.${compendiumItem.pack}.${compendiumItem.id || compendiumItem._id}`;
 
         // Add from compendium
-        await this.foundryClient.query("warhammer-mcp.addItemFromCompendium", {
+        await this.foundryClient.query<any>("warhammer-mcp.addItemFromCompendium", {
             actorId: character.id,
             compendiumId: compendiumUuid
         });
@@ -411,7 +411,7 @@ Use for quick stat changes, character creation, testing, or corrections where yo
         // If advances specified, update them
         if (args.advances) {
             // Get the newly added item
-            const updatedCharacter = await this.foundryClient.query("warhammer-mcp.getCharacterInfo", {
+            const updatedCharacter = await this.foundryClient.query<any>("warhammer-mcp.getCharacterInfo", {
                 characterName: args.characterName
             });
 
@@ -420,7 +420,7 @@ Use for quick stat changes, character creation, testing, or corrections where yo
             );
 
             if (newItem) {
-                await this.foundryClient.query("warhammer-mcp.updateItem", {
+                await this.foundryClient.query<any>("warhammer-mcp.updateItem", {
                     actorId: character.id,
                     itemId: newItem.id,
                     updateData: {
@@ -438,7 +438,7 @@ Use for quick stat changes, character creation, testing, or corrections where yo
         this.logger.info("Updating character notes", { characterName: args.characterName, noteType: args.noteType });
 
         // Get character
-        const character = await this.foundryClient.query("warhammer-mcp.getCharacterInfo", {
+        const character = await this.foundryClient.query<any>("warhammer-mcp.getCharacterInfo", {
             characterName: args.characterName
         });
 
@@ -458,7 +458,7 @@ Use for quick stat changes, character creation, testing, or corrections where yo
             updateData['system.details.biography.value'] = newContent;
         }
 
-        await this.foundryClient.query("warhammer-mcp.updateActor", {
+        await this.foundryClient.query<any>("warhammer-mcp.updateActor", {
             actorId: character.id,
             updateData
         });
@@ -471,7 +471,7 @@ Use for quick stat changes, character creation, testing, or corrections where yo
         this.logger.info("Adding XP log entry", { characterName: args.characterName, amount: args.amount });
 
         // Get character
-        const character = await this.foundryClient.query("warhammer-mcp.getCharacterInfo", {
+        const character = await this.foundryClient.query<any>("warhammer-mcp.getCharacterInfo", {
             characterName: args.characterName
         });
 
@@ -492,7 +492,7 @@ Use for quick stat changes, character creation, testing, or corrections where yo
         // Update log
         const updatedLog = [...existingLog, newEntry];
 
-        await this.foundryClient.query("warhammer-mcp.updateActor", {
+        await this.foundryClient.query<any>("warhammer-mcp.updateActor", {
             actorId: character.id,
             updateData: {
                 'system.details.experience.log': updatedLog

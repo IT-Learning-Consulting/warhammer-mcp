@@ -91,7 +91,7 @@ export class ManageMutationTools {
         this.logger.info('Adding mutation', { characterName: args.characterName, mutationName: args.mutationName });
 
         try {
-            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
+            const character = await this.foundryClient.query<any>('warhammer-mcp.getCharacterInfo', {
                 characterName: args.characterName,
             });
 
@@ -111,7 +111,7 @@ export class ManageMutationTools {
             let compendiumUuid = null;
 
             try {
-                const searchResults = await this.foundryClient.query('warhammer-mcp.searchCompendium', {
+                const searchResults = await this.foundryClient.query<any>('warhammer-mcp.searchCompendium', {
                     query: args.mutationName,
                     packType: 'Item',
                 });
@@ -136,7 +136,7 @@ export class ManageMutationTools {
             let response = '';
 
             if (compendiumMutation && compendiumUuid) {
-                await this.foundryClient.query('warhammer-mcp.addItemFromCompendium', {
+                await this.foundryClient.query<any>('warhammer-mcp.addItemFromCompendium', {
                     actorId: character.id,
                     compendiumId: compendiumUuid,
                 });
@@ -167,7 +167,7 @@ export class ManageMutationTools {
                     },
                 };
 
-                await this.foundryClient.query('warhammer-mcp.createItem', {
+                await this.foundryClient.query<any>('warhammer-mcp.createItem', {
                     actorId: character.id,
                     itemData: mutationData,
                 });
@@ -192,7 +192,7 @@ export class ManageMutationTools {
         this.logger.info('Removing mutation', { characterName: args.characterName, mutationName: args.mutationName });
 
         try {
-            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
+            const character = await this.foundryClient.query<any>('warhammer-mcp.getCharacterInfo', {
                 characterName: args.characterName,
             });
 
@@ -208,7 +208,7 @@ export class ManageMutationTools {
                 throw new Error(`Mutation "${args.mutationName}" not found on ${character.name}`);
             }
 
-            await this.foundryClient.query('warhammer-mcp.deleteItem', {
+            await this.foundryClient.query<any>('warhammer-mcp.deleteItem', {
                 actorId: character.id,
                 itemId: mutation.id,
             });
@@ -225,7 +225,7 @@ export class ManageMutationTools {
         this.logger.info('Listing mutations', { characterName: args.characterName });
 
         try {
-            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
+            const character = await this.foundryClient.query<any>('warhammer-mcp.getCharacterInfo', {
                 characterName: args.characterName,
             });
 
@@ -234,11 +234,6 @@ export class ManageMutationTools {
             }
 
             const system = character.system as any;
-            const isWFRP = !!(system.status?.corruption !== undefined || system.characteristics?.wp);
-
-            if (!isWFRP) {
-                return `${character.name} is not using the WFRP 4e system. Mutation tracking is only available for WFRP characters.`;
-            }
 
             const mutations: any[] = [];
             if (character.items && Array.isArray(character.items)) {

@@ -239,7 +239,7 @@ export class CreateItemTool {
     private async handleCreateWeapon(args: z.infer<typeof WeaponSchema>): Promise<string> {
         this.logger.info("Creating weapon", { weaponName: args.weaponName });
 
-        const response = await this.foundryClient.query(
+        await this.foundryClient.query<any>(
             "warhammer-mcp.createWeapon",
             {
                 characterName: args.characterName,
@@ -255,10 +255,6 @@ export class CreateItemTool {
             }
         );
 
-        if (!response.success) {
-            return `❌ Failed to create weapon: ${response.error || "Unknown error"}`;
-        }
-
         const target = args.characterName ? ` for ${args.characterName}` : '';
         return `✅ Created **${args.weaponName}**${target}\n` +
             `- Group: ${args.weaponGroup}\n` +
@@ -270,7 +266,7 @@ export class CreateItemTool {
     private async handleCreateArmour(args: z.infer<typeof ArmourSchema>): Promise<string> {
         this.logger.info("Creating armour", { armourName: args.armourName });
 
-        const response = await this.foundryClient.query(
+        await this.foundryClient.query<any>(
             "warhammer-mcp.createArmour",
             {
                 characterName: args.characterName,
@@ -285,10 +281,6 @@ export class CreateItemTool {
             }
         );
 
-        if (!response.success) {
-            return `❌ Failed to create armour: ${response.error || "Unknown error"}`;
-        }
-
         const target = args.characterName ? ` for ${args.characterName}` : '';
         return `✅ Created **${args.armourName}**${target}\n` +
             `- Type: ${args.armourType}\n` +
@@ -300,7 +292,7 @@ export class CreateItemTool {
     private async handleCreateTrapping(args: z.infer<typeof TrappingSchema>): Promise<string> {
         this.logger.info("Creating trapping", { trappingName: args.trappingName });
 
-        const response = await this.foundryClient.query(
+        await this.foundryClient.query<any>(
             "warhammer-mcp.createTrapping",
             {
                 characterName: args.characterName,
@@ -314,10 +306,6 @@ export class CreateItemTool {
             }
         );
 
-        if (!response.success) {
-            return `❌ Failed to create trapping: ${response.error || "Unknown error"}`;
-        }
-
         const target = args.characterName ? ` for ${args.characterName}` : '';
         return `✅ Created **${args.trappingName}**${target}\n` +
             `- Type: ${args.trappingType}\n` +
@@ -328,7 +316,7 @@ export class CreateItemTool {
     private async handleCreateAmmunition(args: z.infer<typeof AmmunitionSchema>): Promise<string> {
         this.logger.info("Creating ammunition", { ammunitionName: args.ammunitionName });
 
-        const response = await this.foundryClient.query(
+        await this.foundryClient.query<any>(
             "warhammer-mcp.createAmmunition",
             {
                 characterName: args.characterName,
@@ -340,10 +328,6 @@ export class CreateItemTool {
             }
         );
 
-        if (!response.success) {
-            return `❌ Failed to create ammunition: ${response.error || "Unknown error"}`;
-        }
-
         const target = args.characterName ? ` for ${args.characterName}` : '';
         return `✅ Created **${args.ammunitionName}**${target}\n` +
             `- Type: ${args.ammunitionGroup}\n` +
@@ -354,7 +338,7 @@ export class CreateItemTool {
     private async handleCreateContainer(args: z.infer<typeof ContainerSchema>): Promise<string> {
         this.logger.info("Creating container", { containerName: args.containerName });
 
-        const response = await this.foundryClient.query(
+        await this.foundryClient.query<any>(
             "warhammer-mcp.createContainer",
             {
                 characterName: args.characterName,
@@ -365,10 +349,6 @@ export class CreateItemTool {
             }
         );
 
-        if (!response.success) {
-            return `❌ Failed to create container: ${response.error || "Unknown error"}`;
-        }
-
         const target = args.characterName ? ` for ${args.characterName}` : '';
         return `✅ Created **${args.containerName}**${target}\n` +
             `- Capacity: ${args.capacity} Enc\n` +
@@ -378,7 +358,7 @@ export class CreateItemTool {
     private async handleModifyQualities(args: z.infer<typeof ModifyQualitiesSchema>): Promise<string> {
         this.logger.info("Modifying item qualities", { itemName: args.itemName, characterName: args.characterName });
 
-        const response = await this.foundryClient.query(
+        await this.foundryClient.query<any>(
             "warhammer-mcp.modifyItemQualities",
             {
                 characterName: args.characterName,
@@ -389,10 +369,6 @@ export class CreateItemTool {
                 removeFlaws: args.removeFlaws
             }
         );
-
-        if (!response.success) {
-            return `❌ Failed to modify item qualities: ${response.error || "Unknown error"}`;
-        }
 
         let result = `✅ Modified **${args.itemName}** for ${args.characterName}\n`;
 

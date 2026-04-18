@@ -210,7 +210,7 @@ Use quest-style HTML or plain text (Markdown will be stripped):
     }) {
         this.logger.info("Creating quest journal", { title: args.questTitle });
 
-        const response = await this.foundryClient.query(
+        const response = await this.foundryClient.query<any>(
             "warhammer-mcp.createQuestJournal",
             {
                 questTitle: args.questTitle,
@@ -224,18 +224,7 @@ Use quest-style HTML or plain text (Markdown will be stripped):
             }
         );
 
-        if (!response.success) {
-            return {
-                content: [
-                    {
-                        type: "text",
-                        text: `❌ Failed to create quest journal: ${response.error || "Unknown error"}`,
-                    },
-                ],
-            };
-        }
-
-        const journal = response.data;
+        const journal = response;
         return {
             content: [
                 {
@@ -253,7 +242,7 @@ Use quest-style HTML or plain text (Markdown will be stripped):
     }) {
         this.logger.info("Updating quest journal", { journalId: args.journalId });
 
-        const response = await this.foundryClient.query(
+        await this.foundryClient.query<any>(
             "warhammer-mcp.updateQuestJournal",
             {
                 journalId: args.journalId,
@@ -261,17 +250,6 @@ Use quest-style HTML or plain text (Markdown will be stripped):
                 updateType: args.updateType,
             }
         );
-
-        if (!response.success) {
-            return {
-                content: [
-                    {
-                        type: "text",
-                        text: `❌ Failed to update journal: ${response.error || "Unknown error"}`,
-                    },
-                ],
-            };
-        }
 
         let updateIcon = "📝";
         switch (args.updateType) {
@@ -306,7 +284,7 @@ Use quest-style HTML or plain text (Markdown will be stripped):
             npcName: args.npcName,
         });
 
-        const response = await this.foundryClient.query(
+        await this.foundryClient.query<any>(
             "warhammer-mcp.linkQuestToNPC",
             {
                 journalId: args.journalId,
@@ -314,17 +292,6 @@ Use quest-style HTML or plain text (Markdown will be stripped):
                 relationship: args.relationship,
             }
         );
-
-        if (!response.success) {
-            return {
-                content: [
-                    {
-                        type: "text",
-                        text: `❌ Failed to link journal to NPC: ${response.error || "Unknown error"}`,
-                    },
-                ],
-            };
-        }
 
         return {
             content: [
@@ -342,7 +309,7 @@ Use quest-style HTML or plain text (Markdown will be stripped):
     }) {
         this.logger.info("Listing journals", { filterQuests: args.filterQuests });
 
-        const response = await this.foundryClient.query(
+        const response = await this.foundryClient.query<any>(
             "warhammer-mcp.listJournals",
             {
                 filterQuests: args.filterQuests,
@@ -350,18 +317,7 @@ Use quest-style HTML or plain text (Markdown will be stripped):
             }
         );
 
-        if (!response.success) {
-            return {
-                content: [
-                    {
-                        type: "text",
-                        text: `❌ Failed to list journals: ${response.error || "Unknown error"}`,
-                    },
-                ],
-            };
-        }
-
-        const journals = response.data || [];
+        const journals = response ?? [];
         if (journals.length === 0) {
             return {
                 content: [
@@ -397,23 +353,12 @@ Use quest-style HTML or plain text (Markdown will be stripped):
     private async handleSearch(args: { query: string }) {
         this.logger.info("Searching journals", { query: args.query });
 
-        const response = await this.foundryClient.query(
+        const response = await this.foundryClient.query<any>(
             "warhammer-mcp.searchJournals",
             { query: args.query }
         );
 
-        if (!response.success) {
-            return {
-                content: [
-                    {
-                        type: "text",
-                        text: `❌ Failed to search journals: ${response.error || "Unknown error"}`,
-                    },
-                ],
-            };
-        }
-
-        const results = response.data || [];
+        const results = response ?? [];
         if (results.length === 0) {
             return {
                 content: [

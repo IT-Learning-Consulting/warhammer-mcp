@@ -91,7 +91,7 @@ export class ManageCorruptionTools {
         this.logger.info('Getting corruption status', { characterName: args.characterName });
 
         try {
-            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
+            const character = await this.foundryClient.query<any>('warhammer-mcp.getCharacterInfo', {
                 characterName: args.characterName,
             });
 
@@ -100,11 +100,6 @@ export class ManageCorruptionTools {
             }
 
             const system = character.system as any;
-            const isWFRP = !!(system.status?.corruption !== undefined || system.characteristics?.wp);
-
-            if (!isWFRP) {
-                return `${character.name} is not using the WFRP 4e system. Corruption tracking is only available for WFRP characters.`;
-            }
 
             const currentCorruption = system.status?.corruption?.value || 0;
             const maxCorruption = system.status?.corruption?.max || 0;
@@ -158,7 +153,7 @@ export class ManageCorruptionTools {
         this.logger.info('Adding corruption', { characterName: args.characterName, amount: args.amount });
 
         try {
-            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
+            const character = await this.foundryClient.query<any>('warhammer-mcp.getCharacterInfo', {
                 characterName: args.characterName,
             });
 
@@ -167,11 +162,6 @@ export class ManageCorruptionTools {
             }
 
             const system = character.system as any;
-            const isWFRP = !!(system.status?.corruption !== undefined || system.characteristics?.wp);
-
-            if (!isWFRP) {
-                return `${character.name} is not using the WFRP 4e system.`;
-            }
 
             const currentCorruption = system.status?.corruption?.value || 0;
             const newCorruption = currentCorruption + args.amount;
@@ -197,7 +187,7 @@ export class ManageCorruptionTools {
                 crossedThresholds.push('Major');
             }
 
-            await this.foundryClient.query('warhammer-mcp.updateActor', {
+            await this.foundryClient.query<any>('warhammer-mcp.updateActor', {
                 actorId: character.id,
                 updateData: {
                     'system.status.corruption.value': newCorruption,
@@ -235,7 +225,7 @@ export class ManageCorruptionTools {
         this.logger.info('Removing Corruption', { characterName: args.characterName, amount: args.amount });
 
         try {
-            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
+            const character = await this.foundryClient.query<any>('warhammer-mcp.getCharacterInfo', {
                 characterName: args.characterName,
             });
 
@@ -253,7 +243,7 @@ export class ManageCorruptionTools {
             const amountToRemove = Math.min(args.amount, currentCorruption);
             const newCorruption = currentCorruption - amountToRemove;
 
-            await this.foundryClient.query('warhammer-mcp.updateActor', {
+            await this.foundryClient.query<any>('warhammer-mcp.updateActor', {
                 actorId: character.id,
                 updateData: {
                     'system.status.corruption.value': newCorruption,

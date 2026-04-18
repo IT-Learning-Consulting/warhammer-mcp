@@ -190,23 +190,12 @@ export class ManageArcaneMagicTool {
             lore: args.lore,
         });
 
-        const response = await this.foundryClient.query(
+        const character = await this.foundryClient.query<any>(
             "warhammer-mcp.getCharacterInfo",
             { actorName: args.characterName }
         );
 
-        if (!response.success || !response.data) {
-            return {
-                content: [
-                    {
-                        type: "text",
-                        text: `❌ Failed to get character info: ${response.error || "Unknown error"}`,
-                    },
-                ],
-            };
-        }
-
-        const items = response.data.items || [];
+        const items = character.items || [];
         let spells = items.filter((item: any) => item.type === "spell");
 
         if (args.lore) {
@@ -268,7 +257,7 @@ export class ManageArcaneMagicTool {
             }
         }
 
-        const intBonus = response.data.system?.characteristics?.int?.bonus || 0;
+        const intBonus = character.system?.characteristics?.int?.bonus || 0;
         const memorizedCount = spells.filter((s: any) => s.system?.memorized?.value).length;
         resultText += `\n**Memorization:** ${memorizedCount}/${intBonus} (Intelligence Bonus)\n`;
 
@@ -290,7 +279,7 @@ export class ManageArcaneMagicTool {
         });
 
         // Get character and spell info
-        const charResponse = await this.foundryClient.query(
+        const charResponse = await this.foundryClient.query<any>(
             "warhammer-mcp.getCharacterInfo",
             { actorName: args.characterName }
         );
@@ -386,23 +375,12 @@ export class ManageArcaneMagicTool {
             lore: args.lore,
         });
 
-        const response = await this.foundryClient.query(
+        const character = await this.foundryClient.query<any>(
             "warhammer-mcp.getCharacterInfo",
             { actorName: args.characterName }
         );
 
-        if (!response.success || !response.data) {
-            return {
-                content: [
-                    {
-                        type: "text",
-                        text: `❌ Failed to get character info: ${response.error || "Unknown error"}`,
-                    },
-                ],
-            };
-        }
-
-        const wpBonus = response.data.system?.characteristics?.wp?.bonus || 0;
+        const wpBonus = character.system?.characteristics?.wp?.bonus || 0;
 
         let resultText = `🌀 **Channelling Power**\n\n`;
         resultText += `**Wizard:** ${args.characterName}\n`;
@@ -505,7 +483,7 @@ export class ManageArcaneMagicTool {
         });
 
         // Get character and spell
-        const charResponse = await this.foundryClient.query(
+        const charResponse = await this.foundryClient.query<any>(
             "warhammer-mcp.getCharacterInfo",
             { actorName: args.characterName }
         );
@@ -556,7 +534,7 @@ export class ManageArcaneMagicTool {
         }
 
         // Update spell to memorized
-        const updateResponse = await this.foundryClient.query(
+        const updateResponse = await this.foundryClient.query<any>(
             "warhammer-mcp.updateItem",
             {
                 actorName: args.characterName,
@@ -599,7 +577,7 @@ export class ManageArcaneMagicTool {
         });
 
         // Try to find spell in compendium and add to character
-        const response = await this.foundryClient.query(
+        await this.foundryClient.query<any>(
             "warhammer-mcp.addItemFromCompendium",
             {
                 actorName: args.characterName,
@@ -607,17 +585,6 @@ export class ManageArcaneMagicTool {
                 compendiumType: "spell",
             }
         );
-
-        if (!response.success) {
-            return {
-                content: [
-                    {
-                        type: "text",
-                        text: `❌ Failed to learn spell: ${response.error || "Unknown error"}\n\nMake sure the spell "${args.spellName}" exists in the WFRP4e spell compendiums.`,
-                    },
-                ],
-            };
-        }
 
         return {
             content: [

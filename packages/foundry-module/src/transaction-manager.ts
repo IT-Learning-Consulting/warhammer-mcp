@@ -1,4 +1,5 @@
 import { MODULE_ID } from './constants.js';
+import { permissionManager } from './permissions.js';
 
 export interface TransactionAction {
   type: 'create' | 'update' | 'delete';
@@ -265,3 +266,29 @@ export class TransactionManager {
 
 // Export singleton instance
 export const transactionManager = new TransactionManager();
+
+/**
+ * Wrap a write operation in a permission check + transaction.
+ * Permission denial throws before the transaction starts.
+ * Handler throw rolls back the transaction and re-throws the original error.
+ * Rollback-time errors are logged but do not mask the original throw.
+ */
+export async function wrappedWrite<T>(operation: string, fn: () => Promise<T>): Promise<T> {
+  const permCheck = permissionManager.checkWritePermission(operation);
+  if (!permCheck.allowed) {
+    throw new Error(permCheck.reason ?? `Permission denied for ${operation}`);
+  }
+  const txId = transactionManager.startTransaction(operation);
+  try {
+    const result = await fn();
+    transactionManager.commitTransaction(txId);
+    return result;
+  } catch (err) {
+    try {
+      await transactionManager.rollbackTransaction(txId);
+    } catch (rollbackErr) {
+      console.error(`[${MODULE_ID}] [wrappedWrite] Rollback of ${operation} failed:`, rollbackErr);
+    }
+    throw err;
+  }
+}

@@ -175,23 +175,12 @@ export class ManageDivineMagicTool {
     private async handleGetBlessings(args: { characterName: string }) {
         this.logger.info("Getting active blessings", { characterName: args.characterName });
 
-        const response = await this.foundryClient.query(
+        const character = await this.foundryClient.query<any>(
             "warhammer-mcp.getCharacterInfo",
             { actorName: args.characterName }
         );
 
-        if (!response.success || !response.data) {
-            return {
-                content: [
-                    {
-                        type: "text",
-                        text: `❌ Failed to get character info: ${response.error || "Unknown error"}`,
-                    },
-                ],
-            };
-        }
-
-        const items = response.data.items || [];
+        const items = character.items || [];
         const blessings = items.filter(
             (item: any) => item.type === "prayer" || item.type === "blessing"
         );
@@ -248,7 +237,7 @@ export class ManageDivineMagicTool {
         });
 
         // First check if character has the prayer
-        const charResponse = await this.foundryClient.query(
+        const charResponse = await this.foundryClient.query<any>(
             "warhammer-mcp.getCharacterInfo",
             { actorName: args.characterName }
         );
@@ -326,24 +315,13 @@ export class ManageDivineMagicTool {
     private async handleCheckFavor(args: { characterName: string }) {
         this.logger.info("Checking divine favor", { characterName: args.characterName });
 
-        const response = await this.foundryClient.query(
+        const character = await this.foundryClient.query<any>(
             "warhammer-mcp.getCharacterInfo",
             { actorName: args.characterName }
         );
 
-        if (!response.success || !response.data) {
-            return {
-                content: [
-                    {
-                        type: "text",
-                        text: `❌ Failed to get character info: ${response.error || "Unknown error"}`,
-                    },
-                ],
-            };
-        }
-
-        const sinPoints = response.data.system?.status?.sin?.value || 0;
-        const corruption = response.data.system?.status?.corruption?.value || 0;
+        const sinPoints = character.system?.status?.sin?.value || 0;
+        const corruption = character.system?.status?.corruption?.value || 0;
 
         let status = "";
         let penalty = "";
@@ -410,7 +388,7 @@ export class ManageDivineMagicTool {
         });
 
         // Get current sin
-        const charResponse = await this.foundryClient.query(
+        const charResponse = await this.foundryClient.query<any>(
             "warhammer-mcp.getCharacterInfo",
             { actorName: args.characterName }
         );
@@ -430,7 +408,7 @@ export class ManageDivineMagicTool {
         const newSin = Math.min(10, currentSin + args.amount);
 
         // Update sin
-        const updateResponse = await this.foundryClient.query(
+        const updateResponse = await this.foundryClient.query<any>(
             "warhammer-mcp.updateActor",
             {
                 actorName: args.characterName,
@@ -514,7 +492,7 @@ export class ManageDivineMagicTool {
         });
 
         // Get current sin
-        const charResponse = await this.foundryClient.query(
+        const charResponse = await this.foundryClient.query<any>(
             "warhammer-mcp.getCharacterInfo",
             { actorName: args.characterName }
         );
@@ -534,7 +512,7 @@ export class ManageDivineMagicTool {
         const newSin = Math.max(0, currentSin - args.sinReduction);
 
         // Update sin
-        const updateResponse = await this.foundryClient.query(
+        const updateResponse = await this.foundryClient.query<any>(
             "warhammer-mcp.updateActor",
             {
                 actorName: args.characterName,
@@ -626,24 +604,13 @@ export class ManageDivineMagicTool {
             blessingName: args.blessingName,
         });
 
-        const response = await this.foundryClient.query(
+        await this.foundryClient.query<any>(
             "warhammer-mcp.removeItemFromActor",
             {
                 actorName: args.characterName,
                 itemName: args.blessingName,
             }
         );
-
-        if (!response.success) {
-            return {
-                content: [
-                    {
-                        type: "text",
-                        text: `❌ Failed to remove blessing: ${response.error || "Unknown error"}`,
-                    },
-                ],
-            };
-        }
 
         return {
             content: [

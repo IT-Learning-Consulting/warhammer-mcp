@@ -63,7 +63,7 @@ export class CharacterTools {
     this.logger.info('Getting character information', { identifier });
 
     try {
-      const characterData = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
+      const characterData = await this.foundryClient.query<any>('warhammer-mcp.getCharacterInfo', {
         characterName: identifier,
       });
 
@@ -91,7 +91,7 @@ export class CharacterTools {
     this.logger.info('Listing characters', { type });
 
     try {
-      const actors = await this.foundryClient.query('warhammer-mcp.listActors', { type });
+      const actors = await this.foundryClient.query<any>('warhammer-mcp.listActors', { type });
 
       this.logger.debug('Successfully retrieved character list', { count: actors.length });
 
@@ -136,198 +136,160 @@ export class CharacterTools {
     // Extract common fields that exist across different game systems
     const basicInfo: any = {};
 
-    // Detect game system based on data structure
-    const isWFRP = !!(system.characteristics || system.status?.wounds);
-
-    if (isWFRP) {
-      // WFRP 4e system
-      if (system.status?.wounds) {
-        basicInfo.wounds = {
-          current: system.status.wounds.value,
-          max: system.status.wounds.max,
-        };
-      }
-
-      // Fortune and Fate (using correct value property, no max on these - they're set by Fate/Resilience)
-      if (system.status?.fortune !== undefined) {
-        basicInfo.fortune = system.status.fortune.value || 0;
-      }
-
-      if (system.status?.fate !== undefined) {
-        basicInfo.fate = system.status.fate.value || 0;
-      }
-
-      // Resilience and Resolve (new in WFRP4e)
-      if (system.status?.resilience !== undefined) {
-        basicInfo.resilience = system.status.resilience.value || 0;
-      }
-
-      if (system.status?.resolve !== undefined) {
-        basicInfo.resolve = system.status.resolve.value || 0;
-      }
-
-      // Corruption
-      if (system.status?.corruption) {
-        basicInfo.corruption = {
-          current: system.status.corruption.value || 0,
-          max: system.status.corruption.max || 0,
-        };
-      }
-
-      // Critical Wounds (count critical wound items)
-      const criticalWounds = items.filter((item: any) => item.type === 'critical');
-      basicInfo.criticalWounds = {
-        count: criticalWounds.length,
-        wounds: criticalWounds.map((crit: any) => ({
-          name: crit.name,
-          location: crit.system?.location?.value || 'unknown',
-          severity: crit.system?.wounds?.value || 0,
-          description: this.truncateText(crit.system?.description?.value || '', 200),
-        })),
+    // WFRP 4e system (system-id guard upstream ensures WFRP)
+    if (system.status?.wounds) {
+      basicInfo.wounds = {
+        current: system.status.wounds.value,
+        max: system.status.wounds.max,
       };
+    }
 
-      // Money (filter and sum money items correctly)
-      const moneyItems = items.filter((item: any) => item.type === 'money');
-      if (moneyItems.length > 0) {
-        basicInfo.money = {};
-        for (const moneyItem of moneyItems) {
-          // Use item name as key (e.g., "Gold Crown", "Silver Shilling", "Brass Penny")
-          const quantity = moneyItem.system?.quantity?.value || 0;
-          if (quantity > 0) {
-            basicInfo.money[moneyItem.name] = quantity;
-          }
+    // Fortune and Fate (using correct value property, no max on these - they're set by Fate/Resilience)
+    if (system.status?.fortune !== undefined) {
+      basicInfo.fortune = system.status.fortune.value || 0;
+    }
+
+    if (system.status?.fate !== undefined) {
+      basicInfo.fate = system.status.fate.value || 0;
+    }
+
+    // Resilience and Resolve (new in WFRP4e)
+    if (system.status?.resilience !== undefined) {
+      basicInfo.resilience = system.status.resilience.value || 0;
+    }
+
+    if (system.status?.resolve !== undefined) {
+      basicInfo.resolve = system.status.resolve.value || 0;
+    }
+
+    // Corruption
+    if (system.status?.corruption) {
+      basicInfo.corruption = {
+        current: system.status.corruption.value || 0,
+        max: system.status.corruption.max || 0,
+      };
+    }
+
+    // Critical Wounds (count critical wound items)
+    const criticalWounds = items.filter((item: any) => item.type === 'critical');
+    basicInfo.criticalWounds = {
+      count: criticalWounds.length,
+      wounds: criticalWounds.map((crit: any) => ({
+        name: crit.name,
+        location: crit.system?.location?.value || 'unknown',
+        severity: crit.system?.wounds?.value || 0,
+        description: this.truncateText(crit.system?.description?.value || '', 200),
+      })),
+    };
+
+    // Money (filter and sum money items correctly)
+    const moneyItems = items.filter((item: any) => item.type === 'money');
+    if (moneyItems.length > 0) {
+      basicInfo.money = {};
+      for (const moneyItem of moneyItems) {
+        // Use item name as key (e.g., "Gold Crown", "Silver Shilling", "Brass Penny")
+        const quantity = moneyItem.system?.quantity?.value || 0;
+        if (quantity > 0) {
+          basicInfo.money[moneyItem.name] = quantity;
         }
-      }
-
-      // Toughness Bonus + Armor Points
-      if (system.characteristics?.t) {
-        const toughnessBonus = Math.floor((system.characteristics.t.value || 0) / 10);
-        const armorPoints = system.status?.armour?.value || system.status?.armour?.head || 0;
-        basicInfo.toughness = {
-          bonus: toughnessBonus,
-          armorPoints: armorPoints,
-          total: toughnessBonus + armorPoints
-        };
-      }
-
-      // Species
-      if (system.details?.species?.value) {
-        basicInfo.species = system.details.species.value;
-      }
-
-      // Career
-      if (system.details?.career?.value) {
-        basicInfo.career = system.details.career.value;
-      }
-
-      // Status/Class
-      if (system.details?.status?.value) {
-        basicInfo.status = system.details.status.value;
-      }
-
-      // Experience
-      if (system.details?.experience) {
-        basicInfo.experience = {
-          current: system.details.experience.current || 0,
-          total: system.details.experience.total || 0,
-          spent: system.details.experience.spent || 0,
-        };
-      }
-
-      // Biography - WFRP 4e stores motivation and ambitions as separate fields
-      if (system.details?.motivation?.value || system.details?.["personal-ambitions"]) {
-        basicInfo.biography = {};
-        if (system.details.motivation?.value) {
-          basicInfo.biography.motivation = system.details.motivation.value;
-        }
-        if (system.details["personal-ambitions"]?.["short-term"]) {
-          basicInfo.biography.shortTermAmbition = system.details["personal-ambitions"]["short-term"];
-        }
-        if (system.details["personal-ambitions"]?.["long-term"]) {
-          basicInfo.biography.longTermAmbition = system.details["personal-ambitions"]["long-term"];
-        }
-      }
-
-      // GM Notes (WFRP 4e)
-      if (system.details?.gmnotes?.value) {
-        basicInfo.gmNotes = system.details.gmnotes.value;
-      }
-
-      // Movement (WFRP 4e)
-      if (system.details?.move) {
-        basicInfo.movement = system.details.move.value || system.details.move;
-      }
-
-      // Physical Description
-      if (system.details?.gender?.value) {
-        basicInfo.gender = system.details.gender.value;
-      }
-      if (system.details?.age?.value) {
-        basicInfo.age = system.details.age.value;
-      }
-      if (system.details?.height?.value) {
-        basicInfo.height = system.details.height.value;
-      }
-      // WFRP4e uses haircolour (not hair), eyecolour (not eyes), distinguishingmark (not distinguishingMarks)
-      if (system.details?.haircolour?.value) {
-        basicInfo.hair = system.details.haircolour.value;
-      }
-      if (system.details?.eyecolour?.value) {
-        basicInfo.eyes = system.details.eyecolour.value;
-      }
-      if (system.details?.distinguishingmark?.value) {
-        basicInfo.distinguishingMarks = system.details.distinguishingmark.value;
-      }
-      // Weight (WFRP 4e)
-      if (system.details?.weight?.value) {
-        basicInfo.weight = system.details.weight.value;
-      }
-      // Star Sign (WFRP 4e - handle both camelCase and lowercase)
-      if (system.details?.starsign?.value) {
-        basicInfo.starSign = system.details.starsign.value;
-      } else if (system.details?.starSign?.value) {
-        basicInfo.starSign = system.details.starSign.value;
-      }
-
-      // Experience log (if available)
-      if (system.details?.experience?.log) {
-        basicInfo.experienceLog = system.details.experience.log;
-      }
-
-    } else {
-      // Non-WFRP system - limited data extraction
-      if (system.attributes) {
-        if (system.attributes.hp) {
-          basicInfo.hitPoints = {
-            current: system.attributes.hp.value,
-            max: system.attributes.hp.max,
-            temp: system.attributes.hp.temp || 0,
-          };
-        }
-        if (system.attributes.ac) {
-          basicInfo.armorClass = system.attributes.ac.value;
-        }
-      }
-
-      // Level information
-      if (system.details?.level?.value) {
-        basicInfo.level = system.details.level.value;
-      } else if (system.level) {
-        basicInfo.level = system.level;
-      }
-
-      // Class information
-      if (system.details?.class) {
-        basicInfo.class = system.details.class;
-      }
-
-      // Race/ancestry information
-      if (system.details?.race) {
-        basicInfo.race = system.details.race;
-      } else if (system.details?.ancestry) {
-        basicInfo.ancestry = system.details.ancestry;
       }
     }
+
+    // Toughness Bonus + Armor Points
+    if (system.characteristics?.t) {
+      const toughnessBonus = Math.floor((system.characteristics.t.value || 0) / 10);
+      const armorPoints = system.status?.armour?.value || system.status?.armour?.head || 0;
+      basicInfo.toughness = {
+        bonus: toughnessBonus,
+        armorPoints: armorPoints,
+        total: toughnessBonus + armorPoints
+      };
+    }
+
+    // Species
+    if (system.details?.species?.value) {
+      basicInfo.species = system.details.species.value;
+    }
+
+    // Career
+    if (system.details?.career?.value) {
+      basicInfo.career = system.details.career.value;
+    }
+
+    // Status/Class
+    if (system.details?.status?.value) {
+      basicInfo.status = system.details.status.value;
+    }
+
+    // Experience
+    if (system.details?.experience) {
+      basicInfo.experience = {
+        current: system.details.experience.current || 0,
+        total: system.details.experience.total || 0,
+        spent: system.details.experience.spent || 0,
+      };
+    }
+
+    // Biography - WFRP 4e stores motivation and ambitions as separate fields
+    if (system.details?.motivation?.value || system.details?.["personal-ambitions"]) {
+      basicInfo.biography = {};
+      if (system.details.motivation?.value) {
+        basicInfo.biography.motivation = system.details.motivation.value;
+      }
+      if (system.details["personal-ambitions"]?.["short-term"]) {
+        basicInfo.biography.shortTermAmbition = system.details["personal-ambitions"]["short-term"];
+      }
+      if (system.details["personal-ambitions"]?.["long-term"]) {
+        basicInfo.biography.longTermAmbition = system.details["personal-ambitions"]["long-term"];
+      }
+    }
+
+    // GM Notes (WFRP 4e)
+    if (system.details?.gmnotes?.value) {
+      basicInfo.gmNotes = system.details.gmnotes.value;
+    }
+
+    // Movement (WFRP 4e)
+    if (system.details?.move) {
+      basicInfo.movement = system.details.move.value || system.details.move;
+    }
+
+    // Physical Description
+    if (system.details?.gender?.value) {
+      basicInfo.gender = system.details.gender.value;
+    }
+    if (system.details?.age?.value) {
+      basicInfo.age = system.details.age.value;
+    }
+    if (system.details?.height?.value) {
+      basicInfo.height = system.details.height.value;
+    }
+    // WFRP4e uses haircolour (not hair), eyecolour (not eyes), distinguishingmark (not distinguishingMarks)
+    if (system.details?.haircolour?.value) {
+      basicInfo.hair = system.details.haircolour.value;
+    }
+    if (system.details?.eyecolour?.value) {
+      basicInfo.eyes = system.details.eyecolour.value;
+    }
+    if (system.details?.distinguishingmark?.value) {
+      basicInfo.distinguishingMarks = system.details.distinguishingmark.value;
+    }
+    // Weight (WFRP 4e)
+    if (system.details?.weight?.value) {
+      basicInfo.weight = system.details.weight.value;
+    }
+    // Star Sign (WFRP 4e - handle both camelCase and lowercase)
+    if (system.details?.starsign?.value) {
+      basicInfo.starSign = system.details.starsign.value;
+    } else if (system.details?.starSign?.value) {
+      basicInfo.starSign = system.details.starSign.value;
+    }
+
+    // Experience log (if available)
+    if (system.details?.experience?.log) {
+      basicInfo.experienceLog = system.details.experience.log;
+    }
+
 
     return basicInfo;
   }
@@ -336,79 +298,74 @@ export class CharacterTools {
     const system = characterData.system || {};
     const stats: any = {};
 
-    // Detect game system based on data structure
-    const isWFRP = !!(system.characteristics || system.status?.wounds);
+    // WFRP 4e Characteristics (WS, BS, S, T, I, Ag, Dex, Int, WP, Fel)
+    if (system.characteristics) {
+      stats.characteristics = {};
+      const charMap: any = {
+        ws: 'Weapon Skill',
+        bs: 'Ballistic Skill',
+        s: 'Strength',
+        t: 'Toughness',
+        i: 'Initiative',
+        ag: 'Agility',
+        dex: 'Dexterity',
+        int: 'Intelligence',
+        wp: 'Willpower',
+        fel: 'Fellowship'
+      };
 
-    if (isWFRP) {
-      // WFRP 4e Characteristics (WS, BS, S, T, I, Ag, Dex, Int, WP, Fel)
-      if (system.characteristics) {
-        stats.characteristics = {};
-        const charMap: any = {
-          ws: 'Weapon Skill',
-          bs: 'Ballistic Skill',
-          s: 'Strength',
-          t: 'Toughness',
-          i: 'Initiative',
-          ag: 'Agility',
-          dex: 'Dexterity',
-          int: 'Intelligence',
-          wp: 'Willpower',
-          fel: 'Fellowship'
-        };
-
-        for (const [key, characteristic] of Object.entries(system.characteristics)) {
-          if (typeof characteristic === 'object' && characteristic !== null) {
-            const char = characteristic as any;
-            stats.characteristics[key.toUpperCase()] = {
-              name: charMap[key] || key.toUpperCase(),
-              initial: char.initial || 0,
-              advances: char.advances || 0,
-              value: char.value || char.initial || 0,
-              bonus: Math.floor((char.value || char.initial || 0) / 10)
-            };
-          }
-        }
-      }
-
-      // WFRP Skills - Extract from items array (skills are items in WFRP4e)
-      const items = characterData.items || [];
-      const skillItems = items.filter((item: any) => item.type === 'skill');
-
-      if (skillItems.length > 0) {
-        stats.skills = {};
-        for (const skill of skillItems) {
-          const skillSystem = skill.system || {};
-          stats.skills[skill.name] = {
-            characteristic: skillSystem.characteristic?.key || skillSystem.characteristic?.value || '',
-            advances: skillSystem.advances?.value || 0,
-            total: skillSystem.total?.value || 0,
-            modifier: skillSystem.modifier?.value || 0,
+      for (const [key, characteristic] of Object.entries(system.characteristics)) {
+        if (typeof characteristic === 'object' && characteristic !== null) {
+          const char = characteristic as any;
+          stats.characteristics[key.toUpperCase()] = {
+            name: charMap[key] || key.toUpperCase(),
+            initial: char.initial || 0,
+            advances: char.advances || 0,
+            value: char.value || char.initial || 0,
+            bonus: Math.floor((char.value || char.initial || 0) / 10)
           };
         }
       }
+    }
 
-      // WFRP Talents - Extract from items array (talents are also items)
-      const talentItems = items.filter((item: any) => item.type === 'talent');
+    // WFRP Skills - Extract from items array (skills are items in WFRP4e)
+    const items = characterData.items || [];
+    const skillItems = items.filter((item: any) => item.type === 'skill');
 
-      if (talentItems.length > 0) {
-        stats.talents = talentItems.map((talent: any) => ({
-          name: talent.name,
-          advances: talent.system?.advances?.value || 1,
-          tests: talent.system?.tests?.value || '',
-          description: this.truncateText(talent.system?.description?.value || '', 200)
-        }));
+    if (skillItems.length > 0) {
+      stats.skills = {};
+      for (const skill of skillItems) {
+        const skillSystem = skill.system || {};
+        stats.skills[skill.name] = {
+          characteristic: skillSystem.characteristic?.key || skillSystem.characteristic?.value || '',
+          advances: skillSystem.advances?.value || 0,
+          total: skillSystem.total?.value || 0,
+          modifier: skillSystem.modifier?.value || 0,
+        };
       }
+    }
 
-      // WFRP Traits - Extract creature traits
-      const traitItems = items.filter((item: any) => item.type === 'trait');
+    // WFRP Talents - Extract from items array (talents are also items)
+    const talentItems = items.filter((item: any) => item.type === 'talent');
 
-      if (traitItems.length > 0) {
-        stats.traits = traitItems.map((trait: any) => ({
-          name: trait.name,
-          specification: trait.system?.specification?.value || '',
-          description: this.truncateText(trait.system?.description?.value || '', 200)
-        }));
-      }
+    if (talentItems.length > 0) {
+      stats.talents = talentItems.map((talent: any) => ({
+        name: talent.name,
+        advances: talent.system?.advances?.value || 1,
+        tests: talent.system?.tests?.value || '',
+        description: this.truncateText(talent.system?.description?.value || '', 200)
+      }));
+    }
+
+    // WFRP Traits - Extract creature traits
+    const traitItems = items.filter((item: any) => item.type === 'trait');
+
+    if (traitItems.length > 0) {
+      stats.traits = traitItems.map((trait: any) => ({
+        name: trait.name,
+        specification: trait.system?.specification?.value || '',
+        description: this.truncateText(trait.system?.description?.value || '', 200)
+      }));
     }
 
     return stats;

@@ -138,7 +138,7 @@ export class ManageFortuneFateTools {
         this.logger.info('Getting Fortune/Fate status', { characterName: args.characterName });
 
         try {
-            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
+            const character = await this.foundryClient.query<any>('warhammer-mcp.getCharacterInfo', {
                 characterName: args.characterName,
             });
 
@@ -147,11 +147,6 @@ export class ManageFortuneFateTools {
             }
 
             const system = character.system as any;
-            const isWFRP = !!(system.status?.fortune !== undefined || system.characteristics?.wp);
-
-            if (!isWFRP) {
-                return `${character.name} is not using the WFRP 4e system. Fortune/Fate tracking is only available for WFRP characters.`;
-            }
 
             const fortuneCurrent = system.status?.fortune?.value ?? 0;
             const fateCurrent = system.status?.fate?.value ?? 0;
@@ -214,7 +209,7 @@ export class ManageFortuneFateTools {
         this.logger.info('Adding Fortune points', { characterName: args.characterName, amount: args.amount });
 
         try {
-            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
+            const character = await this.foundryClient.query<any>('warhammer-mcp.getCharacterInfo', {
                 characterName: args.characterName,
             });
 
@@ -223,11 +218,6 @@ export class ManageFortuneFateTools {
             }
 
             const system = character.system as any;
-            const isWFRP = !!(system.status?.fortune !== undefined || system.characteristics?.wp);
-
-            if (!isWFRP) {
-                return `${character.name} is not using the WFRP 4e system. Fortune tracking is only available for WFRP characters.`;
-            }
 
             const fortuneCurrent = system.status?.fortune?.value ?? 0;
             const fateCurrent = system.status?.fate?.value ?? 0;
@@ -244,7 +234,7 @@ export class ManageFortuneFateTools {
                 return `❌ **Cannot Add Fortune**\n\n${character.name}'s Fortune is already at maximum (${fortuneMax}).`;
             }
 
-            await this.foundryClient.query('warhammer-mcp.updateActor', {
+            await this.foundryClient.query<any>('warhammer-mcp.updateActor', {
                 actorId: character.id,
                 updateData: {
                     'system.status.fortune.value': newFortune,
@@ -274,7 +264,7 @@ export class ManageFortuneFateTools {
         this.logger.info('Spending Fortune', { characterName: args.characterName, amount: args.amount, usageType: args.usageType });
 
         try {
-            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
+            const character = await this.foundryClient.query<any>('warhammer-mcp.getCharacterInfo', {
                 characterName: args.characterName,
             });
 
@@ -283,11 +273,6 @@ export class ManageFortuneFateTools {
             }
 
             const system = character.system as any;
-            const isWFRP = !!(system.status?.fortune !== undefined || system.characteristics?.wp);
-
-            if (!isWFRP) {
-                return `${character.name} is not using the WFRP 4e system. Fortune tracking is only available for WFRP characters.`;
-            }
 
             const fortuneCurrent = system.status?.fortune?.value ?? 0;
             const fateCurrent = system.status?.fate?.value ?? 0;
@@ -300,7 +285,7 @@ export class ManageFortuneFateTools {
 
             const newFortune = fortuneCurrent - spendAmount;
 
-            await this.foundryClient.query('warhammer-mcp.updateActor', {
+            await this.foundryClient.query<any>('warhammer-mcp.updateActor', {
                 actorId: character.id,
                 updateData: {
                     'system.status.fortune.value': newFortune,
@@ -338,7 +323,7 @@ export class ManageFortuneFateTools {
         this.logger.info('Refreshing Fortune', { characterName: args.characterName });
 
         try {
-            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
+            const character = await this.foundryClient.query<any>('warhammer-mcp.getCharacterInfo', {
                 characterName: args.characterName,
             });
 
@@ -347,11 +332,6 @@ export class ManageFortuneFateTools {
             }
 
             const system = character.system as any;
-            const isWFRP = !!(system.status?.fortune !== undefined || system.characteristics?.wp);
-
-            if (!isWFRP) {
-                return `${character.name} is not using the WFRP 4e system. Fortune tracking is only available for WFRP characters.`;
-            }
 
             const fortuneCurrent = system.status?.fortune?.value ?? 0;
             const fateCurrent = system.status?.fate?.value ?? 0;
@@ -365,7 +345,7 @@ export class ManageFortuneFateTools {
                 return `${character.name}'s Fortune is already at maximum (${fortuneMax}).`;
             }
 
-            await this.foundryClient.query('warhammer-mcp.updateActor', {
+            await this.foundryClient.query<any>('warhammer-mcp.updateActor', {
                 actorId: character.id,
                 updateData: {
                     'system.status.fortune.value': fortuneMax,
@@ -392,7 +372,7 @@ export class ManageFortuneFateTools {
         this.logger.info('Adding Fate point (RARE EVENT)', { characterName: args.characterName, amount: args.amount });
 
         try {
-            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
+            const character = await this.foundryClient.query<any>('warhammer-mcp.getCharacterInfo', {
                 characterName: args.characterName,
             });
 
@@ -401,18 +381,13 @@ export class ManageFortuneFateTools {
             }
 
             const system = character.system as any;
-            const isWFRP = !!(system.status?.fate !== undefined || system.characteristics?.wp);
-
-            if (!isWFRP) {
-                return `${character.name} is not using the WFRP 4e system. Fate tracking is only available for WFRP characters.`;
-            }
 
             const fateCurrent = system.status?.fate?.value ?? 0;
             const fateMax = system.status?.fate?.max || fateCurrent;
             const newFate = fateCurrent + args.amount;
             const newFateMax = fateMax + args.amount;
 
-            await this.foundryClient.query('warhammer-mcp.updateActor', {
+            await this.foundryClient.query<any>('warhammer-mcp.updateActor', {
                 actorId: character.id,
                 updateData: {
                     'system.status.fate.value': newFate,
@@ -450,7 +425,7 @@ export class ManageFortuneFateTools {
         this.logger.info('Burning Fate', { characterName: args.characterName });
 
         try {
-            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
+            const character = await this.foundryClient.query<any>('warhammer-mcp.getCharacterInfo', {
                 characterName: args.characterName,
             });
 
@@ -459,11 +434,6 @@ export class ManageFortuneFateTools {
             }
 
             const system = character.system as any;
-            const isWFRP = !!(system.status?.fate !== undefined || system.characteristics?.wp);
-
-            if (!isWFRP) {
-                return `${character.name} is not using the WFRP 4e system. Fate tracking is only available for WFRP characters.`;
-            }
 
             const fateCurrent = system.status?.fate?.value ?? 0;
             const fateMax = system.status?.fate?.max || fateCurrent;
@@ -475,7 +445,7 @@ export class ManageFortuneFateTools {
             const newFate = fateCurrent - 1;
             const newFateMax = fateMax - 1;
 
-            await this.foundryClient.query('warhammer-mcp.updateActor', {
+            await this.foundryClient.query<any>('warhammer-mcp.updateActor', {
                 actorId: character.id,
                 updateData: {
                     'system.status.fate.value': newFate,

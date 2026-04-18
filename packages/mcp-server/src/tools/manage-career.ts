@@ -122,16 +122,12 @@ Examples:
     private async handleGetAdvancement(args: { characterName: string }): Promise<string> {
         this.logger.info('Getting career advancement', { characterName: args.characterName });
 
-        const response = await this.foundryClient.query(
+        const response = await this.foundryClient.query<any>(
             "warhammer-mcp.getCareerAdvancement",
             { characterName: args.characterName }
         );
 
-        if (!response.success) {
-            return `❌ Failed to get career advancement: ${response.error || "Unknown error"}`;
-        }
-
-        return response.data || "Career advancement information retrieved";
+        return response ?? "Career advancement information retrieved";
     }
 
     private async handleAdvanceCharacteristic(args: {
@@ -141,7 +137,7 @@ Examples:
     }): Promise<string> {
         this.logger.info('Advancing characteristic', args);
 
-        const response = await this.foundryClient.query(
+        await this.foundryClient.query<any>(
             "warhammer-mcp.advanceCharacteristic",
             {
                 characterName: args.characterName,
@@ -149,10 +145,6 @@ Examples:
                 advances: args.advances
             }
         );
-
-        if (!response.success) {
-            return `❌ Failed to advance characteristic: ${response.error || "Unknown error"}`;
-        }
 
         const charName = args.characteristic.toUpperCase();
         const xpCost = 25 * args.advances; // Simplified - actual cost varies
@@ -167,7 +159,7 @@ Examples:
     }): Promise<string> {
         this.logger.info('Advancing skill', args);
 
-        const response = await this.foundryClient.query(
+        await this.foundryClient.query<any>(
             "warhammer-mcp.advanceSkill",
             {
                 characterName: args.characterName,
@@ -175,10 +167,6 @@ Examples:
                 advances: args.advances
             }
         );
-
-        if (!response.success) {
-            return `❌ Failed to advance skill: ${response.error || "Unknown error"}`;
-        }
 
         return `✅ Advanced **${args.skillName}** by ${args.advances} for ${args.characterName}`;
     }
@@ -190,7 +178,7 @@ Examples:
     }): Promise<string> {
         this.logger.info('Advancing talent', args);
 
-        const response = await this.foundryClient.query(
+        await this.foundryClient.query<any>(
             "warhammer-mcp.advanceTalent",
             {
                 characterName: args.characterName,
@@ -198,10 +186,6 @@ Examples:
                 ranks: args.ranks
             }
         );
-
-        if (!response.success) {
-            return `❌ Failed to advance talent: ${response.error || "Unknown error"}`;
-        }
 
         const xpCost = 100 * args.ranks;
         return `✅ Advanced **${args.talentName}** by ${args.ranks} rank(s) for ${args.characterName}\n` +
@@ -214,17 +198,13 @@ Examples:
     }): Promise<string> {
         this.logger.info('Changing career', args);
 
-        const response = await this.foundryClient.query(
+        await this.foundryClient.query<any>(
             "warhammer-mcp.changeCareer",
             {
                 characterName: args.characterName,
                 newCareerName: args.newCareerName
             }
         );
-
-        if (!response.success) {
-            return `❌ Failed to change career: ${response.error || "Unknown error"}`;
-        }
 
         return `✅ **${args.characterName}** changed career to **${args.newCareerName}**\n\n` +
             `XP cost: 100-200 depending on current career completion`;

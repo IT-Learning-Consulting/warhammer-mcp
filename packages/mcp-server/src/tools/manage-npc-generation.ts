@@ -191,7 +191,7 @@ export class ManageNPCGenerationTool {
             totalXP: args.totalXP,
         });
 
-        const response = await this.foundryClient.query(
+        const response = await this.foundryClient.query<any>(
             "warhammer-mcp.createCustomNPC",
             {
                 name: args.name,
@@ -205,18 +205,7 @@ export class ManageNPCGenerationTool {
             }
         );
 
-        if (!response.success) {
-            return {
-                content: [
-                    {
-                        type: "text",
-                        text: `❌ Failed to create NPC: ${response.error || "Unknown error"}`,
-                    },
-                ],
-            };
-        }
-
-        const npc = response.data;
+        const npc = response;
         let resultText = `✨ **NPC ${args.createInFoundry ? "Created" : "Preview"}**\n\n`;
         resultText += `**Name:** ${args.name}\n`;
         resultText += `**Archetype:** ${args.archetype}\n`;
@@ -386,7 +375,7 @@ export class ManageNPCGenerationTool {
             totalXP: args.totalXP,
         });
 
-        const response = await this.foundryClient.query(
+        const response = await this.foundryClient.query<any>(
             "warhammer-mcp.previewNPCXP",
             {
                 totalXP: args.totalXP,
@@ -395,18 +384,7 @@ export class ManageNPCGenerationTool {
             }
         );
 
-        if (!response.success) {
-            return {
-                content: [
-                    {
-                        type: "text",
-                        text: `❌ Failed to preview XP: ${response.error || "Unknown error"}`,
-                    },
-                ],
-            };
-        }
-
-        const preview = response.data;
+        const preview = response;
         let resultText = `📊 **XP Distribution Preview**\n\n`;
         resultText += `**Archetype:** ${args.archetype}\n`;
         resultText += `**Species:** ${args.species}\n`;

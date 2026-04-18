@@ -142,7 +142,7 @@ export class ManageResolveResilienceTools {
         this.logger.info('Getting Resilience/Resolve status', { characterName: args.characterName });
 
         try {
-            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
+            const character = await this.foundryClient.query<any>('warhammer-mcp.getCharacterInfo', {
                 characterName: args.characterName,
             });
 
@@ -151,11 +151,6 @@ export class ManageResolveResilienceTools {
             }
 
             const system = character.system as any;
-            const isWFRP = !!(system.status?.resolve !== undefined || system.characteristics?.wp);
-
-            if (!isWFRP) {
-                return `${character.name} is not using the WFRP 4e system. Resilience/Resolve tracking is only available for WFRP characters.`;
-            }
 
             const resolveCurrent = system.status?.resolve?.value ?? 0;
             const resilienceCurrent = system.status?.resilience?.value ?? 0;
@@ -218,7 +213,7 @@ export class ManageResolveResilienceTools {
         this.logger.info('Adding Resolve points', { characterName: args.characterName, amount: args.amount });
 
         try {
-            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
+            const character = await this.foundryClient.query<any>('warhammer-mcp.getCharacterInfo', {
                 characterName: args.characterName,
             });
 
@@ -227,11 +222,6 @@ export class ManageResolveResilienceTools {
             }
 
             const system = character.system as any;
-            const isWFRP = !!(system.status?.resolve !== undefined || system.characteristics?.wp);
-
-            if (!isWFRP) {
-                return `${character.name} is not using the WFRP 4e system.`;
-            }
 
             const resolveCurrent = system.status?.resolve?.value ?? 0;
             const resilienceCurrent = system.status?.resilience?.value ?? 0;
@@ -248,7 +238,7 @@ export class ManageResolveResilienceTools {
                 return `❌ **Cannot Add Resolve**\n\n${character.name}'s Resolve is already at maximum (${resolveMax}).`;
             }
 
-            await this.foundryClient.query('warhammer-mcp.updateActor', {
+            await this.foundryClient.query<any>('warhammer-mcp.updateActor', {
                 actorId: character.id,
                 updateData: {
                     'system.status.resolve.value': newResolve,
@@ -278,7 +268,7 @@ export class ManageResolveResilienceTools {
         this.logger.info('Spending Resolve', { characterName: args.characterName, usageType: args.usageType });
 
         try {
-            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
+            const character = await this.foundryClient.query<any>('warhammer-mcp.getCharacterInfo', {
                 characterName: args.characterName,
             });
 
@@ -287,11 +277,6 @@ export class ManageResolveResilienceTools {
             }
 
             const system = character.system as any;
-            const isWFRP = !!(system.status?.resolve !== undefined || system.characteristics?.wp);
-
-            if (!isWFRP) {
-                return `${character.name} is not using the WFRP 4e system.`;
-            }
 
             const resolveCurrent = system.status?.resolve?.value ?? 0;
             const resilienceCurrent = system.status?.resilience?.value ?? 0;
@@ -304,7 +289,7 @@ export class ManageResolveResilienceTools {
 
             const newResolve = resolveCurrent - spendAmount;
 
-            await this.foundryClient.query('warhammer-mcp.updateActor', {
+            await this.foundryClient.query<any>('warhammer-mcp.updateActor', {
                 actorId: character.id,
                 updateData: {
                     'system.status.resolve.value': newResolve,
@@ -343,7 +328,7 @@ export class ManageResolveResilienceTools {
         this.logger.info('Refreshing Resolve', { characterName: args.characterName });
 
         try {
-            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
+            const character = await this.foundryClient.query<any>('warhammer-mcp.getCharacterInfo', {
                 characterName: args.characterName,
             });
 
@@ -352,11 +337,6 @@ export class ManageResolveResilienceTools {
             }
 
             const system = character.system as any;
-            const isWFRP = !!(system.status?.resolve !== undefined || system.characteristics?.wp);
-
-            if (!isWFRP) {
-                return `${character.name} is not using the WFRP 4e system.`;
-            }
 
             const resolveCurrent = system.status?.resolve?.value ?? 0;
             const resilienceCurrent = system.status?.resilience?.value ?? 0;
@@ -370,7 +350,7 @@ export class ManageResolveResilienceTools {
                 return `${character.name}'s Resolve is already at maximum (${resolveMax}).`;
             }
 
-            await this.foundryClient.query('warhammer-mcp.updateActor', {
+            await this.foundryClient.query<any>('warhammer-mcp.updateActor', {
                 actorId: character.id,
                 updateData: {
                     'system.status.resolve.value': resolveMax,
@@ -400,7 +380,7 @@ export class ManageResolveResilienceTools {
         this.logger.info('Adding Resilience point (RARE EVENT)', { characterName: args.characterName, amount: args.amount });
 
         try {
-            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
+            const character = await this.foundryClient.query<any>('warhammer-mcp.getCharacterInfo', {
                 characterName: args.characterName,
             });
 
@@ -409,18 +389,13 @@ export class ManageResolveResilienceTools {
             }
 
             const system = character.system as any;
-            const isWFRP = !!(system.status?.resilience !== undefined || system.characteristics?.wp);
-
-            if (!isWFRP) {
-                return `${character.name} is not using the WFRP 4e system.`;
-            }
 
             const resilienceCurrent = system.status?.resilience?.value ?? 0;
             const resilienceMax = system.status?.resilience?.max || resilienceCurrent;
             const newResilience = resilienceCurrent + args.amount;
             const newResilienceMax = resilienceMax + args.amount;
 
-            await this.foundryClient.query('warhammer-mcp.updateActor', {
+            await this.foundryClient.query<any>('warhammer-mcp.updateActor', {
                 actorId: character.id,
                 updateData: {
                     'system.status.resilience.value': newResilience,
@@ -458,7 +433,7 @@ export class ManageResolveResilienceTools {
         this.logger.info('Spending Resilience (PERMANENT)', { characterName: args.characterName, usageType: args.usageType });
 
         try {
-            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
+            const character = await this.foundryClient.query<any>('warhammer-mcp.getCharacterInfo', {
                 characterName: args.characterName,
             });
 
@@ -467,11 +442,6 @@ export class ManageResolveResilienceTools {
             }
 
             const system = character.system as any;
-            const isWFRP = !!(system.status?.resilience !== undefined || system.characteristics?.wp);
-
-            if (!isWFRP) {
-                return `${character.name} is not using the WFRP 4e system.`;
-            }
 
             const resilienceCurrent = system.status?.resilience?.value ?? 0;
             const resilienceMax = system.status?.resilience?.max || resilienceCurrent;
@@ -483,7 +453,7 @@ export class ManageResolveResilienceTools {
             const newResilience = resilienceCurrent - 1;
             const newResilienceMax = resilienceMax - 1;
 
-            await this.foundryClient.query('warhammer-mcp.updateActor', {
+            await this.foundryClient.query<any>('warhammer-mcp.updateActor', {
                 actorId: character.id,
                 updateData: {
                     'system.status.resilience.value': newResilience,

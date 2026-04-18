@@ -100,7 +100,7 @@ export class SceneTools {
     this.logger.info('Getting current scene information', { includeTokens, includeHidden });
 
     try {
-      const sceneData = await this.foundryClient.query('warhammer-mcp.getActiveScene');
+      const sceneData = await this.foundryClient.query<any>('warhammer-mcp.getActiveScene');
 
       this.logger.debug('Successfully retrieved scene data', {
         sceneId: sceneData.id,
@@ -120,7 +120,7 @@ export class SceneTools {
     this.logger.info('Getting world information');
 
     try {
-      const worldData = await this.foundryClient.query('warhammer-mcp.getWorldInfo');
+      const worldData = await this.foundryClient.query<any>('warhammer-mcp.getWorldInfo');
 
       this.logger.debug('Successfully retrieved world data', {
         worldId: worldData.id,
@@ -142,7 +142,7 @@ export class SceneTools {
         filter: typeof safeInput.filter === 'string' ? safeInput.filter : undefined,
         include_active_only: Boolean(safeInput.include_active_only),
       };
-      return await this.foundryClient.query('warhammer-mcp.list-scenes', params);
+      return await this.foundryClient.query<any>('warhammer-mcp.list-scenes', params);
     } catch (error: any) {
       this.logger.error('List scenes failed', { error, input: safeInput });
       return { success: false, error: error?.message ?? 'Unknown error' };
@@ -162,7 +162,7 @@ export class SceneTools {
         optimize_view: safeInput.optimize_view !== false,
       };
 
-      return await this.foundryClient.query('warhammer-mcp.switch-scene', params);
+      return await this.foundryClient.query<any>('warhammer-mcp.switch-scene', params);
     } catch (error: any) {
       this.logger.error('Switch scene failed', { error, input: safeInput });
       return { success: false, error: error?.message ?? 'Unknown error' };

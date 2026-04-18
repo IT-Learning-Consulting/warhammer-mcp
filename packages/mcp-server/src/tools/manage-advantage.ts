@@ -106,7 +106,7 @@ export class ManageAdvantageTools {
         this.logger.info('Getting Advantage', { characterName: args.characterName });
 
         try {
-            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
+            const character = await this.foundryClient.query<any>('warhammer-mcp.getCharacterInfo', {
                 characterName: args.characterName,
             });
 
@@ -115,11 +115,6 @@ export class ManageAdvantageTools {
             }
 
             const system = character.system as any;
-            const isWFRP = !!(system.status?.advantage !== undefined || system.characteristics?.ws);
-
-            if (!isWFRP) {
-                return `${character.name} is not using the WFRP 4e system. Advantage tracking is only available for WFRP characters.`;
-            }
 
             const advantageCurrent = system.status?.advantage?.value || 0;
             const advantageMax = system.status?.advantage?.max || 10;
@@ -175,7 +170,7 @@ export class ManageAdvantageTools {
         this.logger.info('Adding Advantage', { characterName: args.characterName, amount: args.amount });
 
         try {
-            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
+            const character = await this.foundryClient.query<any>('warhammer-mcp.getCharacterInfo', {
                 characterName: args.characterName,
             });
 
@@ -184,11 +179,6 @@ export class ManageAdvantageTools {
             }
 
             const system = character.system as any;
-            const isWFRP = !!(system.status?.advantage !== undefined || system.characteristics?.ws);
-
-            if (!isWFRP) {
-                return `${character.name} is not using the WFRP 4e system.`;
-            }
 
             const advantageCurrent = system.status?.advantage?.value || 0;
             const advantageMax = system.status?.advantage?.max || 10;
@@ -196,7 +186,7 @@ export class ManageAdvantageTools {
             const newAdvantage = Math.min(advantageMax, advantageCurrent + amount);
             const actualGain = newAdvantage - advantageCurrent;
 
-            await this.foundryClient.query('warhammer-mcp.updateActor', {
+            await this.foundryClient.query<any>('warhammer-mcp.updateActor', {
                 actorId: character.id,
                 updateData: {
                     'system.status.advantage.value': newAdvantage,
@@ -239,7 +229,7 @@ export class ManageAdvantageTools {
         this.logger.info('Removing Advantage', { characterName: args.characterName, amount: args.amount });
 
         try {
-            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
+            const character = await this.foundryClient.query<any>('warhammer-mcp.getCharacterInfo', {
                 characterName: args.characterName,
             });
 
@@ -248,11 +238,6 @@ export class ManageAdvantageTools {
             }
 
             const system = character.system as any;
-            const isWFRP = !!(system.status?.advantage !== undefined || system.characteristics?.ws);
-
-            if (!isWFRP) {
-                return `${character.name} is not using the WFRP 4e system.`;
-            }
 
             const advantageCurrent = system.status?.advantage?.value || 0;
             const amount = args.amount ?? 1;
@@ -263,7 +248,7 @@ export class ManageAdvantageTools {
                 return `${character.name} already has 0 Advantage. No Advantage to lose.`;
             }
 
-            await this.foundryClient.query('warhammer-mcp.updateActor', {
+            await this.foundryClient.query<any>('warhammer-mcp.updateActor', {
                 actorId: character.id,
                 updateData: {
                     'system.status.advantage.value': newAdvantage,
@@ -300,7 +285,7 @@ export class ManageAdvantageTools {
         this.logger.info('Clearing Advantage', { characterName: args.characterName });
 
         try {
-            const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
+            const character = await this.foundryClient.query<any>('warhammer-mcp.getCharacterInfo', {
                 characterName: args.characterName,
             });
 
@@ -315,7 +300,7 @@ export class ManageAdvantageTools {
                 return `${character.name} already has 0 Advantage.`;
             }
 
-            await this.foundryClient.query('warhammer-mcp.updateActor', {
+            await this.foundryClient.query<any>('warhammer-mcp.updateActor', {
                 actorId: character.id,
                 updateData: {
                     'system.status.advantage.value': 0,

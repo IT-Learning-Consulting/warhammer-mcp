@@ -1,6 +1,7 @@
 import { Logger } from './logger.js';
 import { Config } from './config.js';
 import { FoundryConnector } from './foundry-connector.js';
+import type { HandlerEnvelope } from '@foundry-mcp/shared';
 
 export interface FoundryQuery {
   method: string;
@@ -50,22 +51,36 @@ export class FoundryClient {
     });
   }
 
-  async query(method: string, data?: any): Promise<any> {
+  async query<T = unknown>(method: string, data?: any): Promise<T> {
     if (!this.connector.isConnected()) {
       throw new Error('Foundry VTT module not connected. Please ensure Foundry is running and the MCP Bridge module is enabled.');
     }
 
     this.logger.debug('Sending query to Foundry module', { method, data });
 
+    let envelope: HandlerEnvelope<T>;
     try {
-      const result = await this.connector.query(method, data);
-      this.logger.debug('Query successful', { method, hasResult: !!result });
-      return result;
+      envelope = (await this.connector.query(method, data)) as HandlerEnvelope<T>;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown query error';
-      this.logger.error('Query failed', { method, error: errorMessage });
+      this.logger.error('Query transport failed', { method, error: errorMessage });
       throw new Error(`Query ${method} failed: ${errorMessage}`);
     }
+
+    // Single unwrap site (PRD R3, CCR-1). Every handler must emit {success, data?, error?}.
+    if (!envelope || typeof envelope.success !== 'boolean') {
+      const preview = JSON.stringify(envelope).slice(0, 200);
+      this.logger.error('Malformed envelope from Foundry', { method, preview });
+      throw new Error(`Query ${method} returned malformed envelope: ${preview}`);
+    }
+    if (!envelope.success) {
+      const message = envelope.error ?? 'no error message';
+      this.logger.error('Query failed', { method, error: message });
+      throw new Error(`Query ${method} failed: ${message}`);
+    }
+
+    this.logger.debug('Query successful', { method });
+    return envelope.data as T;
   }
 
   ping(): Promise<any> {

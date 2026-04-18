@@ -1,6 +1,62 @@
+import { z } from 'zod';
 import { MODULE_ID } from './constants.js';
 import { FoundryDataAccess } from './data-access.js';
+import { wrappedWrite } from './transaction-manager.js';
+import { permissionManager } from './permissions.js';
 import { handleGetPartyCharacters, handleFindPlayers, handleFindActor } from './_staging/orphan-handlers.js';
+import {
+  // actor domain
+  GetCharacterInfoInput,
+  ListActorsInput,
+  CreateActorInput,
+  UpdateActorInput,
+  CreateActorFromCompendiumInput,
+  ValidateWritePermissionsInput,
+  SetActorOwnershipInput,
+  GetActorOwnershipInput,
+  GetFriendlyNPCsInput,
+  GetConnectedPlayersInput,
+  // item domain
+  CreateItemInput,
+  UpdateItemInput,
+  DeleteItemInput,
+  ModifyItemQualitiesInput,
+  AddItemFromCompendiumInput,
+  // compendium domain
+  SearchCompendiumInput,
+  ListCreaturesByCriteriaInput,
+  GetAvailablePacksInput,
+  GetCompendiumDocumentFullInput,
+  GetEnhancedCreatureIndexInput,
+  // scene domain
+  GetActiveSceneInput,
+  ListScenesInput,
+  SwitchSceneInput,
+  AddActorsToSceneInput,
+  // meta (journal, rolltable, ping, world, player rolls)
+  PingInput,
+  GetWorldInfoInput,
+  CreateJournalEntryInput,
+  ListJournalsInput,
+  GetJournalContentInput,
+  UpdateJournalContentInput,
+  RequestPlayerRollsInput,
+  CreateRollTableInput,
+  AddTableResultsInput,
+  ListRollTablesInput,
+  GetRollTableInput,
+  RollOnTableInput,
+  DeleteRollTableInput,
+} from '@foundry-mcp/shared';
+
+/**
+ * Wrap ZodError as Invalid input for consistent boundary error shape (CCR-5).
+ */
+function rethrowAsInvalidInput(error: unknown): void {
+  if (error instanceof z.ZodError) {
+    throw new Error(`Invalid input: ${error.message}`);
+  }
+}
 
 export class QueryHandlers {
   public dataAccess: FoundryDataAccess;
@@ -14,40 +70,25 @@ export class QueryHandlers {
    */
   private validateGMAccess(): { allowed: boolean; error?: any } {
     if (!game.user?.isGM) {
-      // Silent failure - no error message for non-GM users
       return { allowed: false };
     }
     return { allowed: true };
   }
 
-  /**
-   * Register all query handlers in CONFIG.queries
-   */
   registerHandlers(): void {
     const modulePrefix = MODULE_ID;
 
-    // Character/Actor queries
     CONFIG.queries[`${modulePrefix}.getCharacterInfo`] = this.handleGetCharacterInfo.bind(this);
     CONFIG.queries[`${modulePrefix}.listActors`] = this.handleListActors.bind(this);
-
-    // Compendium queries
     CONFIG.queries[`${modulePrefix}.searchCompendium`] = this.handleSearchCompendium.bind(this);
     CONFIG.queries[`${modulePrefix}.addItemFromCompendium`] = this.handleAddItemFromCompendium.bind(this);
     CONFIG.queries[`${modulePrefix}.listCreaturesByCriteria`] = this.handleListCreaturesByCriteria.bind(this);
     CONFIG.queries[`${modulePrefix}.getAvailablePacks`] = this.handleGetAvailablePacks.bind(this);
-
-    // Scene queries
     CONFIG.queries[`${modulePrefix}.getActiveScene`] = this.handleGetActiveScene.bind(this);
     CONFIG.queries[`${modulePrefix}.list-scenes`] = this.handleListScenes.bind(this);
     CONFIG.queries[`${modulePrefix}.switch-scene`] = this.handleSwitchScene.bind(this);
-
-    // World queries
     CONFIG.queries[`${modulePrefix}.getWorldInfo`] = this.handleGetWorldInfo.bind(this);
-
-    // Utility queries
     CONFIG.queries[`${modulePrefix}.ping`] = this.handlePing.bind(this);
-
-    // Phase 2 & 3: Write operation queries
     CONFIG.queries[`${modulePrefix}.createActorFromCompendium`] = this.handleCreateActorFromCompendium.bind(this);
     CONFIG.queries[`${modulePrefix}.getCompendiumDocumentFull`] = this.handleGetCompendiumDocumentFull.bind(this);
     CONFIG.queries[`${modulePrefix}.addActorsToScene`] = this.handleAddActorsToScene.bind(this);
@@ -56,14 +97,8 @@ export class QueryHandlers {
     CONFIG.queries[`${modulePrefix}.listJournals`] = this.handleListJournals.bind(this);
     CONFIG.queries[`${modulePrefix}.getJournalContent`] = this.handleGetJournalContent.bind(this);
     CONFIG.queries[`${modulePrefix}.updateJournalContent`] = this.handleUpdateJournalContent.bind(this);
-
-    // Phase 4: Dice roll queries
     CONFIG.queries[`${modulePrefix}.request-player-rolls`] = this.handleRequestPlayerRolls.bind(this);
-
-    // Enhanced creature index for campaign analysis
     CONFIG.queries[`${modulePrefix}.getEnhancedCreatureIndex`] = this.handleGetEnhancedCreatureIndex.bind(this);
-
-    // Phase 6: Actor ownership management
     CONFIG.queries[`${modulePrefix}.setActorOwnership`] = this.handleSetActorOwnership.bind(this);
     CONFIG.queries[`${modulePrefix}.getActorOwnership`] = this.handleGetActorOwnership.bind(this);
     CONFIG.queries[`${modulePrefix}.getFriendlyNPCs`] = this.handleGetFriendlyNPCs.bind(this);
@@ -71,313 +106,192 @@ export class QueryHandlers {
     CONFIG.queries[`${modulePrefix}.getConnectedPlayers`] = this.handleGetConnectedPlayers.bind(this);
     CONFIG.queries[`${modulePrefix}.findPlayers`] = (args: any) => handleFindPlayers(args, this.dataAccess);
     CONFIG.queries[`${modulePrefix}.findActor`] = (args: any) => handleFindActor(args, this.dataAccess);
-
-    // CRUD operations for items and actors
     CONFIG.queries[`${modulePrefix}.createActor`] = this.handleCreateActor.bind(this);
     CONFIG.queries[`${modulePrefix}.updateActor`] = this.handleUpdateActor.bind(this);
     CONFIG.queries[`${modulePrefix}.updateItem`] = this.handleUpdateItem.bind(this);
     CONFIG.queries[`${modulePrefix}.createItem`] = this.handleCreateItem.bind(this);
     CONFIG.queries[`${modulePrefix}.deleteItem`] = this.handleDeleteItem.bind(this);
     CONFIG.queries[`${modulePrefix}.modifyItemQualities`] = this.handleModifyItemQualities.bind(this);
-
-    // RollTable operations
     CONFIG.queries[`${modulePrefix}.createRollTable`] = this.handleCreateRollTable.bind(this);
     CONFIG.queries[`${modulePrefix}.addTableResults`] = this.handleAddTableResults.bind(this);
     CONFIG.queries[`${modulePrefix}.listRollTables`] = this.handleListRollTables.bind(this);
     CONFIG.queries[`${modulePrefix}.getRollTable`] = this.handleGetRollTable.bind(this);
     CONFIG.queries[`${modulePrefix}.rollOnTable`] = this.handleRollOnTable.bind(this);
     CONFIG.queries[`${modulePrefix}.deleteRollTable`] = this.handleDeleteRollTable.bind(this);
-
   }
 
-  /**
-   * Unregister all query handlers
-   */
   unregisterHandlers(): void {
     const modulePrefix = MODULE_ID;
     const keysToRemove = Object.keys(CONFIG.queries).filter(key => key.startsWith(modulePrefix));
-
     for (const key of keysToRemove) {
       delete CONFIG.queries[key];
     }
-
   }
 
-  /**
-   * Handle query requests from other parts of the module
-   */
   async handleQuery(queryName: string, data: any): Promise<any> {
     try {
       const handler = CONFIG.queries[queryName];
       if (!handler || typeof handler !== 'function') {
         throw new Error(`Query handler not found: ${queryName}`);
       }
-
       return await handler(data);
     } catch (error) {
       console.error(`[${MODULE_ID}] Query failed: ${queryName}`, error);
       return {
         error: error instanceof Error ? error.message : 'Unknown error',
-        success: false
+        success: false,
       };
     }
   }
 
-  /**
-   * Handle character information request
-   */
-  private async handleGetCharacterInfo(data: { characterName?: string; characterId?: string }): Promise<any> {
+  private async handleGetCharacterInfo(data: unknown): Promise<any> {
     try {
-      // SECURITY: Silent GM validation
       const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) {
-        return { error: 'Access denied', success: false };
-      }
-
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
-
-      const identifier = data.characterName || data.characterId;
-      if (!identifier) {
-        throw new Error('characterName or characterId is required');
-      }
-
-      return await this.dataAccess.getCharacterInfo(identifier);
+      const parsed = GetCharacterInfoInput.strict().parse(data ?? {});
+      const identifier = parsed.characterName || parsed.characterId;
+      if (!identifier) throw new Error('characterName or characterId is required');
+      return { success: true, data: await this.dataAccess.getCharacterInfo(identifier) };
     } catch (error) {
+      rethrowAsInvalidInput(error);
       throw new Error(`Failed to get character info: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
-  /**
-   * Handle list actors request
-   */
-  private async handleListActors(data: { type?: string }): Promise<any> {
+  private async handleListActors(data: unknown): Promise<any> {
     try {
-      // SECURITY: Silent GM validation
       const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) {
-        return { error: 'Access denied', success: false };
-      }
-
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
-
-      return await this.dataAccess.listActors(data.type);
+      const parsed = ListActorsInput.strict().parse(data ?? {});
+      return { success: true, data: await this.dataAccess.listActors(parsed.type) };
     } catch (error) {
+      rethrowAsInvalidInput(error);
       throw new Error(`Failed to list actors: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
-  /**
-   * Handle compendium search request
-   */
-  private async handleSearchCompendium(data: {
-    query: string;
-    packType?: string;
-    filters?: {
-      challengeRating?: number | { min?: number; max?: number };
-      creatureType?: string;
-      size?: string;
-      spellcaster?: boolean;
-    }
-  }): Promise<any> {
+  private async handleSearchCompendium(data: unknown): Promise<any> {
     try {
-      // SECURITY: Silent GM validation
       const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) {
-        return { error: 'Access denied', success: false };
-      }
-
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
-
-      // Add better parameter validation
-      if (!data || typeof data !== 'object') {
-        throw new Error('Invalid data parameter structure');
-      }
-
-      if (!data.query || typeof data.query !== 'string') {
-        throw new Error('query parameter is required and must be a string');
-      }
-
-
-      return await this.dataAccess.searchCompendium(data.query, data.packType, data.filters);
+      const parsed = SearchCompendiumInput.strict().parse(data ?? {});
+      return { success: true, data: await this.dataAccess.searchCompendium(parsed.query, parsed.packType, parsed.filters as any, parsed.itemType) };
     } catch (error) {
+      rethrowAsInvalidInput(error);
       throw new Error(`Failed to search compendium: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
-  /**
-   * Handle add item from compendium request
-   * Adds an item (skill, talent, mutation, spell, etc.) from a compendium to an actor
-   */
-  private async handleAddItemFromCompendium(data: {
-    actorId: string;
-    compendiumId: string; // UUID like "Compendium.wfrp4e-core.items.Item.abc123" or "Compendium.wfrp4e-core.mutations.xyz789"
-  }): Promise<any> {
+  private async handleAddItemFromCompendium(data: unknown): Promise<any> {
     try {
-      // SECURITY: Silent GM validation
       const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) {
-        return { error: 'Access denied', success: false };
-      }
-
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
+      const parsed = AddItemFromCompendiumInput.strict().parse(data ?? {});
+      return await wrappedWrite('addItemFromCompendium', async () => {
+        const actor = game.actors?.get(parsed.actorId);
+        if (!actor) throw new Error(`Actor with ID "${parsed.actorId}" not found`);
 
-      // Validate parameters
-      if (!data || typeof data !== 'object') {
-        throw new Error('Invalid data parameter structure');
-      }
+        const itemDoc = await fromUuid(parsed.compendiumId);
+        if (!itemDoc) throw new Error(`Item with UUID "${parsed.compendiumId}" not found in compendium`);
 
-      if (!data.actorId || typeof data.actorId !== 'string') {
-        throw new Error('actorId parameter is required and must be a string');
-      }
+        const itemData = itemDoc.toObject();
+        const createdItems = await actor.createEmbeddedDocuments('Item', [itemData]);
+        if (!createdItems || createdItems.length === 0) throw new Error('Failed to create item on actor');
 
-      if (!data.compendiumId || typeof data.compendiumId !== 'string') {
-        throw new Error('compendiumId parameter is required and must be a string (UUID format)');
-      }
+        const createdItem = createdItems[0];
+        ui.notifications?.info(`MCP: Added ${createdItem.name} to ${actor.name} (from compendium)`);
 
-      // Get the actor
-      const actor = game.actors?.get(data.actorId);
-      if (!actor) {
-        throw new Error(`Actor with ID "${data.actorId}" not found`);
-      }
-
-      // Get the item from compendium using UUID
-      const itemDoc = await fromUuid(data.compendiumId);
-      if (!itemDoc) {
-        throw new Error(`Item with UUID "${data.compendiumId}" not found in compendium`);
-      }
-
-      // Convert to plain object for creation
-      const itemData = itemDoc.toObject();
-
-      // Create the item on the actor
-      const createdItems = await actor.createEmbeddedDocuments('Item', [itemData]);
-
-      if (!createdItems || createdItems.length === 0) {
-        throw new Error('Failed to create item on actor');
-      }
-
-      const createdItem = createdItems[0];
-
-      // Show notification to GM
-      ui.notifications?.info(`MCP: Added ${createdItem.name} to ${actor.name} (from compendium)`);
-
-      return {
-        success: true,
-        itemId: createdItem.id,
-        itemName: createdItem.name,
-        itemType: (createdItem as any).type,
-        actorId: actor.id,
-        actorName: actor.name,
-        message: `Successfully added "${createdItem.name}" to ${actor.name} from compendium`
-      };
+        const payload = {
+          itemId: createdItem.id,
+          itemName: createdItem.name,
+          itemType: (createdItem as any).type,
+          actorId: actor.id,
+          actorName: actor.name,
+          message: `Successfully added "${createdItem.name}" to ${actor.name} from compendium`,
+        };
+        return { success: true, data: payload };
+      });
     } catch (error) {
+      rethrowAsInvalidInput(error);
       throw new Error(`Failed to add item from compendium: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
-  /**
-   * Handle list creatures by criteria request
-   */
-  private async handleListCreaturesByCriteria(data: {
-    challengeRating?: number | { min?: number; max?: number };
-    creatureType?: string;
-    size?: string;
-    hasSpells?: boolean;
-    hasSpecialAbilities?: boolean;
-    limit?: number;
-  }): Promise<any> {
+  private async handleListCreaturesByCriteria(data: unknown): Promise<any> {
     try {
-      // SECURITY: Silent GM validation
       const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) {
-        return { error: 'Access denied', success: false };
-      }
-
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
-
-
-      const result = await this.dataAccess.listCreaturesByCriteria(data);
-
-      // Handle the new format with search summary
-      return {
-        response: result
-      };
+      const parsed = ListCreaturesByCriteriaInput.strict().parse(data ?? {});
+      const result = await this.dataAccess.listCreaturesByCriteria(parsed as any);
+      return { success: true, data: result };
     } catch (error) {
+      rethrowAsInvalidInput(error);
       throw new Error(`Failed to list creatures by criteria: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
-  /**
-   * Handle get available packs request
-   */
-  private async handleGetAvailablePacks(): Promise<any> {
+  private async handleGetAvailablePacks(data: unknown): Promise<any> {
     try {
-      // SECURITY: Silent GM validation
       const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) {
-        return { error: 'Access denied', success: false };
-      }
-
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
-      return await this.dataAccess.getAvailablePacks();
+      GetAvailablePacksInput.strict().parse(data ?? {});
+      return { success: true, data: await this.dataAccess.getAvailablePacks() };
     } catch (error) {
+      rethrowAsInvalidInput(error);
       throw new Error(`Failed to get available packs: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
-  /**
-   * Handle get active scene request
-   */
-  private async handleGetActiveScene(): Promise<any> {
+  private async handleGetActiveScene(data: unknown): Promise<any> {
     try {
-      // SECURITY: Silent GM validation
       const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) {
-        return { error: 'Access denied', success: false };
-      }
-
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
-      return await this.dataAccess.getActiveScene();
+      GetActiveSceneInput.strict().parse(data ?? {});
+      return { success: true, data: await this.dataAccess.getActiveScene() };
     } catch (error) {
+      rethrowAsInvalidInput(error);
       throw new Error(`Failed to get active scene: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
-  /**
-   * Handle get world info request
-   */
-  private async handleGetWorldInfo(): Promise<any> {
+  private async handleGetWorldInfo(data: unknown): Promise<any> {
     try {
-      // SECURITY: Silent GM validation
       const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) {
-        return { error: 'Access denied', success: false };
-      }
-
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
-      return await this.dataAccess.getWorldInfo();
+      GetWorldInfoInput.strict().parse(data ?? {});
+      return { success: true, data: await this.dataAccess.getWorldInfo() };
     } catch (error) {
+      rethrowAsInvalidInput(error);
       throw new Error(`Failed to get world info: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
-  /**
-   * Handle ping request
-   */
-  private async handlePing(): Promise<any> {
-    return {
-      status: 'ok',
-      timestamp: Date.now(),
-      module: MODULE_ID,
-      foundryVersion: game.version,
-      worldId: game.world?.id,
-      userId: game.user?.id,
-    };
+  private async handlePing(data: unknown): Promise<any> {
+    try {
+      PingInput.strict().parse(data ?? {});
+      const payload = {
+        status: 'ok',
+        timestamp: Date.now(),
+        module: MODULE_ID,
+        foundryVersion: game.version,
+        worldId: game.world?.id,
+        userId: game.user?.id,
+      };
+      return { success: true, data: payload };
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to ping: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 
-  /**
-   * Get list of all registered query methods
-   */
   getRegisteredMethods(): string[] {
     const modulePrefix = MODULE_ID;
     return Object.keys(CONFIG.queries)
@@ -385,644 +299,410 @@ export class QueryHandlers {
       .map(key => key.replace(`${modulePrefix}.`, ''));
   }
 
-  /**
-   * Test if a specific query handler is registered
-   */
   isMethodRegistered(method: string): boolean {
     const queryKey = `${MODULE_ID}.${method}`;
     return queryKey in CONFIG.queries && typeof CONFIG.queries[queryKey] === 'function';
   }
 
-  // ===== PHASE 2: WRITE OPERATION HANDLERS =====
+  // ===== Write operation handlers =====
 
-  /**
-   * Handle actor creation from specific compendium entry
-   */
-  private async handleCreateActorFromCompendium(data: {
-    packId: string;
-    itemId: string;
-    customNames?: string[] | undefined;
-    quantity?: number | undefined;
-    addToScene?: boolean | undefined;
-    placement?: {
-      type: 'random' | 'grid' | 'center' | 'coordinates';
-      coordinates?: { x: number; y: number }[];
-    } | undefined;
-  }): Promise<any> {
+  private async handleCreateActorFromCompendium(data: unknown): Promise<any> {
     try {
-      // SECURITY: Silent GM validation
       const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) {
-        return { error: 'Access denied', success: false };
-      }
-
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
+      const parsed = CreateActorFromCompendiumInput.strict().parse(data ?? {});
 
-      // Clean interface - direct pack/item reference only
       const requestData: any = {
-        packId: data.packId,
-        itemId: data.itemId,
-        customNames: data.customNames || [],
-        quantity: data.quantity || 1,
-        addToScene: data.addToScene || false,
+        packId: parsed.packId,
+        itemId: parsed.itemId,
+        customNames: parsed.customNames || [],
+        quantity: parsed.quantity || 1,
+        addToScene: parsed.addToScene || false,
       };
+      if (parsed.placement) requestData.placement = parsed.placement;
 
-      if (data.placement) {
-        requestData.placement = data.placement;
-      }
-
-      return await this.dataAccess.createActorFromCompendiumEntry(requestData);
+      return await wrappedWrite('createActorFromCompendium', async () => ({ success: true, data: await this.dataAccess.createActorFromCompendiumEntry(requestData) }));
     } catch (error) {
+      rethrowAsInvalidInput(error);
       throw new Error(`Failed to create actor from compendium: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
-  /**
-   * Handle get compendium document full request
-   */
-  private async handleGetCompendiumDocumentFull(data: {
-    packId: string;
-    documentId: string;
-  }): Promise<any> {
+  private async handleGetCompendiumDocumentFull(data: unknown): Promise<any> {
     try {
-      // SECURITY: Silent GM validation
       const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) {
-        return { error: 'Access denied', success: false };
-      }
-
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
-
-      if (!data.packId) {
-        throw new Error('packId is required');
-      }
-
-      if (!data.documentId) {
-        throw new Error('documentId is required');
-      }
-
-      return await this.dataAccess.getCompendiumDocumentFull(data.packId, data.documentId);
+      const parsed = GetCompendiumDocumentFullInput.strict().parse(data ?? {});
+      return { success: true, data: await this.dataAccess.getCompendiumDocumentFull(parsed.packId, parsed.documentId) };
     } catch (error) {
+      rethrowAsInvalidInput(error);
       throw new Error(`Failed to get compendium document: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
-  /**
-   * Handle add actors to scene request
-   */
-  private async handleAddActorsToScene(data: {
-    actorIds: string[];
-    placement?: 'random' | 'grid' | 'center';
-    hidden?: boolean;
-  }): Promise<any> {
+  private async handleAddActorsToScene(data: unknown): Promise<any> {
     try {
-      // SECURITY: Silent GM validation
       const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) {
-        return { error: 'Access denied', success: false };
-      }
-
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
-
-      if (!data.actorIds || !Array.isArray(data.actorIds) || data.actorIds.length === 0) {
-        throw new Error('actorIds array is required and must not be empty');
-      }
-
-      return await this.dataAccess.addActorsToScene({
-        actorIds: data.actorIds,
-        placement: data.placement || 'random',
-        hidden: data.hidden || false,
+      const parsed = AddActorsToSceneInput.strict().parse(data ?? {});
+      return await wrappedWrite('addActorsToScene', async () => {
+        const result = await this.dataAccess.addActorsToScene({
+          actorIds: parsed.actorIds,
+          placement: parsed.placement || 'random',
+          hidden: parsed.hidden || false,
+        });
+        return { success: true, data: result };
       });
     } catch (error) {
+      rethrowAsInvalidInput(error);
       throw new Error(`Failed to add actors to scene: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
-  /**
-   * Handle validate write permissions request
-   */
-  private async handleValidateWritePermissions(data: {
-    operation: 'createActor' | 'modifyScene';
-  }): Promise<any> {
+  private async handleValidateWritePermissions(data: unknown): Promise<any> {
     try {
-      // SECURITY: Silent GM validation
       const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) {
-        return { error: 'Access denied', success: false };
-      }
-
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
-
-      if (!data.operation) {
-        throw new Error('operation is required');
-      }
-
-      return await this.dataAccess.validateWritePermissions(data.operation);
+      const parsed = ValidateWritePermissionsInput.strict().parse(data ?? {});
+      const check = permissionManager.checkWritePermission(parsed.operation);
+      const payload = {
+        allowed: check.allowed,
+        ...(check.reason ? { reason: check.reason } : {}),
+        ...(check.requiresConfirmation ? { requiresConfirmation: check.requiresConfirmation } : {}),
+        ...(check.warnings ? { warnings: check.warnings } : {}),
+      };
+      return { success: true, data: payload };
     } catch (error) {
+      rethrowAsInvalidInput(error);
       throw new Error(`Failed to validate write permissions: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
-  /**
-   * Handle journal entry creation
-   */
-  async handleCreateJournalEntry(data: any): Promise<any> {
+  async handleCreateJournalEntry(data: unknown): Promise<any> {
     try {
-      // SECURITY: Silent GM validation
       const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) {
-        return { error: 'Access denied', success: false };
-      }
-
-      if (!data.name) {
-        throw new Error('name is required');
-      }
-      if (!data.content) {
-        throw new Error('content is required');
-      }
-
-      return await this.dataAccess.createJournalEntry({
-        name: data.name,
-        content: data.content,
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
+      const parsed = CreateJournalEntryInput.strict().parse(data ?? {});
+      return await wrappedWrite('createJournalEntry', async () => {
+        const result = await this.dataAccess.createJournalEntry({
+          name: parsed.name,
+          content: parsed.content,
+        });
+        return { success: true, data: result };
       });
     } catch (error) {
+      rethrowAsInvalidInput(error);
       throw new Error(`Failed to create journal entry: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
-  /**
-   * Handle list journals request
-   */
-  async handleListJournals(): Promise<any> {
+  async handleListJournals(data: unknown): Promise<any> {
     try {
-      // SECURITY: Silent GM validation
       const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) {
-        return { error: 'Access denied', success: false };
-      }
-
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
-      return await this.dataAccess.listJournals();
+      ListJournalsInput.strict().parse(data ?? {});
+      return { success: true, data: await this.dataAccess.listJournals() };
     } catch (error) {
+      rethrowAsInvalidInput(error);
       throw new Error(`Failed to list journals: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
-  /**
-   * Handle get journal content request
-   */
-  async handleGetJournalContent(data: { journalId: string }): Promise<any> {
+  async handleGetJournalContent(data: unknown): Promise<any> {
     try {
-      // SECURITY: Silent GM validation
       const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) {
-        return { error: 'Access denied', success: false };
-      }
-
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
-
-      if (!data.journalId) {
-        throw new Error('journalId is required');
-      }
-
-      return await this.dataAccess.getJournalContent(data.journalId);
+      const parsed = GetJournalContentInput.strict().parse(data ?? {});
+      return { success: true, data: await this.dataAccess.getJournalContent(parsed.journalId) };
     } catch (error) {
+      rethrowAsInvalidInput(error);
       throw new Error(`Failed to get journal content: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
-  /**
-   * Handle update journal content request
-   */
-  async handleUpdateJournalContent(data: { journalId: string; content: string }): Promise<any> {
+  async handleUpdateJournalContent(data: unknown): Promise<any> {
     try {
-      // SECURITY: Silent GM validation
       const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) {
-        return { error: 'Access denied', success: false };
-      }
-
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
-
-      if (!data.journalId) {
-        throw new Error('journalId is required');
-      }
-      if (!data.content) {
-        throw new Error('content is required');
-      }
-
-      return await this.dataAccess.updateJournalContent({
-        journalId: data.journalId,
-        content: data.content,
+      const parsed = UpdateJournalContentInput.strict().parse(data ?? {});
+      return await wrappedWrite('updateJournalContent', async () => {
+        const result = await this.dataAccess.updateJournalContent({
+          journalId: parsed.journalId,
+          content: parsed.content,
+        });
+        return { success: true, data: result };
       });
     } catch (error) {
+      rethrowAsInvalidInput(error);
       throw new Error(`Failed to update journal content: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
-  /**
-   * Handle request player rolls - creates interactive roll buttons in chat
-   */
-  async handleRequestPlayerRolls(data: {
-    rollType: string;
-    rollTarget: string;
-    targetPlayer: string;
-    isPublic: boolean;
-    rollModifier: string;
-    flavor: string;
-  }): Promise<any> {
+  async handleRequestPlayerRolls(data: unknown): Promise<any> {
     try {
-      // SECURITY: Silent GM validation
       const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) {
-        return { error: 'Access denied', success: false };
-      }
-
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
-
-      if (!data.rollType || !data.rollTarget || !data.targetPlayer) {
-        throw new Error('rollType, rollTarget, and targetPlayer are required');
-      }
-
-      return await this.dataAccess.requestPlayerRolls(data);
+      const parsed = RequestPlayerRollsInput.strict().parse(data ?? {});
+      return await wrappedWrite('requestPlayerRolls', async () => ({ success: true, data: await this.dataAccess.requestPlayerRolls(parsed) }));
     } catch (error) {
+      rethrowAsInvalidInput(error);
       throw new Error(`Failed to request player rolls: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
-  /**
-   * Handle get enhanced creature index request
-   */
-  async handleGetEnhancedCreatureIndex(): Promise<any> {
+  async handleGetEnhancedCreatureIndex(data: unknown): Promise<any> {
     try {
-      // SECURITY: Silent GM validation
       const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) {
-        return { error: 'Access denied', success: false };
-      }
-
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
-
-      return await this.dataAccess.getEnhancedCreatureIndex();
+      GetEnhancedCreatureIndexInput.strict().parse(data ?? {});
+      return { success: true, data: await this.dataAccess.getEnhancedCreatureIndex() };
     } catch (error) {
+      rethrowAsInvalidInput(error);
       throw new Error(`Failed to get enhanced creature index: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
-  /**
-   * Handle set actor ownership request
-   */
-  async handleSetActorOwnership(data: any): Promise<any> {
+  async handleSetActorOwnership(data: unknown): Promise<any> {
     try {
-      // SECURITY: Silent GM validation
       const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) {
-        return { error: 'Access denied', success: false };
-      }
-
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
-
-      if (!data.actorId || !data.userId || data.permission === undefined) {
-        throw new Error('actorId, userId, and permission are required');
-      }
-
-      return await this.dataAccess.setActorOwnership(data);
+      const parsed = SetActorOwnershipInput.strict().parse(data ?? {});
+      return await wrappedWrite('setActorOwnership', async () => ({ success: true, data: await this.dataAccess.setActorOwnership(parsed as any) }));
     } catch (error) {
+      rethrowAsInvalidInput(error);
       throw new Error(`Failed to set actor ownership: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
-  /**
-   * Handle get actor ownership request
-   */
-  async handleGetActorOwnership(data: any): Promise<any> {
+  async handleGetActorOwnership(data: unknown): Promise<any> {
     try {
-      // SECURITY: Silent GM validation
       const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) {
-        return { error: 'Access denied', success: false };
-      }
-
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
-
-      return await this.dataAccess.getActorOwnership(data);
+      const parsed = GetActorOwnershipInput.strict().parse(data ?? {});
+      return { success: true, data: await this.dataAccess.getActorOwnership(parsed as any) };
     } catch (error) {
+      rethrowAsInvalidInput(error);
       throw new Error(`Failed to get actor ownership: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
-  /**
-   * Handle get friendly NPCs request
-   */
-  async handleGetFriendlyNPCs(): Promise<any> {
+  async handleGetFriendlyNPCs(data: unknown): Promise<any> {
     try {
-      // SECURITY: Silent GM validation
       const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) {
-        return { error: 'Access denied', success: false };
-      }
-
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
-
-      return await this.dataAccess.getFriendlyNPCs();
+      GetFriendlyNPCsInput.strict().parse(data ?? {});
+      return { success: true, data: await this.dataAccess.getFriendlyNPCs() };
     } catch (error) {
+      rethrowAsInvalidInput(error);
       throw new Error(`Failed to get friendly NPCs: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
-  /**
-   * Handle get connected players request
-   */
-  async handleGetConnectedPlayers(): Promise<any> {
+  async handleGetConnectedPlayers(data: unknown): Promise<any> {
     try {
-      // SECURITY: Silent GM validation
       const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) {
-        return { error: 'Access denied', success: false };
-      }
-
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
-
-      return await this.dataAccess.getConnectedPlayers();
+      GetConnectedPlayersInput.strict().parse(data ?? {});
+      return { success: true, data: await this.dataAccess.getConnectedPlayers() };
     } catch (error) {
+      rethrowAsInvalidInput(error);
       throw new Error(`Failed to get connected players: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
-  /**
-   * Handle list scenes request
-   */
-  private async handleListScenes(data: any): Promise<any> {
+  private async handleListScenes(data: unknown): Promise<any> {
     try {
-      // SECURITY: Silent GM validation
       const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) {
-        return { error: 'Access denied', success: false };
-      }
-
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
-      return await this.dataAccess.listScenes(data);
+      const parsed = ListScenesInput.strict().parse(data ?? {});
+      return { success: true, data: await this.dataAccess.listScenes(parsed as any) };
     } catch (error) {
+      rethrowAsInvalidInput(error);
       throw new Error(`Failed to list scenes: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
-  /**
-   * Handle switch scene request
-   */
-  private async handleSwitchScene(data: any): Promise<any> {
+  private async handleSwitchScene(data: unknown): Promise<any> {
     try {
-      // SECURITY: Silent GM validation
       const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) {
-        return { error: 'Access denied', success: false };
-      }
-
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
-
-      if (!data.scene_identifier) {
-        throw new Error('scene_identifier is required');
-      }
-
-      return await this.dataAccess.switchScene(data);
+      const parsed = SwitchSceneInput.strict().parse(data ?? {});
+      return await wrappedWrite('switchScene', async () => ({ success: true, data: await this.dataAccess.switchScene(parsed) }));
     } catch (error) {
+      rethrowAsInvalidInput(error);
       throw new Error(`Failed to switch scene: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
-  /**
-   * Handle create actor request
-   */
-  private async handleCreateActor(data: { actorData: Record<string, any> }): Promise<any> {
+  private async handleCreateActor(data: unknown): Promise<any> {
     try {
-      // SECURITY: Silent GM validation
       const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) {
-        return { error: 'Access denied', success: false };
-      }
-
-      return await this.dataAccess.createActor(data);
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
+      const parsed = CreateActorInput.strict().parse(data ?? {});
+      return await wrappedWrite('createActor', async () => ({ success: true, data: await this.dataAccess.createActor(parsed) }));
     } catch (error) {
+      rethrowAsInvalidInput(error);
       throw new Error(`Failed to create actor: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
-  /**
-   * Handle update actor request
-   */
-  private async handleUpdateActor(data: { actorId: string; updateData: Record<string, any> }): Promise<any> {
+  private async handleUpdateActor(data: unknown): Promise<any> {
     try {
-      // SECURITY: Silent GM validation
       const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) {
-        return { error: 'Access denied', success: false };
-      }
-
-      return await this.dataAccess.updateActor(data);
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
+      const parsed = UpdateActorInput.strict().parse(data ?? {});
+      return await wrappedWrite('updateActor', async () => ({ success: true, data: await this.dataAccess.updateActor(parsed) }));
     } catch (error) {
+      rethrowAsInvalidInput(error);
       throw new Error(`Failed to update actor: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
-  /**
-   * Handle update item request
-   */
-  private async handleUpdateItem(data: { actorId: string; itemId: string; updateData: Record<string, any> }): Promise<any> {
+  private async handleUpdateItem(data: unknown): Promise<any> {
     try {
-      // SECURITY: Silent GM validation
       const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) {
-        return { error: 'Access denied', success: false };
-      }
-
-      return await this.dataAccess.updateItem(data);
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
+      const parsed = UpdateItemInput.strict().parse(data ?? {});
+      return await wrappedWrite('updateItem', async () => ({ success: true, data: await this.dataAccess.updateItem(parsed) }));
     } catch (error) {
+      rethrowAsInvalidInput(error);
       throw new Error(`Failed to update item: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
-  /**
-   * Handle create item request
-   */
-  private async handleCreateItem(data: { actorId: string; itemData: Record<string, any> }): Promise<any> {
+  private async handleCreateItem(data: unknown): Promise<any> {
     try {
-      // SECURITY: Silent GM validation
       const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) {
-        return { error: 'Access denied', success: false };
-      }
-
-      return await this.dataAccess.createItem(data);
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
+      const parsed = CreateItemInput.strict().parse(data ?? {});
+      return await wrappedWrite('createItem', async () => ({ success: true, data: await this.dataAccess.createItem(parsed) }));
     } catch (error) {
+      rethrowAsInvalidInput(error);
       throw new Error(`Failed to create item: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
-  /**
-   * Handle delete item request
-   */
-  private async handleDeleteItem(data: { actorId: string; itemId: string }): Promise<any> {
+  private async handleDeleteItem(data: unknown): Promise<any> {
     try {
-      // SECURITY: Silent GM validation
       const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) {
-        return { error: 'Access denied', success: false };
-      }
-
-      return await this.dataAccess.deleteItem(data);
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
+      const parsed = DeleteItemInput.strict().parse(data ?? {});
+      return await wrappedWrite('deleteItem', async () => ({ success: true, data: await this.dataAccess.deleteItem(parsed) }));
     } catch (error) {
+      rethrowAsInvalidInput(error);
       throw new Error(`Failed to delete item: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
-  /**
-   * Handle modify item qualities request
-   */
-  private async handleModifyItemQualities(data: {
-    characterName: string;
-    itemName: string;
-    addQualities: Array<{ name: string; value?: number }>;
-    removeQualities: string[];
-    addFlaws: Array<{ name: string; value?: number }>;
-    removeFlaws: string[];
-  }): Promise<any> {
+  private async handleModifyItemQualities(data: unknown): Promise<any> {
     try {
-      // SECURITY: Silent GM validation
       const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) {
-        return { error: 'Access denied', success: false };
-      }
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
+      const parsed = ModifyItemQualitiesInput.strict().parse(data ?? {});
+      return await wrappedWrite('modifyItemQualities', async () => {
+        const actor = game.actors?.find((a: any) =>
+          a.name.toLowerCase() === parsed.characterName.toLowerCase()
+        );
+        if (!actor) throw new Error(`Character "${parsed.characterName}" not found`);
 
-      // Find character
-      const actor = game.actors?.find((a: any) =>
-        a.name.toLowerCase() === data.characterName.toLowerCase()
-      );
+        const item = actor.items?.find((i: any) =>
+          i.name.toLowerCase() === parsed.itemName.toLowerCase()
+        );
+        if (!item) throw new Error(`Item "${parsed.itemName}" not found on ${actor.name}`);
 
-      if (!actor) {
-        return { success: false, error: `Character "${data.characterName}" not found` };
-      }
+        // BUG-012: Foundry deep-merges update objects; removing a key requires
+        // the `-=` deletion syntax. In-memory `delete` on a copied object is a
+        // silent no-op after the merge. Adds use dotted paths; removes use -=.
+        const updateData: Record<string, unknown> = {};
 
-      // Find item
-      const item = actor.items?.find((i: any) =>
-        i.name.toLowerCase() === data.itemName.toLowerCase()
-      );
+        for (const quality of parsed.addQualities) {
+          updateData[`system.properties.qualities.${quality.name}`] = quality.value || true;
+        }
+        for (const quality of parsed.removeQualities) {
+          updateData[`system.properties.qualities.-=${quality}`] = null;
+        }
+        for (const flaw of parsed.addFlaws) {
+          updateData[`system.properties.flaws.${flaw.name}`] = flaw.value || true;
+        }
+        for (const flaw of parsed.removeFlaws) {
+          updateData[`system.properties.flaws.-=${flaw}`] = null;
+        }
 
-      if (!item) {
-        return { success: false, error: `Item "${data.itemName}" not found on ${actor.name}` };
-      }
-
-      // Build update data
-      const currentQualities = item.system?.properties?.qualities || {};
-      const currentFlaws = item.system?.properties?.flaws || {};
-
-      const updateData: any = {
-        'system.properties.qualities': { ...currentQualities },
-        'system.properties.flaws': { ...currentFlaws }
-      };
-
-      // Add qualities
-      for (const quality of data.addQualities) {
-        updateData['system.properties.qualities'][quality.name] = quality.value || true;
-      }
-
-      // Remove qualities
-      for (const quality of data.removeQualities) {
-        delete updateData['system.properties.qualities'][quality];
-      }
-
-      // Add flaws
-      for (const flaw of data.addFlaws) {
-        updateData['system.properties.flaws'][flaw.name] = flaw.value || true;
-      }
-
-      // Remove flaws
-      for (const flaw of data.removeFlaws) {
-        delete updateData['system.properties.flaws'][flaw];
-      }
-
-      await item.update(updateData);
-
-      return { success: true, data: { itemName: item.name } };
+        await item.update(updateData);
+        return { success: true, data: { itemName: item.name } };
+      });
     } catch (error) {
+      rethrowAsInvalidInput(error);
       throw new Error(`Failed to modify item qualities: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
-  /**
-   * Handle create RollTable request
-   */
-  private async handleCreateRollTable(data: { tableData: any }): Promise<any> {
+  private async handleCreateRollTable(data: unknown): Promise<any> {
     try {
-      // SECURITY: Silent GM validation
       const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) {
-        return { error: 'Access denied', success: false };
-      }
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
+      const parsed = CreateRollTableInput.strict().parse(data ?? {});
+      return await wrappedWrite('createRollTable', async () => {
+        const tableData: any = parsed.tableData;
+        const results = tableData.results || [];
+        const tableDataWithoutResults = { ...tableData };
+        delete tableDataWithoutResults.results;
 
-      console.log("createRollTable received data:", JSON.stringify(data, null, 2));
+        if (!tableDataWithoutResults.name) {
+          throw new Error('Table name is required');
+        }
 
-      // Extract results from tableData if present
-      const results = data.tableData.results || [];
-      const tableDataWithoutResults = { ...data.tableData };
-      delete tableDataWithoutResults.results;
+        const table = await RollTable.create(tableDataWithoutResults);
+        if (results.length > 0) {
+          await table.createEmbeddedDocuments('TableResult', results);
+        }
 
-      console.log("Creating table with:", JSON.stringify(tableDataWithoutResults, null, 2));
-      console.log("Number of results to add:", results.length);
-
-      // Create the table first - ensure we have a name
-      if (!tableDataWithoutResults.name) {
-        return { error: 'Table name is required', success: false };
-      }
-
-      const table = await RollTable.create(tableDataWithoutResults);
-
-      console.log("Table created with ID:", table.id);
-
-      // If results were provided, add them to the table
-      if (results.length > 0) {
-        console.log("Adding results:", JSON.stringify(results.slice(0, 2), null, 2)); // Log first 2 results
-        await table.createEmbeddedDocuments('TableResult', results);
-      }
-
-      return {
-        id: table.id,
-        name: table.name,
-        success: true
-      };
+        return { success: true, data: { id: table.id, name: table.name } };
+      });
     } catch (error) {
-      console.error("Failed to create RollTable:", error);
+      rethrowAsInvalidInput(error);
+      console.error('Failed to create RollTable:', error);
       throw new Error(`Failed to create RollTable: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
-  /**
-   * Handle add table results request
-   */
-  private async handleAddTableResults(data: { tableId: string; results: any[] }): Promise<any> {
+  private async handleAddTableResults(data: unknown): Promise<any> {
     try {
-      // SECURITY: Silent GM validation
       const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) {
-        return { error: 'Access denied', success: false };
-      }
-
-      const table = game.tables.get(data.tableId);
-      if (!table) {
-        return { error: 'Table not found', success: false };
-      }
-
-      await table.createEmbeddedDocuments('TableResult', data.results);
-      return { success: true };
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
+      const parsed = AddTableResultsInput.strict().parse(data ?? {});
+      return await wrappedWrite('addTableResults', async () => {
+        const table = game.tables.get(parsed.tableId);
+        if (!table) throw new Error('Table not found');
+        await table.createEmbeddedDocuments('TableResult', parsed.results);
+        return { success: true, data: { tableId: parsed.tableId } };
+      });
     } catch (error) {
+      rethrowAsInvalidInput(error);
       throw new Error(`Failed to add table results: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
-  /**
-   * Handle list RollTables request
-   */
-  private async handleListRollTables(_data: {}): Promise<any> {
+  private async handleListRollTables(data: unknown): Promise<any> {
     try {
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
+      ListRollTablesInput.strict().parse(data ?? {});
       const tables = game.tables.map((table: any) => ({
         id: table.id,
         name: table.name,
@@ -1032,27 +712,25 @@ export class QueryHandlers {
           id: r.id,
           text: r.text,
           range: r.range,
-          weight: r.weight
-        }))
+          weight: r.weight,
+        })),
       }));
-
-      return tables;
+      return { success: true, data: tables };
     } catch (error) {
+      rethrowAsInvalidInput(error);
       throw new Error(`Failed to list RollTables: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
-  /**
-   * Handle get RollTable request
-   */
-  private async handleGetRollTable(data: { tableId: string }): Promise<any> {
+  private async handleGetRollTable(data: unknown): Promise<any> {
     try {
-      const table = game.tables.get(data.tableId);
-      if (!table) {
-        return { error: 'Table not found' };
-      }
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
+      const parsed = GetRollTableInput.strict().parse(data ?? {});
+      const table = game.tables.get(parsed.tableId);
+      if (!table) throw new Error('Table not found');
 
-      return {
+      const payload = {
         id: table.id,
         name: table.name,
         formula: table.formula,
@@ -1063,65 +741,59 @@ export class QueryHandlers {
           id: r.id,
           text: r.text,
           range: r.range,
-          weight: r.weight
-        }))
+          weight: r.weight,
+        })),
       };
+      return { success: true, data: payload };
     } catch (error) {
+      rethrowAsInvalidInput(error);
       throw new Error(`Failed to get RollTable: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
-  /**
-   * Handle roll on table request
-   */
-  private async handleRollOnTable(data: { tableId: string; rollMode?: string }): Promise<any> {
+  private async handleRollOnTable(data: unknown): Promise<any> {
     try {
-      const table = game.tables.get(data.tableId);
-      if (!table) {
-        return { error: 'Table not found' };
-      }
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
+      const parsed = RollOnTableInput.strict().parse(data ?? {});
+      const table = game.tables.get(parsed.tableId);
+      if (!table) throw new Error('Table not found');
 
-      const rollMode = data.rollMode || 'public';
+      const rollMode = parsed.rollMode || 'public';
       const draw = await table.draw({ rollMode: rollMode as any });
-
       if (!draw || !draw.results || draw.results.length === 0) {
-        return { error: 'No result drawn from table' };
+        throw new Error('No result drawn from table');
       }
 
-      const result = draw.results[0];
-      return {
+      const drawResult = draw.results[0];
+      const payload = {
         tableName: table.name,
         formula: table.formula,
         roll: draw.roll?.total || 0,
-        text: result.text,
-        drawn: result.drawn
+        text: drawResult.text,
+        drawn: drawResult.drawn,
       };
+      return { success: true, data: payload };
     } catch (error) {
+      rethrowAsInvalidInput(error);
       throw new Error(`Failed to roll on table: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
-  /**
-   * Handle delete RollTable request
-   */
-  private async handleDeleteRollTable(data: { tableId: string }): Promise<any> {
+  private async handleDeleteRollTable(data: unknown): Promise<any> {
     try {
-      // SECURITY: Silent GM validation
       const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) {
-        return { error: 'Access denied', success: false };
-      }
-
-      const table = game.tables.get(data.tableId);
-      if (!table) {
-        return { error: 'Table not found', success: false };
-      }
-
-      await table.delete();
-      return { success: true };
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
+      const parsed = DeleteRollTableInput.strict().parse(data ?? {});
+      return await wrappedWrite('deleteRollTable', async () => {
+        const table = game.tables.get(parsed.tableId);
+        if (!table) throw new Error('Table not found');
+        await table.delete();
+        return { success: true, data: { tableId: parsed.tableId } };
+      });
     } catch (error) {
+      rethrowAsInvalidInput(error);
       throw new Error(`Failed to delete RollTable: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
-
 }

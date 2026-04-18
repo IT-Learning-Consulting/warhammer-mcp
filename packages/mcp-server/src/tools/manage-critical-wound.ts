@@ -97,7 +97,7 @@ Note: Use the roll-critical-wound tool to randomly roll on Critical Tables.`,
     private async handleList(args: { characterName: string }): Promise<string> {
         this.logger.info('Getting critical wounds', { characterName: args.characterName });
 
-        const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
+        const character = await this.foundryClient.query<any>('warhammer-mcp.getCharacterInfo', {
             characterName: args.characterName,
         });
 
@@ -106,11 +106,6 @@ Note: Use the roll-critical-wound tool to randomly roll on Critical Tables.`,
         }
 
         const system = character.system as any;
-        const isWFRP = !!(system.status?.criticalWounds !== undefined || system.characteristics?.t);
-
-        if (!isWFRP) {
-            return `${character.name} is not using the WFRP 4e system. Critical wound tracking is only available for WFRP characters.`;
-        }
 
         const criticalCurrent = system.status?.criticalWounds?.value || 0;
         const criticalMax = system.status?.criticalWounds?.max || 0;
@@ -187,7 +182,7 @@ Note: Use the roll-critical-wound tool to randomly roll on Critical Tables.`,
     private async handleAdd(args: { characterName: string; criticalName: string; location: string }): Promise<string> {
         this.logger.info('Adding critical wound', args);
 
-        const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
+        const character = await this.foundryClient.query<any>('warhammer-mcp.getCharacterInfo', {
             characterName: args.characterName,
         });
 
@@ -202,7 +197,7 @@ Note: Use the roll-critical-wound tool to randomly roll on Critical Tables.`,
         const isDead = newCriticalCount > tBonus;
 
         // Search compendium for the critical
-        const compendiumResults = await this.foundryClient.query('warhammer-mcp.searchCompendium', {
+        const compendiumResults = await this.foundryClient.query<any>('warhammer-mcp.searchCompendium', {
             query: args.criticalName,
             types: ['critical'],
         });
@@ -226,7 +221,7 @@ Note: Use the roll-critical-wound tool to randomly roll on Critical Tables.`,
         }
 
         // Add the critical wound from compendium
-        const addResult = await this.foundryClient.query('warhammer-mcp.addItemFromCompendium', {
+        const addResult = await this.foundryClient.query<any>('warhammer-mcp.addItemFromCompendium', {
             actorId: character.id,
             compendiumId: criticalUuid,
         });
@@ -236,7 +231,7 @@ Note: Use the roll-critical-wound tool to randomly roll on Critical Tables.`,
         }
 
         // Update location
-        await this.foundryClient.query('warhammer-mcp.updateItem', {
+        await this.foundryClient.query<any>('warhammer-mcp.updateItem', {
             actorId: character.id,
             itemId: addResult.itemId,
             updateData: {
@@ -245,7 +240,7 @@ Note: Use the roll-critical-wound tool to randomly roll on Critical Tables.`,
         });
 
         // Update critical wound count
-        await this.foundryClient.query('warhammer-mcp.updateActor', {
+        await this.foundryClient.query<any>('warhammer-mcp.updateActor', {
             actorId: character.id,
             updateData: {
                 'system.status.criticalWounds.value': newCriticalCount,
@@ -276,7 +271,7 @@ Note: Use the roll-critical-wound tool to randomly roll on Critical Tables.`,
     private async handleRemove(args: { characterName: string; woundName: string }): Promise<string> {
         this.logger.info('Removing critical wound', args);
 
-        const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
+        const character = await this.foundryClient.query<any>('warhammer-mcp.getCharacterInfo', {
             characterName: args.characterName,
         });
 
@@ -313,13 +308,13 @@ Note: Use the roll-critical-wound tool to randomly roll on Critical Tables.`,
         const newCriticalCount = Math.max(0, criticalCurrent - 1);
 
         // Delete the critical wound item
-        await this.foundryClient.query('warhammer-mcp.deleteItem', {
+        await this.foundryClient.query<any>('warhammer-mcp.deleteItem', {
             actorId: character.id,
             itemId: foundCritical._id,
         });
 
         // Update critical wound count
-        await this.foundryClient.query('warhammer-mcp.updateActor', {
+        await this.foundryClient.query<any>('warhammer-mcp.updateActor', {
             actorId: character.id,
             updateData: {
                 'system.status.criticalWounds.value': newCriticalCount,
@@ -347,7 +342,7 @@ Note: Use the roll-critical-wound tool to randomly roll on Critical Tables.`,
     private async handleCheckDeath(args: { characterName: string }): Promise<string> {
         this.logger.info('Checking death from criticals', { characterName: args.characterName });
 
-        const character = await this.foundryClient.query('warhammer-mcp.getCharacterInfo', {
+        const character = await this.foundryClient.query<any>('warhammer-mcp.getCharacterInfo', {
             characterName: args.characterName,
         });
 

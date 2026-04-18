@@ -4,8 +4,8 @@
   "description": "Warhammer Fantasy Roleplay 4e MCP bridge module for Foundry VTT",
   "type": "module",
   "scripts": {
-    "build": "tsc",
-    "dev": "tsc --watch",
+    "build": "rm -rf dist && esbuild src/main.ts --bundle --format=esm --platform=browser --target=es2022 --outfile=dist/main.js --sourcemap && node scripts/verify-browser-safe.mjs",
+    "dev": "esbuild src/main.ts --bundle --format=esm --platform=browser --target=es2022 --outfile=dist/main.js --sourcemap --watch",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src --ext .ts",
