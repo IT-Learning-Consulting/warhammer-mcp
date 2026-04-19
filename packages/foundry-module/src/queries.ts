@@ -3,7 +3,6 @@ import { MODULE_ID } from './constants.js';
 import { FoundryDataAccess } from './data-access.js';
 import { wrappedWrite } from './transaction-manager.js';
 import { permissionManager } from './permissions.js';
-import { handleGetPartyCharacters, handleFindPlayers, handleFindActor } from './_staging/orphan-handlers.js';
 import {
   // actor domain
   GetCharacterInfoInput,
@@ -16,6 +15,9 @@ import {
   GetActorOwnershipInput,
   GetFriendlyNPCsInput,
   GetConnectedPlayersInput,
+  GetPartyCharactersInput,
+  FindPlayersInput,
+  FindActorInput,
   // item domain
   CreateItemInput,
   UpdateItemInput,
@@ -36,6 +38,7 @@ import {
   // meta (journal, rolltable, ping, world, player rolls)
   PingInput,
   GetWorldInfoInput,
+  GetWfrp4eConfigInput,
   CreateJournalEntryInput,
   ListJournalsInput,
   GetJournalContentInput,
@@ -47,6 +50,19 @@ import {
   GetRollTableInput,
   RollOnTableInput,
   DeleteRollTableInput,
+  // combat domain (Phase 4b)
+  GetCombatInput,
+  ListCombatantsInput,
+  AdvanceCombatInput,
+  AddCombatantsInput,
+  RemoveCombatantsInput,
+  EndCombatInput,
+  ApplyDamageInput,
+  // conditions / effects domain (Phase 4b)
+  ApplyConditionInput,
+  RemoveConditionInput,
+  ListConditionsInput,
+  ListActiveEffectsInput,
 } from '@foundry-mcp/shared';
 
 /**
@@ -102,10 +118,10 @@ export class QueryHandlers {
     CONFIG.queries[`${modulePrefix}.setActorOwnership`] = this.handleSetActorOwnership.bind(this);
     CONFIG.queries[`${modulePrefix}.getActorOwnership`] = this.handleGetActorOwnership.bind(this);
     CONFIG.queries[`${modulePrefix}.getFriendlyNPCs`] = this.handleGetFriendlyNPCs.bind(this);
-    CONFIG.queries[`${modulePrefix}.getPartyCharacters`] = () => handleGetPartyCharacters(this.dataAccess);
+    CONFIG.queries[`${modulePrefix}.getPartyCharacters`] = this.handleGetPartyCharacters.bind(this);
     CONFIG.queries[`${modulePrefix}.getConnectedPlayers`] = this.handleGetConnectedPlayers.bind(this);
-    CONFIG.queries[`${modulePrefix}.findPlayers`] = (args: any) => handleFindPlayers(args, this.dataAccess);
-    CONFIG.queries[`${modulePrefix}.findActor`] = (args: any) => handleFindActor(args, this.dataAccess);
+    CONFIG.queries[`${modulePrefix}.findPlayers`] = this.handleFindPlayers.bind(this);
+    CONFIG.queries[`${modulePrefix}.findActor`] = this.handleFindActor.bind(this);
     CONFIG.queries[`${modulePrefix}.createActor`] = this.handleCreateActor.bind(this);
     CONFIG.queries[`${modulePrefix}.updateActor`] = this.handleUpdateActor.bind(this);
     CONFIG.queries[`${modulePrefix}.updateItem`] = this.handleUpdateItem.bind(this);
@@ -118,6 +134,22 @@ export class QueryHandlers {
     CONFIG.queries[`${modulePrefix}.getRollTable`] = this.handleGetRollTable.bind(this);
     CONFIG.queries[`${modulePrefix}.rollOnTable`] = this.handleRollOnTable.bind(this);
     CONFIG.queries[`${modulePrefix}.deleteRollTable`] = this.handleDeleteRollTable.bind(this);
+
+    // Phase 4b — combat + damage + conditions + active-effects
+    CONFIG.queries[`${modulePrefix}.getCombat`] = this.handleGetCombat.bind(this);
+    CONFIG.queries[`${modulePrefix}.listCombatants`] = this.handleListCombatants.bind(this);
+    CONFIG.queries[`${modulePrefix}.advanceCombat`] = this.handleAdvanceCombat.bind(this);
+    CONFIG.queries[`${modulePrefix}.addCombatants`] = this.handleAddCombatants.bind(this);
+    CONFIG.queries[`${modulePrefix}.removeCombatants`] = this.handleRemoveCombatants.bind(this);
+    CONFIG.queries[`${modulePrefix}.endCombat`] = this.handleEndCombat.bind(this);
+    CONFIG.queries[`${modulePrefix}.applyDamage`] = this.handleApplyDamage.bind(this);
+    CONFIG.queries[`${modulePrefix}.applyCondition`] = this.handleApplyCondition.bind(this);
+    CONFIG.queries[`${modulePrefix}.removeCondition`] = this.handleRemoveCondition.bind(this);
+    CONFIG.queries[`${modulePrefix}.listConditions`] = this.handleListConditions.bind(this);
+    CONFIG.queries[`${modulePrefix}.listActiveEffects`] = this.handleListActiveEffects.bind(this);
+
+    // Phase 4c.0 — config-read primitive for skill-side rule lookups
+    CONFIG.queries[`${modulePrefix}.getWfrp4eConfig`] = this.handleGetWfrp4eConfig.bind(this);
   }
 
   unregisterHandlers(): void {
@@ -405,8 +437,21 @@ export class QueryHandlers {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
-      ListJournalsInput.strict().parse(data ?? {});
-      return { success: true, data: await this.dataAccess.listJournals() };
+      const parsed = ListJournalsInput.strict().parse(data ?? {});
+      let journals: Array<{ id: string; name: string; type: string; content?: string }> =
+        await this.dataAccess.listJournals();
+      if (parsed.filterQuests === true) {
+        journals = journals.filter(j => /^quest:/i.test(j.name));
+      }
+      if (parsed.includeContent === true) {
+        journals = await Promise.all(
+          journals.map(async j => {
+            const body = await this.dataAccess.getJournalContent(j.id);
+            return { ...j, content: body?.content ?? '' };
+          })
+        );
+      }
+      return { success: true, data: journals };
     } catch (error) {
       rethrowAsInvalidInput(error);
       throw new Error(`Failed to list journals: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -520,6 +565,45 @@ export class QueryHandlers {
     } catch (error) {
       rethrowAsInvalidInput(error);
       throw new Error(`Failed to get connected players: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  private async handleGetPartyCharacters(data: unknown): Promise<any> {
+    try {
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
+      this.dataAccess.validateFoundryState();
+      GetPartyCharactersInput.strict().parse(data ?? {});
+      return { success: true, data: await this.dataAccess.getPartyCharacters() };
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to get party characters: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  private async handleFindPlayers(data: unknown): Promise<any> {
+    try {
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
+      this.dataAccess.validateFoundryState();
+      const parsed = FindPlayersInput.strict().parse(data ?? {});
+      return { success: true, data: await this.dataAccess.findPlayers(parsed) };
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to find players: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  private async handleFindActor(data: unknown): Promise<any> {
+    try {
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
+      this.dataAccess.validateFoundryState();
+      const parsed = FindActorInput.strict().parse(data ?? {});
+      return { success: true, data: await this.dataAccess.findActor(parsed) };
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to find actor: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
@@ -794,6 +878,186 @@ export class QueryHandlers {
     } catch (error) {
       rethrowAsInvalidInput(error);
       throw new Error(`Failed to delete RollTable: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  // ============================================================
+  // Phase 4b handlers — combat / damage / conditions / effects
+  // ============================================================
+
+  private async handleGetCombat(data: unknown): Promise<any> {
+    try {
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
+      this.dataAccess.validateFoundryState();
+      const parsed = GetCombatInput.strict().parse(data ?? {});
+      return { success: true, data: await this.dataAccess.getCombat(parsed as any) };
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to get combat: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  private async handleListCombatants(data: unknown): Promise<any> {
+    try {
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
+      this.dataAccess.validateFoundryState();
+      const parsed = ListCombatantsInput.strict().parse(data ?? {});
+      return { success: true, data: await this.dataAccess.listCombatants(parsed as any) };
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to list combatants: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  private async handleAdvanceCombat(data: unknown): Promise<any> {
+    try {
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
+      this.dataAccess.validateFoundryState();
+      const parsed = AdvanceCombatInput.strict().parse(data ?? {});
+      return await wrappedWrite('advanceCombat', async () => ({
+        success: true,
+        data: await this.dataAccess.advanceCombat(parsed as any),
+      }));
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to advance combat: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  private async handleAddCombatants(data: unknown): Promise<any> {
+    try {
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
+      this.dataAccess.validateFoundryState();
+      const parsed = AddCombatantsInput.strict().parse(data ?? {});
+      return await wrappedWrite('addCombatants', async () => ({
+        success: true,
+        data: await this.dataAccess.addCombatants(parsed as any),
+      }));
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to add combatants: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  private async handleRemoveCombatants(data: unknown): Promise<any> {
+    try {
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
+      this.dataAccess.validateFoundryState();
+      const parsed = RemoveCombatantsInput.strict().parse(data ?? {});
+      return await wrappedWrite('removeCombatants', async () => ({
+        success: true,
+        data: await this.dataAccess.removeCombatants(parsed as any),
+      }));
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to remove combatants: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  private async handleEndCombat(data: unknown): Promise<any> {
+    try {
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
+      this.dataAccess.validateFoundryState();
+      const parsed = EndCombatInput.strict().parse(data ?? {});
+      return await wrappedWrite('endCombat', async () => ({
+        success: true,
+        data: await this.dataAccess.endCombat(parsed as any),
+      }));
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to end combat: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  private async handleApplyDamage(data: unknown): Promise<any> {
+    try {
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
+      this.dataAccess.validateFoundryState();
+      const parsed = ApplyDamageInput.strict().parse(data ?? {});
+      return await wrappedWrite('applyDamage', async () => ({
+        success: true,
+        data: await this.dataAccess.applyDamage(parsed as any),
+      }));
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to apply damage: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  private async handleApplyCondition(data: unknown): Promise<any> {
+    try {
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
+      this.dataAccess.validateFoundryState();
+      const parsed = ApplyConditionInput.strict().parse(data ?? {});
+      return await wrappedWrite('applyCondition', async () => ({
+        success: true,
+        data: await this.dataAccess.applyCondition(parsed as any),
+      }));
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to apply condition: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  private async handleRemoveCondition(data: unknown): Promise<any> {
+    try {
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
+      this.dataAccess.validateFoundryState();
+      const parsed = RemoveConditionInput.strict().parse(data ?? {});
+      return await wrappedWrite('removeCondition', async () => ({
+        success: true,
+        data: await this.dataAccess.removeCondition(parsed as any),
+      }));
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to remove condition: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  private async handleListConditions(data: unknown): Promise<any> {
+    try {
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
+      this.dataAccess.validateFoundryState();
+      const parsed = ListConditionsInput.strict().parse(data ?? {});
+      return { success: true, data: await this.dataAccess.listConditions(parsed as any) };
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to list conditions: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  private async handleListActiveEffects(data: unknown): Promise<any> {
+    try {
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
+      this.dataAccess.validateFoundryState();
+      const parsed = ListActiveEffectsInput.strict().parse(data ?? {});
+      return { success: true, data: await this.dataAccess.listActiveEffects(parsed as any) };
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to list active effects: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  private async handleGetWfrp4eConfig(data: unknown): Promise<any> {
+    try {
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
+      const parsed = GetWfrp4eConfigInput.strict().parse(data ?? {});
+      return { success: true, data: await this.dataAccess.getWfrp4eConfig(parsed) };
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to read wfrp4e config: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 }

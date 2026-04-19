@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { wrappedWrite, transactionManager } from '../transaction-manager.js';
 import { permissionManager } from '../permissions.js';
+import { QueryHandlers } from '../queries.js';
 
 describe('wrappedWrite', () => {
   beforeEach(() => {
@@ -59,4 +60,52 @@ describe('wrappedWrite', () => {
     expect(rollbackSpy).toHaveBeenCalledWith('tx-2');
     expect(commitSpy).not.toHaveBeenCalled();
   });
+});
+
+// Phase 4b — per-handler wrappedWrite engagement for 7 write handlers.
+// Reads (getCombat, listCombatants, listConditions, listActiveEffects) skip.
+
+describe('Phase 4b — wrappedWrite engagement per handler', () => {
+  beforeEach(() => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    (globalThis as any).game = {
+      ...(globalThis as any).game,
+      system: { id: 'wfrp4e' },
+      user: { isGM: true, id: 'gm', name: 'GM' },
+      tables: new Map(),
+      actors: new Map(),
+    };
+    vi.spyOn(permissionManager, 'checkWritePermission').mockReturnValue({ allowed: true });
+    vi.spyOn(transactionManager, 'commitTransaction').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function makeHandlers(): QueryHandlers {
+    const qh = new QueryHandlers();
+    (qh.dataAccess as any).validateFoundryState = () => {};
+    return qh;
+  }
+
+  const writeCases: Array<[string, string, any, string]> = [
+    ['handleAdvanceCombat', 'advanceCombat', { action: 'next' }, 'advanceCombat'],
+    ['handleAddCombatants', 'addCombatants', { actorIds: ['a1'] }, 'addCombatants'],
+    ['handleRemoveCombatants', 'removeCombatants', { combatantIds: ['c1'] }, 'removeCombatants'],
+    ['handleEndCombat', 'endCombat', {}, 'endCombat'],
+    ['handleApplyDamage', 'applyDamage', { actorId: 'a1', amount: 0 }, 'applyDamage'],
+    ['handleApplyCondition', 'applyCondition', { actorId: 'a1', conditionKey: 'prone' }, 'applyCondition'],
+    ['handleRemoveCondition', 'removeCondition', { actorId: 'a1', conditionKey: 'prone' }, 'removeCondition'],
+  ];
+
+  for (const [method, daMethod, input, expectedOp] of writeCases) {
+    it(`${method} engages wrappedWrite (startTransaction called with "${expectedOp}")`, async () => {
+      const qh = makeHandlers();
+      (qh.dataAccess as any)[daMethod] = async () => ({ ok: true });
+      const startSpy = vi.spyOn(transactionManager, 'startTransaction').mockReturnValue('tx');
+      await (qh as any)[method](input);
+      expect(startSpy).toHaveBeenCalledWith(expectedOp);
+    });
+  }
 });

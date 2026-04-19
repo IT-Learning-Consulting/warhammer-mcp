@@ -3575,9 +3575,21 @@ export class FoundryDataAccess {
         }
       }
 
-      // Pass skipDialog option to bypass WFRP4e confirmation dialogs
-      // This prevents timeouts when advancing characteristics/skills via MCP
-      await actor.update(data.updateData, { skipDialog: true } as any);
+      // Bypass wfrp4e's programmatic-hostile _preUpdate hooks:
+      //   - _checkCharacteristicChange (wfrp4e.js:28735) pops an Advancement Cost dialog
+      //     whenever system.characteristics.*.advances changes, doubling cost for
+      //     out-of-career advances. It calls actor.update() itself inside the dialog
+      //     callback, racing with our update and charging the XP twice.
+      //   - _handleExperienceChange (wfrp4e.js:28895) pops an ExpChange dialog whenever
+      //     system.details.experience changes without experience.log, then auto-appends
+      //     a log entry.
+      // Both hooks gate on !options.skipExperienceChecks (wfrp4e.js:28727). Setting it
+      // to true is the documented way for programmatic callers to bypass the wizardry.
+      // Caller contract: skills that bump experience.spent MUST also include the
+      // experience.log entry in updateData (since auto-append is now skipped).
+      // The old `skipDialog: true` flag was a no-op — no code in wfrp4e or warhammer-lib
+      // references it.
+      await actor.update(data.updateData, { skipExperienceChecks: true } as any);
 
       // Debug: Log the updateData structure to help diagnose issues
       console.log(`[Warhammer MCP] Update data structure:`, {
@@ -3967,6 +3979,344 @@ export class FoundryDataAccess {
     } catch (error) {
       throw new Error(`Failed to delete item: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
+  }
+
+  // ============================================================
+  // Phase 4b — combat / damage / conditions / active-effects
+  // ============================================================
+
+  private resolveCombat(combatId?: string): any {
+    const combats: any = (game as any).combats;
+    const combat = combatId ? combats?.get(combatId) : combats?.active;
+    return combat ?? null;
+  }
+
+  private snapshotStatus(actor: any): any {
+    const status: any = actor.system?.status ?? {};
+    const conditions: string[] = (actor.effects ?? [])
+      .filter((e: any) => e.isCondition)
+      .map((e: any) => (e.conditionKey ?? e.statuses?.first?.() ?? e.name) as string)
+      .filter(Boolean);
+    return {
+      wounds: {
+        value: status.wounds?.value ?? 0,
+        max: status.wounds?.max ?? 0,
+      },
+      criticalWounds: {
+        value: status.criticalWounds?.value ?? 0,
+        max: status.criticalWounds?.max ?? 0,
+      },
+      fate: { value: status.fate?.value ?? 0 },
+      fortune: { value: status.fortune?.value ?? 0 },
+      advantage: { value: status.advantage?.value ?? 0 },
+      conditions,
+    };
+  }
+
+  async getCombat(data: { combatId?: string } = {}): Promise<any> {
+    this.validateFoundryState();
+    const combat = this.resolveCombat(data.combatId);
+    if (!combat) return null;
+    return {
+      id: combat.id,
+      round: combat.round,
+      turn: combat.turn,
+      active: combat.active,
+      started: combat.started,
+      sceneId: combat.scene?.id ?? null,
+      currentCombatantId: combat.combatant?.id ?? null,
+      combatantCount: combat.turns?.length ?? 0,
+    };
+  }
+
+  async listCombatants(data: { combatId?: string } = {}): Promise<any[]> {
+    this.validateFoundryState();
+    const combat = this.resolveCombat(data.combatId);
+    if (!combat) return [];
+    return (combat.turns ?? []).map((c: any) => ({
+      id: c.id,
+      actorId: c.actorId ?? c.actor?.id ?? null,
+      tokenId: c.tokenId ?? c.token?.id ?? null,
+      name: c.name,
+      initiative: c.initiative,
+      defeated: c.defeated ?? false,
+      hidden: c.hidden ?? false,
+    }));
+  }
+
+  async advanceCombat(data: {
+    combatId?: string;
+    action: 'start' | 'next' | 'prev' | 'nextRound' | 'prevRound' | 'rollAll' | 'rollNPC';
+  }): Promise<any> {
+    this.validateFoundryState();
+    const combat: any = this.resolveCombat(data.combatId);
+    if (!combat) throw new Error('No combat found');
+
+    switch (data.action) {
+      case 'start':
+        await combat.startCombat();
+        break;
+      case 'next':
+        await combat.nextTurn();
+        break;
+      case 'prev':
+        await combat.previousTurn();
+        break;
+      case 'nextRound':
+        await combat.nextRound();
+        break;
+      case 'prevRound':
+        await combat.previousRound();
+        break;
+      case 'rollAll':
+        await combat.rollAll();
+        break;
+      case 'rollNPC':
+        await combat.rollNPC();
+        break;
+    }
+
+    return {
+      combatId: combat.id,
+      round: combat.round,
+      turn: combat.turn,
+      combatantId: combat.combatant?.id ?? null,
+    };
+  }
+
+  async addCombatants(data: {
+    combatId?: string;
+    actorIds: string[];
+    sceneId?: string;
+  }): Promise<{ added: string[] }> {
+    this.validateFoundryState();
+    let combat: any = this.resolveCombat(data.combatId);
+
+    if (!combat) {
+      const sceneId = data.sceneId ?? (game as any).scenes?.active?.id;
+      if (!sceneId) throw new Error('No active scene and no sceneId provided');
+      combat = await (Combat as any).create({ scene: sceneId, active: true });
+    }
+
+    const scene: any = combat.scene ?? (game as any).scenes?.get(data.sceneId) ?? (game as any).scenes?.active;
+    const creates: any[] = [];
+    for (const actorId of data.actorIds) {
+      const actor: any = (game as any).actors?.get(actorId);
+      if (!actor) continue;
+      const token: any = scene?.tokens?.find((t: any) => t.actorId === actorId);
+      creates.push({
+        actorId,
+        tokenId: token?.id,
+        sceneId: scene?.id,
+        hidden: token?.hidden ?? false,
+      });
+    }
+
+    const created: any[] = await combat.createEmbeddedDocuments('Combatant', creates);
+    return { added: created.map((c: any) => c.id).filter(Boolean) };
+  }
+
+  async removeCombatants(data: {
+    combatId?: string;
+    combatantIds: string[];
+  }): Promise<{ removed: string[] }> {
+    this.validateFoundryState();
+    const combat: any = this.resolveCombat(data.combatId);
+    if (!combat) throw new Error('No combat found');
+    await combat.deleteEmbeddedDocuments('Combatant', data.combatantIds);
+    return { removed: data.combatantIds };
+  }
+
+  async endCombat(data: { combatId?: string } = {}): Promise<{ ended: string }> {
+    this.validateFoundryState();
+    const combat: any = this.resolveCombat(data.combatId);
+    if (!combat) throw new Error('No combat found');
+    const id: string = combat.id;
+    await combat.delete();
+    return { ended: id };
+  }
+
+  async applyDamage(data: {
+    actorId: string;
+    amount: number;
+    damageType?: 'NORMAL' | 'IGNORE_AP' | 'IGNORE_TB' | 'IGNORE_ALL';
+    hitLocation?: 'head' | 'body' | 'rArm' | 'lArm' | 'rLeg' | 'lLeg';
+  }): Promise<any> {
+    this.validateFoundryState();
+    const actor: any = (game as any).actors?.get(data.actorId);
+    if (!actor) throw new Error(`Actor not found with ID: ${data.actorId}`);
+
+    const damageType = data.damageType ?? 'NORMAL';
+    const damageTypeConst: any =
+      (CONFIG as any).WFRP4E?.DAMAGE_TYPE?.[damageType] ?? 0;
+
+    const before = this.snapshotStatus(actor);
+    await actor.applyBasicDamage(data.amount, {
+      damageType: damageTypeConst,
+      hitloc: data.hitLocation ? { result: data.hitLocation } : undefined,
+    });
+    const after = this.snapshotStatus(actor);
+
+    return {
+      actorId: actor.id,
+      damage: {
+        amount: data.amount,
+        damageType,
+        hitLocation: data.hitLocation,
+      },
+      before,
+      after,
+    };
+  }
+
+  async applyCondition(data: {
+    actorId: string;
+    conditionKey: string;
+    value?: number;
+  }): Promise<any> {
+    this.validateFoundryState();
+    const actor: any = (game as any).actors?.get(data.actorId);
+    if (!actor) throw new Error(`Actor not found with ID: ${data.actorId}`);
+
+    const validKeys = Object.keys((CONFIG as any).WFRP4E?.conditions ?? {});
+    if (validKeys.length && !validKeys.includes(data.conditionKey)) {
+      throw new Error(
+        `Unknown condition key '${data.conditionKey}'. Valid: ${validKeys.join(', ')}`,
+      );
+    }
+
+    const value = data.value ?? 1;
+    await actor.addCondition(data.conditionKey, value);
+    const stacked: any = actor.hasCondition?.(data.conditionKey);
+    const stackCount =
+      typeof stacked === 'object'
+        ? stacked?.conditionValue ?? stacked?.flags?.wfrp4e?.value ?? value
+        : value;
+    return {
+      actorId: actor.id,
+      conditionKey: data.conditionKey,
+      stackCount,
+    };
+  }
+
+  async removeCondition(data: {
+    actorId: string;
+    conditionKey: string;
+    count?: number;
+  }): Promise<any> {
+    this.validateFoundryState();
+    const actor: any = (game as any).actors?.get(data.actorId);
+    if (!actor) throw new Error(`Actor not found with ID: ${data.actorId}`);
+    const count = data.count ?? 1;
+    await actor.removeCondition(data.conditionKey, count);
+    const stacked: any = actor.hasCondition?.(data.conditionKey);
+    const remainingCount =
+      stacked && typeof stacked === 'object'
+        ? stacked?.conditionValue ?? stacked?.flags?.wfrp4e?.value ?? 0
+        : stacked
+          ? 1
+          : 0;
+    return {
+      actorId: actor.id,
+      conditionKey: data.conditionKey,
+      remainingCount,
+    };
+  }
+
+  async listConditions(data: { actorId: string }): Promise<any[]> {
+    this.validateFoundryState();
+    const actor: any = (game as any).actors?.get(data.actorId);
+    if (!actor) throw new Error(`Actor not found with ID: ${data.actorId}`);
+    return (actor.effects ?? [])
+      .filter((e: any) => e.isCondition)
+      .map((e: any) => ({
+        conditionKey: e.conditionKey ?? e.statuses?.first?.() ?? e.name,
+        value:
+          e.conditionValue ?? e.flags?.wfrp4e?.value ?? 1,
+        effectId: e.id,
+      }));
+  }
+
+  async listActiveEffects(data: {
+    actorId: string;
+    filter?: 'all' | 'applied' | 'temporary' | 'conditions';
+  }): Promise<any[]> {
+    this.validateFoundryState();
+    const actor: any = (game as any).actors?.get(data.actorId);
+    if (!actor) throw new Error(`Actor not found with ID: ${data.actorId}`);
+
+    const filter = data.filter ?? 'all';
+    let collection: any[];
+    switch (filter) {
+      case 'applied':
+        collection = Array.from(actor.appliedEffects ?? []);
+        break;
+      case 'temporary':
+        collection = Array.from(actor.temporaryEffects ?? []);
+        break;
+      case 'conditions':
+        collection = Array.from(actor.effects ?? []).filter(
+          (e: any) => e.isCondition,
+        );
+        break;
+      default:
+        collection = Array.from(actor.effects ?? []);
+    }
+
+    return collection.map((e: any) => ({
+      id: e.id,
+      name: e.name,
+      img: e.img ?? e.icon ?? null,
+      statuses: Array.from(e.statuses ?? []),
+      disabled: !!e.disabled,
+      duration: {
+        rounds: e.duration?.rounds ?? null,
+        turns: e.duration?.turns ?? null,
+        seconds: e.duration?.seconds ?? null,
+      },
+      origin: e.origin ?? null,
+      changes: (e.changes ?? []).map((c: any) => ({
+        key: c.key,
+        mode: c.mode,
+        value: c.value,
+        priority: c.priority ?? null,
+      })),
+    }));
+  }
+
+  /**
+   * Phase 4c.0 — read whitelisted CONFIG.WFRP4E.* keys for skill-side rule lookups.
+   * Skills (e.g. /wfrp-advance, /wfrp-status) need authoritative WFRP rule tables
+   * (xpCost, talentMax, statusTiers, earningValues, ...) at runtime so they can
+   * compute costs without hardcoding (BUG-001 / BUG-018). Whitelist enforced here
+   * so skills can't read arbitrary `game.wfrp4e.config.*` paths.
+   */
+  async getWfrp4eConfig(data: { keys: string[] }): Promise<Record<string, unknown>> {
+    this.validateFoundryState();
+    const ALLOWED = new Set([
+      'xpCost',
+      'talentMax',
+      'characteristics',
+      'characteristicsAbbrev',
+      'characteristicsBonus',
+      'careerLevels',
+      'statusTiers',
+      'earningValues',
+      'moneyValues',
+      'moneyNames',
+      'conditions',
+      'difficultyModifiers',
+      'symptoms',
+      'mutationTypes',
+      'corruptionTables',
+    ]);
+    const config: any = (game as any).wfrp4e?.config ?? (globalThis as any).WFRP4E ?? {};
+    const out: Record<string, unknown> = {};
+    for (const key of data.keys) {
+      if (!ALLOWED.has(key)) continue;
+      out[key] = config[key] ?? null;
+    }
+    return out;
   }
 
 }

@@ -44,12 +44,19 @@ const SearchJournalsSchema = z.object({
     query: z.string()
 });
 
+// Get content schema
+const GetContentSchema = z.object({
+    action: z.literal("get-content"),
+    journalId: z.string()
+});
+
 const ManageJournalSchema = z.discriminatedUnion("action", [
     CreateJournalSchema,
     UpdateJournalSchema,
     LinkNPCSchema,
     ListJournalsSchema,
-    SearchJournalsSchema
+    SearchJournalsSchema,
+    GetContentSchema
 ]);
 
 type ManageJournalArgs = z.infer<typeof ManageJournalSchema>;
@@ -89,6 +96,7 @@ export class ManageJournalTool {
 - **link-npc**: Link journal to NPC (quest giver, target, ally, enemy, contact)
 - **list**: List all journals (optionally filter for quests)
 - **search**: Search journal content
+- **get-content**: Fetch the first text page of a journal entry by ID
 
 **Content Formatting (for update action):**
 Use quest-style HTML or plain text (Markdown will be stripped):
@@ -102,13 +110,14 @@ Use quest-style HTML or plain text (Markdown will be stripped):
 - Update quest: {action: "update", journalId: "abc123", newContent: "The party discovered...", updateType: "progress"}
 - Link NPC: {action: "link-npc", journalId: "abc123", npcName: "Captain Marcus", relationship: "quest_giver"}
 - List quests: {action: "list", filterQuests: true}
-- Search: {action: "search", query: "cultist"}`,
+- Search: {action: "search", query: "cultist"}
+- Get content: {action: "get-content", journalId: "abc123"}`,
             inputSchema: {
                 type: "object",
                 properties: {
                     action: {
                         type: "string",
-                        enum: ["create", "update", "link-npc", "list", "search"],
+                        enum: ["create", "update", "link-npc", "list", "search", "get-content"],
                         description: "The journal action to perform"
                     },
                     questTitle: {
@@ -147,7 +156,7 @@ Use quest-style HTML or plain text (Markdown will be stripped):
                     },
                     journalId: {
                         type: "string",
-                        description: "[update/link-npc] Journal entry ID"
+                        description: "[update/link-npc/get-content] Journal entry ID"
                     },
                     newContent: {
                         type: "string",
@@ -195,6 +204,8 @@ Use quest-style HTML or plain text (Markdown will be stripped):
                 return this.handleList(args);
             case "search":
                 return this.handleSearch(args);
+            case "get-content":
+                return this.handleGetContent(args);
         }
     }
 
@@ -388,6 +399,23 @@ Use quest-style HTML or plain text (Markdown will be stripped):
 
         return {
             content: [{ type: "text", text: resultText }],
+        };
+    }
+
+    private async handleGetContent(args: { journalId: string }) {
+        this.logger.info("Getting journal content", { journalId: args.journalId });
+        const response = await this.foundryClient.query<any>(
+            "warhammer-mcp.getJournalContent",
+            { journalId: args.journalId }
+        );
+        const data = response ?? {};
+        const rawContent = typeof data.content === "string" ? data.content : "";
+        const plainText = rawContent.replace(/<[^>]*>/g, "").trim();
+        return {
+            content: [{
+                type: "text",
+                text: `📄 **Journal Content** (${args.journalId})\n\n${plainText || "(empty)"}`
+            }]
         };
     }
 }

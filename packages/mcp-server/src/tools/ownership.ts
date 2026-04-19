@@ -23,13 +23,13 @@ const ListOwnershipSchema = z.object({
     actorName: z.string()
 });
 
-const ManageOwnershipSchema = z.discriminatedUnion("action", [
+const OwnershipSchema = z.discriminatedUnion("action", [
     AssignOwnershipSchema,
     RemoveOwnershipSchema,
     ListOwnershipSchema
 ]);
 
-type ManageOwnershipArgs = z.infer<typeof ManageOwnershipSchema>;
+type OwnershipArgs = z.infer<typeof OwnershipSchema>;
 
 // Foundry ownership levels
 const OwnershipLevels: Record<string, number> = {
@@ -39,7 +39,7 @@ const OwnershipLevels: Record<string, number> = {
     owner: 3
 };
 
-export class ManageOwnershipTool {
+export class OwnershipTool {
     constructor(
         private foundryClient: FoundryClient,
         private logger: Logger
@@ -47,7 +47,7 @@ export class ManageOwnershipTool {
 
     getToolDefinitions() {
         return [{
-            name: "manage-ownership",
+            name: "ownership",
             description: `Manage actor ownership and permissions in Foundry VTT. Control which players can view, edit, or control actors.
 
 **Foundry VTT Ownership Levels:**
@@ -105,8 +105,8 @@ export class ManageOwnershipTool {
         }];
     }
 
-    async execute(args: ManageOwnershipArgs) {
-        this.logger.info("Executing manage-ownership", { action: args.action });
+    async execute(args: OwnershipArgs) {
+        this.logger.info("Executing ownership", { action: args.action });
 
         switch (args.action) {
             case "assign":

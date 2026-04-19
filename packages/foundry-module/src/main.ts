@@ -2,6 +2,7 @@ import { MODULE_ID } from './constants.js';
 import { SocketBridge } from './socket-bridge.js';
 import { QueryHandlers } from './queries.js';
 import { ModuleSettings } from './settings.js';
+import { runHealthCheck, captureInitError } from './health-check.js';
 // Connection control now handled through settings menu
 
 /**
@@ -36,7 +37,35 @@ class FoundryMCPBridge {
       console.log(`[${MODULE_ID}] Initializing Warhammer MCP...`);
 
       // Register module settings
-      this.settings.registerSettings();
+      try {
+        this.settings.registerSettings();
+      } catch (e) {
+        captureInitError('settings-register', e);
+        throw e;
+      }
+
+      // Register health-check client/world settings (HC10 self-diagnostic)
+      try {
+        game.settings.register(MODULE_ID, 'healthCheckDelayMs', {
+          name: 'Health check delay (ms)',
+          hint: 'Time after Foundry ready event to post the MCP self-diagnostic summary. Default 120000 (2 min). Set 0 to disable.',
+          scope: 'client',
+          config: true,
+          type: Number,
+          default: 120000,
+          range: { min: 0, max: 600000, step: 5000 },
+        });
+        game.settings.register(MODULE_ID, 'expectedQueryCount', {
+          name: 'Expected query count (health check)',
+          hint: 'If > 0, self-diagnostic warns when fewer queries are registered. Default 40 (current Phase 4 in-flight count). Will raise to 51 when Phase 4 final sub-plan closes. Set 0 to skip.',
+          scope: 'world',
+          config: true,
+          type: Number,
+          default: 40,
+        });
+      } catch (e) {
+        captureInitError('healthcheck-settings-register', e);
+      }
 
       // HC1 / BUG-019: Hard system-id guard. Non-wfrp4e worlds register zero handlers.
       const systemId = (game as any).system?.id;
@@ -47,7 +76,12 @@ class FoundryMCPBridge {
       }
 
       // Register query handlers
-      this.queryHandlers.registerHandlers();
+      try {
+        this.queryHandlers.registerHandlers();
+      } catch (e) {
+        captureInitError('queryhandlers-register', e);
+        throw e;
+      }
 
       // Expose data access globally for settings UI
       (window as any).foundryMCPBridge.dataAccess = this.queryHandlers.dataAccess;
@@ -416,6 +450,24 @@ Hooks.once('init', async () => {
 Hooks.once('ready', async () => {
   try {
     await foundryMCPBridge.onReady();
+
+    // Schedule the 2-minute post-ready health-check banner.
+    try {
+      const delayMs = (game.settings.get(MODULE_ID, 'healthCheckDelayMs') as number) ?? 120000;
+      const expectedRaw = game.settings.get(MODULE_ID, 'expectedQueryCount') as number;
+      const expected = expectedRaw && expectedRaw > 0 ? expectedRaw : undefined;
+      if (delayMs > 0) {
+        setTimeout(() => {
+          try {
+            runHealthCheck(expected);
+          } catch (e) {
+            console.error(`[${MODULE_ID}] health-check itself threw:`, e);
+          }
+        }, delayMs);
+      }
+    } catch (e) {
+      captureInitError('ready-hook-health-check-schedule', e);
+    }
 
     // Register socket listener for roll state management (after game.user is available)
 

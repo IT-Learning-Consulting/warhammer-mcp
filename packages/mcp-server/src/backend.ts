@@ -16,20 +16,12 @@ import { FoundryClient } from './foundry-client.js';
 import { CharacterTools } from './tools/character.js';
 import { ManageCharacterTool } from './tools/manage-character.js';
 
-import { ManageCareerTool } from './tools/manage-career.js';
-
 import { ManageCorruptionTools } from './tools/manage-corruption.js';
 
 import { ManageMutationTools } from './tools/manage-mutation.js';
 
-import { ManageFortuneFateTools } from './tools/manage-fortune-fate.js';
-
-import { ManageResolveResilienceTools } from './tools/manage-resolve-resilience.js';
-
 import { ManageCriticalWoundTool } from './tools/manage-critical-wound.js';
 import { RollCriticalWoundTool } from './tools/roll-critical-wound.js';
-
-import { ManageAdvantageTools } from './tools/manage-advantage.js';
 
 import { ManageDiseaseTool } from './tools/manage-disease.js';
 
@@ -40,8 +32,6 @@ import { CreateItemTool } from './tools/create-item.js';
 import { ManageDivineMagicTool } from './tools/manage-divine-magic.js';
 
 import { ManageArcaneMagicTool } from './tools/manage-arcane-magic.js';
-
-import { ManageSocialStatusTool } from './tools/manage-social-status.js';
 
 import { ManageNPCGenerationTool } from './tools/manage-npc-generation.js';
 
@@ -55,9 +45,21 @@ import { ManageJournalTool } from './tools/manage-journal.js';
 
 import { DiceRollTools } from './tools/dice-roll.js';
 
-import { ManageOwnershipTool } from './tools/manage-ownership.js';
+import { OwnershipTool } from './tools/ownership.js';
 
-import { ManageRollTableTool } from './tools/manage-rolltable.js';
+import { RollTableTool } from './tools/rolltable.js';
+
+import { ManageCombatTools } from './tools/manage-combat.js';
+
+import { ApplyDamageTool } from './tools/apply-damage.js';
+
+import { ManageConditionsTools } from './tools/manage-conditions.js';
+
+import { ListActiveEffectsTool } from './tools/list-active-effects.js';
+
+import { UpdateActorTool } from './tools/update-actor.js';
+import { UpdateItemTool } from './tools/update-item.js';
+import { GetWfrpConfigTool } from './tools/get-wfrp-config.js';
 
 const CONTROL_HOST = '127.0.0.1';
 
@@ -194,20 +196,12 @@ async function startBackend(): Promise<void> {
   const characterTools = new CharacterTools({ foundryClient, logger });
   const manageCharacterTool = new ManageCharacterTool(foundryClient, logger);
 
-  const manageCareerTool = new ManageCareerTool(foundryClient, logger);
-
   const manageCorruptionTools = new ManageCorruptionTools({ foundryClient, logger });
 
   const manageMutationTools = new ManageMutationTools({ foundryClient, logger });
 
-  const manageFortuneFateTools = new ManageFortuneFateTools({ foundryClient, logger });
-
-  const manageResolveResilienceTools = new ManageResolveResilienceTools({ foundryClient, logger });
-
   const manageCriticalWoundTool = new ManageCriticalWoundTool(foundryClient, logger);
   const rollCriticalWoundTool = new RollCriticalWoundTool(foundryClient, logger);
-
-  const manageAdvantageTools = new ManageAdvantageTools({ foundryClient, logger });
 
   const manageDiseaseTool = new ManageDiseaseTool(foundryClient, logger);
 
@@ -218,8 +212,6 @@ async function startBackend(): Promise<void> {
   const manageDivineMagicTool = new ManageDivineMagicTool(foundryClient, logger);
 
   const manageArcaneMagicTool = new ManageArcaneMagicTool(foundryClient, logger);
-
-  const manageSocialStatusTool = new ManageSocialStatusTool(foundryClient, logger);
 
   const manageNPCGenerationTool = new ManageNPCGenerationTool(foundryClient, logger);
 
@@ -233,29 +225,33 @@ async function startBackend(): Promise<void> {
 
   const diceRollTools = new DiceRollTools({ foundryClient, logger });
 
-  const manageOwnershipTool = new ManageOwnershipTool(foundryClient, logger);
+  const ownershipTool = new OwnershipTool(foundryClient, logger);
 
-  const manageRollTableTool = new ManageRollTableTool(foundryClient, logger);
+  const rollTableTool = new RollTableTool(foundryClient, logger);
+
+  const manageCombatTools = new ManageCombatTools({ foundryClient, logger });
+
+  const applyDamageTool = new ApplyDamageTool({ foundryClient, logger });
+
+  const manageConditionsTools = new ManageConditionsTools({ foundryClient, logger });
+
+  const listActiveEffectsTool = new ListActiveEffectsTool({ foundryClient, logger });
+
+  const updateActorTool = new UpdateActorTool({ foundryClient, logger });
+  const updateItemTool = new UpdateItemTool({ foundryClient, logger });
+  const getWfrpConfigTool = new GetWfrpConfigTool({ foundryClient, logger });
 
   const allTools = [
 
     ...characterTools.getToolDefinitions(),
     ...manageCharacterTool.getToolDefinitions(),
 
-    ...manageCareerTool.getToolDefinitions(),
-
     ...manageCorruptionTools.getToolDefinitions(),
 
     ...manageMutationTools.getToolDefinitions(),
 
-    ...manageFortuneFateTools.getToolDefinitions(),
-
-    ...manageResolveResilienceTools.getToolDefinitions(),
-
     ...manageCriticalWoundTool.getToolDefinitions(),
     ...rollCriticalWoundTool.getToolDefinitions(),
-
-    ...manageAdvantageTools.getToolDefinitions(),
 
     ...manageDiseaseTool.getToolDefinitions(),
 
@@ -266,8 +262,6 @@ async function startBackend(): Promise<void> {
     ...manageDivineMagicTool.getToolDefinitions(),
 
     ...manageArcaneMagicTool.getToolDefinitions(),
-
-    ...manageSocialStatusTool.getToolDefinitions(),
 
     ...manageNPCGenerationTool.getToolDefinitions(),
 
@@ -281,9 +275,23 @@ async function startBackend(): Promise<void> {
 
     ...diceRollTools.getToolDefinitions(),
 
-    ...manageOwnershipTool.getToolDefinitions(),
+    ...ownershipTool.getToolDefinitions(),
 
-    ...manageRollTableTool.getToolDefinitions(),
+    ...rollTableTool.getToolDefinitions(),
+
+    ...manageCombatTools.getToolDefinitions(),
+
+    ...applyDamageTool.getToolDefinitions(),
+
+    ...manageConditionsTools.getToolDefinitions(),
+
+    ...listActiveEffectsTool.getToolDefinitions(),
+
+    ...updateActorTool.getToolDefinitions(),
+
+    ...updateItemTool.getToolDefinitions(),
+
+    ...getWfrpConfigTool.getToolDefinitions(),
 
   ];
 
@@ -369,14 +377,6 @@ async function startBackend(): Promise<void> {
 
                   break;
 
-                // Career advancement tools (consolidated)
-
-                case 'manage-career':
-
-                  result = await manageCareerTool.handle(args);
-
-                  break;
-
                 // Corruption & Mutation tools (consolidated)
 
                 case 'manage-corruption':
@@ -391,22 +391,6 @@ async function startBackend(): Promise<void> {
 
                   break;
 
-                // Fortune & Fate tools (consolidated)
-
-                case 'manage-fortune-fate':
-
-                  result = await manageFortuneFateTools.handle(args);
-
-                  break;
-
-                // Resolve & Resilience tools (consolidated)
-
-                case 'manage-resolve-resilience':
-
-                  result = await manageResolveResilienceTools.handle(args);
-
-                  break;
-
                 // Critical Wounds tools (consolidated)
 
                 case 'manage-critical-wound':
@@ -418,14 +402,6 @@ async function startBackend(): Promise<void> {
                 case 'roll-critical-wound':
 
                   result = await rollCriticalWoundTool.handle(args);
-
-                  break;
-
-                // Advantage tools (consolidated)
-
-                case 'manage-advantage':
-
-                  result = await manageAdvantageTools.handle(args);
 
                   break;
 
@@ -466,14 +442,6 @@ async function startBackend(): Promise<void> {
                 case 'manage-arcane-magic':
 
                   result = await manageArcaneMagicTool.execute(args);
-
-                  break;
-
-                // Social Status Tools (consolidated)
-
-                case 'manage-social-status':
-
-                  result = await manageSocialStatusTool.handle(args);
 
                   break;
 
@@ -557,9 +525,9 @@ async function startBackend(): Promise<void> {
 
                 // Ownership tool (consolidated)
 
-                case 'manage-ownership':
+                case 'ownership':
 
-                  result = await manageOwnershipTool.execute(args);
+                  result = await ownershipTool.execute(args);
 
                   break;
 
@@ -577,9 +545,102 @@ async function startBackend(): Promise<void> {
 
                 // Roll Table tool (consolidated)
 
-                case 'manage-rolltable':
+                case 'rolltable':
 
-                  result = await manageRollTableTool.execute(args);
+                  result = await rollTableTool.execute(args);
+
+                  break;
+
+                // Combat tools (Phase 4b — 6 queries)
+
+                case 'get-combat':
+
+                  result = await manageCombatTools.handleGetCombat(args);
+
+                  break;
+
+                case 'list-combatants':
+
+                  result = await manageCombatTools.handleListCombatants(args);
+
+                  break;
+
+                case 'advance-combat':
+
+                  result = await manageCombatTools.handleAdvanceCombat(args);
+
+                  break;
+
+                case 'add-combatants':
+
+                  result = await manageCombatTools.handleAddCombatants(args);
+
+                  break;
+
+                case 'remove-combatants':
+
+                  result = await manageCombatTools.handleRemoveCombatants(args);
+
+                  break;
+
+                case 'end-combat':
+
+                  result = await manageCombatTools.handleEndCombat(args);
+
+                  break;
+
+                // Damage tool (Phase 4b)
+
+                case 'apply-damage':
+
+                  result = await applyDamageTool.handle(args);
+
+                  break;
+
+                // Condition tools (Phase 4b — 3 queries)
+
+                case 'apply-condition':
+
+                  result = await manageConditionsTools.handleApplyCondition(args);
+
+                  break;
+
+                case 'remove-condition':
+
+                  result = await manageConditionsTools.handleRemoveCondition(args);
+
+                  break;
+
+                case 'list-conditions':
+
+                  result = await manageConditionsTools.handleListConditions(args);
+
+                  break;
+
+                // Active effects tool (Phase 4b)
+
+                case 'list-active-effects':
+
+                  result = await listActiveEffectsTool.handle(args);
+
+                  break;
+
+                // Phase 4c.0 — primitives for skill-side rule composition
+                case 'update-actor':
+
+                  result = await updateActorTool.handle(args);
+
+                  break;
+
+                case 'update-item':
+
+                  result = await updateItemTool.handle(args);
+
+                  break;
+
+                case 'get-wfrp-config':
+
+                  result = await getWfrpConfigTool.handle(args);
 
                   break;
 

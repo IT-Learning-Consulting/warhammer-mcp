@@ -3,7 +3,6 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { QueryHandlers } from '../queries.js';
-import { handleGetPartyCharacters, handleFindPlayers, handleFindActor } from '../_staging/orphan-handlers.js';
 
 function bad<T>(extra: Record<string, unknown> = { unknownKey: 'x' }): T {
   return { ...extra } as any;
@@ -65,6 +64,21 @@ const methodCases: Array<[string, string]> = [
   ['handleGetRollTable', 'getRollTable'],
   ['handleRollOnTable', 'rollOnTable'],
   ['handleDeleteRollTable', 'deleteRollTable'],
+  ['handleGetPartyCharacters', 'getPartyCharacters'],
+  ['handleFindPlayers', 'findPlayers'],
+  ['handleFindActor', 'findActor'],
+  // Phase 4b
+  ['handleGetCombat', 'getCombat'],
+  ['handleListCombatants', 'listCombatants'],
+  ['handleAdvanceCombat', 'advanceCombat'],
+  ['handleAddCombatants', 'addCombatants'],
+  ['handleRemoveCombatants', 'removeCombatants'],
+  ['handleEndCombat', 'endCombat'],
+  ['handleApplyDamage', 'applyDamage'],
+  ['handleApplyCondition', 'applyCondition'],
+  ['handleRemoveCondition', 'removeCondition'],
+  ['handleListConditions', 'listConditions'],
+  ['handleListActiveEffects', 'listActiveEffects'],
 ];
 
 for (const [methodName, queryKey] of methodCases) {
@@ -78,24 +92,3 @@ for (const [methodName, queryKey] of methodCases) {
   });
 }
 
-// Orphan handlers (3) — registered as arrow-wrapped functions in queries.ts
-describe('getPartyCharacters', () => {
-  it('rejects unknown keys with Invalid input ZodError', async () => {
-    const qh = makeHandlers();
-    await expect(handleGetPartyCharacters(qh.dataAccess, bad())).rejects.toThrow(/Invalid input/);
-  });
-});
-
-describe('findPlayers', () => {
-  it('rejects unknown keys with Invalid input ZodError', async () => {
-    const qh = makeHandlers();
-    await expect(handleFindPlayers(bad(), qh.dataAccess)).rejects.toThrow(/Invalid input/);
-  });
-});
-
-describe('findActor', () => {
-  it('rejects unknown keys with Invalid input ZodError', async () => {
-    const qh = makeHandlers();
-    await expect(handleFindActor(bad(), qh.dataAccess)).rejects.toThrow(/Invalid input/);
-  });
-});

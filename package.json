@@ -19,6 +19,8 @@
     "build:deploy": "npm run build && npm run deploy:foundry",
     "installer:stage": "node installer/build-nsis.js --skip-download --skip-nsis",
     "test": "npm run test --workspaces --if-present",
+    "test:skills": "vitest --config vitest.skills.config.ts run",
+    "lint:skills": "node scripts/lint-skills.mjs",
     "lint": "eslint . --ext .ts,.js",
     "lint:fix": "eslint . --ext .ts,.js --fix",
     "format": "prettier --write \"**/*.{ts,js,json,md}\"",

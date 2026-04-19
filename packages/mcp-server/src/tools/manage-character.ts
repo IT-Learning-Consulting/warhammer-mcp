@@ -108,7 +108,7 @@ Use for quick stat changes, character creation, testing, or corrections where yo
 - Status: currentWounds, fortune, fate, resilience, resolve
 - Physical: age, height, weight, hair, eyes, gender, distinguishingMarks, starSign
 
-**Note:** For awarding bonus Fortune/Fate with proper narrative ceremony, use manage-fortune-fate tool instead.
+**Note:** For awarding bonus Fortune/Fate with proper narrative ceremony, use the /wfrp-resources skill (grant-fate / spend-fortune actions).
 
 **Examples:**
 - Update stats: action="update-stats", characterName="Hans", updates={strength: 40, fortune: 3}

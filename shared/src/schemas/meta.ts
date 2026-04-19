@@ -82,12 +82,24 @@ export const PingInput = z.object({}).strict();
 
 export const GetWorldInfoInput = z.object({}).strict();
 
+// Phase 4c.0 — whitelisted CONFIG.WFRP4E.* read-through for skills.
+// Skills (e.g. /wfrp-advance) need authoritative WFRP rule tables (xpCost,
+// talentMax, statusTiers, earningValues) at runtime so they can compute costs
+// without hardcoding. Keys are validated against an allowlist server-side
+// (data-access.ts:getWfrp4eConfig).
+export const GetWfrp4eConfigInput = z.object({
+  keys: z.array(z.string()).min(1),
+}).strict();
+
 export const CreateJournalEntryInput = z.object({
   name: z.string(),
   content: z.string(),
 }).strict();
 
-export const ListJournalsInput = z.object({}).strict();
+export const ListJournalsInput = z.object({
+  filterQuests: z.boolean().optional(),
+  includeContent: z.boolean().optional(),
+}).strict();
 
 export const GetJournalContentInput = z.object({
   journalId: z.string(),

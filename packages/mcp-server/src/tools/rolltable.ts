@@ -41,7 +41,7 @@ const DeleteRollTableSchema = z.object({
     tableId: z.string()
 });
 
-const ManageRollTableSchema = z.discriminatedUnion("action", [
+const RollTableSchema = z.discriminatedUnion("action", [
     CreateRollTableSchema,
     ListRollTablesSchema,
     GetRollTableSchema,
@@ -49,9 +49,9 @@ const ManageRollTableSchema = z.discriminatedUnion("action", [
     DeleteRollTableSchema
 ]);
 
-type ManageRollTableArgs = z.infer<typeof ManageRollTableSchema>;
+type RollTableArgs = z.infer<typeof RollTableSchema>;
 
-export class ManageRollTableTool {
+export class RollTableTool {
     constructor(
         private foundryClient: FoundryClient,
         private logger: Logger
@@ -59,7 +59,7 @@ export class ManageRollTableTool {
 
     getToolDefinitions() {
         return [{
-            name: "manage-rolltable",
+            name: "rolltable",
             description: `Manage roll tables in Foundry VTT - create, list, get, roll, and delete tables.
 
 **Roll Tables** are used for random generation: encounters, loot, events, weather, rumors, etc.
@@ -151,8 +151,8 @@ export class ManageRollTableTool {
         }];
     }
 
-    async execute(args: ManageRollTableArgs) {
-        this.logger.info("Executing manage-rolltable", { action: args.action });
+    async execute(args: RollTableArgs) {
+        this.logger.info("Executing rolltable", { action: args.action });
 
         switch (args.action) {
             case "create":
