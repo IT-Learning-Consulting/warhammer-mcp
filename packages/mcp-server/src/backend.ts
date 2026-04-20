@@ -50,6 +50,7 @@ import { AddItemFromCompendiumTool } from './tools/add-item-from-compendium.js';
 import { DeleteItemTool } from './tools/delete-item.js';
 import { GetWfrpConfigTool } from './tools/get-wfrp-config.js';
 import { JournalTools } from './tools/journal.js';
+import { WorldDeleteTools } from './tools/world-delete.js';
 import { AddActorsToSceneTool } from './tools/add-actors-to-scene.js';
 
 const CONTROL_HOST = '127.0.0.1';
@@ -261,6 +262,7 @@ async function startBackend(): Promise<void> {
   const deleteItemTool = new DeleteItemTool({ foundryClient, logger });
   const getWfrpConfigTool = new GetWfrpConfigTool({ foundryClient, logger });
   const journalTools = new JournalTools({ foundryClient, logger });
+  const worldDeleteTools = new WorldDeleteTools({ foundryClient, logger });
   const addActorsToSceneTool = new AddActorsToSceneTool({ foundryClient, logger });
 
   const allTools = [
@@ -307,6 +309,8 @@ async function startBackend(): Promise<void> {
     ...getWfrpConfigTool.getToolDefinitions(),
 
     ...journalTools.getToolDefinitions(),
+
+    ...worldDeleteTools.getToolDefinitions(),
 
     ...addActorsToSceneTool.getToolDefinitions(),
 
@@ -652,6 +656,18 @@ async function startBackend(): Promise<void> {
                 case 'add-actors-to-scene':
 
                   result = await addActorsToSceneTool.handle(args);
+
+                  break;
+
+                case 'delete-actor':
+
+                  result = await worldDeleteTools.handleDeleteActor(args);
+
+                  break;
+
+                case 'delete-journal-entry':
+
+                  result = await worldDeleteTools.handleDeleteJournalEntry(args);
 
                   break;
 

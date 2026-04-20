@@ -50,6 +50,8 @@ import {
   GetRollTableInput,
   RollOnTableInput,
   DeleteRollTableInput,
+  DeleteActorInput,
+  DeleteJournalEntryInput,
   // combat domain (Phase 4b)
   GetCombatInput,
   ListCombatantsInput,
@@ -113,6 +115,8 @@ export class QueryHandlers {
     CONFIG.queries[`${modulePrefix}.listJournals`] = this.handleListJournals.bind(this);
     CONFIG.queries[`${modulePrefix}.getJournalContent`] = this.handleGetJournalContent.bind(this);
     CONFIG.queries[`${modulePrefix}.updateJournalContent`] = this.handleUpdateJournalContent.bind(this);
+    CONFIG.queries[`${modulePrefix}.deleteActor`] = this.handleDeleteActor.bind(this);
+    CONFIG.queries[`${modulePrefix}.deleteJournalEntry`] = this.handleDeleteJournalEntry.bind(this);
     CONFIG.queries[`${modulePrefix}.request-player-rolls`] = this.handleRequestPlayerRolls.bind(this);
     CONFIG.queries[`${modulePrefix}.getEnhancedCreatureIndex`] = this.handleGetEnhancedCreatureIndex.bind(this);
     CONFIG.queries[`${modulePrefix}.setActorOwnership`] = this.handleSetActorOwnership.bind(this);
@@ -690,6 +694,30 @@ export class QueryHandlers {
     } catch (error) {
       rethrowAsInvalidInput(error);
       throw new Error(`Failed to delete item: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  private async handleDeleteActor(data: unknown): Promise<any> {
+    try {
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
+      const parsed = DeleteActorInput.strict().parse(data ?? {});
+      return await wrappedWrite('deleteActor', async () => ({ success: true, data: await this.dataAccess.deleteActor(parsed) }));
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to delete actor: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  private async handleDeleteJournalEntry(data: unknown): Promise<any> {
+    try {
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
+      const parsed = DeleteJournalEntryInput.strict().parse(data ?? {});
+      return await wrappedWrite('deleteJournalEntry', async () => ({ success: true, data: await this.dataAccess.deleteJournalEntry(parsed) }));
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to delete journal entry: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 

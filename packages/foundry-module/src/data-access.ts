@@ -1820,6 +1820,30 @@ export class FoundryDataAccess {
     }
   }
 
+  async deleteActor(data: { id: string }): Promise<{ success: boolean }> {
+    this.validateFoundryState();
+    const actor = game.actors?.get(data.id);
+    if (!actor) {
+      this.auditLog('deleteActor', data, 'failure', 'not found');
+      return { success: false };
+    }
+    await actor.delete();
+    this.auditLog('deleteActor', data, 'success');
+    return { success: true };
+  }
+
+  async deleteJournalEntry(data: { id: string }): Promise<{ success: boolean }> {
+    this.validateFoundryState();
+    const journal = game.journal?.get(data.id);
+    if (!journal) {
+      this.auditLog('deleteJournalEntry', data, 'failure', 'not found');
+      return { success: false };
+    }
+    await journal.delete();
+    this.auditLog('deleteJournalEntry', data, 'success');
+    return { success: true };
+  }
+
   /**
    * Create actors from compendium entries with custom names
    */

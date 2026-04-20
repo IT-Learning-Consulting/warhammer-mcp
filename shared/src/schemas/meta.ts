@@ -142,3 +142,11 @@ export const RollOnTableInput = z.object({
 export const DeleteRollTableInput = z.object({
   tableId: z.string(),
 }).strict();
+
+export const DeleteActorInput = z.object({
+  id: z.string().min(1),
+}).strict();
+
+export const DeleteJournalEntryInput = z.object({
+  id: z.string().min(1),
+}).strict();
