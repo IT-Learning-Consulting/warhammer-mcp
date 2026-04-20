@@ -24,15 +24,11 @@ import { ManageDivineMagicTool } from './tools/manage-divine-magic.js';
 
 import { ManageArcaneMagicTool } from './tools/manage-arcane-magic.js';
 
-import { ManageNPCGenerationTool } from './tools/manage-npc-generation.js';
-
 import { CompendiumTools } from './tools/compendium.js';
 
 import { SceneTools } from './tools/scene.js';
 
 import { ActorCreationTools } from './tools/actor-creation.js';
-
-import { ManageJournalTool } from './tools/manage-journal.js';
 
 import { DiceRollTools } from './tools/dice-roll.js';
 
@@ -53,12 +49,54 @@ import { UpdateItemTool } from './tools/update-item.js';
 import { AddItemFromCompendiumTool } from './tools/add-item-from-compendium.js';
 import { DeleteItemTool } from './tools/delete-item.js';
 import { GetWfrpConfigTool } from './tools/get-wfrp-config.js';
+import { JournalTools } from './tools/journal.js';
+import { AddActorsToSceneTool } from './tools/add-actors-to-scene.js';
 
 const CONTROL_HOST = '127.0.0.1';
 
 const CONTROL_PORT = 31414;
 
 const LOCK_FILE = path.join(os.tmpdir(), 'foundry-mcp-backend.lock');
+
+// BUG-047: Claude Code's MCP client ships booleans / arrays / numbers as JSON-encoded
+// strings. Each tool's Zod parser expects the native JSON type and rejects with
+// "expected boolean, received string". Coerce per the tool's declared inputSchema
+// before dispatch so Zod sees the right shape. Unknown / untyped props pass through
+// unchanged — downstream Zod will still catch real errors.
+function coerceArgsBySchema(schema: any, args: any): any {
+  if (!schema || schema.type !== 'object' || !schema.properties || !args || typeof args !== 'object' || Array.isArray(args)) {
+    return args;
+  }
+  const out: any = { ...args };
+  for (const [key, propSchemaRaw] of Object.entries(schema.properties as Record<string, any>)) {
+    if (!(key in out)) continue;
+    const propSchema = propSchemaRaw as any;
+    const t = propSchema?.type;
+    const val = out[key];
+    if (typeof val === 'string' && t && t !== 'string') {
+      if (t === 'boolean') {
+        if (val === 'true') out[key] = true;
+        else if (val === 'false') out[key] = false;
+      } else if (t === 'number' || t === 'integer') {
+        const n = Number(val);
+        if (!Number.isNaN(n) && val.trim() !== '') out[key] = n;
+      } else if (t === 'array' || t === 'object') {
+        try {
+          const parsed = JSON.parse(val);
+          out[key] = parsed;
+          if (t === 'object' && propSchema.properties) {
+            out[key] = coerceArgsBySchema(propSchema, parsed);
+          }
+        } catch {
+          // leave as-is; Zod will produce a readable error downstream
+        }
+      }
+    } else if (t === 'object' && propSchema.properties && val && typeof val === 'object' && !Array.isArray(val)) {
+      out[key] = coerceArgsBySchema(propSchema, val);
+    }
+  }
+  return out;
+}
 
 let lockFd: number | null = null;
 
@@ -197,15 +235,11 @@ async function startBackend(): Promise<void> {
 
   const manageArcaneMagicTool = new ManageArcaneMagicTool(foundryClient, logger);
 
-  const manageNPCGenerationTool = new ManageNPCGenerationTool(foundryClient, logger);
-
   const compendiumTools = new CompendiumTools({ foundryClient, logger });
 
   const sceneTools = new SceneTools({ foundryClient, logger });
 
   const actorCreationTools = new ActorCreationTools({ foundryClient, logger });
-
-  const manageJournalTool = new ManageJournalTool(foundryClient, logger);
 
   const diceRollTools = new DiceRollTools({ foundryClient, logger });
 
@@ -226,6 +260,8 @@ async function startBackend(): Promise<void> {
   const addItemFromCompendiumTool = new AddItemFromCompendiumTool({ foundryClient, logger });
   const deleteItemTool = new DeleteItemTool({ foundryClient, logger });
   const getWfrpConfigTool = new GetWfrpConfigTool({ foundryClient, logger });
+  const journalTools = new JournalTools({ foundryClient, logger });
+  const addActorsToSceneTool = new AddActorsToSceneTool({ foundryClient, logger });
 
   const allTools = [
 
@@ -240,15 +276,11 @@ async function startBackend(): Promise<void> {
 
     ...manageArcaneMagicTool.getToolDefinitions(),
 
-    ...manageNPCGenerationTool.getToolDefinitions(),
-
     ...compendiumTools.getToolDefinitions(),
 
     ...sceneTools.getToolDefinitions(),
 
     ...actorCreationTools.getToolDefinitions(),
-
-    ...manageJournalTool.getToolDefinitions(),
 
     ...diceRollTools.getToolDefinitions(),
 
@@ -273,6 +305,10 @@ async function startBackend(): Promise<void> {
     ...deleteItemTool.getToolDefinitions(),
 
     ...getWfrpConfigTool.getToolDefinitions(),
+
+    ...journalTools.getToolDefinitions(),
+
+    ...addActorsToSceneTool.getToolDefinitions(),
 
   ];
 
@@ -328,7 +364,10 @@ async function startBackend(): Promise<void> {
 
           if (msg.method === 'call_tool') {
 
-            const { name, args } = (msg.params || {}) as { name: string; args?: any };
+            const { name, args: rawArgs } = (msg.params || {}) as { name: string; args?: any };
+
+            const toolDef = allTools.find((t: any) => t.name === name);
+            const args = coerceArgsBySchema((toolDef as any)?.inputSchema, rawArgs);
 
             try {
 
@@ -390,14 +429,6 @@ async function startBackend(): Promise<void> {
 
                   break;
 
-                // NPC Generation tool (consolidated)
-
-                case 'manage-npc-generation':
-
-                  result = await manageNPCGenerationTool.execute(args);
-
-                  break;
-
                 // Compendium tools
 
                 case 'search-compendium':
@@ -449,14 +480,6 @@ async function startBackend(): Promise<void> {
                 case 'get-compendium-entry-full':
 
                   result = await actorCreationTools.handleGetCompendiumEntryFull(args);
-
-                  break;
-
-                // Journal tool (consolidated)
-
-                case 'manage-journal':
-
-                  result = await manageJournalTool.execute(args);
 
                   break;
 
@@ -598,6 +621,37 @@ async function startBackend(): Promise<void> {
                 case 'get-wfrp-config':
 
                   result = await getWfrpConfigTool.handle(args);
+
+                  break;
+
+                // Phase 4e Phase 0 — journal + scene primitives for content-creation skills
+                case 'list-journals':
+
+                  result = await journalTools.handleListJournals(args);
+
+                  break;
+
+                case 'get-journal-content':
+
+                  result = await journalTools.handleGetJournalContent(args);
+
+                  break;
+
+                case 'create-journal-entry':
+
+                  result = await journalTools.handleCreateJournalEntry(args);
+
+                  break;
+
+                case 'update-journal-content':
+
+                  result = await journalTools.handleUpdateJournalContent(args);
+
+                  break;
+
+                case 'add-actors-to-scene':
+
+                  result = await addActorsToSceneTool.handle(args);
 
                   break;
 

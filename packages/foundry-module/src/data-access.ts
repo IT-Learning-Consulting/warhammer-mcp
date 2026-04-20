@@ -1944,8 +1944,8 @@ export class FoundryDataAccess {
         throw new Error(`Document "${itemId}" not found in pack "${packId}"`);
       }
 
-      if (sourceDocument.type !== 'npc') {
-        throw new Error(`Document "${itemId}" is not an actor/NPC (type: ${sourceDocument.type})`);
+      if (sourceDocument.documentName !== 'Actor') {
+        throw new Error(`Document "${itemId}" is not an Actor (documentName: ${sourceDocument.documentName}); pack "${packId}" must be an Actor compendium.`);
       }
 
       const sourceActor = sourceDocument as Actor;
@@ -4309,6 +4309,7 @@ export class FoundryDataAccess {
       'symptoms',
       'mutationTypes',
       'corruptionTables',
+      'hitLocationTables',
     ]);
     const config: any = (game as any).wfrp4e?.config ?? (globalThis as any).WFRP4E ?? {};
     const out: Record<string, unknown> = {};
