@@ -16,15 +16,6 @@ import { FoundryClient } from './foundry-client.js';
 import { CharacterTools } from './tools/character.js';
 import { ManageCharacterTool } from './tools/manage-character.js';
 
-import { ManageCorruptionTools } from './tools/manage-corruption.js';
-
-import { ManageMutationTools } from './tools/manage-mutation.js';
-
-import { ManageCriticalWoundTool } from './tools/manage-critical-wound.js';
-import { RollCriticalWoundTool } from './tools/roll-critical-wound.js';
-
-import { ManageDiseaseTool } from './tools/manage-disease.js';
-
 import { ManageInventoryTool } from './tools/manage-inventory.js';
 
 import { CreateItemTool } from './tools/create-item.js';
@@ -59,6 +50,8 @@ import { ListActiveEffectsTool } from './tools/list-active-effects.js';
 
 import { UpdateActorTool } from './tools/update-actor.js';
 import { UpdateItemTool } from './tools/update-item.js';
+import { AddItemFromCompendiumTool } from './tools/add-item-from-compendium.js';
+import { DeleteItemTool } from './tools/delete-item.js';
 import { GetWfrpConfigTool } from './tools/get-wfrp-config.js';
 
 const CONTROL_HOST = '127.0.0.1';
@@ -196,15 +189,6 @@ async function startBackend(): Promise<void> {
   const characterTools = new CharacterTools({ foundryClient, logger });
   const manageCharacterTool = new ManageCharacterTool(foundryClient, logger);
 
-  const manageCorruptionTools = new ManageCorruptionTools({ foundryClient, logger });
-
-  const manageMutationTools = new ManageMutationTools({ foundryClient, logger });
-
-  const manageCriticalWoundTool = new ManageCriticalWoundTool(foundryClient, logger);
-  const rollCriticalWoundTool = new RollCriticalWoundTool(foundryClient, logger);
-
-  const manageDiseaseTool = new ManageDiseaseTool(foundryClient, logger);
-
   const manageInventoryTool = new ManageInventoryTool(foundryClient, logger);
 
   const createItemTool = new CreateItemTool(foundryClient, logger);
@@ -239,21 +223,14 @@ async function startBackend(): Promise<void> {
 
   const updateActorTool = new UpdateActorTool({ foundryClient, logger });
   const updateItemTool = new UpdateItemTool({ foundryClient, logger });
+  const addItemFromCompendiumTool = new AddItemFromCompendiumTool({ foundryClient, logger });
+  const deleteItemTool = new DeleteItemTool({ foundryClient, logger });
   const getWfrpConfigTool = new GetWfrpConfigTool({ foundryClient, logger });
 
   const allTools = [
 
     ...characterTools.getToolDefinitions(),
     ...manageCharacterTool.getToolDefinitions(),
-
-    ...manageCorruptionTools.getToolDefinitions(),
-
-    ...manageMutationTools.getToolDefinitions(),
-
-    ...manageCriticalWoundTool.getToolDefinitions(),
-    ...rollCriticalWoundTool.getToolDefinitions(),
-
-    ...manageDiseaseTool.getToolDefinitions(),
 
     ...manageInventoryTool.getToolDefinitions(),
 
@@ -290,6 +267,10 @@ async function startBackend(): Promise<void> {
     ...updateActorTool.getToolDefinitions(),
 
     ...updateItemTool.getToolDefinitions(),
+
+    ...addItemFromCompendiumTool.getToolDefinitions(),
+
+    ...deleteItemTool.getToolDefinitions(),
 
     ...getWfrpConfigTool.getToolDefinitions(),
 
@@ -374,42 +355,6 @@ async function startBackend(): Promise<void> {
                 case 'manage-character':
 
                   result = await manageCharacterTool.handle(args);
-
-                  break;
-
-                // Corruption & Mutation tools (consolidated)
-
-                case 'manage-corruption':
-
-                  result = await manageCorruptionTools.handle(args);
-
-                  break;
-
-                case 'manage-mutation':
-
-                  result = await manageMutationTools.handle(args);
-
-                  break;
-
-                // Critical Wounds tools (consolidated)
-
-                case 'manage-critical-wound':
-
-                  result = await manageCriticalWoundTool.handle(args);
-
-                  break;
-
-                case 'roll-critical-wound':
-
-                  result = await rollCriticalWoundTool.handle(args);
-
-                  break;
-
-                // Disease & Infection tools (consolidated)
-
-                case 'manage-disease':
-
-                  result = await manageDiseaseTool.handle(args);
 
                   break;
 
@@ -635,6 +580,18 @@ async function startBackend(): Promise<void> {
                 case 'update-item':
 
                   result = await updateItemTool.handle(args);
+
+                  break;
+
+                case 'add-item-from-compendium':
+
+                  result = await addItemFromCompendiumTool.handle(args);
+
+                  break;
+
+                case 'delete-item':
+
+                  result = await deleteItemTool.handle(args);
 
                   break;
 

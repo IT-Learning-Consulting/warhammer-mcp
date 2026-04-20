@@ -211,6 +211,12 @@ export class CharacterTools {
       basicInfo.species = system.details.species.value;
     }
 
+    // Hit-location table key (humanoids: "hitloc"; creatures: "snake", "oversized", etc.)
+    // Surfaced so /wfrp-critical can select the correct RollTable per creature.
+    if (system.details?.hitLocationTable?.value) {
+      basicInfo.hitLocationTable = system.details.hitLocationTable.value;
+    }
+
     // Career
     if (system.details?.career?.value) {
       basicInfo.career = system.details.career.value;
