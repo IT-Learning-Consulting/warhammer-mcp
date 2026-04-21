@@ -48,10 +48,16 @@ import { UpdateActorTool } from './tools/update-actor.js';
 import { UpdateItemTool } from './tools/update-item.js';
 import { AddItemFromCompendiumTool } from './tools/add-item-from-compendium.js';
 import { DeleteItemTool } from './tools/delete-item.js';
+import { DuplicateActorTool } from './tools/duplicate-actor.js';
+import { ListActorItemsTool } from './tools/list-actor-items.js';
+import { ApplyNpcCareerAdvanceTool } from './tools/apply-npc-career-advance.js';
+import { ApplyTemplateTool } from './tools/apply-template.js';
+import { ApplyTemplateToTokenTool } from './tools/apply-template-to-token.js';
 import { GetWfrpConfigTool } from './tools/get-wfrp-config.js';
 import { JournalTools } from './tools/journal.js';
 import { WorldDeleteTools } from './tools/world-delete.js';
 import { AddActorsToSceneTool } from './tools/add-actors-to-scene.js';
+import { DeleteTokenTool } from './tools/delete-token.js';
 
 const CONTROL_HOST = '127.0.0.1';
 
@@ -264,6 +270,12 @@ async function startBackend(): Promise<void> {
   const journalTools = new JournalTools({ foundryClient, logger });
   const worldDeleteTools = new WorldDeleteTools({ foundryClient, logger });
   const addActorsToSceneTool = new AddActorsToSceneTool({ foundryClient, logger });
+  const deleteTokenTool = new DeleteTokenTool({ foundryClient, logger });
+  const duplicateActorTool = new DuplicateActorTool({ foundryClient, logger });
+  const listActorItemsTool = new ListActorItemsTool({ foundryClient, logger });
+  const applyNpcCareerAdvanceTool = new ApplyNpcCareerAdvanceTool({ foundryClient, logger });
+  const applyTemplateTool = new ApplyTemplateTool({ foundryClient, logger });
+  const applyTemplateToTokenTool = new ApplyTemplateToTokenTool({ foundryClient, logger });
 
   const allTools = [
 
@@ -313,6 +325,17 @@ async function startBackend(): Promise<void> {
     ...worldDeleteTools.getToolDefinitions(),
 
     ...addActorsToSceneTool.getToolDefinitions(),
+
+    ...deleteTokenTool.getToolDefinitions(),
+
+    ...duplicateActorTool.getToolDefinitions(),
+    ...listActorItemsTool.getToolDefinitions(),
+
+    ...applyNpcCareerAdvanceTool.getToolDefinitions(),
+
+    ...applyTemplateTool.getToolDefinitions(),
+
+    ...applyTemplateToTokenTool.getToolDefinitions(),
 
   ];
 
@@ -610,6 +633,36 @@ async function startBackend(): Promise<void> {
 
                   break;
 
+                case 'duplicate-actor':
+
+                  result = await duplicateActorTool.handle(args);
+
+                  break;
+
+                case 'list-actor-items':
+
+                  result = await listActorItemsTool.handle(args);
+
+                  break;
+
+                case 'apply-npc-career-advance':
+
+                  result = await applyNpcCareerAdvanceTool.handle(args);
+
+                  break;
+
+                case 'apply-template':
+
+                  result = await applyTemplateTool.handle(args);
+
+                  break;
+
+                case 'apply-template-to-token':
+
+                  result = await applyTemplateToTokenTool.handle(args);
+
+                  break;
+
                 case 'add-item-from-compendium':
 
                   result = await addItemFromCompendiumTool.handle(args);
@@ -656,6 +709,12 @@ async function startBackend(): Promise<void> {
                 case 'add-actors-to-scene':
 
                   result = await addActorsToSceneTool.handle(args);
+
+                  break;
+
+                case 'delete-token':
+
+                  result = await deleteTokenTool.handle(args);
 
                   break;
 

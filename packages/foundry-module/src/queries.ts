@@ -18,6 +18,10 @@ import {
   GetPartyCharactersInput,
   FindPlayersInput,
   FindActorInput,
+  DuplicateActorInput,
+  ApplyNpcCareerAdvanceInput,
+  ApplyTemplateInput,
+  ListActorItemsInput,
   // item domain
   CreateItemInput,
   UpdateItemInput,
@@ -35,6 +39,8 @@ import {
   ListScenesInput,
   SwitchSceneInput,
   AddActorsToSceneInput,
+  DeleteTokenInput,
+  ApplyTemplateToTokenInput,
   // meta (journal, rolltable, ping, world, player rolls)
   PingInput,
   GetWorldInfoInput,
@@ -110,6 +116,7 @@ export class QueryHandlers {
     CONFIG.queries[`${modulePrefix}.createActorFromCompendium`] = this.handleCreateActorFromCompendium.bind(this);
     CONFIG.queries[`${modulePrefix}.getCompendiumDocumentFull`] = this.handleGetCompendiumDocumentFull.bind(this);
     CONFIG.queries[`${modulePrefix}.addActorsToScene`] = this.handleAddActorsToScene.bind(this);
+    CONFIG.queries[`${modulePrefix}.deleteToken`] = this.handleDeleteToken.bind(this);
     CONFIG.queries[`${modulePrefix}.validateWritePermissions`] = this.handleValidateWritePermissions.bind(this);
     CONFIG.queries[`${modulePrefix}.createJournalEntry`] = this.handleCreateJournalEntry.bind(this);
     CONFIG.queries[`${modulePrefix}.listJournals`] = this.handleListJournals.bind(this);
@@ -154,6 +161,17 @@ export class QueryHandlers {
 
     // Phase 4c.0 — config-read primitive for skill-side rule lookups
     CONFIG.queries[`${modulePrefix}.getWfrp4eConfig`] = this.handleGetWfrp4eConfig.bind(this);
+
+    // Phase 4g — /wfrp-build-npc primitives
+    CONFIG.queries[`${modulePrefix}.duplicateActor`] = this.handleDuplicateActor.bind(this);
+    CONFIG.queries[`${modulePrefix}.applyNpcCareerAdvance`] = this.handleApplyNpcCareerAdvance.bind(this);
+    CONFIG.queries[`${modulePrefix}.listActorItems`] = this.handleListActorItems.bind(this);
+
+    // Phase 4h — /wfrp-encounter-builder template-composition primitive
+    CONFIG.queries[`${modulePrefix}.applyTemplate`] = this.handleApplyTemplate.bind(this);
+
+    // apply-template-to-token — token-delta variant for prototype-sheet routing
+    CONFIG.queries[`${modulePrefix}.applyTemplateToToken`] = this.handleApplyTemplateToToken.bind(this);
   }
 
   unregisterHandlers(): void {
@@ -383,10 +401,11 @@ export class QueryHandlers {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
-      const parsed = AddActorsToSceneInput.strict().parse(data ?? {});
+      const parsed = AddActorsToSceneInput.parse(data ?? {});
       return await wrappedWrite('addActorsToScene', async () => {
         const result = await this.dataAccess.addActorsToScene({
           actorIds: parsed.actorIds,
+          ...(parsed.quantities ? { quantities: parsed.quantities } : {}),
           placement: parsed.placement || 'random',
           hidden: parsed.hidden || false,
         });
@@ -395,6 +414,19 @@ export class QueryHandlers {
     } catch (error) {
       rethrowAsInvalidInput(error);
       throw new Error(`Failed to add actors to scene: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  private async handleDeleteToken(data: unknown): Promise<any> {
+    try {
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
+      this.dataAccess.validateFoundryState();
+      const parsed = DeleteTokenInput.strict().parse(data ?? {});
+      return await wrappedWrite('deleteToken', async () => ({ success: true, data: await this.dataAccess.deleteToken(parsed) }));
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to delete token: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
@@ -646,6 +678,66 @@ export class QueryHandlers {
     } catch (error) {
       rethrowAsInvalidInput(error);
       throw new Error(`Failed to create actor: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  private async handleDuplicateActor(data: unknown): Promise<any> {
+    try {
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
+      const parsed = DuplicateActorInput.strict().parse(data ?? {});
+      return await wrappedWrite('duplicateActor', async () => ({ success: true, data: await this.dataAccess.duplicateActor(parsed) }));
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to duplicate actor: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  private async handleApplyNpcCareerAdvance(data: unknown): Promise<any> {
+    try {
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
+      const parsed = ApplyNpcCareerAdvanceInput.strict().parse(data ?? {});
+      return await wrappedWrite('applyNpcCareerAdvance', async () => ({ success: true, data: await this.dataAccess.applyNpcCareerAdvance(parsed) }));
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to apply NPC career advance: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  private async handleApplyTemplate(data: unknown): Promise<any> {
+    try {
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
+      const parsed = ApplyTemplateInput.strict().parse(data ?? {});
+      return await wrappedWrite('applyTemplate', async () => ({ success: true, data: await this.dataAccess.applyTemplate(parsed) }));
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to apply template: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  private async handleApplyTemplateToToken(data: unknown): Promise<any> {
+    try {
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
+      const parsed = ApplyTemplateToTokenInput.strict().parse(data ?? {});
+      return await wrappedWrite('applyTemplateToToken', async () => ({ success: true, data: await this.dataAccess.applyTemplateToToken(parsed) }));
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to apply template to token: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  private async handleListActorItems(data: unknown): Promise<any> {
+    try {
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
+      const parsed = ListActorItemsInput.strict().parse(data ?? {});
+      return { success: true, data: await this.dataAccess.listActorItems(parsed) };
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to list actor items: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 

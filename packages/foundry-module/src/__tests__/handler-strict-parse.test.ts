@@ -79,6 +79,15 @@ const methodCases: Array<[string, string]> = [
   ['handleRemoveCondition', 'removeCondition'],
   ['handleListConditions', 'listConditions'],
   ['handleListActiveEffects', 'listActiveEffects'],
+  // Phase 4g
+  ['handleDuplicateActor', 'duplicateActor'],
+  ['handleApplyNpcCareerAdvance', 'applyNpcCareerAdvance'],
+  // Phase 4h
+  ['handleApplyTemplate', 'applyTemplate'],
+  // Phase 4h post-hotfix (BUG-051)
+  ['handleDeleteToken', 'deleteToken'],
+  // apply-template-to-token — prototype-sheet routing primitive
+  ['handleApplyTemplateToToken', 'applyTemplateToToken'],
 ];
 
 for (const [methodName, queryKey] of methodCases) {

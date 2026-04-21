@@ -93,3 +93,41 @@ export const FindPlayersInput = z.object({
 export const FindActorInput = z.object({
   identifier: z.string(),
 }).strict();
+
+// Phase 4g — /wfrp-build-npc primitives.
+
+export const DuplicateActorInput = z.object({
+  sourceActorId: z.string(),
+  newName: z.string().optional(),
+}).strict();
+
+export const ApplyNpcCareerAdvanceInput = z.object({
+  actorId: z.string(),
+  careerItemId: z.string(),
+}).strict();
+
+export const ListActorItemsInput = z.object({
+  actorId: z.string(),
+  typeFilter: z.string().optional(),
+}).strict();
+
+// Phase 4h — /wfrp-encounter-builder template-composition primitive.
+// BUG-051 post-hotfix: `specialisations` also overrides `(Any)` wildcard resolution.
+// For a skill named `Melee (Any)` in the template, `specialisations["Melee (Any)"] = ["Basic"]`
+// resolves to `Melee (Basic)` (first array entry wins; bypasses the random pick / lore+trapping
+// correlation). Multi-spec expansion (the original use, skill.specialisations > 1) still uses
+// the base-name key (e.g. `specialisations["Melee"] = ["Melee (Basic)", "Melee (Polearm)"]`).
+// Both key conventions coexist — wildcard key is the full `(Any)`-suffixed name; expansion key
+// is the bare base name. Resolution order: override → lore/weapon-group correlation → random.
+export const ApplyTemplateInput = z.object({
+  actorId: z.string(),
+  templateUuid: z.string(),
+  preResolvedChoices: z.object({
+    skillGroups:     z.record(z.string()).optional(),
+    talentGroups:    z.record(z.string()).optional(),
+    specialisations: z.record(z.array(z.string())).optional(),
+    lores:           z.array(z.string()).optional(),
+    spells:          z.record(z.array(z.string())).optional(),
+    trappings:       z.record(z.string()).optional(),
+  }).strict().optional(),
+}).strict();

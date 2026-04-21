@@ -1,0 +1,51 @@
+import { ApplyNpcCareerAdvanceInput } from '@foundry-mcp/shared';
+import { FoundryClient } from '../foundry-client.js';
+import { Logger } from '../logger.js';
+
+export interface ApplyNpcCareerAdvanceToolOptions {
+  foundryClient: FoundryClient;
+  logger: Logger;
+}
+
+export class ApplyNpcCareerAdvanceTool {
+  private foundryClient: FoundryClient;
+  private logger: Logger;
+
+  constructor({ foundryClient, logger }: ApplyNpcCareerAdvanceToolOptions) {
+    this.foundryClient = foundryClient;
+    this.logger = logger.child({ component: 'ApplyNpcCareerAdvanceTool' });
+  }
+
+  getToolDefinitions() {
+    return [
+      {
+        name: 'apply-npc-career-advance',
+        description:
+          'Apply a career\'s auto-advancement to an npc-type actor. Invokes StandardActorModel.advance(career) (wfrp4e.js:6623) which runs the Advancement class\'s dialog-free advance() method — stamps characteristics, skills, and talents per the career\'s schema. BYPASSES THE WFRP4E CONFIRMATION DIALOG, unlike clicking "Complete" on the career card. Requires actor.type === "npc" and a career-type item already embedded on the actor.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            actorId: {
+              type: 'string',
+              description: 'npc-type actor ID. Creature-type actors advance via _onCreate auto-hook; this tool is for npc-type only.',
+            },
+            careerItemId: {
+              type: 'string',
+              description: 'Embedded career-type Item ID on the actor.',
+            },
+          },
+          required: ['actorId', 'careerItemId'],
+        },
+      },
+    ];
+  }
+
+  async handle(args: any): Promise<any> {
+    const parsed = ApplyNpcCareerAdvanceInput.parse(args);
+    this.logger.info('apply-npc-career-advance', {
+      actorId: parsed.actorId,
+      careerItemId: parsed.careerItemId,
+    });
+    return await this.foundryClient.query<any>('warhammer-mcp.applyNpcCareerAdvance', parsed);
+  }
+}
