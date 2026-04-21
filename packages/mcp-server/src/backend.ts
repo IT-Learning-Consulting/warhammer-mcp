@@ -20,10 +20,6 @@ import { ManageInventoryTool } from './tools/manage-inventory.js';
 
 import { CreateItemTool } from './tools/create-item.js';
 
-import { ManageDivineMagicTool } from './tools/manage-divine-magic.js';
-
-import { ManageArcaneMagicTool } from './tools/manage-arcane-magic.js';
-
 import { CompendiumTools } from './tools/compendium.js';
 
 import { SceneTools } from './tools/scene.js';
@@ -238,10 +234,6 @@ async function startBackend(): Promise<void> {
 
   const createItemTool = new CreateItemTool(foundryClient, logger);
 
-  const manageDivineMagicTool = new ManageDivineMagicTool(foundryClient, logger);
-
-  const manageArcaneMagicTool = new ManageArcaneMagicTool(foundryClient, logger);
-
   const compendiumTools = new CompendiumTools({ foundryClient, logger });
 
   const sceneTools = new SceneTools({ foundryClient, logger });
@@ -285,10 +277,6 @@ async function startBackend(): Promise<void> {
     ...manageInventoryTool.getToolDefinitions(),
 
     ...createItemTool.getToolDefinitions(),
-
-    ...manageDivineMagicTool.getToolDefinitions(),
-
-    ...manageArcaneMagicTool.getToolDefinitions(),
 
     ...compendiumTools.getToolDefinitions(),
 
@@ -437,22 +425,6 @@ async function startBackend(): Promise<void> {
                 case 'create-item':
 
                   result = await createItemTool.handle(args);
-
-                  break;
-
-                // Divine Magic tool (consolidated)
-
-                case 'manage-divine-magic':
-
-                  result = await manageDivineMagicTool.execute(args);
-
-                  break;
-
-                // Arcane Magic tool (consolidated)
-
-                case 'manage-arcane-magic':
-
-                  result = await manageArcaneMagicTool.execute(args);
 
                   break;
 
