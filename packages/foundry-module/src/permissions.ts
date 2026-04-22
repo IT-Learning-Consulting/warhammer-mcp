@@ -85,6 +85,48 @@ export class PermissionManager {
         }
         break;
 
+      case 'tradeItem':
+        // GM-gated via validateGMAccess() in handleTradeItem + transaction-wrapped
+        // via wrappedWrite. Zod handles the shape check; this case documents
+        // the operation in the permission model alongside createActor/modifyScene.
+        if (!sanitized.fromActorId || typeof sanitized.fromActorId !== 'string') {
+          errors.push('fromActorId is required and must be a string');
+        }
+        if (!sanitized.toActorId || typeof sanitized.toActorId !== 'string') {
+          errors.push('toActorId is required and must be a string');
+        }
+        if (!sanitized.itemId || typeof sanitized.itemId !== 'string') {
+          errors.push('itemId is required and must be a string');
+        }
+        if (sanitized.quantity !== undefined) {
+          const q = Number(sanitized.quantity);
+          if (!Number.isFinite(q) || q <= 0) {
+            errors.push('quantity must be a positive number');
+          } else {
+            sanitized.quantity = q;
+          }
+        }
+        break;
+
+      case 'addActiveEffect':
+      case 'updateActiveEffect':
+      case 'deleteActiveEffect': {
+        // GM-gated via validateGMAccess() in the handler + transaction-wrapped
+        // via wrappedWrite. Zod handles the shape check; this case documents
+        // the operation in the permission model alongside createActor/modifyScene/tradeItem.
+        if (!sanitized.target || typeof sanitized.target !== 'object') {
+          errors.push('target is required and must be an ItemTarget object');
+        } else if (sanitized.target.scope !== 'actor' && sanitized.target.scope !== 'world') {
+          errors.push('target.scope must be "actor" or "world"');
+        }
+        if (operationName !== 'addActiveEffect') {
+          if (!sanitized.effectId && !sanitized.effectName) {
+            errors.push('one of effectId or effectName is required');
+          }
+        }
+        break;
+      }
+
       default:
         break;
     }

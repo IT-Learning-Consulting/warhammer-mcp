@@ -21,17 +21,27 @@ export class UpdateItemTool {
       {
         name: 'update-item',
         description:
-          'Apply an arbitrary update to an embedded item on an actor. Thin pass-through to the Foundry-module updateItem query — does not enforce WFRP rules. Used by skills like /wfrp-advance to write skill.system.advances.value or talent.system.advances.value.',
+          'Apply an arbitrary update to an item. Supports both actor-embedded and world-scope items. Thin pass-through to the Foundry-module updateItem query — does not enforce WFRP rules. Legacy shape `{actorId, itemId, updateData}` still accepted for backward compat. New shape: `{destination: {type:"actor"|"world", ...}, itemId? or itemName?, updateData}`. Used by skills like /wfrp-advance to write skill.system.advances.value or talent.system.advances.value, and by world-item maintenance flows.',
         inputSchema: {
           type: 'object',
           properties: {
             actorId: {
               type: 'string',
-              description: 'Owning actor ID.',
+              description: 'Legacy: owning actor ID (actor-embedded lookup). Use `destination` for world-scope items.',
             },
             itemId: {
               type: 'string',
-              description: 'Embedded item ID on the actor.',
+              description: 'Item ID (embedded or world). Authoritative.',
+            },
+            itemName: {
+              type: 'string',
+              description: 'Item name (case-insensitive). First match wins if ambiguous. Use itemId when the id is known.',
+            },
+            destination: {
+              type: 'object',
+              description:
+                'Scope discriminator. `{type:"actor", actorId?|actorName?}` targets an embedded item on that actor. `{type:"world"}` targets an item in the world Items sidebar.',
+              additionalProperties: true,
             },
             updateData: {
               type: 'object',
@@ -40,7 +50,7 @@ export class UpdateItemTool {
                 'Foundry update payload. Keys can be dot-paths (e.g. "system.advances.value"); values are the new values.',
             },
           },
-          required: ['actorId', 'itemId', 'updateData'],
+          required: ['updateData'],
         },
       },
     ];
@@ -51,6 +61,8 @@ export class UpdateItemTool {
     this.logger.info('update-item', {
       actorId: parsed.actorId,
       itemId: parsed.itemId,
+      itemName: parsed.itemName,
+      destinationType: parsed.destination?.type,
       paths: Object.keys(parsed.updateData),
     });
     return await this.foundryClient.query<any>('warhammer-mcp.updateItem', parsed);

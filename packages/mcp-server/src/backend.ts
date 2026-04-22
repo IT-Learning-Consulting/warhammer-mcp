@@ -18,8 +18,6 @@ import { ManageCharacterTool } from './tools/manage-character.js';
 
 import { ManageInventoryTool } from './tools/manage-inventory.js';
 
-import { CreateItemTool } from './tools/create-item.js';
-
 import { CompendiumTools } from './tools/compendium.js';
 
 import { SceneTools } from './tools/scene.js';
@@ -54,6 +52,12 @@ import { JournalTools } from './tools/journal.js';
 import { WorldDeleteTools } from './tools/world-delete.js';
 import { AddActorsToSceneTool } from './tools/add-actors-to-scene.js';
 import { DeleteTokenTool } from './tools/delete-token.js';
+import { CreateCustomItemTool } from './tools/create-custom-item.js';
+import { TradeItemTool } from './tools/trade-item.js';
+import { ModifyItemQualitiesTool } from './tools/modify-item-qualities.js';
+import { AddActiveEffectTool } from './tools/add-active-effect.js';
+import { UpdateActiveEffectTool } from './tools/update-active-effect.js';
+import { DeleteActiveEffectTool } from './tools/delete-active-effect.js';
 
 const CONTROL_HOST = '127.0.0.1';
 
@@ -232,8 +236,6 @@ async function startBackend(): Promise<void> {
 
   const manageInventoryTool = new ManageInventoryTool(foundryClient, logger);
 
-  const createItemTool = new CreateItemTool(foundryClient, logger);
-
   const compendiumTools = new CompendiumTools({ foundryClient, logger });
 
   const sceneTools = new SceneTools({ foundryClient, logger });
@@ -268,6 +270,12 @@ async function startBackend(): Promise<void> {
   const applyNpcCareerAdvanceTool = new ApplyNpcCareerAdvanceTool({ foundryClient, logger });
   const applyTemplateTool = new ApplyTemplateTool({ foundryClient, logger });
   const applyTemplateToTokenTool = new ApplyTemplateToTokenTool({ foundryClient, logger });
+  const createCustomItemTool = new CreateCustomItemTool({ foundryClient, logger });
+  const tradeItemTool = new TradeItemTool({ foundryClient, logger });
+  const modifyItemQualitiesTool = new ModifyItemQualitiesTool({ foundryClient, logger });
+  const addActiveEffectTool = new AddActiveEffectTool({ foundryClient, logger });
+  const updateActiveEffectTool = new UpdateActiveEffectTool({ foundryClient, logger });
+  const deleteActiveEffectTool = new DeleteActiveEffectTool({ foundryClient, logger });
 
   const allTools = [
 
@@ -275,8 +283,6 @@ async function startBackend(): Promise<void> {
     ...manageCharacterTool.getToolDefinitions(),
 
     ...manageInventoryTool.getToolDefinitions(),
-
-    ...createItemTool.getToolDefinitions(),
 
     ...compendiumTools.getToolDefinitions(),
 
@@ -324,6 +330,13 @@ async function startBackend(): Promise<void> {
     ...applyTemplateTool.getToolDefinitions(),
 
     ...applyTemplateToTokenTool.getToolDefinitions(),
+
+    ...createCustomItemTool.getToolDefinitions(),
+    ...tradeItemTool.getToolDefinitions(),
+    ...modifyItemQualitiesTool.getToolDefinitions(),
+    ...addActiveEffectTool.getToolDefinitions(),
+    ...updateActiveEffectTool.getToolDefinitions(),
+    ...deleteActiveEffectTool.getToolDefinitions(),
 
   ];
 
@@ -420,11 +433,40 @@ async function startBackend(): Promise<void> {
 
                   break;
 
-                // Item Creator tools (consolidated)
+                // Phase 5 — custom-content creation + trade + qualities mutation
+                case 'create-custom-item':
 
-                case 'create-item':
+                  result = await createCustomItemTool.handle(args);
 
-                  result = await createItemTool.handle(args);
+                  break;
+
+                case 'trade-item':
+
+                  result = await tradeItemTool.handle(args);
+
+                  break;
+
+                case 'modify-item-qualities':
+
+                  result = await modifyItemQualitiesTool.handle(args);
+
+                  break;
+
+                case 'add-active-effect':
+
+                  result = await addActiveEffectTool.handle(args);
+
+                  break;
+
+                case 'update-active-effect':
+
+                  result = await updateActiveEffectTool.handle(args);
+
+                  break;
+
+                case 'delete-active-effect':
+
+                  result = await deleteActiveEffectTool.handle(args);
 
                   break;
 

@@ -28,6 +28,7 @@ import {
   DeleteItemInput,
   ModifyItemQualitiesInput,
   AddItemFromCompendiumInput,
+  TradeItemInput,
   // compendium domain
   SearchCompendiumInput,
   ListCreaturesByCriteriaInput,
@@ -71,6 +72,10 @@ import {
   RemoveConditionInput,
   ListConditionsInput,
   ListActiveEffectsInput,
+  // Phase 5 follow-up B — active-effect CRUD
+  AddActiveEffectInput,
+  UpdateActiveEffectInput,
+  DeleteActiveEffectInput,
 } from '@foundry-mcp/shared';
 
 /**
@@ -139,6 +144,7 @@ export class QueryHandlers {
     CONFIG.queries[`${modulePrefix}.createItem`] = this.handleCreateItem.bind(this);
     CONFIG.queries[`${modulePrefix}.deleteItem`] = this.handleDeleteItem.bind(this);
     CONFIG.queries[`${modulePrefix}.modifyItemQualities`] = this.handleModifyItemQualities.bind(this);
+    CONFIG.queries[`${modulePrefix}.tradeItem`] = this.handleTradeItem.bind(this);
     CONFIG.queries[`${modulePrefix}.createRollTable`] = this.handleCreateRollTable.bind(this);
     CONFIG.queries[`${modulePrefix}.addTableResults`] = this.handleAddTableResults.bind(this);
     CONFIG.queries[`${modulePrefix}.listRollTables`] = this.handleListRollTables.bind(this);
@@ -172,6 +178,11 @@ export class QueryHandlers {
 
     // apply-template-to-token — token-delta variant for prototype-sheet routing
     CONFIG.queries[`${modulePrefix}.applyTemplateToToken`] = this.handleApplyTemplateToToken.bind(this);
+
+    // Phase 5 follow-up B — active-effect CRUD
+    CONFIG.queries[`${modulePrefix}.addActiveEffect`] = this.handleAddActiveEffect.bind(this);
+    CONFIG.queries[`${modulePrefix}.updateActiveEffect`] = this.handleUpdateActiveEffect.bind(this);
+    CONFIG.queries[`${modulePrefix}.deleteActiveEffect`] = this.handleDeleteActiveEffect.bind(this);
   }
 
   unregisterHandlers(): void {
@@ -819,15 +830,69 @@ export class QueryHandlers {
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       const parsed = ModifyItemQualitiesInput.strict().parse(data ?? {});
       return await wrappedWrite('modifyItemQualities', async () => {
-        const actor = game.actors?.find((a: any) =>
-          a.name.toLowerCase() === parsed.characterName.toLowerCase()
-        );
-        if (!actor) throw new Error(`Character "${parsed.characterName}" not found`);
+        // Phase 5: route on destination discriminator OR fall back to legacy characterName.
+        let item: any = null;
+        let ownerLabel = '';
 
-        const item = actor.items?.find((i: any) =>
-          i.name.toLowerCase() === parsed.itemName.toLowerCase()
-        );
-        if (!item) throw new Error(`Item "${parsed.itemName}" not found on ${actor.name}`);
+        if (parsed.destination?.type === 'world') {
+          // World-scope item lookup
+          const items = (game.items as any) ?? [];
+          if (parsed.itemId) {
+            item = items.get?.(parsed.itemId) ?? null;
+          }
+          if (!item && parsed.itemName) {
+            item = items.find?.(
+              (i: any) => i.name?.toLowerCase() === parsed.itemName!.toLowerCase()
+            ) ?? null;
+          }
+          if (!item) {
+            throw new Error(
+              `World item "${parsed.itemName ?? parsed.itemId}" not found in Items sidebar`
+            );
+          }
+          ownerLabel = '(world)';
+        } else {
+          // Actor-scope lookup — destination.actor OR legacy characterName
+          let actor: any = null;
+          if (parsed.destination?.type === 'actor') {
+            const dest = parsed.destination;
+            if (dest.actorId) {
+              actor = (game.actors as any)?.get(dest.actorId);
+            } else if (dest.actorName) {
+              actor = (game.actors as any)?.find(
+                (a: any) => a.name?.toLowerCase() === dest.actorName!.toLowerCase()
+              );
+            }
+          } else if (parsed.characterName) {
+            actor = (game.actors as any)?.find(
+              (a: any) => a.name?.toLowerCase() === parsed.characterName!.toLowerCase()
+            );
+          }
+          if (!actor) {
+            throw new Error(
+              `Actor not found: ${
+                parsed.characterName ??
+                (parsed.destination?.type === 'actor'
+                  ? parsed.destination.actorId ?? parsed.destination.actorName
+                  : '(no identifier)')
+              }`
+            );
+          }
+
+          if (parsed.itemId) {
+            item = actor.items?.get(parsed.itemId);
+          } else if (parsed.itemName) {
+            item = actor.items?.find(
+              (i: any) => i.name?.toLowerCase() === parsed.itemName!.toLowerCase()
+            );
+          }
+          if (!item) {
+            throw new Error(
+              `Item "${parsed.itemName ?? parsed.itemId}" not found on ${actor.name}`
+            );
+          }
+          ownerLabel = actor.name;
+        }
 
         // BUG-012: Foundry deep-merges update objects; removing a key requires
         // the `-=` deletion syntax. In-memory `delete` on a copied object is a
@@ -848,11 +913,30 @@ export class QueryHandlers {
         }
 
         await item.update(updateData);
-        return { success: true, data: { itemName: item.name } };
+        return { success: true, data: { itemName: item.name, owner: ownerLabel } };
       });
     } catch (error) {
       rethrowAsInvalidInput(error);
       throw new Error(`Failed to modify item qualities: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  // Phase 5 — atomic item trade between actors
+  // tradeItem: GM-gated via validateGMAccess(); transaction-wrapped via wrappedWrite.
+  private async handleTradeItem(data: unknown): Promise<any> {
+    try {
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
+      const parsed = TradeItemInput.strict().parse(data ?? {});
+      return await wrappedWrite('tradeItem', async () => ({
+        success: true,
+        data: await this.dataAccess.tradeItem(parsed),
+      }));
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(
+        `Failed to trade item: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
     }
   }
 
@@ -1178,6 +1262,61 @@ export class QueryHandlers {
     } catch (error) {
       rethrowAsInvalidInput(error);
       throw new Error(`Failed to read wfrp4e config: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  // ============================================================
+  // Phase 5 follow-up B — active-effect CRUD
+  // ============================================================
+
+  private async handleAddActiveEffect(data: unknown): Promise<any> {
+    try {
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
+      const parsed = AddActiveEffectInput.strict().parse(data ?? {});
+      return await wrappedWrite('addActiveEffect', async () => ({
+        success: true,
+        data: await this.dataAccess.addActiveEffect(parsed as any),
+      }));
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to add active effect: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  private async handleUpdateActiveEffect(data: unknown): Promise<any> {
+    try {
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
+      const parsed = UpdateActiveEffectInput.strict().parse(data ?? {});
+      if (!parsed.effectId && !parsed.effectName) {
+        throw new Error('updateActiveEffect requires one of effectId or effectName');
+      }
+      return await wrappedWrite('updateActiveEffect', async () => ({
+        success: true,
+        data: await this.dataAccess.updateActiveEffect(parsed as any),
+      }));
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to update active effect: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  private async handleDeleteActiveEffect(data: unknown): Promise<any> {
+    try {
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
+      const parsed = DeleteActiveEffectInput.strict().parse(data ?? {});
+      if (!parsed.effectId && !parsed.effectName) {
+        throw new Error('deleteActiveEffect requires one of effectId or effectName');
+      }
+      return await wrappedWrite('deleteActiveEffect', async () => ({
+        success: true,
+        data: await this.dataAccess.deleteActiveEffect(parsed as any),
+      }));
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to delete active effect: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 }

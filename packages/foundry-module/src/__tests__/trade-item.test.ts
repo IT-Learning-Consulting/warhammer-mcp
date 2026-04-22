@@ -1,0 +1,194 @@
+// Phase 5 (B.9) — FoundryDataAccess.tradeItem handler behavior.
+// Exercises the atomic move (full + partial) path + error paths on the Foundry-module side.
+
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { FoundryDataAccess } from '../data-access.js';
+
+function makeActor(
+  id: string,
+  name: string,
+  items: Array<{ id: string; name: string; type: string; quantity?: number }>
+) {
+  const itemMap = new Map(
+    items.map((i) => [
+      i.id,
+      {
+        id: i.id,
+        name: i.name,
+        type: i.type,
+        system: { quantity: { value: i.quantity ?? 1 } },
+        toObject: () => ({
+          _id: i.id,
+          name: i.name,
+          type: i.type,
+          system: { quantity: { value: i.quantity ?? 1 } },
+        }),
+        update: vi.fn(async () => {}),
+      },
+    ])
+  );
+  return {
+    id,
+    name,
+    items: {
+      get: (iid: string) => itemMap.get(iid) ?? null,
+      find: (pred: (it: any) => boolean) => Array.from(itemMap.values()).find(pred) ?? null,
+    },
+    createEmbeddedDocuments: vi.fn(async (_type: string, payloads: any[]) =>
+      payloads.map((p, i) => ({
+        id: `${id}-new-${i}`,
+        name: p.name,
+        type: p.type,
+        toObject: () => ({ ...p, _id: `${id}-new-${i}` }),
+      }))
+    ),
+    deleteEmbeddedDocuments: vi.fn(async () => {}),
+    _itemMap: itemMap,
+  };
+}
+
+beforeEach(() => {
+  vi.spyOn(console, 'error').mockImplementation(() => {});
+});
+
+function makeDA(): FoundryDataAccess {
+  const da = new FoundryDataAccess();
+  (da as any).validateFoundryState = () => {};
+  return da;
+}
+
+describe('tradeItem — full transfer', () => {
+  it('moves the item from source to destination', async () => {
+    const fromActor = makeActor('a1', 'Hans', [
+      { id: 'item1', name: 'Longsword', type: 'weapon', quantity: 1 },
+    ]);
+    const toActor = makeActor('a2', 'Maria', []);
+    (globalThis as any).game = {
+      ...(globalThis as any).game,
+      actors: {
+        get: (id: string) => (id === 'a1' ? fromActor : id === 'a2' ? toActor : null),
+      },
+    };
+    const da = makeDA();
+    const res = await da.tradeItem({
+      fromActorId: 'a1',
+      toActorId: 'a2',
+      itemId: 'item1',
+    });
+    expect(fromActor.deleteEmbeddedDocuments).toHaveBeenCalledOnce();
+    expect(toActor.createEmbeddedDocuments).toHaveBeenCalledOnce();
+    expect(res.success).toBe(true);
+    expect(res.itemName).toBe('Longsword');
+  });
+
+  it('throws when source actor missing', async () => {
+    (globalThis as any).game = {
+      ...(globalThis as any).game,
+      actors: { get: () => null },
+    };
+    const da = makeDA();
+    await expect(
+      da.tradeItem({ fromActorId: 'ghost', toActorId: 'a2', itemId: 'x' })
+    ).rejects.toThrow(/Source actor not found/);
+  });
+
+  it('throws when destination actor missing', async () => {
+    const fromActor = makeActor('a1', 'Hans', [
+      { id: 'item1', name: 'X', type: 'weapon' },
+    ]);
+    (globalThis as any).game = {
+      ...(globalThis as any).game,
+      actors: { get: (id: string) => (id === 'a1' ? fromActor : null) },
+    };
+    const da = makeDA();
+    await expect(
+      da.tradeItem({ fromActorId: 'a1', toActorId: 'ghost', itemId: 'item1' })
+    ).rejects.toThrow(/Destination actor not found/);
+  });
+
+  it('throws when item missing on source', async () => {
+    const fromActor = makeActor('a1', 'Hans', []);
+    const toActor = makeActor('a2', 'Maria', []);
+    (globalThis as any).game = {
+      ...(globalThis as any).game,
+      actors: {
+        get: (id: string) => (id === 'a1' ? fromActor : id === 'a2' ? toActor : null),
+      },
+    };
+    const da = makeDA();
+    await expect(
+      da.tradeItem({ fromActorId: 'a1', toActorId: 'a2', itemId: 'ghost-item' })
+    ).rejects.toThrow(/not found on/);
+  });
+});
+
+describe('tradeItem — partial-quantity transfer', () => {
+  it('decrements source and creates a new stack on destination', async () => {
+    const fromActor = makeActor('a1', 'Hans', [
+      { id: 'stack', name: 'Arrows', type: 'ammunition', quantity: 20 },
+    ]);
+    const toActor = makeActor('a2', 'Maria', []);
+    (globalThis as any).game = {
+      ...(globalThis as any).game,
+      actors: {
+        get: (id: string) => (id === 'a1' ? fromActor : id === 'a2' ? toActor : null),
+      },
+    };
+    const da = makeDA();
+    const res = await da.tradeItem({
+      fromActorId: 'a1',
+      toActorId: 'a2',
+      itemId: 'stack',
+      quantity: 5,
+    });
+    const srcItem = fromActor._itemMap.get('stack');
+    expect(srcItem?.update).toHaveBeenCalledWith({ 'system.quantity.value': 15 });
+    expect(toActor.createEmbeddedDocuments).toHaveBeenCalledOnce();
+    expect(res.quantities).toEqual({ from: 15, to: 5 });
+  });
+
+  it('full-transfer path used when quantity equals source quantity', async () => {
+    const fromActor = makeActor('a1', 'Hans', [
+      { id: 'stack', name: 'Arrows', type: 'ammunition', quantity: 10 },
+    ]);
+    const toActor = makeActor('a2', 'Maria', []);
+    (globalThis as any).game = {
+      ...(globalThis as any).game,
+      actors: {
+        get: (id: string) => (id === 'a1' ? fromActor : id === 'a2' ? toActor : null),
+      },
+    };
+    const da = makeDA();
+    await da.tradeItem({
+      fromActorId: 'a1',
+      toActorId: 'a2',
+      itemId: 'stack',
+      quantity: 10,
+    });
+    // quantity === sourceQty triggers the full-transfer branch (not partial)
+    expect(fromActor.deleteEmbeddedDocuments).toHaveBeenCalledOnce();
+  });
+});
+
+describe('tradeItem — encumbrance stays system-owned (HC3)', () => {
+  it('handler does not write to actor.system.status.encumbrance.current', async () => {
+    const fromActor: any = makeActor('a1', 'Hans', [
+      { id: 'item1', name: 'Armour', type: 'armour', quantity: 1 },
+    ]);
+    const toActor: any = makeActor('a2', 'Maria', []);
+    fromActor.update = vi.fn();
+    toActor.update = vi.fn();
+    (globalThis as any).game = {
+      ...(globalThis as any).game,
+      actors: {
+        get: (id: string) => (id === 'a1' ? fromActor : id === 'a2' ? toActor : null),
+      },
+    };
+    const da = makeDA();
+    await da.tradeItem({ fromActorId: 'a1', toActorId: 'a2', itemId: 'item1' });
+    // Neither actor.update nor any direct encumbrance-field write occurred.
+    // Foundry prepareData recomputes encumbrance on item-list change.
+    expect(fromActor.update).not.toHaveBeenCalled();
+    expect(toActor.update).not.toHaveBeenCalled();
+  });
+});

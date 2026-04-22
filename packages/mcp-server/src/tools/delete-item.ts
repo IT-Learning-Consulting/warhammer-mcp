@@ -21,20 +21,30 @@ export class DeleteItemTool {
       {
         name: 'delete-item',
         description:
-          'Delete an embedded item from an actor. Thin pass-through to the Foundry-module deleteItem query — does not enforce WFRP rules. The system\'s deleteItem hook chain auto-removes any Active Effects the item embedded (research §7.4). Used by /wfrp-mutation remove, /wfrp-disease cure, /wfrp-critical remove.',
+          'Delete an item. Supports both actor-embedded and world-scope items. Thin pass-through to the Foundry-module deleteItem query — does not enforce WFRP rules. The system\'s deleteItem hook chain auto-removes any Active Effects the item embedded (research §7.4). Legacy shape `{actorId, itemId}` still accepted for backward compat. New shape: `{destination: {type:"actor"|"world", ...}, itemId? or itemName?}`. Used by /wfrp-mutation remove, /wfrp-disease cure, /wfrp-critical remove, and world-item cleanup flows.',
         inputSchema: {
           type: 'object',
           properties: {
             actorId: {
               type: 'string',
-              description: 'Owning actor ID.',
+              description: 'Legacy: owning actor ID. Use `destination` for world-scope items.',
             },
             itemId: {
               type: 'string',
-              description: 'Embedded item ID to delete.',
+              description: 'Item ID (embedded or world). Authoritative.',
+            },
+            itemName: {
+              type: 'string',
+              description: 'Item name (case-insensitive). First match wins if ambiguous.',
+            },
+            destination: {
+              type: 'object',
+              description:
+                'Scope discriminator. `{type:"actor", actorId?|actorName?}` or `{type:"world"}`.',
+              additionalProperties: true,
             },
           },
-          required: ['actorId', 'itemId'],
+          required: [],
         },
       },
     ];
@@ -45,6 +55,8 @@ export class DeleteItemTool {
     this.logger.info('delete-item', {
       actorId: parsed.actorId,
       itemId: parsed.itemId,
+      itemName: parsed.itemName,
+      destinationType: parsed.destination?.type,
     });
     return await this.foundryClient.query<any>('warhammer-mcp.deleteItem', parsed);
   }

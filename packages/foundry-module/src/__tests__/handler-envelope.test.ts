@@ -72,9 +72,11 @@ describe('handler envelope — item-write (handleCreateItem)', () => {
       itemId: 'i1',
       itemName: 'Sword',
     });
+    // Phase 5: createItem now takes a destination discriminator (actor|world) +
+    // itemData. Legacy {actorId, itemData} shape is gone.
     const result = await (qh as any).handleCreateItem({
-      actorId: 'a1',
       itemData: { name: 'Sword', type: 'weapon' },
+      destination: { type: 'actor', actorId: 'a1' },
     });
     expectEnvelope<{ itemId: string; itemName: string }>(result);
     expect(result.data.itemId).toBe('i1');
