@@ -3,7 +3,110 @@ import { FoundryClient } from "../foundry-client.js";
 import { Logger } from "../logger.js";
 import { BaseTool, BaseToolOptions } from "../base-tool.js";
 
-// Create roll table schema
+// Phase 2 mcp_crud_expansion — RollTable tool extended from 5 → 13 actions.
+//
+// **Envelope-consumer contract (CCR-Envelope-Consumer; post-BUG-069 2026-05-14):**
+// Legacy 5 actions (create/list/get/roll/delete) keep `query<any>` — grandfathered.
+// New 8 actions use CONCRETE response interfaces — no `<any>` on new query calls.
+// Every new handler wraps its query call in try/catch; failures return errorResponse().
+
+// ── Response interfaces for new actions (concrete typed per CCR-Envelope-Consumer rule 3) ──
+
+interface UpdateRollTableResponse {
+  tableId: string;
+  changes: Record<string, unknown>;
+}
+
+interface AddTableResultsResponse {
+  tableId: string;
+  addedCount: number;
+}
+
+// Handler returns updatedCount only (no updatedIds in the Foundry-side handler).
+interface UpdateTableResultsResponse {
+  tableId: string;
+  updatedCount: number;
+}
+
+// Handler returns deletedCount only (no deletedIds in the Foundry-side handler).
+interface DeleteTableResultsResponse {
+  tableId: string;
+  deletedCount: number;
+}
+
+interface NormalizeRollTableResponse {
+  tableId: string;
+  resultCount: number;
+}
+
+interface ResetRollTableResultsResponse {
+  tableId: string;
+  resultCount: number;
+}
+
+// drawManyFromTable handler returns tableName/roll at top level; no tableId in response.
+interface DrawManyFromTableResponse {
+  tableName: string;
+  roll: number;
+  results: Array<{
+    id: string;
+    type: string;
+    text: string;
+    documentUuid: string;
+    name: string;
+    img: string;
+    description: string;
+    range: number[];
+    weight: number;
+    drawn: boolean;
+  }>;
+  exhausted?: boolean;
+  requested?: number;
+  returned?: number;
+}
+
+interface ImportRollTableFromCompendiumResponse {
+  newTableId: string;
+  name: string;
+  normalized: boolean;
+}
+
+// ── Zod schemas ───────────────────────────────────────────────────────────────
+
+// Legacy create schema extended: keep entries (now optional) + add results (new, 3 types).
+const TableResultInputZ = z.discriminatedUnion("type", [
+    z.object({
+        type: z.literal("text"),
+        text: z.string(),
+        name: z.string().optional(),
+        img: z.string().optional(),
+        description: z.string().optional(),
+        range: z.tuple([z.number(), z.number()]).optional(),
+        weight: z.number().optional(),
+    }),
+    z.object({
+        type: z.literal("document"),
+        documentCollection: z.string(),
+        documentId: z.string(),
+        name: z.string().optional(),
+        img: z.string().optional(),
+        description: z.string().optional(),
+        range: z.tuple([z.number(), z.number()]).optional(),
+        weight: z.number().optional(),
+    }),
+    z.object({
+        type: z.literal("compendium"),
+        documentCollection: z.string(),
+        documentId: z.string(),
+        name: z.string().optional(),
+        img: z.string().optional(),
+        description: z.string().optional(),
+        range: z.tuple([z.number(), z.number()]).optional(),
+        weight: z.number().optional(),
+    }),
+]);
+
+// Create roll table schema — entries kept optional (backward-compat alias), results is new.
 const CreateRollTableSchema = z.object({
     action: z.literal("create"),
     name: z.string(),
@@ -13,7 +116,8 @@ const CreateRollTableSchema = z.object({
         text: z.string(),
         weight: z.number().optional(),
         range: z.tuple([z.number(), z.number()]).optional()
-    })),
+    })).optional(),
+    results: z.array(TableResultInputZ).optional(),
     replacement: z.boolean().default(true),
     displayRoll: z.boolean().default(true)
 });
@@ -43,12 +147,90 @@ const DeleteRollTableSchema = z.object({
     tableId: z.string()
 });
 
+// ── New 8 action schemas ──────────────────────────────────────────────────────
+
+const UpdateRollTableSchema = z.object({
+    action: z.literal("update"),
+    tableId: z.string(),
+    changes: z.object({
+        name: z.string().optional(),
+        img: z.string().optional(),
+        description: z.string().optional(),
+        formula: z.string().optional(),
+        replacement: z.boolean().optional(),
+        displayRoll: z.boolean().optional(),
+        folder: z.string().nullable().optional(),
+        sort: z.number().int().optional(),
+    }),
+});
+
+const AddTableResultsSchema = z.object({
+    action: z.literal("add-results"),
+    tableId: z.string(),
+    results: z.array(TableResultInputZ).min(1),
+});
+
+const UpdateTableResultsSchema = z.object({
+    action: z.literal("update-results"),
+    tableId: z.string(),
+    updates: z.array(z.object({
+        _id: z.string(),
+        name: z.string().optional(),
+        text: z.string().optional(),
+        img: z.string().optional(),
+        description: z.string().optional(),
+        range: z.tuple([z.number(), z.number()]).optional(),
+        weight: z.number().optional(),
+        drawn: z.boolean().optional(),
+    })).min(1),
+});
+
+const DeleteTableResultsSchema = z.object({
+    action: z.literal("delete-results"),
+    tableId: z.string(),
+    resultIds: z.array(z.string()).min(1),
+});
+
+const NormalizeRollTableSchema = z.object({
+    action: z.literal("normalize"),
+    tableId: z.string(),
+});
+
+const ResetRollTableSchema = z.object({
+    action: z.literal("reset"),
+    tableId: z.string(),
+});
+
+const DrawManyFromTableSchema = z.object({
+    action: z.literal("draw-many"),
+    tableId: z.string(),
+    number: z.number().int().min(1).max(50),
+    displayChat: z.boolean().optional(),
+    recursive: z.boolean().optional(),
+    rollMode: z.string().optional(),
+});
+
+const ImportRollTableFromCompendiumSchema = z.object({
+    action: z.literal("import-from-compendium"),
+    pack: z.string(),
+    documentId: z.string(),
+    normalize: z.boolean().optional(),
+});
+
 const RollTableSchema = z.discriminatedUnion("action", [
     CreateRollTableSchema,
     ListRollTablesSchema,
     GetRollTableSchema,
     RollOnTableSchema,
-    DeleteRollTableSchema
+    DeleteRollTableSchema,
+    UpdateRollTableSchema,
+    AddTableResultsSchema,
+    UpdateTableResultsSchema,
+    DeleteTableResultsSchema,
+    NormalizeRollTableSchema,
+    ResetRollTableSchema,
+    DrawManyFromTableSchema,
+    ImportRollTableFromCompendiumSchema,
 ]);
 
 type RollTableArgs = z.infer<typeof RollTableSchema>;
@@ -73,47 +255,51 @@ export class RollTableTool extends BaseTool {
               idempotentHint: false,
               openWorldHint: true,
             },
-            description: `Manage roll tables in Foundry VTT - create, list, get, roll, and delete tables.
-
-**Roll Tables** are used for random generation: encounters, loot, events, weather, rumors, etc.
-
-**Common Use Cases:**
-- Random Encounter Tables (d100 wilderness)
-- Loot/Treasure Tables
-- Critical Hit/Fumble Tables
-- Random Event/Weather Tables
-- NPC Name/Personality Tables
-
-**Formula Examples:**
-- "1d100": Roll 1d100, entries have ranges (1-5, 6-10, etc.)
-- "1d20": Standard d20
-- "1d6": Simple d6
-- "2d6": 2d6 bell curve (2-12)
+            description: `Manage roll tables in Foundry VTT — 13 actions: create, list, get, roll, delete, update, add-results, update-results, delete-results, normalize, reset, draw-many, import-from-compendium.
 
 **Actions:**
-- **create**: Create new roll table with entries
-- **list**: List all roll tables in world
-- **get**: Get details of specific table
-- **roll**: Roll on table and get result
-- **delete**: Permanently delete table
+- **create**: Create a table with entries (legacy text-only) or results (text/document/compendium).
+- **list**: List all roll tables in world.
+- **get**: Get full details + result list for a table.
+- **roll**: Roll once on a table and get a result.
+- **delete**: Permanently delete entire table. ⚠️ Irreversible.
+- **update**: Edit top-level table fields (name, formula, img, description, replacement, displayRoll, folder, sort).
+- **add-results**: Append one or more new results (text/document/compendium types) to an existing table.
+- **update-results**: Update fields on existing results by _id (text, range, weight, drawn, etc.).
+- **delete-results**: Permanently remove specific results by ID. ⚠️ Irreversible.
+- **normalize**: Recalculate all result range values from weights. ⚠️ Overwrites manually-set ranges (Risk 2.B).
+- **reset**: Clear all drawn flags so all results are available again (for non-replacement tables).
+- **draw-many**: Draw multiple results in one call (1–50). Returns partial + exhausted flag if pool runs dry.
+- **import-from-compendium**: Import a roll table from a compendium pack into the world.
 
-**Example Usage:**
-- Create table: {action: "create", name: "Random Encounters", formula: "1d20", entries: [{text: "Goblin ambush", range: [1, 5]}, ...]}
-- List tables: {action: "list"}
-- Get table: {action: "get", tableId: "abc123"}
-- Roll on table: {action: "roll", tableId: "abc123", rollMode: "public"}
-- Delete table: {action: "delete", tableId: "abc123"}`,
+**Formula Examples:** "1d100", "1d20", "2d6"
+
+**Result types (add-results / create.results):**
+- text: {type:"text", text:"...", weight?, range?}
+- document: {type:"document", documentCollection:"Actor", documentId:"abc"}
+- compendium: {type:"compendium", documentCollection:"wfrp4e-core.Actor", documentId:"xyz"}
+
+**Examples:**
+- create: {action:"create", name:"Encounters", formula:"1d20", results:[{type:"text",text:"Goblin"}]}
+- update: {action:"update", tableId:"abc", changes:{name:"New Name", formula:"1d100"}}
+- add-results: {action:"add-results", tableId:"abc", results:[{type:"text",text:"Wolf",weight:2}]}
+- update-results: {action:"update-results", tableId:"abc", updates:[{_id:"r1",drawn:false}]}
+- delete-results: {action:"delete-results", tableId:"abc", resultIds:["r1","r2"]}
+- normalize: {action:"normalize", tableId:"abc"}
+- reset: {action:"reset", tableId:"abc"}
+- draw-many: {action:"draw-many", tableId:"abc", number:5, rollMode:"public"}
+- import-from-compendium: {action:"import-from-compendium", pack:"wfrp4e-core.tables", documentId:"xyz", normalize:true}`,
             inputSchema: {
                 type: "object",
                 properties: {
                     action: {
                         type: "string",
-                        enum: ["create", "list", "get", "roll", "delete"],
+                        enum: ["create", "list", "get", "roll", "delete", "update", "add-results", "update-results", "delete-results", "normalize", "reset", "draw-many", "import-from-compendium"],
                         description: "The roll table action to perform"
                     },
                     tableId: {
                         type: "string",
-                        description: "[get/roll/delete] ID of the roll table"
+                        description: "[get/roll/delete/update/add-results/update-results/delete-results/normalize/reset/draw-many] ID of the roll table"
                     },
                     name: {
                         type: "string",
@@ -143,7 +329,12 @@ export class RollTableTool extends BaseTool {
                             },
                             required: ["text"]
                         },
-                        description: "[create] Array of table entries"
+                        description: "[create] Legacy text-only entries (use 'results' for document/compendium types)"
+                    },
+                    results: {
+                        type: "array",
+                        items: { type: "object" },
+                        description: "[create/add-results] Result objects with type='text'|'document'|'compendium'"
                     },
                     replacement: {
                         type: "boolean",
@@ -156,11 +347,53 @@ export class RollTableTool extends BaseTool {
                     rollMode: {
                         type: "string",
                         enum: ["public", "private", "blind", "self"],
-                        description: "[roll] How to display the roll result"
+                        description: "[roll/draw-many] How to display the roll result"
                     },
                     modifier: {
                         type: "number",
                         description: "[roll] Optional numeric modifier added to the roll result"
+                    },
+                    changes: {
+                        type: "object",
+                        description: "[update] Fields to change: name, img, description, formula, replacement, displayRoll, folder, sort"
+                    },
+                    updates: {
+                        type: "array",
+                        items: { type: "object" },
+                        description: "[update-results] Array of {_id, ...fields} result update objects"
+                    },
+                    resultIds: {
+                        type: "array",
+                        items: { type: "string" },
+                        description: "[delete-results] IDs of results to permanently remove"
+                    },
+                    number: {
+                        type: "integer",
+                        description: "[draw-many] Number of results to draw (1–50)"
+                    },
+                    displayChat: {
+                        type: "boolean",
+                        description: "[draw-many] Display the roll results in chat (default: true)"
+                    },
+                    recursive: {
+                        type: "boolean",
+                        description: "[draw-many] Roll nested tables recursively (default: false)"
+                    },
+                    pack: {
+                        type: "string",
+                        description: "[import-from-compendium] Compendium pack ID (e.g. 'wfrp4e-core.tables')"
+                    },
+                    documentId: {
+                        type: "string",
+                        description: "[import-from-compendium] Document ID within the pack"
+                    },
+                    documentCollection: {
+                        type: "string",
+                        description: "[result input] Collection for document/compendium result types"
+                    },
+                    normalize: {
+                        type: "boolean",
+                        description: "[import-from-compendium] Normalize ranges after import (overwrites manual ranges)"
                     }
                 },
                 required: ["action"]
@@ -182,22 +415,52 @@ export class RollTableTool extends BaseTool {
                 return this.handleRoll(args);
             case "delete":
                 return this.handleDelete(args);
+            case "update":
+                return this.handleUpdate(args);
+            case "add-results":
+                return this.handleAddResults(args);
+            case "update-results":
+                return this.handleUpdateResults(args);
+            case "delete-results":
+                return this.handleDeleteResults(args);
+            case "normalize":
+                return this.handleNormalize(args);
+            case "reset":
+                return this.handleReset(args);
+            case "draw-many":
+                return this.handleDrawMany(args);
+            case "import-from-compendium":
+                return this.handleImportFromCompendium(args);
         }
     }
+
+    // ── Legacy action handlers (query<any> grandfathered per CCR-Envelope-Consumer rule 3) ──
 
     private async handleCreate(args: {
         name: string;
         description?: string | undefined;
         formula: string;
-        entries: Array<{
+        entries?: Array<{
             text: string;
             weight?: number | undefined;
             range?: [number, number] | undefined;
-        }>;
+        }> | undefined;
+        results?: Array<z.infer<typeof TableResultInputZ>> | undefined;
         replacement: boolean;
         displayRoll: boolean;
     }) {
         this.logger.info("Creating roll table", { name: args.name });
+
+        // Backward-compat: if entries provided but not results, normalize entries → text results.
+        let resolvedResults: Array<z.infer<typeof TableResultInputZ>> | undefined = args.results;
+        if (!resolvedResults && args.entries && args.entries.length > 0) {
+            resolvedResults = args.entries.map(e => ({
+                type: "text" as const,
+                text: e.text,
+                weight: e.weight,
+                range: e.range,
+            }));
+        }
 
         const response = await this.query<any>(
             "createRollTable",
@@ -205,18 +468,19 @@ export class RollTableTool extends BaseTool {
                 name: args.name,
                 description: args.description,
                 formula: args.formula,
-                entries: args.entries,
                 replacement: args.replacement,
                 displayRoll: args.displayRoll,
+                ...(resolvedResults !== undefined ? { results: resolvedResults } : {}),
             }
         );
 
         const table = response;
+        const entryCount = resolvedResults?.length ?? 0;
         return {
             content: [
                 {
                     type: "text",
-                    text: `🎲 **Roll Table Created**\n\n**Name:** ${args.name}\n**Formula:** ${args.formula}\n**Entries:** ${args.entries.length}\n**ID:** ${table.id || "N/A"}\n\n✅ Roll table is ready to use. Use the 'roll' action to roll on this table.`,
+                    text: `🎲 **Roll Table Created**\n\n**Name:** ${args.name}\n**Formula:** ${args.formula}\n**Entries:** ${entryCount}\n**ID:** ${table.id || "N/A"}\n\n✅ Roll table is ready to use. Use the 'roll' action to roll on this table.`,
                 },
             ],
         };
@@ -281,10 +545,16 @@ export class RollTableTool extends BaseTool {
         if (table.results && table.results.length > 0) {
             resultText += `**Entries:** (${table.results.length})\n\n`;
             for (const entry of table.results) {
-                if (entry.range) {
-                    resultText += `${entry.range[0]}-${entry.range[1]}: ${entry.text}\n`;
+                // F09: expose result id + type so callers can construct update-results/delete-results
+                // payloads from a single get without needing F12 paste. Compendium/document-typed
+                // results show the documentUuid in place of (empty) text.
+                const label = entry.text || entry.documentUuid || "(unknown)";
+                const idTag = entry.id ? ` [_id: ${entry.id}]` : "";
+                const typeTag = entry.type && entry.type !== "text" ? ` (${entry.type})` : "";
+                if (entry.range && entry.range.length === 2) {
+                    resultText += `${entry.range[0]}-${entry.range[1]}: ${label}${typeTag}${idTag}\n`;
                 } else {
-                    resultText += `- ${entry.text}${entry.weight ? ` (weight: ${entry.weight})` : ""}\n`;
+                    resultText += `- ${label}${typeTag}${entry.weight ? ` (weight: ${entry.weight})` : ""}${idTag}\n`;
                 }
             }
         }
@@ -339,6 +609,175 @@ export class RollTableTool extends BaseTool {
                     text: `🗑️ **Roll Table Deleted**\n\nThe roll table has been permanently removed from the world.`,
                 },
             ],
+        };
+    }
+
+    // ── New action handlers (concrete typed per CCR-Envelope-Consumer rule 3) ──
+
+    private async handleUpdate(args: z.infer<typeof UpdateRollTableSchema>) {
+        this.logger.info("Updating roll table", { tableId: args.tableId });
+        try {
+            const response = await this.query<UpdateRollTableResponse>("updateRollTable", {
+                tableId: args.tableId,
+                changes: args.changes,
+            });
+            return {
+                content: [{
+                    type: "text" as const,
+                    text: `✏️ **Roll Table Updated**\n\n**Table ID:** ${response.tableId}\n**Changed Fields:** ${Object.keys(response.changes).join(", ")}`,
+                }],
+            };
+        } catch (e) {
+            return this.errorResponse("update", e instanceof Error ? e.message : String(e));
+        }
+    }
+
+    private async handleAddResults(args: z.infer<typeof AddTableResultsSchema>) {
+        this.logger.info("Adding results to roll table", { tableId: args.tableId });
+        try {
+            const response = await this.query<AddTableResultsResponse>("addTableResults", {
+                tableId: args.tableId,
+                results: args.results,
+            });
+            return {
+                content: [{
+                    type: "text" as const,
+                    text: `➕ **Results Added**\n\n**Table ID:** ${response.tableId}\n**Added:** ${response.addedCount} result${response.addedCount !== 1 ? "s" : ""}`,
+                }],
+            };
+        } catch (e) {
+            return this.errorResponse("add-results", e instanceof Error ? e.message : String(e));
+        }
+    }
+
+    private async handleUpdateResults(args: z.infer<typeof UpdateTableResultsSchema>) {
+        this.logger.info("Updating table results", { tableId: args.tableId });
+        try {
+            const response = await this.query<UpdateTableResultsResponse>("updateTableResults", {
+                tableId: args.tableId,
+                updates: args.updates,
+            });
+            return {
+                content: [{
+                    type: "text" as const,
+                    text: `✏️ **Table Results Updated**\n\n**Table ID:** ${response.tableId}\n**Updated:** ${response.updatedCount} result${response.updatedCount !== 1 ? "s" : ""}`,
+                }],
+            };
+        } catch (e) {
+            return this.errorResponse("update-results", e instanceof Error ? e.message : String(e));
+        }
+    }
+
+    private async handleDeleteResults(args: z.infer<typeof DeleteTableResultsSchema>) {
+        this.logger.info("Deleting table results", { tableId: args.tableId });
+        try {
+            const response = await this.query<DeleteTableResultsResponse>("deleteTableResults", {
+                tableId: args.tableId,
+                resultIds: args.resultIds,
+            });
+            return {
+                content: [{
+                    type: "text" as const,
+                    text: `🗑️ **Table Results Deleted**\n\n**Table ID:** ${response.tableId}\n**Deleted:** ${response.deletedCount} result${response.deletedCount !== 1 ? "s" : ""}\n\n⚠️ This operation is permanent and cannot be undone.`,
+                }],
+            };
+        } catch (e) {
+            return this.errorResponse("delete-results", e instanceof Error ? e.message : String(e));
+        }
+    }
+
+    private async handleNormalize(args: z.infer<typeof NormalizeRollTableSchema>) {
+        this.logger.info("Normalizing roll table", { tableId: args.tableId });
+        try {
+            const response = await this.query<NormalizeRollTableResponse>("normalizeRollTable", {
+                tableId: args.tableId,
+            });
+            return {
+                content: [{
+                    type: "text" as const,
+                    text: `📐 **Roll Table Normalized**\n\n**Table ID:** ${response.tableId}\n**Results:** ${response.resultCount}\n\n⚠️ All result ranges have been recalculated from weights — any manually-set ranges have been overwritten.`,
+                }],
+            };
+        } catch (e) {
+            return this.errorResponse("normalize", e instanceof Error ? e.message : String(e));
+        }
+    }
+
+    private async handleReset(args: z.infer<typeof ResetRollTableSchema>) {
+        this.logger.info("Resetting roll table drawn flags", { tableId: args.tableId });
+        try {
+            const response = await this.query<ResetRollTableResultsResponse>("resetRollTableResults", {
+                tableId: args.tableId,
+            });
+            return {
+                content: [{
+                    type: "text" as const,
+                    text: `🔄 **Roll Table Reset**\n\n**Table ID:** ${response.tableId}\n**Results:** ${response.resultCount}\n\nAll drawn flags cleared — all results are available to draw again.`,
+                }],
+            };
+        } catch (e) {
+            return this.errorResponse("reset", e instanceof Error ? e.message : String(e));
+        }
+    }
+
+    private async handleDrawMany(args: z.infer<typeof DrawManyFromTableSchema>) {
+        this.logger.info("Drawing many from roll table", { tableId: args.tableId, number: args.number });
+        try {
+            const response = await this.query<DrawManyFromTableResponse>("drawManyFromTable", {
+                tableId: args.tableId,
+                number: args.number,
+                ...(args.displayChat !== undefined ? { displayChat: args.displayChat } : {}),
+                ...(args.recursive !== undefined ? { recursive: args.recursive } : {}),
+                ...(args.rollMode !== undefined ? { rollMode: args.rollMode } : {}),
+            });
+
+            let text = `🎲 **Draw Many Results** — ${response.tableName}\n\n`;
+            text += `**Requested:** ${args.number}  **Returned:** ${response.returned ?? response.results.length}\n\n`;
+
+            for (let i = 0; i < response.results.length; i++) {
+                const r = response.results[i];
+                const label = r.text || r.documentUuid || "(unknown)";
+                const idTag = r.id ? ` [_id: ${r.id}]` : "";
+                text += `${i + 1}. ${label}${idTag}`;
+                if (r.drawn) text += " *(drawn)*";
+                text += "\n";
+            }
+
+            if (response.exhausted) {
+                text += `\n⚠️ **Pool exhausted** — only ${response.returned} of ${response.requested} requested results were available. Call 'reset' to clear drawn flags.`;
+            }
+
+            return {
+                content: [{ type: "text" as const, text }],
+            };
+        } catch (e) {
+            return this.errorResponse("draw-many", e instanceof Error ? e.message : String(e));
+        }
+    }
+
+    private async handleImportFromCompendium(args: z.infer<typeof ImportRollTableFromCompendiumSchema>) {
+        this.logger.info("Importing roll table from compendium", { pack: args.pack, documentId: args.documentId });
+        try {
+            const response = await this.query<ImportRollTableFromCompendiumResponse>("importRollTableFromCompendium", {
+                pack: args.pack,
+                documentId: args.documentId,
+                ...(args.normalize !== undefined ? { normalize: args.normalize } : {}),
+            });
+            return {
+                content: [{
+                    type: "text" as const,
+                    text: `📦 **Table Imported**\n\n**New Table ID:** ${response.newTableId}\n**Name:** ${response.name}\n**Normalized:** ${response.normalized ? "yes" : "no"}`,
+                }],
+            };
+        } catch (e) {
+            return this.errorResponse("import-from-compendium", e instanceof Error ? e.message : String(e));
+        }
+    }
+
+    private errorResponse(action: string, error: string) {
+        return {
+            content: [{ type: "text" as const, text: `❌ **rolltable.${action} failed**\n\n${error}` }],
+            isError: true,
         };
     }
 }

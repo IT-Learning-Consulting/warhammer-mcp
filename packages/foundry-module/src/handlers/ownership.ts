@@ -177,7 +177,7 @@ function resolveUserId(userIdInput: string): string {
 function verifyOwnershipWrite(
   _updateResult: any,
   doc: any,
-  expected: { userId?: string; default?: boolean; level: number }
+  expected: { userId?: string | undefined; default?: boolean | undefined; level: number }
 ): void {
   // Ground truth is the post-state, not the update() return value.
   // `doc.update()` returns `Promise<undefined | Document>` (foundry_docs/abstract/classes/Document.md

@@ -119,29 +119,152 @@ export const RequestPlayerRollsInput = z.object({
   flavor: z.string(),
 }).strict();
 
+// ── RollTable schemas (Phase 2 mcp_crud_expansion) ─────────────────────────
+//
+// v13 BaseTableResult uses a single `documentUuid: DocumentUUIDField` for
+// document/compendium results (BaseTableResult.md L1163). MCP tool input
+// accepts `{documentCollection, documentId}` as a builder convenience; the
+// Foundry-side handler assembles the UUID + validates via fromUuid().
+// See ADR-027 (mcp_crud_expansion_v1_journal.md).
+
+const ResultCommonShape = {
+  name: z.string().optional(),
+  img: z.string().optional(),
+  description: z.string().optional(),
+  range: z.tuple([z.number().int(), z.number().int()]).optional(),
+  weight: z.number().nonnegative().optional(),
+};
+
+export const TextResultSchema = z.object({
+  type: z.literal('text'),
+  text: z.string(),
+  ...ResultCommonShape,
+}).strict();
+
+export const DocumentResultSchema = z.object({
+  type: z.literal('document'),
+  documentCollection: z.string().min(1),
+  documentId: z.string().min(1),
+  ...ResultCommonShape,
+}).strict();
+
+export const CompendiumResultSchema = z.object({
+  type: z.literal('compendium'),
+  documentCollection: z.string().min(1),
+  documentId: z.string().min(1),
+  ...ResultCommonShape,
+}).strict();
+
+export const TableResultInputSchema = z.discriminatedUnion('type', [
+  TextResultSchema,
+  DocumentResultSchema,
+  CompendiumResultSchema,
+]);
+
+const RollTableWritableFields = {
+  name: z.string().min(1).optional(),
+  img: z.string().optional(),
+  description: z.string().optional(),
+  formula: z.string().min(1).optional(),
+  replacement: z.boolean().optional(),
+  displayRoll: z.boolean().optional(),
+  folder: z.string().nullable().optional(),
+  sort: z.number().int().optional(),
+};
+
 export const CreateRollTableInput = z.object({
-  tableData: z.record(z.unknown()),
+  name: z.string().min(1),
+  description: z.string().optional(),
+  formula: z.string().min(1).optional(),
+  img: z.string().optional(),
+  replacement: z.boolean().optional(),
+  displayRoll: z.boolean().optional(),
+  folder: z.string().nullable().optional(),
+  sort: z.number().int().optional(),
+  results: z.array(TableResultInputSchema).optional(),
 }).strict();
 
 export const AddTableResultsInput = z.object({
-  tableId: z.string(),
-  results: z.array(z.record(z.unknown())),
+  tableId: z.string().min(1),
+  results: z.array(TableResultInputSchema).min(1),
 }).strict();
 
 export const ListRollTablesInput = z.object({}).strict();
 
 export const GetRollTableInput = z.object({
-  tableId: z.string(),
+  tableId: z.string().min(1),
 }).strict();
 
 export const RollOnTableInput = z.object({
-  tableId: z.string(),
+  tableId: z.string().min(1),
   rollMode: z.string().optional(),
 }).strict();
 
 export const DeleteRollTableInput = z.object({
-  tableId: z.string(),
+  tableId: z.string().min(1),
 }).strict();
+
+export const UpdateRollTableInput = z.object({
+  tableId: z.string().min(1),
+  changes: z.object(RollTableWritableFields).strict().refine(
+    (obj) => Object.keys(obj).length > 0,
+    { message: 'ROLLTABLE_EMPTY_PAYLOAD: changes object must contain at least one field' },
+  ),
+}).strict();
+
+export const UpdateTableResultsInput = z.object({
+  tableId: z.string().min(1),
+  updates: z.array(
+    z.object({
+      _id: z.string().min(1),
+      name: z.string().optional(),
+      img: z.string().optional(),
+      description: z.string().optional(),
+      text: z.string().optional(),
+      range: z.tuple([z.number().int(), z.number().int()]).optional(),
+      weight: z.number().nonnegative().optional(),
+      drawn: z.boolean().optional(),
+    }).strict(),
+  ).min(1),
+}).strict();
+
+export const DeleteTableResultsInput = z.object({
+  tableId: z.string().min(1),
+  resultIds: z.array(z.string().min(1)).min(1),
+}).strict();
+
+export const NormalizeRollTableInput = z.object({
+  tableId: z.string().min(1),
+}).strict();
+
+export const ResetRollTableInput = z.object({
+  tableId: z.string().min(1),
+}).strict();
+
+export const DrawManyFromTableInput = z.object({
+  tableId: z.string().min(1),
+  number: z.number().int().min(1).max(50),
+  displayChat: z.boolean().optional(),
+  recursive: z.boolean().optional(),
+  rollMode: z.string().optional(),
+}).strict();
+
+export const ImportRollTableFromCompendiumInput = z.object({
+  pack: z.string().min(1),
+  documentId: z.string().min(1),
+  normalize: z.boolean().default(true),
+}).strict();
+
+export type TableResultInputType = z.infer<typeof TableResultInputSchema>;
+export type CreateRollTableInputType = z.infer<typeof CreateRollTableInput>;
+export type AddTableResultsInputType = z.infer<typeof AddTableResultsInput>;
+export type UpdateRollTableInputType = z.infer<typeof UpdateRollTableInput>;
+export type UpdateTableResultsInputType = z.infer<typeof UpdateTableResultsInput>;
+export type DeleteTableResultsInputType = z.infer<typeof DeleteTableResultsInput>;
+export type NormalizeRollTableInputType = z.infer<typeof NormalizeRollTableInput>;
+export type ResetRollTableInputType = z.infer<typeof ResetRollTableInput>;
+export type DrawManyFromTableInputType = z.infer<typeof DrawManyFromTableInput>;
+export type ImportRollTableFromCompendiumInputType = z.infer<typeof ImportRollTableFromCompendiumInput>;
 
 export const DeleteActorInput = z.object({
   id: z.string().min(1),

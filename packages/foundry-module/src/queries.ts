@@ -10,6 +10,22 @@ import {
   bulkSetDocumentOwnership as bulkSetDocumentOwnershipHandler,
   resetDocumentOwnership as resetDocumentOwnershipHandler,
 } from './handlers/ownership.js';
+// Phase 2 mcp_crud_expansion — RollTable handlers (migrated from inline + 7 new actions).
+import {
+  createRollTable as createRollTableHandler,
+  addTableResults as addTableResultsHandler,
+  listRollTables as listRollTablesHandler,
+  getRollTable as getRollTableHandler,
+  rollOnTable as rollOnTableHandler,
+  deleteRollTable as deleteRollTableHandler,
+  updateRollTable as updateRollTableHandler,
+  updateTableResults as updateTableResultsHandler,
+  deleteTableResults as deleteTableResultsHandler,
+  normalizeRollTable as normalizeRollTableHandler,
+  resetRollTableResults as resetRollTableResultsHandler,
+  drawManyFromTable as drawManyFromTableHandler,
+  importRollTableFromCompendium as importRollTableFromCompendiumHandler,
+} from './handlers/rolltable.js';
 import {
   // actor domain
   GetCharacterInfoInput,
@@ -63,12 +79,7 @@ import {
   GetJournalContentInput,
   UpdateJournalContentInput,
   RequestPlayerRollsInput,
-  CreateRollTableInput,
-  AddTableResultsInput,
-  ListRollTablesInput,
-  GetRollTableInput,
-  RollOnTableInput,
-  DeleteRollTableInput,
+  // RollTable schemas moved to handlers/rolltable.ts (Phase 2; parsed handler-side).
   DeleteActorInput,
   DeleteJournalEntryInput,
   // combat domain (Phase 4b)
@@ -165,12 +176,20 @@ export class QueryHandlers {
     CONFIG.queries[`${modulePrefix}.deleteItem`] = this.handleDeleteItem.bind(this);
     CONFIG.queries[`${modulePrefix}.modifyItemQualities`] = this.handleModifyItemQualities.bind(this);
     CONFIG.queries[`${modulePrefix}.tradeItem`] = this.handleTradeItem.bind(this);
+    // Phase 2 mcp_crud_expansion — RollTable surface (6 migrated + 7 new = 13 handlers).
     CONFIG.queries[`${modulePrefix}.createRollTable`] = this.handleCreateRollTable.bind(this);
     CONFIG.queries[`${modulePrefix}.addTableResults`] = this.handleAddTableResults.bind(this);
     CONFIG.queries[`${modulePrefix}.listRollTables`] = this.handleListRollTables.bind(this);
     CONFIG.queries[`${modulePrefix}.getRollTable`] = this.handleGetRollTable.bind(this);
     CONFIG.queries[`${modulePrefix}.rollOnTable`] = this.handleRollOnTable.bind(this);
     CONFIG.queries[`${modulePrefix}.deleteRollTable`] = this.handleDeleteRollTable.bind(this);
+    CONFIG.queries[`${modulePrefix}.updateRollTable`] = this.handleUpdateRollTable.bind(this);
+    CONFIG.queries[`${modulePrefix}.updateTableResults`] = this.handleUpdateTableResults.bind(this);
+    CONFIG.queries[`${modulePrefix}.deleteTableResults`] = this.handleDeleteTableResults.bind(this);
+    CONFIG.queries[`${modulePrefix}.normalizeRollTable`] = this.handleNormalizeRollTable.bind(this);
+    CONFIG.queries[`${modulePrefix}.resetRollTableResults`] = this.handleResetRollTableResults.bind(this);
+    CONFIG.queries[`${modulePrefix}.drawManyFromTable`] = this.handleDrawManyFromTable.bind(this);
+    CONFIG.queries[`${modulePrefix}.importRollTableFromCompendium`] = this.handleImportRollTableFromCompendium.bind(this);
 
     // Phase 4b — combat + damage + conditions + active-effects
     CONFIG.queries[`${modulePrefix}.getCombat`] = this.handleGetCombat.bind(this);
@@ -1031,46 +1050,21 @@ export class QueryHandlers {
     }
   }
 
+  // Phase 2 mcp_crud_expansion — RollTable thin shims. All logic now lives in
+  // handlers/rolltable.ts (strict-parse + GM gate + wrappedWrite + BUG-070 pre/post-verify).
+  // Shims just strict-validate Foundry state and delegate.
   private async handleCreateRollTable(data: unknown): Promise<any> {
     try {
-      const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
-      const parsed = CreateRollTableInput.strict().parse(data ?? {});
-      return await wrappedWrite('createRollTable', async () => {
-        const tableData: any = parsed.tableData;
-        const results = tableData.results || [];
-        const tableDataWithoutResults = { ...tableData };
-        delete tableDataWithoutResults.results;
-
-        if (!tableDataWithoutResults.name) {
-          throw new Error('Table name is required');
-        }
-
-        const table = await RollTable.create(tableDataWithoutResults);
-        if (results.length > 0) {
-          await table.createEmbeddedDocuments('TableResult', results);
-        }
-
-        return { success: true, data: { id: table.id, name: table.name } };
-      });
+      return await createRollTableHandler(data);
     } catch (error) {
       rethrowAsInvalidInput(error);
-      console.error('Failed to create RollTable:', error);
       throw new Error(`Failed to create RollTable: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
   private async handleAddTableResults(data: unknown): Promise<any> {
     try {
-      const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
-      const parsed = AddTableResultsInput.strict().parse(data ?? {});
-      return await wrappedWrite('addTableResults', async () => {
-        const table = game.tables.get(parsed.tableId);
-        if (!table) throw new Error('Table not found');
-        await table.createEmbeddedDocuments('TableResult', parsed.results);
-        return { success: true, data: { tableId: parsed.tableId } };
-      });
+      return await addTableResultsHandler(data);
     } catch (error) {
       rethrowAsInvalidInput(error);
       throw new Error(`Failed to add table results: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -1079,22 +1073,7 @@ export class QueryHandlers {
 
   private async handleListRollTables(data: unknown): Promise<any> {
     try {
-      const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
-      ListRollTablesInput.strict().parse(data ?? {});
-      const tables = game.tables.map((table: any) => ({
-        id: table.id,
-        name: table.name,
-        formula: table.formula,
-        description: table.description || '',
-        results: table.results.map((r: any) => ({
-          id: r.id,
-          text: r.text,
-          range: r.range,
-          weight: r.weight,
-        })),
-      }));
-      return { success: true, data: tables };
+      return await listRollTablesHandler(data);
     } catch (error) {
       rethrowAsInvalidInput(error);
       throw new Error(`Failed to list RollTables: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -1103,27 +1082,7 @@ export class QueryHandlers {
 
   private async handleGetRollTable(data: unknown): Promise<any> {
     try {
-      const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
-      const parsed = GetRollTableInput.strict().parse(data ?? {});
-      const table = game.tables.get(parsed.tableId);
-      if (!table) throw new Error('Table not found');
-
-      const payload = {
-        id: table.id,
-        name: table.name,
-        formula: table.formula,
-        description: table.description || '',
-        replacement: table.replacement,
-        displayRoll: table.displayRoll,
-        results: (table.results as any).map((r: any) => ({
-          id: r.id,
-          text: r.text,
-          range: r.range,
-          weight: r.weight,
-        })),
-      };
-      return { success: true, data: payload };
+      return await getRollTableHandler(data);
     } catch (error) {
       rethrowAsInvalidInput(error);
       throw new Error(`Failed to get RollTable: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -1132,27 +1091,7 @@ export class QueryHandlers {
 
   private async handleRollOnTable(data: unknown): Promise<any> {
     try {
-      const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
-      const parsed = RollOnTableInput.strict().parse(data ?? {});
-      const table = game.tables.get(parsed.tableId);
-      if (!table) throw new Error('Table not found');
-
-      const rollMode = parsed.rollMode || 'public';
-      const draw = await table.draw({ rollMode: rollMode as any });
-      if (!draw || !draw.results || draw.results.length === 0) {
-        throw new Error('No result drawn from table');
-      }
-
-      const drawResult = draw.results[0];
-      const payload = {
-        tableName: table.name,
-        formula: table.formula,
-        roll: draw.roll?.total || 0,
-        text: drawResult.text,
-        drawn: drawResult.drawn,
-      };
-      return { success: true, data: payload };
+      return await rollOnTableHandler(data);
     } catch (error) {
       rethrowAsInvalidInput(error);
       throw new Error(`Failed to roll on table: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -1161,18 +1100,73 @@ export class QueryHandlers {
 
   private async handleDeleteRollTable(data: unknown): Promise<any> {
     try {
-      const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
-      const parsed = DeleteRollTableInput.strict().parse(data ?? {});
-      return await wrappedWrite('deleteRollTable', async () => {
-        const table = game.tables.get(parsed.tableId);
-        if (!table) throw new Error('Table not found');
-        await table.delete();
-        return { success: true, data: { tableId: parsed.tableId } };
-      });
+      return await deleteRollTableHandler(data);
     } catch (error) {
       rethrowAsInvalidInput(error);
       throw new Error(`Failed to delete RollTable: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  private async handleUpdateRollTable(data: unknown): Promise<any> {
+    try {
+      return await updateRollTableHandler(data);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to update RollTable: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  private async handleUpdateTableResults(data: unknown): Promise<any> {
+    try {
+      return await updateTableResultsHandler(data);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to update table results: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  private async handleDeleteTableResults(data: unknown): Promise<any> {
+    try {
+      return await deleteTableResultsHandler(data);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to delete table results: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  private async handleNormalizeRollTable(data: unknown): Promise<any> {
+    try {
+      return await normalizeRollTableHandler(data);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to normalize RollTable: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  private async handleResetRollTableResults(data: unknown): Promise<any> {
+    try {
+      return await resetRollTableResultsHandler(data);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to reset RollTable results: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  private async handleDrawManyFromTable(data: unknown): Promise<any> {
+    try {
+      return await drawManyFromTableHandler(data);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to draw from table: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  private async handleImportRollTableFromCompendium(data: unknown): Promise<any> {
+    try {
+      return await importRollTableFromCompendiumHandler(data);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to import RollTable from compendium: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
