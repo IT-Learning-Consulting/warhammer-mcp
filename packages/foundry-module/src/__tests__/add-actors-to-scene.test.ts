@@ -97,3 +97,94 @@ describe('FoundryDataAccess.addActorsToScene — per-actor quantities (BUG-051 p
     expect(actorIds).toEqual(['act-1', 'act-2']);
   });
 });
+
+// TOOL-IDEA-004 + TOOL-IDEA-005 (2026-05-14)
+describe('FoundryDataAccess.addActorsToScene — sceneId + tokens[] response', () => {
+  it('targets a non-active scene via sceneId (TOOL-IDEA-004)', async () => {
+    const activeScene = makeScene();
+    activeScene.id = 'active-scene';
+    activeScene.name = 'Active';
+    const inactiveScene = makeScene();
+    inactiveScene.id = 'other-scene';
+    inactiveScene.name = 'Other';
+    const actor = makeActor('act-1', 'Skeleton');
+    (globalThis as any).game = {
+      ...(globalThis as any).game,
+      scenes: {
+        current: activeScene,
+        get: (id: string) => (id === 'other-scene' ? inactiveScene : null),
+      },
+      actors: { get: (id: string) => (id === 'act-1' ? actor : null) },
+    };
+
+    const da: any = new FoundryDataAccess();
+    da.validateFoundryState = () => {};
+
+    const result = await da.addActorsToScene({
+      actorIds: ['act-1'],
+      placement: 'grid',
+      hidden: false,
+      sceneId: 'other-scene',
+    });
+
+    // Inactive scene received the create call, not the active one.
+    expect(inactiveScene.createEmbeddedDocuments).toHaveBeenCalledTimes(1);
+    expect(activeScene.createEmbeddedDocuments).not.toHaveBeenCalled();
+    expect(result.sceneId).toBe('other-scene');
+    expect(result.sceneName).toBe('Other');
+  });
+
+  it('throws SceneNotFound when sceneId misses (TOOL-IDEA-004)', async () => {
+    (globalThis as any).game = {
+      ...(globalThis as any).game,
+      scenes: {
+        current: makeScene(),
+        get: () => null,
+      },
+      actors: { get: () => null },
+    };
+
+    const da: any = new FoundryDataAccess();
+    da.validateFoundryState = () => {};
+
+    await expect(
+      da.addActorsToScene({
+        actorIds: ['act-1'],
+        placement: 'grid',
+        hidden: false,
+        sceneId: 'nonexistent',
+      }),
+    ).rejects.toThrow(/Scene not found.*nonexistent/);
+  });
+
+  it('returns tokens[] with id/name/actorId alongside legacy tokenIds (TOOL-IDEA-005)', async () => {
+    const scene = makeScene();
+    const actor = makeActor('act-1', 'Skeleton');
+    (globalThis as any).game = {
+      ...(globalThis as any).game,
+      scenes: { current: scene },
+      actors: { get: (id: string) => (id === 'act-1' ? actor : null) },
+    };
+
+    const da: any = new FoundryDataAccess();
+    da.validateFoundryState = () => {};
+
+    const result = await da.addActorsToScene({
+      actorIds: ['act-1'],
+      quantities: [3],
+      placement: 'grid',
+      hidden: false,
+    });
+
+    expect(result.tokenIds).toHaveLength(3);
+    expect(result.tokens).toHaveLength(3);
+    for (const t of result.tokens) {
+      expect(t).toHaveProperty('id');
+      expect(t).toHaveProperty('name');
+      expect(t).toHaveProperty('actorId');
+      expect(t.actorId).toBe('act-1');
+    }
+    // tokenIds and tokens are parallel — same ordering, same ids.
+    expect(result.tokens.map((t: any) => t.id)).toEqual(result.tokenIds);
+  });
+});

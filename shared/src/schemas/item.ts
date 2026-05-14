@@ -59,5 +59,6 @@ export const ModifyItemQualitiesInput = z.object({
 
 export const AddItemFromCompendiumInput = z.object({
   actorId: z.string(),
-  compendiumId: z.string(),
+  itemUuid: z.string().optional(),
+  compendiumId: z.string().optional(),
 }).strict();

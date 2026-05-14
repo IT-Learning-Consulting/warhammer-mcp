@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { FoundryClient } from "../foundry-client.js";
 import { Logger } from "../logger.js";
+import { BaseTool, BaseToolOptions } from "../base-tool.js";
 
 const ManageInventorySchema = z.discriminatedUnion("action", [
     z.object({
@@ -35,15 +36,26 @@ const ManageInventorySchema = z.discriminatedUnion("action", [
 
 type ManageInventoryArgs = z.infer<typeof ManageInventorySchema>;
 
-export class ManageInventoryTool {
-    constructor(
-        private foundryClient: FoundryClient,
-        private logger: Logger
-    ) { }
+export interface ManageInventoryToolOptions {
+  foundryClient: FoundryClient;
+  logger: Logger;
+}
+
+export class ManageInventoryTool extends BaseTool {
+  constructor(options: BaseToolOptions) {
+    super(options);
+  }
 
     getToolDefinitions() {
         return [{
             name: "manage-inventory",
+            title: "Manage Inventory",
+            annotations: {
+              readOnlyHint: false,
+              destructiveHint: false,
+              idempotentHint: false,
+              openWorldHint: true,
+            },
             description: `Manage inventory for WFRP 4e characters including items, encumbrance, and ammunition.
 
 WFRP Encumbrance System:
@@ -122,8 +134,8 @@ Examples:
     private async handleGetStatus(args: { characterName: string }): Promise<string> {
         this.logger.info("Getting inventory status", { characterName: args.characterName });
 
-        const character = await this.foundryClient.query<any>(
-            "warhammer-mcp.getCharacterInfo",
+        const character = await this.query<any>(
+            "getCharacterInfo",
             { characterName: args.characterName }
         );
 
@@ -217,8 +229,8 @@ Examples:
 
         const quantity = args.quantity || 1;
 
-        await this.foundryClient.query<any>(
-            "warhammer-mcp.addItemToInventory",
+        await this.query<any>(
+            "addItemToInventory",
             {
                 characterName: args.characterName,
                 itemName: args.itemName,
@@ -237,8 +249,8 @@ Examples:
 
         const quantity = args.quantity || 1;
 
-        await this.foundryClient.query<any>(
-            "warhammer-mcp.removeItemFromInventory",
+        await this.query<any>(
+            "removeItemFromInventory",
             {
                 characterName: args.characterName,
                 itemName: args.itemName,
@@ -252,8 +264,8 @@ Examples:
     private async handleTrackAmmunition(args: { characterName: string; ammunitionType: string; amount: number }): Promise<string> {
         this.logger.info("Tracking ammunition", args);
 
-        await this.foundryClient.query<any>(
-            "warhammer-mcp.trackAmmunition",
+        await this.query<any>(
+            "trackAmmunition",
             {
                 characterName: args.characterName,
                 ammunitionType: args.ammunitionType,
@@ -269,8 +281,8 @@ Examples:
     private async handleCheckEncumbrance(args: { characterName: string }): Promise<string> {
         this.logger.info("Checking encumbrance", { characterName: args.characterName });
 
-        const character = await this.foundryClient.query<any>(
-            "warhammer-mcp.getCharacterInfo",
+        const character = await this.query<any>(
+            "getCharacterInfo",
             { characterName: args.characterName }
         );
 

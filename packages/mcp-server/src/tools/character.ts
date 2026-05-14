@@ -1,19 +1,17 @@
 import { z } from 'zod';
+import { GetCharacterOutput, GET_CHARACTER_OUTPUT_JSON_SCHEMA } from '@foundry-mcp/shared';
 import { FoundryClient } from '../foundry-client.js';
 import { Logger } from '../logger.js';
+import { BaseTool, BaseToolOptions } from '../base-tool.js';
 
 export interface CharacterToolsOptions {
   foundryClient: FoundryClient;
   logger: Logger;
 }
 
-export class CharacterTools {
-  private foundryClient: FoundryClient;
-  private logger: Logger;
-
-  constructor({ foundryClient, logger }: CharacterToolsOptions) {
-    this.foundryClient = foundryClient;
-    this.logger = logger.child({ component: 'CharacterTools' });
+export class CharacterTools extends BaseTool {
+  constructor(options: BaseToolOptions) {
+    super(options);
   }
 
   /**
@@ -25,7 +23,14 @@ export class CharacterTools {
     return [
       {
         name: 'get-character',
-        description: 'Retrieve comprehensive character information for a WFRP 4e character. Returns complete character data including: identity (name, species, status), characteristics (WS, BS, S, T, I, Ag, Dex, Int, WP, Fel), status (wounds, fortune, fate, resilience, resolve, corruption, money, toughness), critical wounds (count and details), biography (motivation, ambitions), skills (with advances and totals), talents (with descriptions), traits (creature traits), conditions (injuries, mutations, diseases, psychology), items (physical inventory only - weapons, armor, trappings), and experience. Use this tool when the user asks for character info - you can then present only the sections they requested (e.g., if they ask for "skills and talents only", retrieve all data but present only those sections in your response).',
+        title: 'Get Character',
+        annotations: {
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: true,
+        },
+        description: 'Retrieve comprehensive character information for a WFRP 4e character. Returns complete character data including: identity (name, species, status), characteristics (WS, BS, S, T, I, Ag, Dex, Int, WP, Fel), status (wounds, fortune, fate, resilience, resolve, corruption, money, toughness), critical wounds (count and details), biography (motivation, ambitions), skills (with advances and totals), talents (with descriptions), traits (creature traits), conditions (injuries, mutations, diseases, psychology), items (physical inventory only - weapons, armor, trappings), and experience.\n\nTOOL-IDEA-006 (2026-05-14): pass `sections: ["characteristics"]` (or any subset) to receive only those sections in the response. Reduces payload size dramatically for narrow queries (e.g. "what is Camila\'s WS?"). `id`, `name`, `type`, `hasImage` are always returned. Available section names: `identity`, `vitals`, `characteristics`, `skills`, `talents`, `conditions`, `items`, `effects`, `biography`. Omit `sections` to receive the full payload as before.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -33,12 +38,28 @@ export class CharacterTools {
               type: 'string',
               description: 'Character name or ID to look up',
             },
+            sections: {
+              type: 'array',
+              items: {
+                type: 'string',
+                enum: ['identity', 'vitals', 'characteristics', 'skills', 'talents', 'conditions', 'items', 'effects', 'biography'],
+              },
+              description: 'Optional allowlist of response sections (TOOL-IDEA-006). id/name/type/hasImage are always returned.',
+            },
           },
           required: ['identifier'],
         },
+        outputSchema: GET_CHARACTER_OUTPUT_JSON_SCHEMA,
       },
       {
         name: 'list-characters',
+        title: 'List Characters',
+        annotations: {
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: true,
+        },
         description: 'List all available characters with basic information. WFRP 4e specific.',
         inputSchema: {
           type: 'object',
@@ -54,16 +75,18 @@ export class CharacterTools {
   }
 
   async handleGetCharacter(args: any): Promise<any> {
+    const SECTIONS = ['identity', 'vitals', 'characteristics', 'skills', 'talents', 'conditions', 'items', 'effects', 'biography'] as const;
     const schema = z.object({
       identifier: z.string().min(1, 'Character identifier cannot be empty'),
+      sections: z.array(z.enum(SECTIONS)).optional(),
     });
 
-    const { identifier } = schema.parse(args);
+    const { identifier, sections } = schema.parse(args);
 
-    this.logger.info('Getting character information', { identifier });
+    this.logger.info('Getting character information', { identifier, sections });
 
     try {
-      const characterData = await this.foundryClient.query<any>('warhammer-mcp.getCharacterInfo', {
+      const characterData = await this.query<any>('getCharacterInfo', {
         characterName: identifier,
       });
 
@@ -72,13 +95,86 @@ export class CharacterTools {
         characterName: characterData.name
       });
 
-      // Format the response for Claude
-      return this.formatCharacterResponse(characterData);
+      const fullOutput = this.formatCharacterResponse(characterData);
+      const output = sections && sections.length > 0
+        ? this.applySectionsFilter(fullOutput, sections)
+        : fullOutput;
+      GetCharacterOutput.parse(output);
+      return {
+        content: [{ type: 'text', text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
 
     } catch (error) {
       this.logger.error('Failed to get character information', error);
       throw new Error(`Failed to retrieve character "${identifier}": ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
+  }
+
+  // TOOL-IDEA-006 (2026-05-14): post-assembly sections filter.
+  // Splits basicInfo into identity/vitals/biography virtual sections, plus
+  // characteristics/skills/talents lifted from stats. id/name/type/hasImage
+  // are always preserved.
+  private applySectionsFilter(full: any, sections: readonly string[]): any {
+    const sectionSet = new Set(sections);
+    const basicInfo = full.basicInfo ?? {};
+    const stats = full.stats ?? {};
+
+    // Field maps (by section bucket) — match the keys produced by extractBasicInfo / extractStats.
+    // F01 (2026-05-14): hitLocationTable moved from identity → vitals to match the plan's mapping
+    // table (TOOL-IDEA-006). It's a combat-resolution field (which RollTable to roll on for crit
+    // location), so it belongs with the other combat vitals.
+    const identityKeys = ['species', 'career', 'status', 'gender', 'age', 'height', 'weight', 'hair', 'eyes', 'starSign', 'movement', 'distinguishingMarks'];
+    const vitalsKeys = ['wounds', 'fortune', 'fate', 'resilience', 'resolve', 'corruption', 'toughness', 'money', 'criticalWounds', 'hitLocationTable'];
+    const biographyKeys = ['biography', 'gmNotes', 'experience', 'experienceLog'];
+
+    const pick = (src: any, keys: string[]): any => {
+      const out: any = {};
+      for (const k of keys) {
+        if (src[k] !== undefined) out[k] = src[k];
+      }
+      return out;
+    };
+
+    const filtered: any = {
+      id: full.id,
+      name: full.name,
+      type: full.type,
+      hasImage: full.hasImage,
+    };
+
+    if (sectionSet.has('identity')) {
+      filtered.identity = pick(basicInfo, identityKeys);
+    }
+    if (sectionSet.has('vitals')) {
+      filtered.vitals = pick(basicInfo, vitalsKeys);
+    }
+    if (sectionSet.has('biography')) {
+      filtered.biography = pick(basicInfo, biographyKeys);
+    }
+    if (sectionSet.has('characteristics') && stats.characteristics) {
+      filtered.characteristics = stats.characteristics;
+    }
+    if (sectionSet.has('skills') && stats.skills) {
+      filtered.skills = stats.skills;
+    }
+    if (sectionSet.has('talents')) {
+      const t: any = {};
+      if (stats.talents) t.talents = stats.talents;
+      if (stats.traits) t.traits = stats.traits;
+      if (Object.keys(t).length > 0) filtered.talents = t;
+    }
+    if (sectionSet.has('conditions') && full.conditions) {
+      filtered.conditions = full.conditions;
+    }
+    if (sectionSet.has('items') && full.items) {
+      filtered.items = full.items;
+    }
+    if (sectionSet.has('effects') && full.effects) {
+      filtered.effects = full.effects;
+    }
+
+    return filtered;
   }
 
   async handleListCharacters(args: any): Promise<any> {
@@ -91,7 +187,7 @@ export class CharacterTools {
     this.logger.info('Listing characters', { type });
 
     try {
-      const actors = await this.foundryClient.query<any>('warhammer-mcp.listActors', { type });
+      const actors = await this.query<any>('listActors', { type });
 
       this.logger.debug('Successfully retrieved character list', { count: actors.length });
 
@@ -198,7 +294,7 @@ export class CharacterTools {
     // Toughness Bonus + Armor Points
     if (system.characteristics?.t) {
       const toughnessBonus = Math.floor((system.characteristics.t.value || 0) / 10);
-      const armorPoints = system.status?.armour?.value || system.status?.armour?.head || 0;
+      const armorPoints = system.status?.armour?.value ?? system.status?.armour?.head?.value ?? 0;
       basicInfo.toughness = {
         bonus: toughnessBonus,
         armorPoints: armorPoints,

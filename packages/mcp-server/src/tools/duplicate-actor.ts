@@ -1,25 +1,29 @@
 import { DuplicateActorInput } from '@foundry-mcp/shared';
 import { FoundryClient } from '../foundry-client.js';
 import { Logger } from '../logger.js';
+import { BaseTool, BaseToolOptions } from '../base-tool.js';
 
 export interface DuplicateActorToolOptions {
   foundryClient: FoundryClient;
   logger: Logger;
 }
 
-export class DuplicateActorTool {
-  private foundryClient: FoundryClient;
-  private logger: Logger;
-
-  constructor({ foundryClient, logger }: DuplicateActorToolOptions) {
-    this.foundryClient = foundryClient;
-    this.logger = logger.child({ component: 'DuplicateActorTool' });
+export class DuplicateActorTool extends BaseTool {
+  constructor(options: BaseToolOptions) {
+    super(options);
   }
 
   getToolDefinitions() {
     return [
       {
         name: 'duplicate-actor',
+        title: 'Duplicate Actor',
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: false,
+          openWorldHint: true,
+        },
         description:
           'Clone a world actor by ID, optionally renaming. Thin pass-through to the Foundry-module duplicateActor query — persists the clone via Actor.create(source.toObject()) with _id/folder/sort stripped. Preferred over createActorFromCompendium when the source is a user-curated world template (e.g. clean NPC-type species bases for /wfrp-build-npc).',
         inputSchema: {
@@ -46,6 +50,6 @@ export class DuplicateActorTool {
       sourceActorId: parsed.sourceActorId,
       newName: parsed.newName,
     });
-    return await this.foundryClient.query<any>('warhammer-mcp.duplicateActor', parsed);
+    return await this.query<any>('duplicateActor', parsed);
   }
 }

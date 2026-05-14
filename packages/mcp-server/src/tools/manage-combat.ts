@@ -8,25 +8,29 @@ import {
 } from '@foundry-mcp/shared';
 import { FoundryClient } from '../foundry-client.js';
 import { Logger } from '../logger.js';
+import { BaseTool, BaseToolOptions } from '../base-tool.js';
 
 export interface ManageCombatToolsOptions {
   foundryClient: FoundryClient;
   logger: Logger;
 }
 
-export class ManageCombatTools {
-  private foundryClient: FoundryClient;
-  private logger: Logger;
-
-  constructor({ foundryClient, logger }: ManageCombatToolsOptions) {
-    this.foundryClient = foundryClient;
-    this.logger = logger.child({ component: 'ManageCombatTools' });
+export class ManageCombatTools extends BaseTool {
+  constructor(options: BaseToolOptions) {
+    super(options);
   }
 
   getToolDefinitions() {
     return [
       {
         name: 'get-combat',
+        title: 'Get Combat',
+        annotations: {
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: true,
+        },
         description: 'Get the current WFRP 4e combat state (id, round, turn, active combatant summary). Returns null if no active combat. Read-only.',
         inputSchema: {
           type: 'object',
@@ -40,7 +44,14 @@ export class ManageCombatTools {
       },
       {
         name: 'list-combatants',
-        description: 'List combatants in the current or specified WFRP 4e combat with initiative, active conditions, and wounds snapshot. Read-only.',
+        title: 'List Combatants',
+        annotations: {
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: true,
+        },
+        description: 'List combatants in the current or specified WFRP 4e combat. Returns {combatId, combatants:[]} envelope: combatId=null means no active combat on the scene; combatId="<id>" with combatants=[] means active combat with zero combatants. Each combatant entry has initiative, conditions, and wounds snapshot. Read-only.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -53,7 +64,14 @@ export class ManageCombatTools {
       },
       {
         name: 'advance-combat',
-        description: 'Advance WFRP 4e combat: start tracker, next/prev turn, next/prev round, roll initiative (all or NPCs only). Use end-combat to end.',
+        title: 'Advance Combat',
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: false,
+          openWorldHint: true,
+        },
+        description: 'Advance WFRP 4e combat state. action="rollNPC" and "next/prev/nextRound/prevRound" are dialog-free and fire-and-forget. action="rollAll" and "start" open the Foundry initiative dialog and BLOCK the MCP call until the GM dismisses it — use these only when an interactive GM is at the keyboard. Use end-combat to clear the tracker.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -72,6 +90,13 @@ export class ManageCombatTools {
       },
       {
         name: 'add-combatants',
+        title: 'Add Combatants',
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: false,
+          openWorldHint: true,
+        },
         description: 'Add actors to a WFRP 4e combat as combatants. Requires at least one actor ID.',
         inputSchema: {
           type: 'object',
@@ -96,6 +121,13 @@ export class ManageCombatTools {
       },
       {
         name: 'remove-combatants',
+        title: 'Remove Combatants',
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: true,
+          idempotentHint: true,
+          openWorldHint: true,
+        },
         description: 'Remove combatants from a WFRP 4e combat by combatant ID.',
         inputSchema: {
           type: 'object',
@@ -116,7 +148,14 @@ export class ManageCombatTools {
       },
       {
         name: 'end-combat',
-        description: 'End (delete) a WFRP 4e combat.',
+        title: 'End Combat',
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: true,
+          idempotentHint: true,
+          openWorldHint: true,
+        },
+        description: 'End (delete) a WFRP 4e combat encounter, clearing the tracker and releasing all combatants.\n\nArgs:\n  - combatId (string, optional): Specific combat UUID. Omit to target the active combat on the current scene.\n\nReturns:\n  - On success: confirmation that the combat was deleted.\n  - On error: throws with an actionable message (e.g. no active combat found).\n\nUse when: the encounter is resolved and you need to clear the combat tracker. Don\'t use when: you only want to pause combat — this permanently deletes the tracker.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -133,36 +172,41 @@ export class ManageCombatTools {
   async handleGetCombat(args: any): Promise<any> {
     const parsed = GetCombatInput.parse(args);
     this.logger.info('get-combat', parsed);
-    return await this.foundryClient.query<any>('warhammer-mcp.getCombat', parsed);
+    return await this.query<any>('getCombat', parsed);
   }
 
   async handleListCombatants(args: any): Promise<any> {
     const parsed = ListCombatantsInput.parse(args);
     this.logger.info('list-combatants', parsed);
-    return await this.foundryClient.query<any>('warhammer-mcp.listCombatants', parsed);
+    const result = await this.query<any>('listCombatants', parsed);
+    if (Array.isArray(result)) {
+      const combat = await this.query<any>('getCombat', { combatId: parsed.combatId }).catch(() => null);
+      return { combatId: combat?.id ?? null, combatants: result };
+    }
+    return result;
   }
 
   async handleAdvanceCombat(args: any): Promise<any> {
     const parsed = AdvanceCombatInput.parse(args);
     this.logger.info('advance-combat', parsed);
-    return await this.foundryClient.query<any>('warhammer-mcp.advanceCombat', parsed);
+    return await this.query<any>('advanceCombat', parsed);
   }
 
   async handleAddCombatants(args: any): Promise<any> {
     const parsed = AddCombatantsInput.parse(args);
     this.logger.info('add-combatants', parsed);
-    return await this.foundryClient.query<any>('warhammer-mcp.addCombatants', parsed);
+    return await this.query<any>('addCombatants', parsed);
   }
 
   async handleRemoveCombatants(args: any): Promise<any> {
     const parsed = RemoveCombatantsInput.parse(args);
     this.logger.info('remove-combatants', parsed);
-    return await this.foundryClient.query<any>('warhammer-mcp.removeCombatants', parsed);
+    return await this.query<any>('removeCombatants', parsed);
   }
 
   async handleEndCombat(args: any): Promise<any> {
     const parsed = EndCombatInput.parse(args);
     this.logger.info('end-combat', parsed);
-    return await this.foundryClient.query<any>('warhammer-mcp.endCombat', parsed);
+    return await this.query<any>('endCombat', parsed);
   }
 }

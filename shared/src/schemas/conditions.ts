@@ -47,6 +47,10 @@ export const ListConditionsInput = z
   })
   .strict();
 
+// TOOL-IDEA-002 (2026-05-14): `includeItemAEs` opts in to surfacing AEs attached to
+// the actor's embedded items (e.g. weapon-AEs on Camila's Dagger). Default false to
+// preserve back-compat — callers that ignore the projection's new `parentType` field
+// still work because actor-level AEs come back as before.
 export const ListActiveEffectsInput = z
   .object({
     actorId: z.string(),
@@ -54,10 +58,13 @@ export const ListActiveEffectsInput = z
       .enum(['all', 'applied', 'temporary', 'conditions'])
       .optional()
       .default('all'),
+    includeItemAEs: z.boolean().optional().default(false),
   })
   .strict();
 
 // Projection returned by list-active-effects (research §2.4 — full AE is heavy)
+// TOOL-IDEA-002 (2026-05-14): added parentType/parentId/parentName so a flat single-array
+// result can disambiguate actor-level vs item-level AEs without nesting.
 export const ActiveEffectProjection = z.object({
   id: z.string(),
   name: z.string(),
@@ -80,6 +87,9 @@ export const ActiveEffectProjection = z.object({
       priority: z.number().nullable(),
     }),
   ),
+  parentType: z.enum(['Actor', 'Item']).optional(),
+  parentId: z.string().optional(),
+  parentName: z.string().optional(),
 });
 
 export type ConditionKey = z.infer<typeof ConditionKey>;

@@ -88,6 +88,11 @@ const methodCases: Array<[string, string]> = [
   ['handleDeleteToken', 'deleteToken'],
   // apply-template-to-token — prototype-sheet routing primitive
   ['handleApplyTemplateToToken', 'applyTemplateToToken'],
+  // Phase 1 mcp_crud_expansion — polymorphic ownership.
+  ['handleSetDocumentOwnership', 'setDocumentOwnership'],
+  ['handleGetDocumentOwnership', 'getDocumentOwnership'],
+  ['handleBulkSetDocumentOwnership', 'bulkSetDocumentOwnership'],
+  ['handleResetDocumentOwnership', 'resetDocumentOwnership'],
 ];
 
 for (const [methodName, queryKey] of methodCases) {

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { FoundryClient } from "../foundry-client.js";
 import { Logger } from "../logger.js";
+import { BaseTool, BaseToolOptions } from "../base-tool.js";
 
 // Create roll table schema
 const CreateRollTableSchema = z.object({
@@ -32,7 +33,8 @@ const GetRollTableSchema = z.object({
 const RollOnTableSchema = z.object({
     action: z.literal("roll"),
     tableId: z.string(),
-    rollMode: z.enum(["public", "private", "blind", "self"]).default("public")
+    rollMode: z.enum(["public", "private", "blind", "self"]).default("public"),
+    modifier: z.number().optional()
 });
 
 // Delete roll table schema
@@ -51,15 +53,26 @@ const RollTableSchema = z.discriminatedUnion("action", [
 
 type RollTableArgs = z.infer<typeof RollTableSchema>;
 
-export class RollTableTool {
-    constructor(
-        private foundryClient: FoundryClient,
-        private logger: Logger
-    ) { }
+export interface RollTableToolOptions {
+  foundryClient: FoundryClient;
+  logger: Logger;
+}
+
+export class RollTableTool extends BaseTool {
+  constructor(options: BaseToolOptions) {
+    super(options);
+  }
 
     getToolDefinitions() {
         return [{
             name: "rolltable",
+            title: "Roll On Table",
+            annotations: {
+              readOnlyHint: false,
+              destructiveHint: false,
+              idempotentHint: false,
+              openWorldHint: true,
+            },
             description: `Manage roll tables in Foundry VTT - create, list, get, roll, and delete tables.
 
 **Roll Tables** are used for random generation: encounters, loot, events, weather, rumors, etc.
@@ -144,6 +157,10 @@ export class RollTableTool {
                         type: "string",
                         enum: ["public", "private", "blind", "self"],
                         description: "[roll] How to display the roll result"
+                    },
+                    modifier: {
+                        type: "number",
+                        description: "[roll] Optional numeric modifier added to the roll result"
                     }
                 },
                 required: ["action"]
@@ -182,8 +199,8 @@ export class RollTableTool {
     }) {
         this.logger.info("Creating roll table", { name: args.name });
 
-        const response = await this.foundryClient.query<any>(
-            "warhammer-mcp.createRollTable",
+        const response = await this.query<any>(
+            "createRollTable",
             {
                 name: args.name,
                 description: args.description,
@@ -208,8 +225,8 @@ export class RollTableTool {
     private async handleList() {
         this.logger.info("Listing roll tables");
 
-        const response = await this.foundryClient.query<any>(
-            "warhammer-mcp.listRollTables",
+        const response = await this.query<any>(
+            "listRollTables",
             {}
         );
 
@@ -246,8 +263,8 @@ export class RollTableTool {
     private async handleGet(args: { tableId: string }) {
         this.logger.info("Getting roll table", { tableId: args.tableId });
 
-        const response = await this.foundryClient.query<any>(
-            "warhammer-mcp.getRollTable",
+        const response = await this.query<any>(
+            "getRollTable",
             { tableId: args.tableId }
         );
 
@@ -283,8 +300,8 @@ export class RollTableTool {
     }) {
         this.logger.info("Rolling on table", { tableId: args.tableId });
 
-        const response = await this.foundryClient.query<any>(
-            "warhammer-mcp.rollOnTable",
+        const response = await this.query<any>(
+            "rollOnTable",
             {
                 tableId: args.tableId,
                 rollMode: args.rollMode,
@@ -310,8 +327,8 @@ export class RollTableTool {
     private async handleDelete(args: { tableId: string }) {
         this.logger.info("Deleting roll table", { tableId: args.tableId });
 
-        await this.foundryClient.query<any>(
-            "warhammer-mcp.deleteRollTable",
+        await this.query<any>(
+            "deleteRollTable",
             { tableId: args.tableId }
         );
 

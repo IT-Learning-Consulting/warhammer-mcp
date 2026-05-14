@@ -1,19 +1,17 @@
 import { z } from 'zod';
+import { GetCurrentSceneOutput, GET_CURRENT_SCENE_OUTPUT_JSON_SCHEMA } from '@foundry-mcp/shared';
 import { FoundryClient } from '../foundry-client.js';
 import { Logger } from '../logger.js';
+import { BaseTool, BaseToolOptions } from '../base-tool.js';
 
 export interface SceneToolsOptions {
   foundryClient: FoundryClient;
   logger: Logger;
 }
 
-export class SceneTools {
-  private foundryClient: FoundryClient;
-  private logger: Logger;
-
-  constructor({ foundryClient, logger }: SceneToolsOptions) {
-    this.foundryClient = foundryClient;
-    this.logger = logger.child({ component: 'SceneTools' });
+export class SceneTools extends BaseTool {
+  constructor(options: BaseToolOptions) {
+    super(options);
   }
 
   /**
@@ -23,10 +21,21 @@ export class SceneTools {
     return [
       {
         name: 'get-current-scene',
-        description: 'Get information about the currently active scene, including tokens and layout. Useful for understanding the current game state and positioning of characters and NPCs.',
+        title: 'Get Current Scene',
+        annotations: {
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: true,
+        },
+        description: 'Get information about a Foundry scene — the currently active scene by default, or any scene by ID via the optional `sceneId` parameter. TOOL-IDEA-007 (2026-05-14): pass `sceneId` to inspect a non-active scene without disrupting the GM\'s canvas view. The response includes an `active` boolean so callers can tell whether the returned scene is the live one.',
         inputSchema: {
           type: 'object',
           properties: {
+            sceneId: {
+              type: 'string',
+              description: 'Optional Scene document ID to inspect. Omit to read the currently active scene (back-compat).',
+            },
             includeTokens: {
               type: 'boolean',
               description: 'Whether to include detailed token information (default: true)',
@@ -39,9 +48,17 @@ export class SceneTools {
             },
           },
         },
+        outputSchema: GET_CURRENT_SCENE_OUTPUT_JSON_SCHEMA,
       },
       {
         name: 'get-world-info',
+        title: 'Get World Info',
+        annotations: {
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: true,
+        },
         description: 'Get basic information about the Foundry world and game system (e.g., D&D 5e, WFRP 4e). Use this to understand what system is being used and tailor responses accordingly.',
         inputSchema: {
           type: 'object',
@@ -50,7 +67,14 @@ export class SceneTools {
       },
       {
         name: 'list-scenes',
-        description: 'List all available Foundry VTT scenes with their details',
+        title: 'List Scenes',
+        annotations: {
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: true,
+        },
+        description: 'List Foundry VTT scenes. TOOL-IDEA-001 (2026-05-14): pagination + count-only mode for large worlds (200+ scenes overflow the transport at ~68k chars). Pass `countOnly: true` to probe inventory size before committing to a filter. Pass `page` and/or `pageSize` to paginate. When neither is set, returns the bare array as before (back-compat). Sort order = Foundry insertion order; for deterministic paging combine with `filter` or sort post-hoc.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -63,12 +87,34 @@ export class SceneTools {
               type: 'boolean',
               description: 'Only return the currently active scene',
               default: false
+            },
+            page: {
+              type: 'integer',
+              minimum: 1,
+              description: 'Page number (1-based). When set, response shape becomes `{total, page, pageSize, pageCount, scenes}` instead of a bare array.'
+            },
+            pageSize: {
+              type: 'integer',
+              minimum: 1,
+              maximum: 100,
+              description: 'Items per page (default 50, max 100). Triggers paginated response shape.'
+            },
+            countOnly: {
+              type: 'boolean',
+              description: 'If true, return `{total, filterApplied}` only (no scene data). Cheap inventory probe.'
             }
           }
         }
       },
       {
         name: 'switch-scene',
+        title: 'Switch Scene',
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: true,
+        },
         description: 'Switch to a different Foundry VTT scene by name or ID',
         inputSchema: {
           type: 'object',
@@ -90,17 +136,22 @@ export class SceneTools {
   }
 
   async handleGetCurrentScene(args: any): Promise<any> {
+    // TOOL-IDEA-007 (2026-05-14): accept and forward optional sceneId.
     const schema = z.object({
+      sceneId: z.string().optional(),
       includeTokens: z.boolean().default(true),
       includeHidden: z.boolean().default(false),
     });
 
-    const { includeTokens, includeHidden } = schema.parse(args);
+    const { sceneId, includeTokens, includeHidden } = schema.parse(args);
 
-    this.logger.info('Getting current scene information', { includeTokens, includeHidden });
+    this.logger.info('Getting current scene information', { sceneId, includeTokens, includeHidden });
 
     try {
-      const sceneData = await this.foundryClient.query<any>('warhammer-mcp.getActiveScene');
+      const sceneData = await this.query<any>(
+        'getActiveScene',
+        sceneId ? { sceneId } : {}
+      );
 
       this.logger.debug('Successfully retrieved scene data', {
         sceneId: sceneData.id,
@@ -108,7 +159,12 @@ export class SceneTools {
         tokenCount: sceneData.tokens?.length || 0,
       });
 
-      return this.formatSceneResponse(sceneData, includeTokens, includeHidden);
+      const output = this.formatSceneResponse(sceneData, includeTokens, includeHidden);
+      GetCurrentSceneOutput.parse(output);
+      return {
+        content: [{ type: 'text', text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
 
     } catch (error) {
       this.logger.error('Failed to get current scene', error);
@@ -120,7 +176,7 @@ export class SceneTools {
     this.logger.info('Getting world information');
 
     try {
-      const worldData = await this.foundryClient.query<any>('warhammer-mcp.getWorldInfo');
+      const worldData = await this.query<any>('getWorldInfo');
 
       this.logger.debug('Successfully retrieved world data', {
         worldId: worldData.id,
@@ -138,11 +194,17 @@ export class SceneTools {
   async listScenes(input: any): Promise<any> {
     const safeInput = input ?? {};
     try {
-      const params = {
+      // TOOL-IDEA-001 (2026-05-14): pass through pagination + countOnly. Foundry-module
+      // side returns a bare array when none of page/pageSize/countOnly is set
+      // (back-compat) and an envelope otherwise — we forward whatever it returns.
+      const params: Record<string, any> = {
         filter: typeof safeInput.filter === 'string' ? safeInput.filter : undefined,
         include_active_only: Boolean(safeInput.include_active_only),
       };
-      return await this.foundryClient.query<any>('warhammer-mcp.list-scenes', params);
+      if (safeInput.page !== undefined) params.page = safeInput.page;
+      if (safeInput.pageSize !== undefined) params.pageSize = safeInput.pageSize;
+      if (safeInput.countOnly !== undefined) params.countOnly = safeInput.countOnly;
+      return await this.query<any>('list-scenes', params);
     } catch (error: any) {
       this.logger.error('List scenes failed', { error, input: safeInput });
       return { success: false, error: error?.message ?? 'Unknown error' };
@@ -162,7 +224,7 @@ export class SceneTools {
         optimize_view: safeInput.optimize_view !== false,
       };
 
-      return await this.foundryClient.query<any>('warhammer-mcp.switch-scene', params);
+      return await this.query<any>('switch-scene', params);
     } catch (error: any) {
       this.logger.error('Switch scene failed', { error, input: safeInput });
       return { success: false, error: error?.message ?? 'Unknown error' };

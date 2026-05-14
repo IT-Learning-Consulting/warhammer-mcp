@@ -43,11 +43,24 @@ export const SceneInfoSchema = z.object({
 
 // Handler inputs (.strict())
 
-export const GetActiveSceneInput = z.object({}).strict();
+// TOOL-IDEA-007 (2026-05-14): optional `sceneId` lets callers inspect a non-active
+// scene without `switch-scene` (which disrupts the GM's canvas view). `includeTokens`/
+// `includeHidden` are lifted from the server's inline schema so both layers share one shape.
+export const GetActiveSceneInput = z.object({
+  sceneId: z.string().optional(),
+  includeTokens: z.boolean().optional(),
+  includeHidden: z.boolean().optional(),
+}).strict();
 
+// TOOL-IDEA-001 (2026-05-14): pagination + count-only mode. Bare-array response is
+// preserved when none of page/pageSize/countOnly is provided (back-compat for existing
+// callers that read `scenes[0].name` directly).
 export const ListScenesInput = z.object({
   filter: z.string().optional(),
   include_active_only: z.boolean().optional(),
+  page: z.number().int().min(1).optional(),
+  pageSize: z.number().int().min(1).max(100).optional(),
+  countOnly: z.boolean().optional(),
 }).strict();
 
 export const SwitchSceneInput = z.object({
@@ -59,11 +72,15 @@ export const SwitchSceneInput = z.object({
 // — quantities[i] = number of tokens to drop for actorIds[i]. Missing/undefined → 1 (back-compat).
 // Lets one world actor with `prototypeToken.actorLink: false` produce N unlinked tokens,
 // each carrying its own ActorDelta (independent HP / conditions, shared sheet).
+// TOOL-IDEA-004 (2026-05-14): optional `sceneId` targets a non-active scene without
+// requiring a prior `switch-scene` call (which disrupts the GM's view). Defaults to
+// `game.scenes.current` when omitted.
 export const AddActorsToSceneInput = z.object({
   actorIds: z.array(z.string()).min(1),
   quantities: z.array(z.number().int().positive()).optional(),
   placement: z.enum(['random', 'grid', 'center']).optional(),
   hidden: z.boolean().optional(),
+  sceneId: z.string().optional(),
 }).strict().refine(
   (v) => v.quantities === undefined || v.quantities.length === v.actorIds.length,
   { message: 'quantities must have the same length as actorIds' },

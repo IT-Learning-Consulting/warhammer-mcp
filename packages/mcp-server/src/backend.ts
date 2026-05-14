@@ -13,6 +13,9 @@ import { Logger } from './logger.js';
 
 import { FoundryClient } from './foundry-client.js';
 
+import { scrubError } from './utils/scrub-error.js';
+import { ToolRegistry } from './tool-registry.js';
+
 import { CharacterTools } from './tools/character.js';
 import { ManageCharacterTool } from './tools/manage-character.js';
 
@@ -58,6 +61,8 @@ import { ModifyItemQualitiesTool } from './tools/modify-item-qualities.js';
 import { AddActiveEffectTool } from './tools/add-active-effect.js';
 import { UpdateActiveEffectTool } from './tools/update-active-effect.js';
 import { DeleteActiveEffectTool } from './tools/delete-active-effect.js';
+// TOOL-IDEA-003 (2026-05-14): read-only AE-by-name resolver.
+import { GetActiveEffectByNameTool } from './tools/get-active-effect-by-name.js';
 
 const CONTROL_HOST = '127.0.0.1';
 
@@ -70,7 +75,7 @@ const LOCK_FILE = path.join(os.tmpdir(), 'foundry-mcp-backend.lock');
 // "expected boolean, received string". Coerce per the tool's declared inputSchema
 // before dispatch so Zod sees the right shape. Unknown / untyped props pass through
 // unchanged — downstream Zod will still catch real errors.
-function coerceArgsBySchema(schema: any, args: any): any {
+export function coerceArgsBySchema(schema: any, args: any): any {
   if (!schema || schema.type !== 'object' || !schema.properties || !args || typeof args !== 'object' || Array.isArray(args)) {
     return args;
   }
@@ -93,6 +98,8 @@ function coerceArgsBySchema(schema: any, args: any): any {
           out[key] = parsed;
           if (t === 'object' && propSchema.properties) {
             out[key] = coerceArgsBySchema(propSchema, parsed);
+          } else if (t === 'array' && propSchema.items && Array.isArray(parsed)) {
+            out[key] = parsed.map((item: any) => coerceArgsBySchema(propSchema.items, item));
           }
         } catch {
           // leave as-is; Zod will produce a readable error downstream
@@ -100,6 +107,8 @@ function coerceArgsBySchema(schema: any, args: any): any {
       }
     } else if (t === 'object' && propSchema.properties && val && typeof val === 'object' && !Array.isArray(val)) {
       out[key] = coerceArgsBySchema(propSchema, val);
+    } else if (t === 'array' && propSchema.items && Array.isArray(val)) {
+      out[key] = val.map((item: any) => coerceArgsBySchema(propSchema.items, item));
     }
   }
   return out;
@@ -232,9 +241,9 @@ async function startBackend(): Promise<void> {
   const foundryClient = new FoundryClient(config.foundry, logger);
 
   const characterTools = new CharacterTools({ foundryClient, logger });
-  const manageCharacterTool = new ManageCharacterTool(foundryClient, logger);
+  const manageCharacterTool = new ManageCharacterTool({ foundryClient, logger });
 
-  const manageInventoryTool = new ManageInventoryTool(foundryClient, logger);
+  const manageInventoryTool = new ManageInventoryTool({ foundryClient, logger });
 
   const compendiumTools = new CompendiumTools({ foundryClient, logger });
 
@@ -244,9 +253,9 @@ async function startBackend(): Promise<void> {
 
   const diceRollTools = new DiceRollTools({ foundryClient, logger });
 
-  const ownershipTool = new OwnershipTool(foundryClient, logger);
+  const ownershipTool = new OwnershipTool({ foundryClient, logger });
 
-  const rollTableTool = new RollTableTool(foundryClient, logger);
+  const rollTableTool = new RollTableTool({ foundryClient, logger });
 
   const manageCombatTools = new ManageCombatTools({ foundryClient, logger });
 
@@ -276,6 +285,64 @@ async function startBackend(): Promise<void> {
   const addActiveEffectTool = new AddActiveEffectTool({ foundryClient, logger });
   const updateActiveEffectTool = new UpdateActiveEffectTool({ foundryClient, logger });
   const deleteActiveEffectTool = new DeleteActiveEffectTool({ foundryClient, logger });
+  // TOOL-IDEA-003 (2026-05-14).
+  const getActiveEffectByNameTool = new GetActiveEffectByNameTool({ foundryClient, logger });
+
+  const registry = new ToolRegistry();
+  registry.register('get-character', (args) => characterTools.handleGetCharacter(args));
+  registry.register('list-characters', (args) => characterTools.handleListCharacters(args));
+  registry.register('manage-character', (args) => manageCharacterTool.handle(args));
+  registry.register('manage-inventory', (args) => manageInventoryTool.handle(args));
+  registry.register('create-custom-item', (args) => createCustomItemTool.handle(args));
+  registry.register('trade-item', (args) => tradeItemTool.handle(args));
+  registry.register('modify-item-qualities', (args) => modifyItemQualitiesTool.handle(args));
+  registry.register('add-active-effect', (args) => addActiveEffectTool.handle(args));
+  registry.register('update-active-effect', (args) => updateActiveEffectTool.handle(args));
+  registry.register('delete-active-effect', (args) => deleteActiveEffectTool.handle(args));
+  // TOOL-IDEA-003 (2026-05-14).
+  registry.register('get-active-effect-by-name', (args) => getActiveEffectByNameTool.handle(args));
+  registry.register('search-compendium', (args) => compendiumTools.handleSearchCompendium(args));
+  registry.register('get-compendium-item', (args) => compendiumTools.handleGetCompendiumItem(args));
+  registry.register('list-creatures-by-criteria', (args) => compendiumTools.handleListCreaturesByCriteria(args));
+  registry.register('list-compendium-packs', (args) => compendiumTools.handleListCompendiumPacks(args));
+  registry.register('get-current-scene', (args) => sceneTools.handleGetCurrentScene(args));
+  registry.register('get-world-info', (args) => sceneTools.handleGetWorldInfo(args));
+  registry.register('create-actor-from-compendium', (args) => actorCreationTools.handleCreateActorFromCompendium(args));
+  registry.register('get-compendium-entry-full', (args) => actorCreationTools.handleGetCompendiumEntryFull(args));
+  registry.register('request-player-rolls', (args) => diceRollTools.handleRequestPlayerRolls(args));
+  registry.register('ownership', (args) => ownershipTool.execute(args));
+  registry.register('list-scenes', (args) => sceneTools.listScenes(args));
+  registry.register('switch-scene', (args) => sceneTools.switchScene(args));
+  registry.register('rolltable', (args) => rollTableTool.execute(args));
+  registry.register('get-combat', (args) => manageCombatTools.handleGetCombat(args));
+  registry.register('list-combatants', (args) => manageCombatTools.handleListCombatants(args));
+  registry.register('advance-combat', (args) => manageCombatTools.handleAdvanceCombat(args));
+  registry.register('add-combatants', (args) => manageCombatTools.handleAddCombatants(args));
+  registry.register('remove-combatants', (args) => manageCombatTools.handleRemoveCombatants(args));
+  registry.register('end-combat', (args) => manageCombatTools.handleEndCombat(args));
+  registry.register('apply-damage', (args) => applyDamageTool.handle(args));
+  registry.register('apply-condition', (args) => manageConditionsTools.handleApplyCondition(args));
+  registry.register('remove-condition', (args) => manageConditionsTools.handleRemoveCondition(args));
+  registry.register('list-conditions', (args) => manageConditionsTools.handleListConditions(args));
+  registry.register('list-active-effects', (args) => listActiveEffectsTool.handle(args));
+  registry.register('update-actor', (args) => updateActorTool.handle(args));
+  registry.register('update-item', (args) => updateItemTool.handle(args));
+  registry.register('duplicate-actor', (args) => duplicateActorTool.handle(args));
+  registry.register('list-actor-items', (args) => listActorItemsTool.handle(args));
+  registry.register('apply-npc-career-advance', (args) => applyNpcCareerAdvanceTool.handle(args));
+  registry.register('apply-template', (args) => applyTemplateTool.handle(args));
+  registry.register('apply-template-to-token', (args) => applyTemplateToTokenTool.handle(args));
+  registry.register('add-item-from-compendium', (args) => addItemFromCompendiumTool.handle(args));
+  registry.register('delete-item', (args) => deleteItemTool.handle(args));
+  registry.register('get-wfrp-config', (args) => getWfrpConfigTool.handle(args));
+  registry.register('list-journals', (args) => journalTools.handleListJournals(args));
+  registry.register('get-journal-content', (args) => journalTools.handleGetJournalContent(args));
+  registry.register('create-journal-entry', (args) => journalTools.handleCreateJournalEntry(args));
+  registry.register('update-journal-content', (args) => journalTools.handleUpdateJournalContent(args));
+  registry.register('add-actors-to-scene', (args) => addActorsToSceneTool.handle(args));
+  registry.register('delete-token', (args) => deleteTokenTool.handle(args));
+  registry.register('delete-actor', (args) => worldDeleteTools.handleDeleteActor(args));
+  registry.register('delete-journal-entry', (args) => worldDeleteTools.handleDeleteJournalEntry(args));
 
   const allTools = [
 
@@ -337,6 +404,8 @@ async function startBackend(): Promise<void> {
     ...addActiveEffectTool.getToolDefinitions(),
     ...updateActiveEffectTool.getToolDefinitions(),
     ...deleteActiveEffectTool.getToolDefinitions(),
+    // TOOL-IDEA-003 (2026-05-14).
+    ...getActiveEffectByNameTool.getToolDefinitions(),
 
   ];
 
@@ -399,373 +468,24 @@ async function startBackend(): Promise<void> {
 
             try {
 
-              let result: any;
-
-              switch (name) {
-
-                // Character tools
-
-                case 'get-character':
-
-                  result = await characterTools.handleGetCharacter(args);
-
-                  break;
-
-                case 'list-characters':
-
-                  result = await characterTools.handleListCharacters(args);
-
-                  break;
-
-                // Character management (consolidated)
-
-                case 'manage-character':
-
-                  result = await manageCharacterTool.handle(args);
-
-                  break;
-
-                // Inventory Management tools (consolidated)
-
-                case 'manage-inventory':
-
-                  result = await manageInventoryTool.handle(args);
-
-                  break;
-
-                // Phase 5 — custom-content creation + trade + qualities mutation
-                case 'create-custom-item':
-
-                  result = await createCustomItemTool.handle(args);
-
-                  break;
-
-                case 'trade-item':
-
-                  result = await tradeItemTool.handle(args);
-
-                  break;
-
-                case 'modify-item-qualities':
-
-                  result = await modifyItemQualitiesTool.handle(args);
-
-                  break;
-
-                case 'add-active-effect':
-
-                  result = await addActiveEffectTool.handle(args);
-
-                  break;
-
-                case 'update-active-effect':
-
-                  result = await updateActiveEffectTool.handle(args);
-
-                  break;
-
-                case 'delete-active-effect':
-
-                  result = await deleteActiveEffectTool.handle(args);
-
-                  break;
-
-                // Compendium tools
-
-                case 'search-compendium':
-
-                  result = await compendiumTools.handleSearchCompendium(args);
-
-                  break;
-
-                case 'get-compendium-item':
-
-                  result = await compendiumTools.handleGetCompendiumItem(args);
-
-                  break;
-
-                case 'list-creatures-by-criteria':
-
-                  result = await compendiumTools.handleListCreaturesByCriteria(args);
-
-                  break;
-
-                case 'list-compendium-packs':
-
-                  result = await compendiumTools.handleListCompendiumPacks(args);
-
-                  break;
-
-                // Scene tools
-
-                case 'get-current-scene':
-
-                  result = await sceneTools.handleGetCurrentScene(args);
-
-                  break;
-
-                case 'get-world-info':
-
-                  result = await sceneTools.handleGetWorldInfo(args);
-
-                  break;
-
-                // Actor creation tools
-
-                case 'create-actor-from-compendium':
-
-                  result = await actorCreationTools.handleCreateActorFromCompendium(args);
-
-                  break;
-
-                case 'get-compendium-entry-full':
-
-                  result = await actorCreationTools.handleGetCompendiumEntryFull(args);
-
-                  break;
-
-                // Dice roll tools
-
-                case 'request-player-rolls':
-
-                  result = await diceRollTools.handleRequestPlayerRolls(args);
-
-                  break;
-
-                // Ownership tool (consolidated)
-
-                case 'ownership':
-
-                  result = await ownershipTool.execute(args);
-
-                  break;
-
-                case 'list-scenes':
-
-                  result = await sceneTools.listScenes(args);
-
-                  break;
-
-                case 'switch-scene':
-
-                  result = await sceneTools.switchScene(args);
-
-                  break;
-
-                // Roll Table tool (consolidated)
-
-                case 'rolltable':
-
-                  result = await rollTableTool.execute(args);
-
-                  break;
-
-                // Combat tools (Phase 4b — 6 queries)
-
-                case 'get-combat':
-
-                  result = await manageCombatTools.handleGetCombat(args);
-
-                  break;
-
-                case 'list-combatants':
-
-                  result = await manageCombatTools.handleListCombatants(args);
-
-                  break;
-
-                case 'advance-combat':
-
-                  result = await manageCombatTools.handleAdvanceCombat(args);
-
-                  break;
-
-                case 'add-combatants':
-
-                  result = await manageCombatTools.handleAddCombatants(args);
-
-                  break;
-
-                case 'remove-combatants':
-
-                  result = await manageCombatTools.handleRemoveCombatants(args);
-
-                  break;
-
-                case 'end-combat':
-
-                  result = await manageCombatTools.handleEndCombat(args);
-
-                  break;
-
-                // Damage tool (Phase 4b)
-
-                case 'apply-damage':
-
-                  result = await applyDamageTool.handle(args);
-
-                  break;
-
-                // Condition tools (Phase 4b — 3 queries)
-
-                case 'apply-condition':
-
-                  result = await manageConditionsTools.handleApplyCondition(args);
-
-                  break;
-
-                case 'remove-condition':
-
-                  result = await manageConditionsTools.handleRemoveCondition(args);
-
-                  break;
-
-                case 'list-conditions':
-
-                  result = await manageConditionsTools.handleListConditions(args);
-
-                  break;
-
-                // Active effects tool (Phase 4b)
-
-                case 'list-active-effects':
-
-                  result = await listActiveEffectsTool.handle(args);
-
-                  break;
-
-                // Phase 4c.0 — primitives for skill-side rule composition
-                case 'update-actor':
-
-                  result = await updateActorTool.handle(args);
-
-                  break;
-
-                case 'update-item':
-
-                  result = await updateItemTool.handle(args);
-
-                  break;
-
-                case 'duplicate-actor':
-
-                  result = await duplicateActorTool.handle(args);
-
-                  break;
-
-                case 'list-actor-items':
-
-                  result = await listActorItemsTool.handle(args);
-
-                  break;
-
-                case 'apply-npc-career-advance':
-
-                  result = await applyNpcCareerAdvanceTool.handle(args);
-
-                  break;
-
-                case 'apply-template':
-
-                  result = await applyTemplateTool.handle(args);
-
-                  break;
-
-                case 'apply-template-to-token':
-
-                  result = await applyTemplateToTokenTool.handle(args);
-
-                  break;
-
-                case 'add-item-from-compendium':
-
-                  result = await addItemFromCompendiumTool.handle(args);
-
-                  break;
-
-                case 'delete-item':
-
-                  result = await deleteItemTool.handle(args);
-
-                  break;
-
-                case 'get-wfrp-config':
-
-                  result = await getWfrpConfigTool.handle(args);
-
-                  break;
-
-                // Phase 4e Phase 0 — journal + scene primitives for content-creation skills
-                case 'list-journals':
-
-                  result = await journalTools.handleListJournals(args);
-
-                  break;
-
-                case 'get-journal-content':
-
-                  result = await journalTools.handleGetJournalContent(args);
-
-                  break;
-
-                case 'create-journal-entry':
-
-                  result = await journalTools.handleCreateJournalEntry(args);
-
-                  break;
-
-                case 'update-journal-content':
-
-                  result = await journalTools.handleUpdateJournalContent(args);
-
-                  break;
-
-                case 'add-actors-to-scene':
-
-                  result = await addActorsToSceneTool.handle(args);
-
-                  break;
-
-                case 'delete-token':
-
-                  result = await deleteTokenTool.handle(args);
-
-                  break;
-
-                case 'delete-actor':
-
-                  result = await worldDeleteTools.handleDeleteActor(args);
-
-                  break;
-
-                case 'delete-journal-entry':
-
-                  result = await worldDeleteTools.handleDeleteJournalEntry(args);
-
-                  break;
-
-                default:
-
-                  throw new Error(`Unknown tool: ${name}`);
-
+              const dispatchP = registry.dispatch(name, args);
+              if (!dispatchP) {
+                socket.write(JSON.stringify({ id: msg.id, error: { code: -32602, message: `Unknown tool: ${name}` } }) + '\n');
+                continue;
               }
-
-              const payload = {
-
-                content: [{ type: 'text', text: typeof result === 'string' ? result : JSON.stringify(result) }],
-
-              };
-
+              const result = await dispatchP;
+              let payload: any;
+              if (result && typeof result === 'object' && 'structuredContent' in result && 'content' in result) {
+                payload = result;
+              } else {
+                payload = { content: [{ type: 'text', text: typeof result === 'string' ? result : JSON.stringify(result) }] };
+              }
               socket.write(JSON.stringify({ id: msg.id, result: payload }) + '\n');
 
             } catch (e: any) {
 
-              const errorMessage = e instanceof Error ? e.message : 'Unknown error occurred';
-
               socket.write(
-
-                JSON.stringify({ id: msg.id, result: { content: [{ type: 'text', text: `Error: ${errorMessage}` }], isError: true } }) + '\n'
-
+                JSON.stringify({ id: msg.id, result: { content: [{ type: 'text', text: `Error: ${scrubError(e)}` }], isError: true } }) + '\n'
               );
 
             }

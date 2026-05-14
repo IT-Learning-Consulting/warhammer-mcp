@@ -82,7 +82,7 @@ export class FoundryConnector {
 
     // Start the HTTP server
     await new Promise<void>((resolve, reject) => {
-      this.httpServer.listen(this.config.port, () => {
+      this.httpServer.listen(this.config.port, '127.0.0.1', () => {
         this.isStarted = true;
         this.logger.info('Foundry connector listening', { port: this.config.port });
         resolve();

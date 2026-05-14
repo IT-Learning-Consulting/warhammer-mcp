@@ -1,25 +1,29 @@
 import { ApplyTemplateToTokenInput } from '@foundry-mcp/shared';
 import { FoundryClient } from '../foundry-client.js';
 import { Logger } from '../logger.js';
+import { BaseTool, BaseToolOptions } from '../base-tool.js';
 
 export interface ApplyTemplateToTokenToolOptions {
   foundryClient: FoundryClient;
   logger: Logger;
 }
 
-export class ApplyTemplateToTokenTool {
-  private foundryClient: FoundryClient;
-  private logger: Logger;
-
-  constructor({ foundryClient, logger }: ApplyTemplateToTokenToolOptions) {
-    this.foundryClient = foundryClient;
-    this.logger = logger.child({ component: 'ApplyTemplateToTokenTool' });
+export class ApplyTemplateToTokenTool extends BaseTool {
+  constructor(options: BaseToolOptions) {
+    super(options);
   }
 
   getToolDefinitions() {
     return [
       {
         name: 'apply-template-to-token',
+        title: 'Apply Template To Token',
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: false,
+          openWorldHint: true,
+        },
         description:
           'Token-delta variant of apply-template. Writes an advancement template (Item of type ' +
           '"template" from owb1/owb2/owb3/core) into a single unlinked token\'s ActorDelta instead ' +
@@ -108,6 +112,6 @@ export class ApplyTemplateToTokenTool {
       templateUuid: parsed.templateUuid,
       hasPreResolved: !!parsed.preResolvedChoices,
     });
-    return await this.foundryClient.query<any>('warhammer-mcp.applyTemplateToToken', parsed);
+    return await this.query<any>('applyTemplateToToken', parsed);
   }
 }

@@ -1,26 +1,30 @@
 import { ApplyDamageInput } from '@foundry-mcp/shared';
 import { FoundryClient } from '../foundry-client.js';
 import { Logger } from '../logger.js';
+import { BaseTool, BaseToolOptions } from '../base-tool.js';
 
 export interface ApplyDamageToolOptions {
   foundryClient: FoundryClient;
   logger: Logger;
 }
 
-export class ApplyDamageTool {
-  private foundryClient: FoundryClient;
-  private logger: Logger;
-
-  constructor({ foundryClient, logger }: ApplyDamageToolOptions) {
-    this.foundryClient = foundryClient;
-    this.logger = logger.child({ component: 'ApplyDamageTool' });
+export class ApplyDamageTool extends BaseTool {
+  constructor(options: BaseToolOptions) {
+    super(options);
   }
 
   getToolDefinitions() {
     return [
       {
         name: 'apply-damage',
-        description: 'Apply WFRP 4e damage to an actor via the system\'s actor.applyBasicDamage path (AP + TB automatically applied by the system per damageType/hitLocation). Returns before/after status snapshot (wounds, conditions, advantage).',
+        title: 'Apply Damage',
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: false,
+          openWorldHint: true,
+        },
+        description: 'Apply WFRP 4e damage to an actor via the system\'s actor.applyBasicDamage path (AP + TB automatically applied by the system per damageType/hitLocation). Returns before/after status snapshot (wounds, conditions, advantage). IGNORE_ALL bypasses AP and TB soak, but does NOT bypass creature trait-based reductions (e.g. Undead). Effective wounds removed may be less than amount.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -54,6 +58,6 @@ export class ApplyDamageTool {
   async handle(args: any): Promise<any> {
     const parsed = ApplyDamageInput.parse(args);
     this.logger.info('apply-damage', parsed);
-    return await this.foundryClient.query<any>('warhammer-mcp.applyDamage', parsed);
+    return await this.query<any>('applyDamage', parsed);
   }
 }

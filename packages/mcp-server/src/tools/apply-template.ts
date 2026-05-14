@@ -1,25 +1,29 @@
 import { ApplyTemplateInput } from '@foundry-mcp/shared';
 import { FoundryClient } from '../foundry-client.js';
 import { Logger } from '../logger.js';
+import { BaseTool, BaseToolOptions } from '../base-tool.js';
 
 export interface ApplyTemplateToolOptions {
   foundryClient: FoundryClient;
   logger: Logger;
 }
 
-export class ApplyTemplateTool {
-  private foundryClient: FoundryClient;
-  private logger: Logger;
-
-  constructor({ foundryClient, logger }: ApplyTemplateToolOptions) {
-    this.foundryClient = foundryClient;
-    this.logger = logger.child({ component: 'ApplyTemplateTool' });
+export class ApplyTemplateTool extends BaseTool {
+  constructor(options: BaseToolOptions) {
+    super(options);
   }
 
   getToolDefinitions() {
     return [
       {
         name: 'apply-template',
+        title: 'Apply Template',
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: false,
+          openWorldHint: true,
+        },
         description:
           'Server-side reimplementation of wfrp4e TemplateModel.apply (wfrp4e.js:32647) — ' +
           'applies an advancement template (Item of type "template" from owb1/owb2/owb3/core) to ' +
@@ -102,6 +106,6 @@ export class ApplyTemplateTool {
       templateUuid: parsed.templateUuid,
       hasPreResolved: !!parsed.preResolvedChoices,
     });
-    return await this.foundryClient.query<any>('warhammer-mcp.applyTemplate', parsed);
+    return await this.query<any>('applyTemplate', parsed);
   }
 }

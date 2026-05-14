@@ -782,3 +782,101 @@ describe('buildEffectPayload — compendium clone regression', () => {
     ).not.toThrow();
   });
 });
+
+// ────────────── TOOL-IDEA-010 (2026-05-14): structured response envelope ──────────────
+
+describe('handle() — TOOL-IDEA-010 structured response envelope', () => {
+  it('returns MCP content envelope with content[0].text + structuredContent', async () => {
+    const { tool } = makeTool();
+    const result: any = await tool.handle({
+      itemType: 'weapon',
+      name: 'Longsword',
+      damage: 'SB+4',
+      ...actorDest('Hans'),
+    });
+
+    expect(result).toHaveProperty('content');
+    expect(Array.isArray(result.content)).toBe(true);
+    expect(result.content[0].type).toBe('text');
+    expect(typeof result.content[0].text).toBe('string');
+    expect(result).toHaveProperty('structuredContent');
+  });
+
+  it('structuredContent always carries itemId/itemName/itemType/scope for chaining', async () => {
+    const { tool } = makeTool();
+    const result: any = await tool.handle({
+      itemType: 'weapon',
+      name: 'Longsword',
+      damage: 'SB+4',
+      ...actorDest('Hans'),
+    });
+
+    expect(result.structuredContent).toMatchObject({
+      success: true,
+      itemId: 'new-item-id',
+      itemName: 'Longsword',
+      itemType: 'weapon',
+      scope: 'actor',
+    });
+  });
+
+  it('world-scope response carries folderId/folderPath in structuredContent', async () => {
+    const { tool } = makeTool();
+    const result: any = await tool.handle({
+      itemType: 'weapon',
+      name: 'Fire Sword',
+      damage: 'SB+6',
+      ...worldDest(['Custom', 'Weapons']),
+    });
+
+    expect(result.structuredContent.scope).toBe('world');
+    expect(result.structuredContent).toHaveProperty('folderPath');
+    expect(result.structuredContent.folderPath).toEqual(['Custom', 'Weapons']);
+  });
+
+  it('actor-scope response carries actorId/actorName in structuredContent', async () => {
+    const tool = (() => {
+      const calls: any[] = [];
+      const foundryClient: any = {
+        query: vi.fn(async () => ({
+          success: true,
+          data: {
+            itemId: 'item-99',
+            itemName: 'Sword',
+            itemType: 'weapon',
+            scope: 'actor',
+            actorId: 'actor-7',
+            actorName: 'Hans',
+          },
+        })),
+      };
+      return new CreateCustomItemTool({ foundryClient, logger: makeLogger() });
+    })();
+
+    const result: any = await tool.handle({
+      itemType: 'weapon',
+      name: 'Sword',
+      damage: 'SB+4',
+      ...actorDest('Hans'),
+    });
+
+    expect(result.structuredContent).toMatchObject({
+      scope: 'actor',
+      itemId: 'item-99',
+      actorId: 'actor-7',
+      actorName: 'Hans',
+    });
+  });
+
+  it('prose content[0].text mentions item name (for human display)', async () => {
+    const { tool } = makeTool();
+    const result: any = await tool.handle({
+      itemType: 'weapon',
+      name: 'Longsword',
+      damage: 'SB+4',
+      ...actorDest('Hans'),
+    });
+
+    expect(result.content[0].text).toMatch(/Longsword/);
+  });
+});

@@ -70,12 +70,23 @@ export const ValidateWritePermissionsInput = z.object({
   operation: z.enum(['createActor', 'modifyScene']),
 }).strict();
 
+/**
+ * @deprecated Phase 1 mcp_crud_expansion (2026-05-14). Use `SetDocumentOwnershipInput`
+ * from `./ownership.ts` with `{documentType: 'actor', ...}`. Kept exported solely so
+ * the Foundry-side deprecation-wrapper handlers (`handleSetActorOwnership`) can still
+ * parse legacy input shapes and return a deprecation error per PRD R1.5.
+ */
 export const SetActorOwnershipInput = z.object({
   actorId: z.string(),
   userId: z.string(),
   permission: z.union([z.string(), z.number()]),
 }).strict();
 
+/**
+ * @deprecated Phase 1 mcp_crud_expansion (2026-05-14). Use `GetDocumentOwnershipInput`
+ * from `./ownership.ts` with `{documentType: 'actor', ...}`. Kept exported solely for
+ * the deprecation-wrapper handler.
+ */
 export const GetActorOwnershipInput = z.object({
   actorId: z.string().optional(),
 }).strict();

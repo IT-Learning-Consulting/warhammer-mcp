@@ -1,25 +1,29 @@
 import { UpdateItemInput } from '@foundry-mcp/shared';
 import { FoundryClient } from '../foundry-client.js';
 import { Logger } from '../logger.js';
+import { BaseTool, BaseToolOptions } from '../base-tool.js';
 
 export interface UpdateItemToolOptions {
   foundryClient: FoundryClient;
   logger: Logger;
 }
 
-export class UpdateItemTool {
-  private foundryClient: FoundryClient;
-  private logger: Logger;
-
-  constructor({ foundryClient, logger }: UpdateItemToolOptions) {
-    this.foundryClient = foundryClient;
-    this.logger = logger.child({ component: 'UpdateItemTool' });
+export class UpdateItemTool extends BaseTool {
+  constructor(options: BaseToolOptions) {
+    super(options);
   }
 
   getToolDefinitions() {
     return [
       {
         name: 'update-item',
+        title: 'Update Item',
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: false,
+          openWorldHint: true,
+        },
         description:
           'Apply an arbitrary update to an item. Supports both actor-embedded and world-scope items. Thin pass-through to the Foundry-module updateItem query — does not enforce WFRP rules. Legacy shape `{actorId, itemId, updateData}` still accepted for backward compat. New shape: `{destination: {type:"actor"|"world", ...}, itemId? or itemName?, updateData}`. Used by skills like /wfrp-advance to write skill.system.advances.value or talent.system.advances.value, and by world-item maintenance flows.',
         inputSchema: {
@@ -65,6 +69,6 @@ export class UpdateItemTool {
       destinationType: parsed.destination?.type,
       paths: Object.keys(parsed.updateData),
     });
-    return await this.foundryClient.query<any>('warhammer-mcp.updateItem', parsed);
+    return await this.query<any>('updateItem', parsed);
   }
 }

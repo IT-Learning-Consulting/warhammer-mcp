@@ -13,3 +13,7 @@ export * from './item-target.js';
 export * from './add-active-effect.js';
 export * from './update-active-effect.js';
 export * from './delete-active-effect.js';
+export * from './get-active-effect-by-name.js';
+export * from './ownership.js';
+export * from './targets.js';
+export * from './outputs.js';

@@ -1,27 +1,31 @@
-import { GetWfrp4eConfigInput } from '@foundry-mcp/shared';
+import { GetWfrp4eConfigInput, GetWfrpConfigOutput, GET_WFRP_CONFIG_OUTPUT_JSON_SCHEMA } from '@foundry-mcp/shared';
 import { FoundryClient } from '../foundry-client.js';
 import { Logger } from '../logger.js';
+import { BaseTool, BaseToolOptions } from '../base-tool.js';
 
 export interface GetWfrpConfigToolOptions {
   foundryClient: FoundryClient;
   logger: Logger;
 }
 
-export class GetWfrpConfigTool {
-  private foundryClient: FoundryClient;
-  private logger: Logger;
-
-  constructor({ foundryClient, logger }: GetWfrpConfigToolOptions) {
-    this.foundryClient = foundryClient;
-    this.logger = logger.child({ component: 'GetWfrpConfigTool' });
+export class GetWfrpConfigTool extends BaseTool {
+  constructor(options: BaseToolOptions) {
+    super(options);
   }
 
   getToolDefinitions() {
     return [
       {
         name: 'get-wfrp-config',
+        title: 'Get WFRP Config',
+        annotations: {
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: true,
+        },
         description:
-          'Read whitelisted CONFIG.WFRP4E.* keys (game.wfrp4e.config.*) for skill-side rule lookups. Skills use this to read authoritative tables (xpCost, talentMax, statusTiers, earningValues, conditions, ...) instead of hardcoding values. Returns { [key]: value } for each requested key in the allowlist; unknown keys are silently skipped. Allowlist: xpCost, talentMax, characteristics, characteristicsAbbrev, characteristicsBonus, careerLevels, statusTiers, earningValues, moneyValues, moneyNames, conditions, difficultyModifiers, symptoms, mutationTypes, corruptionTables.',
+          'Read whitelisted CONFIG.WFRP4E.* keys (game.wfrp4e.config.*) for skill-side rule lookups. Skills use this to read authoritative tables (xpCost, talentMax, statusTiers, earningValues, conditions, ...) instead of hardcoding values. Returns `{ values: { [key]: resolvedValue, ... }, skipped: [...] }`: each requested key in the allowlist appears under `values`; unknown/disallowed keys land in `skipped[]` so callers can detect typos. Access example: `result.values.statusTiers`. Allowlist: xpCost, talentMax, characteristics, characteristicsAbbrev, characteristicsBonus, careerLevels, statusTiers, earningValues, moneyValues, moneyNames, conditions, difficultyModifiers, symptoms, mutationTypes, corruptionTables, hitLocationTables.\n\nValues are i18n-resolved server-side (e.g. "Defeated" not "WFRP4E.ConditionName.Defeated"). The response uses a `{values, skipped}` envelope so a future allowlist key literally named "skipped" cannot collide with the bookkeeping field.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -35,6 +39,7 @@ export class GetWfrpConfigTool {
           },
           required: ['keys'],
         },
+        outputSchema: GET_WFRP_CONFIG_OUTPUT_JSON_SCHEMA,
       },
     ];
   }
@@ -42,6 +47,11 @@ export class GetWfrpConfigTool {
   async handle(args: any): Promise<any> {
     const parsed = GetWfrp4eConfigInput.parse(args);
     this.logger.info('get-wfrp-config', { keys: parsed.keys });
-    return await this.foundryClient.query<any>('warhammer-mcp.getWfrp4eConfig', parsed);
+    const output = await this.query<any>('getWfrp4eConfig', parsed);
+    GetWfrpConfigOutput.parse(output);
+    return {
+      content: [{ type: 'text', text: JSON.stringify(output) }],
+      structuredContent: output,
+    };
   }
 }

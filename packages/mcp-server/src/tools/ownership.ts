@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { FoundryClient } from "../foundry-client.js";
 import { Logger } from "../logger.js";
+import { BaseTool, BaseToolOptions } from "../base-tool.js";
 
 // Assign ownership schema
 const AssignOwnershipSchema = z.object({
@@ -39,15 +40,26 @@ const OwnershipLevels: Record<string, number> = {
     owner: 3
 };
 
-export class OwnershipTool {
-    constructor(
-        private foundryClient: FoundryClient,
-        private logger: Logger
-    ) { }
+export interface OwnershipToolOptions {
+  foundryClient: FoundryClient;
+  logger: Logger;
+}
+
+export class OwnershipTool extends BaseTool {
+  constructor(options: BaseToolOptions) {
+    super(options);
+  }
 
     getToolDefinitions() {
         return [{
             name: "ownership",
+            title: "Manage Ownership",
+            annotations: {
+              readOnlyHint: false,
+              destructiveHint: false,
+              idempotentHint: true,
+              openWorldHint: true,
+            },
             description: `Manage actor ownership and permissions in Foundry VTT. Control which players can view, edit, or control actors.
 
 **Foundry VTT Ownership Levels:**
@@ -131,8 +143,8 @@ export class OwnershipTool {
 
         const permissionLevel = OwnershipLevels[args.level];
 
-        await this.foundryClient.query<any>(
-            "warhammer-mcp.setActorOwnership",
+        await this.query<any>(
+            "setActorOwnership",
             {
                 actorName: args.actorName,
                 userId: args.userId,
@@ -181,8 +193,8 @@ export class OwnershipTool {
             userId: args.userId,
         });
 
-        await this.foundryClient.query<any>(
-            "warhammer-mcp.setActorOwnership",
+        await this.query<any>(
+            "setActorOwnership",
             {
                 actorName: args.actorName,
                 userId: args.userId,
@@ -203,8 +215,8 @@ export class OwnershipTool {
     private async handleList(args: { actorName: string }) {
         this.logger.info("Listing ownership", { actorName: args.actorName });
 
-        const response = await this.foundryClient.query<any>(
-            "warhammer-mcp.getActorOwnership",
+        const response = await this.query<any>(
+            "getActorOwnership",
             { actorName: args.actorName }
         );
 

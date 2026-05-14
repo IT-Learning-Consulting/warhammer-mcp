@@ -1,33 +1,36 @@
-import { DeleteActiveEffectInput } from '@foundry-mcp/shared';
+import { DeleteActiveEffectInput, ITEM_TARGET_JSON_SCHEMA } from '@foundry-mcp/shared';
 import { FoundryClient } from '../foundry-client.js';
 import { Logger } from '../logger.js';
+import { BaseTool, BaseToolOptions } from '../base-tool.js';
 
 export interface DeleteActiveEffectToolOptions {
   foundryClient: FoundryClient;
   logger: Logger;
 }
 
-export class DeleteActiveEffectTool {
-  private foundryClient: FoundryClient;
-  private logger: Logger;
-
-  constructor({ foundryClient, logger }: DeleteActiveEffectToolOptions) {
-    this.foundryClient = foundryClient;
-    this.logger = logger.child({ component: 'DeleteActiveEffectTool' });
+export class DeleteActiveEffectTool extends BaseTool {
+  constructor(options: BaseToolOptions) {
+    super(options);
   }
 
   getToolDefinitions() {
     return [
       {
         name: 'delete-active-effect',
+        title: 'Delete Active Effect',
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: true,
+          idempotentHint: false,
+          openWorldHint: true,
+        },
         description:
-          'Remove an ActiveEffect from an item. effectId is authoritative; effectName is the ergonomic fallback. Supply one.',
+          'Remove an ActiveEffect from an item. effectId is authoritative; effectName is the ergonomic fallback. Supply one.\n\nArgs:\n  - target (ItemTarget): scope=actor (needs actorId/actorName + itemId/itemName) or scope=world (needs itemId/itemName).\n  - effectId (string, optional): Effect UUID — use when available (authoritative).\n  - effectName (string, optional): Effect name — first match wins. Use when effectId is unknown.\n\nReturns:\n  - On success: deletion confirmation with the removed effectId.\n  - On error: throws with an actionable message.\n\nUse when: removing a script-injected or condition-linked effect from a specific item. Don\'t use when: removing a WFRP4e condition (use remove-condition instead).',
         inputSchema: {
           type: 'object',
           properties: {
             target: {
-              type: 'object',
-              additionalProperties: true,
+              ...(ITEM_TARGET_JSON_SCHEMA as any),
               description: 'ItemTarget (same shape as add-active-effect).',
             },
             effectId: {
@@ -55,6 +58,6 @@ export class DeleteActiveEffectTool {
       effectId: parsed.effectId,
       effectName: parsed.effectName,
     });
-    return await this.foundryClient.query<any>('warhammer-mcp.deleteActiveEffect', parsed);
+    return await this.query<any>('deleteActiveEffect', parsed);
   }
 }

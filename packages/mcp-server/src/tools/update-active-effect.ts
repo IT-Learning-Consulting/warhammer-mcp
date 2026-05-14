@@ -1,33 +1,36 @@
-import { UpdateActiveEffectInput } from '@foundry-mcp/shared';
+import { UpdateActiveEffectInput, ITEM_TARGET_JSON_SCHEMA } from '@foundry-mcp/shared';
 import { FoundryClient } from '../foundry-client.js';
 import { Logger } from '../logger.js';
+import { BaseTool, BaseToolOptions } from '../base-tool.js';
 
 export interface UpdateActiveEffectToolOptions {
   foundryClient: FoundryClient;
   logger: Logger;
 }
 
-export class UpdateActiveEffectTool {
-  private foundryClient: FoundryClient;
-  private logger: Logger;
-
-  constructor({ foundryClient, logger }: UpdateActiveEffectToolOptions) {
-    this.foundryClient = foundryClient;
-    this.logger = logger.child({ component: 'UpdateActiveEffectTool' });
+export class UpdateActiveEffectTool extends BaseTool {
+  constructor(options: BaseToolOptions) {
+    super(options);
   }
 
   getToolDefinitions() {
     return [
       {
         name: 'update-active-effect',
+        title: 'Update Active Effect',
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: true,
+          idempotentHint: false,
+          openWorldHint: true,
+        },
         description:
-          'Modify an existing ActiveEffect on an item. Partial update — only fields supplied in `updates` are applied; other fields on the effect are preserved. effectId is authoritative; effectName is the ergonomic fallback. Supply one.',
+          'Modify an existing ActiveEffect on an item. Partial update — only fields supplied in `updates` are applied; other fields on the effect are preserved. effectId is authoritative; effectName is the ergonomic fallback. Supply one.\n\nSecurity: script / preApplyScript / enableScript fields are executed by Foundry under GM authority. MCP does not sandbox script content. Only invoke with scripts you wrote or audited.',
         inputSchema: {
           type: 'object',
           properties: {
             target: {
-              type: 'object',
-              additionalProperties: true,
+              ...(ITEM_TARGET_JSON_SCHEMA as any),
               description: 'ItemTarget (same shape as add-active-effect).',
             },
             effectId: {
@@ -66,6 +69,6 @@ export class UpdateActiveEffectTool {
       effectName: parsed.effectName,
       updatedKeys: Object.keys(parsed.updates),
     });
-    return await this.foundryClient.query<any>('warhammer-mcp.updateActiveEffect', parsed);
+    return await this.query<any>('updateActiveEffect', parsed);
   }
 }

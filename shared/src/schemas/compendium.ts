@@ -41,7 +41,7 @@ export const SearchCompendiumInput = z.object({
 }).strict();
 
 export const ListCreaturesByCriteriaInput = z.object({
-  challengeRating: z.union([
+  threatLevel: z.union([
     z.number(),
     z.object({ min: z.number().optional(), max: z.number().optional() }),
   ]).optional(),
@@ -54,9 +54,15 @@ export const ListCreaturesByCriteriaInput = z.object({
 
 export const GetAvailablePacksInput = z.object({}).strict();
 
+// TOOL-IDEA-009 (2026-05-14): `summary_only` short-circuits the verbose `fullData`
+// + system tree payload that get-compendium-entry-full returns by default. Bridges
+// the gap between get-compendium-item (compact=true, too lean) and the full payload
+// (too verbose). The flag is also accepted by get-compendium-item (server-side hint
+// only — module returns the same shape regardless).
 export const GetCompendiumDocumentFullInput = z.object({
   packId: z.string(),
   documentId: z.string(),
+  summary_only: z.boolean().optional(),
 }).strict();
 
 export const GetEnhancedCreatureIndexInput = z.object({}).strict();

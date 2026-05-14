@@ -3,6 +3,13 @@ import { MODULE_ID } from './constants.js';
 import { FoundryDataAccess } from './data-access.js';
 import { wrappedWrite } from './transaction-manager.js';
 import { permissionManager } from './permissions.js';
+// Phase 1 mcp_crud_expansion — polymorphic ownership handlers.
+import {
+  setDocumentOwnership as setDocumentOwnershipHandler,
+  getDocumentOwnership as getDocumentOwnershipHandler,
+  bulkSetDocumentOwnership as bulkSetDocumentOwnershipHandler,
+  resetDocumentOwnership as resetDocumentOwnershipHandler,
+} from './handlers/ownership.js';
 import {
   // actor domain
   GetCharacterInfoInput,
@@ -13,6 +20,11 @@ import {
   ValidateWritePermissionsInput,
   SetActorOwnershipInput,
   GetActorOwnershipInput,
+  // Phase 1 mcp_crud_expansion — polymorphic ownership schemas.
+  SetDocumentOwnershipInput,
+  GetDocumentOwnershipInput,
+  BulkSetDocumentOwnershipInput,
+  ResetDocumentOwnershipInput,
   GetFriendlyNPCsInput,
   GetConnectedPlayersInput,
   GetPartyCharactersInput,
@@ -76,6 +88,8 @@ import {
   AddActiveEffectInput,
   UpdateActiveEffectInput,
   DeleteActiveEffectInput,
+  // TOOL-IDEA-003 (2026-05-14): get-active-effect-by-name
+  GetActiveEffectByNameInput,
 } from '@foundry-mcp/shared';
 
 /**
@@ -131,8 +145,14 @@ export class QueryHandlers {
     CONFIG.queries[`${modulePrefix}.deleteJournalEntry`] = this.handleDeleteJournalEntry.bind(this);
     CONFIG.queries[`${modulePrefix}.request-player-rolls`] = this.handleRequestPlayerRolls.bind(this);
     CONFIG.queries[`${modulePrefix}.getEnhancedCreatureIndex`] = this.handleGetEnhancedCreatureIndex.bind(this);
+    // Deprecation wrappers — old actor-only ownership keys (PRD R1.5).
     CONFIG.queries[`${modulePrefix}.setActorOwnership`] = this.handleSetActorOwnership.bind(this);
     CONFIG.queries[`${modulePrefix}.getActorOwnership`] = this.handleGetActorOwnership.bind(this);
+    // Phase 1 mcp_crud_expansion — polymorphic ownership surface (4 handlers).
+    CONFIG.queries[`${modulePrefix}.setDocumentOwnership`] = this.handleSetDocumentOwnership.bind(this);
+    CONFIG.queries[`${modulePrefix}.getDocumentOwnership`] = this.handleGetDocumentOwnership.bind(this);
+    CONFIG.queries[`${modulePrefix}.bulkSetDocumentOwnership`] = this.handleBulkSetDocumentOwnership.bind(this);
+    CONFIG.queries[`${modulePrefix}.resetDocumentOwnership`] = this.handleResetDocumentOwnership.bind(this);
     CONFIG.queries[`${modulePrefix}.getFriendlyNPCs`] = this.handleGetFriendlyNPCs.bind(this);
     CONFIG.queries[`${modulePrefix}.getPartyCharacters`] = this.handleGetPartyCharacters.bind(this);
     CONFIG.queries[`${modulePrefix}.getConnectedPlayers`] = this.handleGetConnectedPlayers.bind(this);
@@ -183,6 +203,9 @@ export class QueryHandlers {
     CONFIG.queries[`${modulePrefix}.addActiveEffect`] = this.handleAddActiveEffect.bind(this);
     CONFIG.queries[`${modulePrefix}.updateActiveEffect`] = this.handleUpdateActiveEffect.bind(this);
     CONFIG.queries[`${modulePrefix}.deleteActiveEffect`] = this.handleDeleteActiveEffect.bind(this);
+
+    // TOOL-IDEA-003 (2026-05-14): read-only AE-by-name resolver.
+    CONFIG.queries[`${modulePrefix}.getActiveEffectByName`] = this.handleGetActiveEffectByName.bind(this);
   }
 
   unregisterHandlers(): void {
@@ -256,12 +279,14 @@ export class QueryHandlers {
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
       const parsed = AddItemFromCompendiumInput.strict().parse(data ?? {});
+      const uuid = parsed.itemUuid ?? parsed.compendiumId;
+      if (!uuid) throw new Error('add-item-from-compendium: one of {itemUuid, compendiumId} is required.');
       return await wrappedWrite('addItemFromCompendium', async () => {
         const actor = game.actors?.get(parsed.actorId);
         if (!actor) throw new Error(`Actor with ID "${parsed.actorId}" not found`);
 
-        const itemDoc = await fromUuid(parsed.compendiumId);
-        if (!itemDoc) throw new Error(`Item with UUID "${parsed.compendiumId}" not found in compendium`);
+        const itemDoc = await fromUuid(uuid);
+        if (!itemDoc) throw new Error(`Item with UUID "${uuid}" not found in compendium`);
 
         const itemData = itemDoc.toObject();
         const createdItems = await actor.createEmbeddedDocuments('Item', [itemData]);
@@ -318,8 +343,14 @@ export class QueryHandlers {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
-      GetActiveSceneInput.strict().parse(data ?? {});
-      return { success: true, data: await this.dataAccess.getActiveScene() };
+      // TOOL-IDEA-007 (2026-05-14): forward sceneId so non-active scene inspection works.
+      const parsed = GetActiveSceneInput.strict().parse(data ?? {});
+      return {
+        success: true,
+        data: await this.dataAccess.getActiveScene(
+          parsed.sceneId ? { sceneId: parsed.sceneId } : {}
+        ),
+      };
     } catch (error) {
       rethrowAsInvalidInput(error);
       throw new Error(`Failed to get active scene: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -414,11 +445,13 @@ export class QueryHandlers {
       this.dataAccess.validateFoundryState();
       const parsed = AddActorsToSceneInput.parse(data ?? {});
       return await wrappedWrite('addActorsToScene', async () => {
+        // TOOL-IDEA-004 (2026-05-14): forward sceneId for non-active scene targeting.
         const result = await this.dataAccess.addActorsToScene({
           actorIds: parsed.actorIds,
           ...(parsed.quantities ? { quantities: parsed.quantities } : {}),
           placement: parsed.placement || 'random',
           hidden: parsed.hidden || false,
+          ...(parsed.sceneId ? { sceneId: parsed.sceneId } : {}),
         });
         return { success: true, data: result };
       });
@@ -563,13 +596,20 @@ export class QueryHandlers {
     }
   }
 
+  // PRD R1.5 — deprecation wrappers. Old actor-only ownership keys are kept
+  // exported so cached legacy callers fail loudly with a pointer at the new
+  // polymorphic surface. Input is still strict-parsed (BUG-034 / CCR-5).
   async handleSetActorOwnership(data: unknown): Promise<any> {
     try {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
-      const parsed = SetActorOwnershipInput.strict().parse(data ?? {});
-      return await wrappedWrite('setActorOwnership', async () => ({ success: true, data: await this.dataAccess.setActorOwnership(parsed as any) }));
+      SetActorOwnershipInput.strict().parse(data ?? {});
+      return {
+        success: false,
+        error: 'setActorOwnership is deprecated; use setDocumentOwnership with documentType: "actor" (PRD mcp_crud_expansion Phase 1 R1.5)',
+        deprecated: true,
+      };
     } catch (error) {
       rethrowAsInvalidInput(error);
       throw new Error(`Failed to set actor ownership: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -581,11 +621,62 @@ export class QueryHandlers {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
-      const parsed = GetActorOwnershipInput.strict().parse(data ?? {});
-      return { success: true, data: await this.dataAccess.getActorOwnership(parsed as any) };
+      GetActorOwnershipInput.strict().parse(data ?? {});
+      return {
+        success: false,
+        error: 'getActorOwnership is deprecated; use getDocumentOwnership with documentType: "actor" (PRD mcp_crud_expansion Phase 1 R1.5)',
+        deprecated: true,
+      };
     } catch (error) {
       rethrowAsInvalidInput(error);
       throw new Error(`Failed to get actor ownership: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  // Phase 1 mcp_crud_expansion — polymorphic ownership handlers. Each strict-parses
+  // its input (CCR-5) and delegates to handlers/ownership.ts where the GM gate +
+  // wrappedWrite + Foundry doc updates live.
+  async handleSetDocumentOwnership(data: unknown): Promise<any> {
+    try {
+      this.dataAccess.validateFoundryState();
+      const parsed = SetDocumentOwnershipInput.parse(data ?? {});
+      return await setDocumentOwnershipHandler(parsed);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to set document ownership: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  async handleGetDocumentOwnership(data: unknown): Promise<any> {
+    try {
+      this.dataAccess.validateFoundryState();
+      const parsed = GetDocumentOwnershipInput.parse(data ?? {});
+      return await getDocumentOwnershipHandler(parsed);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to get document ownership: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  async handleBulkSetDocumentOwnership(data: unknown): Promise<any> {
+    try {
+      this.dataAccess.validateFoundryState();
+      const parsed = BulkSetDocumentOwnershipInput.parse(data ?? {});
+      return await bulkSetDocumentOwnershipHandler(parsed);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to bulk-set document ownership: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  async handleResetDocumentOwnership(data: unknown): Promise<any> {
+    try {
+      this.dataAccess.validateFoundryState();
+      const parsed = ResetDocumentOwnershipInput.parse(data ?? {});
+      return await resetDocumentOwnershipHandler(parsed);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to reset document ownership: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
@@ -1317,6 +1408,27 @@ export class QueryHandlers {
     } catch (error) {
       rethrowAsInvalidInput(error);
       throw new Error(`Failed to delete active effect: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  // TOOL-IDEA-003 (2026-05-14): read-only AE-by-name resolver. Not wrapped in
+  // wrappedWrite — pure read.
+  private async handleGetActiveEffectByName(data: unknown): Promise<any> {
+    try {
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
+      this.dataAccess.validateFoundryState();
+      const parsed = GetActiveEffectByNameInput.strict().parse(data ?? {});
+      if (!parsed.effectId && !parsed.effectName) {
+        throw new Error('getActiveEffectByName requires one of effectId or effectName');
+      }
+      return {
+        success: true,
+        data: await this.dataAccess.getActiveEffectByName(parsed as any),
+      };
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to get active effect: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 }

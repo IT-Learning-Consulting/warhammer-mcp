@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { FoundryClient } from '../foundry-client.js';
 import { Logger } from '../logger.js';
-import { ErrorHandler } from '../utils/error-handler.js';
+import { BaseTool, BaseToolOptions } from '../base-tool.js';
 
 export interface ActorCreationToolsOptions {
   foundryClient: FoundryClient;
@@ -9,15 +9,9 @@ export interface ActorCreationToolsOptions {
 }
 
 
-export class ActorCreationTools {
-  private foundryClient: FoundryClient;
-  private logger: Logger;
-  private errorHandler: ErrorHandler;
-
-  constructor({ foundryClient, logger }: ActorCreationToolsOptions) {
-    this.foundryClient = foundryClient;
-    this.logger = logger.child({ component: 'ActorCreationTools' });
-    this.errorHandler = new ErrorHandler(this.logger);
+export class ActorCreationTools extends BaseTool {
+  constructor(options: BaseToolOptions) {
+    super(options);
   }
 
   /**
@@ -27,6 +21,13 @@ export class ActorCreationTools {
     return [
       {
         name: 'create-actor-from-compendium',
+        title: 'Create Actor From Compendium',
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: false,
+          openWorldHint: true,
+        },
         description: 'Create one or more actors from a specific compendium entry with custom names. Use search-compendium first to find the exact creature you want, then use this tool with the packId and itemId from the search results.',
         inputSchema: {
           type: 'object',
@@ -44,6 +45,11 @@ export class ActorCreationTools {
               items: { type: 'string' },
               description: 'Custom names for the created actors (e.g., ["Flameheart", "Sneak", "Peek"])',
               minItems: 1,
+            },
+            customNames: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Alias for names — accepted when skills pass customNames directly. Handler reads names; if only customNames is provided, pass it as names.',
             },
             quantity: {
               type: 'number',
@@ -87,7 +93,14 @@ export class ActorCreationTools {
       },
       {
         name: 'get-compendium-entry-full',
-        description: 'Retrieve complete stat block data including items, spells, and abilities for actor creation',
+        title: 'Get Compendium Entry Full',
+        annotations: {
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: true,
+        },
+        description: 'Retrieve complete stat block data including items, spells, and abilities for actor creation. TOOL-IDEA-009 (2026-05-14): pass `summary_only: true` to drop the verbose `fullData` and `system` tree from the response, returning only name-only `items[]`/`effects[]` summaries plus the `summary` line. Use this for "does creature X have trait Y?"-style queries when you don\'t need the full payload.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -98,6 +111,11 @@ export class ActorCreationTools {
             entryId: {
               type: 'string',
               description: 'Entry identifier within the pack',
+            },
+            summary_only: {
+              type: 'boolean',
+              description: 'TOOL-IDEA-009 (2026-05-14): when true, drop fullData + system tree, return name-only item/effect summaries.',
+              default: false,
             },
           },
           required: ['packId', 'entryId'],
@@ -145,7 +163,7 @@ export class ActorCreationTools {
       }
 
       // Create the actors via Foundry module using exact pack/item IDs
-      const result = await this.foundryClient.query<any>('warhammer-mcp.createActorFromCompendium', {
+      const result = await this.query<any>('createActorFromCompendium', {
         packId,
         itemId,
         customNames: customNames.slice(0, finalQuantity),
@@ -168,7 +186,8 @@ export class ActorCreationTools {
       return this.formatSimpleActorCreationResponse(result, packId, itemId, customNames.slice(0, finalQuantity));
 
     } catch (error) {
-      this.errorHandler.handleToolError(error, 'create-actor-from-compendium', 'actor creation');
+      this.logger.error('create-actor-from-compendium failed', error);
+      throw new Error(`Failed to create actor from compendium: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
@@ -179,14 +198,15 @@ export class ActorCreationTools {
     const schema = z.object({
       packId: z.string().min(1, 'Pack ID cannot be empty'),
       entryId: z.string().min(1, 'Entry ID cannot be empty'),
+      summary_only: z.boolean().default(false),
     });
 
-    const { packId, entryId } = schema.parse(args);
+    const { packId, entryId, summary_only } = schema.parse(args);
 
-    this.logger.info('Getting full compendium entry', { packId, entryId });
+    this.logger.info('Getting full compendium entry', { packId, entryId, summary_only });
 
     try {
-      const fullEntry = await this.foundryClient.query<any>('warhammer-mcp.getCompendiumDocumentFull', {
+      const fullEntry = await this.query<any>('getCompendiumDocumentFull', {
         packId,
         documentId: entryId,
       });
@@ -199,24 +219,24 @@ export class ActorCreationTools {
         hasEffects: !!fullEntry.effects?.length,
       });
 
-      return this.formatCompendiumEntryResponse(fullEntry);
+      return this.formatCompendiumEntryResponse(fullEntry, summary_only);
 
     } catch (error) {
-      this.errorHandler.handleToolError(error, 'get-compendium-entry-full', 'compendium retrieval');
+      this.logger.error('get-compendium-entry-full failed', error);
+      throw new Error(`Failed to retrieve compendium entry: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
 
 
 
-
-
-
-
   /**
-   * Format compendium entry response
+   * Format compendium entry response.
+   * TOOL-IDEA-009 (2026-05-14): when summaryOnly is true, drop fullData + system tree
+   * (huge — prototypeToken, full system, embedded AE script payloads) and project
+   * items[]/effects[] down to names-only summaries.
    */
-  private formatCompendiumEntryResponse(entry: any): any {
+  private formatCompendiumEntryResponse(entry: any, summaryOnly: boolean = false): any {
     const itemsInfo = entry.items?.length > 0
       ? `\n📦 Items: ${entry.items.map((item: any) => item.name).join(', ')}`
       : '';
@@ -224,6 +244,26 @@ export class ActorCreationTools {
     const effectsInfo = entry.effects?.length > 0
       ? `\n✨ Effects: ${entry.effects.map((effect: any) => effect.name).join(', ')}`
       : '';
+
+    if (summaryOnly) {
+      return {
+        name: entry.name,
+        type: entry.type,
+        pack: entry.packLabel,
+        items: (entry.items || []).map((item: any) => ({
+          id: item.id,
+          name: item.name,
+          type: item.type,
+        })),
+        effects: (entry.effects || []).map((effect: any) => ({
+          id: effect.id,
+          name: effect.name,
+          disabled: !!effect.disabled,
+        })),
+        summary: `📊 **${entry.name}** (${entry.type} from ${entry.packLabel})${itemsInfo}${effectsInfo}`,
+        mode: 'summary_only',
+      };
+    }
 
     return {
       name: entry.name,

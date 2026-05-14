@@ -11,7 +11,12 @@ export interface LoggerConfig {
 export class Logger {
   private logger: winston.Logger;
 
-  constructor(config: LoggerConfig) {
+  constructor(configOrLogger: LoggerConfig | { existingLogger: winston.Logger }) {
+    if ('existingLogger' in configOrLogger) {
+      this.logger = configOrLogger.existingLogger;
+      return;
+    }
+    const config = configOrLogger;
     const formats = [];
     
     // Add timestamp to all logs
@@ -84,15 +89,6 @@ export class Logger {
   }
 
   child(defaultMeta: any): Logger {
-    const childLogger = this.logger.child(defaultMeta);
-    const childInstance = new Logger({
-      level: 'info', // This will be overridden by the child logger
-      enableConsole: false, // Child doesn't need its own transports
-    });
-    
-    // Replace the logger instance
-    (childInstance as any).logger = childLogger;
-    
-    return childInstance;
+    return new Logger({ existingLogger: this.logger.child(defaultMeta) });
   }
 }

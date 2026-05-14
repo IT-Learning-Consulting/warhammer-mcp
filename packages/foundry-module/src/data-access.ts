@@ -200,12 +200,19 @@ interface SceneTokenPlacement {
   placement: 'random' | 'grid' | 'center' | 'coordinates';
   hidden: boolean;
   coordinates?: { x: number; y: number }[];
+  // TOOL-IDEA-004 (2026-05-14): optional sceneId targets a non-active scene.
+  sceneId?: string;
 }
 
 interface TokenPlacementResult {
   success: boolean;
   tokensCreated: number;
   tokenIds: string[];
+  // TOOL-IDEA-005 (2026-05-14): structured per-token list incl. final disambiguated
+  // name (Foundry auto-counter rename) + actorId for chaining.
+  tokens?: { id: string; name: string; actorId: string }[];
+  sceneId?: string;
+  sceneName?: string;
   errors?: string[] | undefined;
 }
 
@@ -885,7 +892,7 @@ export class FoundryDataAccess {
           // Convert search criteria and use enhanced search
           const criteria: any = { limit: 100 }; // Default limit for search
 
-          if (filters.challengeRating) criteria.challengeRating = filters.challengeRating;
+          if (filters.challengeRating) criteria.threatLevel = filters.challengeRating;
           if (filters.creatureType) criteria.creatureType = filters.creatureType;
           if (filters.size) criteria.size = filters.size;
 
@@ -1105,7 +1112,7 @@ export class FoundryDataAccess {
    * List creatures by criteria using enhanced persistent index - optimized for instant filtering
    */
   async listCreaturesByCriteria(criteria: {
-    challengeRating?: number | { min?: number; max?: number };
+    threatLevel?: number | { min?: number; max?: number };
     creatureType?: string;
     size?: string;
     hasSpells?: boolean;
@@ -1212,7 +1219,7 @@ export class FoundryDataAccess {
    * Check if enhanced creature passes all specified criteria
    */
   private passesEnhancedCriteria(creature: EnhancedCreatureIndex, criteria: {
-    challengeRating?: number | { min?: number; max?: number };
+    threatLevel?: number | { min?: number; max?: number };
     creatureType?: string;
     size?: string;
     hasSpells?: boolean;
@@ -1220,13 +1227,13 @@ export class FoundryDataAccess {
   }): boolean {
 
     // Challenge Rating filter
-    if (criteria.challengeRating !== undefined) {
-      if (typeof criteria.challengeRating === 'number') {
-        if (creature.challengeRating !== criteria.challengeRating) {
+    if (criteria.threatLevel !== undefined) {
+      if (typeof criteria.threatLevel === 'number') {
+        if (creature.challengeRating !== criteria.threatLevel) {
           return false;
         }
-      } else if (typeof criteria.challengeRating === 'object') {
-        const { min, max } = criteria.challengeRating;
+      } else if (typeof criteria.threatLevel === 'object') {
+        const { min, max } = criteria.threatLevel;
         if (min !== undefined && creature.challengeRating < min) {
           return false;
         }
@@ -1280,12 +1287,12 @@ export class FoundryDataAccess {
       searchTerms.push(criteria.creatureType);
     }
 
-    if (criteria.challengeRating) {
-      if (typeof criteria.challengeRating === 'number') {
+    if (criteria.threatLevel) {
+      if (typeof criteria.threatLevel === 'number') {
         // Add CR-based name patterns as fallback
-        if (criteria.challengeRating >= 15) searchTerms.push('ancient', 'legendary');
-        else if (criteria.challengeRating >= 10) searchTerms.push('adult', 'champion');
-        else if (criteria.challengeRating >= 5) searchTerms.push('captain', 'knight');
+        if (criteria.threatLevel >= 15) searchTerms.push('ancient', 'legendary');
+        else if (criteria.threatLevel >= 10) searchTerms.push('adult', 'champion');
+        else if (criteria.threatLevel >= 5) searchTerms.push('captain', 'knight');
       }
     }
 
@@ -1439,12 +1446,22 @@ export class FoundryDataAccess {
 
   /**
    * Get active scene information
+   * TOOL-IDEA-007 (2026-05-14): optional `sceneId` lets callers inspect a non-active
+   * scene without `switch-scene`. Resolves via `game.scenes.get(id)`; throws SceneNotFound
+   * if the id misses. When `sceneId` is omitted, behavior is unchanged (returns
+   * `game.scenes.current`).
    */
-  async getActiveScene(): Promise<SceneInfo> {
+  async getActiveScene(options: { sceneId?: string } = {}): Promise<SceneInfo> {
 
-    const scene = (game.scenes as any).current;
+    const scene = options.sceneId
+      ? (game.scenes as any).get(options.sceneId)
+      : (game.scenes as any).current;
     if (!scene) {
-      throw new Error(ERROR_MESSAGES.SCENE_NOT_FOUND);
+      throw new Error(
+        options.sceneId
+          ? `Scene not found: ${options.sceneId}`
+          : ERROR_MESSAGES.SCENE_NOT_FOUND
+      );
     }
 
     const sceneData: SceneInfo = {
@@ -1556,12 +1573,12 @@ export class FoundryDataAccess {
     // Safety depth limit to prevent extremely deep recursion
     if (depth > 50) {
       console.warn(`[${this.moduleId}] Sanitization depth limit reached at depth ${depth}`);
-      return '[Max depth reached]';
+      return { $ref: 'maxDepth', depth };
     }
 
     // Check for circular reference
     if (visited.has(obj)) {
-      return '[Circular Reference]';
+      return { $ref: 'cycle' };
     }
 
     // Mark this object as visited
@@ -1595,7 +1612,7 @@ export class FoundryDataAccess {
 
     } catch (error) {
       console.warn(`[${this.moduleId}] Error during sanitization at depth ${depth}:`, error);
-      return '[Sanitization failed]';
+      return { $ref: 'sanitizationFailed', error: error instanceof Error ? error.message : 'Unknown' };
     }
   }
 
@@ -2126,9 +2143,18 @@ export class FoundryDataAccess {
   async addActorsToScene(placement: SceneTokenPlacement): Promise<TokenPlacementResult> {
     this.validateFoundryState();
 
-    const scene = (game.scenes as any).current;
+    // TOOL-IDEA-004 (2026-05-14): optional `sceneId` targets a non-active scene.
+    // `scene.createEmbeddedDocuments('Token', ...)` is a DB write that works regardless
+    // of canvas/active state — tokens become visible when the GM later views the scene.
+    const scene = (placement as any).sceneId
+      ? (game.scenes as any).get((placement as any).sceneId)
+      : (game.scenes as any).current;
     if (!scene) {
-      throw new Error('No active scene found');
+      throw new Error(
+        (placement as any).sceneId
+          ? `Scene not found: ${(placement as any).sceneId}`
+          : 'No active scene found'
+      );
     }
 
     this.auditLog('addActorsToScene', placement, 'success');
@@ -2177,10 +2203,21 @@ export class FoundryDataAccess {
 
       const createdTokens = await scene.createEmbeddedDocuments('Token', tokenData);
 
+      // TOOL-IDEA-005 (2026-05-14): surface placed token names alongside IDs so callers
+      // chaining encounter-builder workflows can read auto-counter-renamed names (e.g.
+      // "Skeleton (3)") without a follow-up `get-current-scene` over-fetch. `tokenIds`
+      // is preserved for back-compat with existing skill prompts.
       const result: TokenPlacementResult = {
         success: createdTokens.length > 0,
         tokensCreated: createdTokens.length,
         tokenIds: createdTokens.map((token: any) => token.id),
+        tokens: createdTokens.map((token: any) => ({
+          id: token.id,
+          name: token.name,
+          actorId: token.actorId,
+        })),
+        sceneId: scene.id,
+        sceneName: scene.name,
         ...(errors.length > 0 ? { errors } : {}),
       };
 
@@ -3147,98 +3184,11 @@ export class FoundryDataAccess {
     }
   }
 
-  /**
-   * Set actor ownership permission for a user
-   */
-  async setActorOwnership(data: { actorId: string; userId: string; permission: number }): Promise<{ success: boolean; message: string; error?: string }> {
-    this.validateFoundryState();
-
-    try {
-      const actor = game.actors?.get(data.actorId);
-      if (!actor) {
-        return { success: false, error: `Actor not found: ${data.actorId}`, message: '' };
-      }
-
-      const user = game.users?.get(data.userId);
-      if (!user) {
-        return { success: false, error: `User not found: ${data.userId}`, message: '' };
-      }
-
-      // Get current ownership
-      const currentOwnership = (actor as any).ownership || {};
-      const newOwnership = { ...currentOwnership };
-
-      // Set the new permission level
-      newOwnership[data.userId] = data.permission;
-
-      // Update the actor
-      await actor.update({ ownership: newOwnership });
-
-      const permissionNames = { 0: 'NONE', 1: 'LIMITED', 2: 'OBSERVER', 3: 'OWNER' };
-      const permissionName = permissionNames[data.permission as keyof typeof permissionNames] || data.permission.toString();
-
-      return {
-        success: true,
-        message: `Set ${actor.name} ownership to ${permissionName} for ${user.name}`,
-      };
-    } catch (error) {
-      console.error(`[${MODULE_ID}] Error setting actor ownership:`, error);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
-        message: '',
-      };
-    }
-  }
-
-  /**
-   * Get actor ownership information
-   */
-  async getActorOwnership(data: { actorIdentifier?: string; playerIdentifier?: string }): Promise<any> {
-    this.validateFoundryState();
-
-    try {
-      const actors = data.actorIdentifier ?
-        (data.actorIdentifier === 'all' ? Array.from(game.actors || []) : [this.findActorByIdentifier(data.actorIdentifier)].filter(Boolean)) :
-        Array.from(game.actors || []);
-
-      const users = data.playerIdentifier ?
-        [game.users?.getName(data.playerIdentifier) || game.users?.get(data.playerIdentifier)].filter(Boolean) :
-        Array.from(game.users || []);
-
-      const ownershipInfo = [];
-      const permissionNames = { 0: 'NONE', 1: 'LIMITED', 2: 'OBSERVER', 3: 'OWNER' };
-
-      for (const actor of actors) {
-        const actorInfo: any = {
-          id: actor.id,
-          name: actor.name,
-          type: actor.type,
-          ownership: [],
-        };
-
-        for (const user of users.filter(u => u && !u.isGM)) {
-          const permission = actor.testUserPermission(user, 'OWNER') ? 3 :
-            actor.testUserPermission(user, 'OBSERVER') ? 2 :
-              actor.testUserPermission(user, 'LIMITED') ? 1 : 0;
-
-          actorInfo.ownership.push({
-            userId: user!.id,
-            userName: user!.name,
-            permission: permissionNames[permission as keyof typeof permissionNames],
-            numericPermission: permission,
-          });
-        }
-
-        ownershipInfo.push(actorInfo);
-      }
-
-      return ownershipInfo;
-    } catch (error) {
-      console.error(`[${MODULE_ID}] Error getting actor ownership:`, error);
-      throw error;
-    }
-  }
+  // Phase 1 mcp_crud_expansion (2026-05-14): the actor-only `setActorOwnership`
+  // and `getActorOwnership` methods that lived here are removed. The polymorphic
+  // replacements live in `handlers/ownership.ts` and are dispatched from
+  // queries.ts. The deprecation wrappers in queries.ts now strict-parse legacy
+  // input and return a deprecation error pointing at the new surface.
 
   /**
    * Find actor by name or ID
@@ -3456,8 +3406,18 @@ export class FoundryDataAccess {
 
   /**
    * List all scenes with filtering options
+   * TOOL-IDEA-001 (2026-05-14): pagination + count-only mode. Bare-array response
+   * preserved when none of page/pageSize/countOnly is provided (back-compat).
+   * When any pagination param is set, returns `{total, page, pageSize, pageCount, scenes}`.
+   * When countOnly is set, returns `{total, filterApplied}` only.
    */
-  async listScenes(options: { filter?: string; include_active_only?: boolean } = {}): Promise<any[]> {
+  async listScenes(options: {
+    filter?: string;
+    include_active_only?: boolean;
+    page?: number;
+    pageSize?: number;
+    countOnly?: boolean;
+  } = {}): Promise<any> {
     this.validateFoundryState();
 
     try {
@@ -3476,8 +3436,15 @@ export class FoundryDataAccess {
         );
       }
 
-      // Map to consistent format
-      return scenes.map((scene: any) => ({
+      const total = scenes.length;
+      const filterApplied = !!(options.filter || options.include_active_only);
+
+      // Count-only short-circuit: caller wants to probe inventory size before paging.
+      if (options.countOnly) {
+        return { total, filterApplied };
+      }
+
+      const projectScene = (scene: any) => ({
         id: scene.id,
         name: scene.name,
         active: scene.active,
@@ -3492,7 +3459,25 @@ export class FoundryDataAccess {
         lighting: scene.lights?.size || 0,
         sounds: scene.sounds?.size || 0,
         navigation: scene.navigation || false
-      }));
+      });
+
+      const paginate = options.page !== undefined || options.pageSize !== undefined;
+      if (paginate) {
+        const pageSize = options.pageSize ?? 50;
+        const page = options.page ?? 1;
+        const start = (page - 1) * pageSize;
+        const pageScenes = scenes.slice(start, start + pageSize).map(projectScene);
+        return {
+          total,
+          page,
+          pageSize,
+          pageCount: Math.max(1, Math.ceil(total / pageSize)),
+          scenes: pageScenes,
+        };
+      }
+
+      // Back-compat: bare array when no pagination/count params are set.
+      return scenes.map(projectScene);
     } catch (error) {
       throw new Error(`Failed to list scenes: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
@@ -5360,10 +5345,38 @@ export class FoundryDataAccess {
       (CONFIG as any).WFRP4E?.DAMAGE_TYPE?.[damageType] ?? 0;
 
     const before = this.snapshotStatus(actor);
-    await actor.applyBasicDamage(data.amount, {
-      damageType: damageTypeConst,
-      hitloc: data.hitLocation ? { result: data.hitLocation } : undefined,
+
+    // BUG-064: wfrp4e's applyDamage at wfrp4e.js:13074 calls `actor.update({...})` fire-and-forget,
+    // so applyBasicDamage resolves before the wounds mutation lands on the local document.
+    // Snapshotting immediately after the await returned `before === after`. We pre-register a
+    // listener for the next updateActor hook on this actor and wait on it before sampling `after`.
+    // The 2s safety timeout handles edge cases (e.g. wfrp4e routing the call via SocketHandlers
+    // to an offline player owner, where the update will never propagate back this session).
+    let hookId: number | undefined;
+    let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+    const updateApplied = new Promise<void>((resolve) => {
+      hookId = (Hooks as any).on('updateActor', (updatedActor: any) => {
+        if (updatedActor?.id === actor.id) {
+          resolve();
+        }
+      });
+      timeoutHandle = setTimeout(resolve, 2000);
     });
+
+    try {
+      // wfrp4e signature is `applyBasicDamage(damage, { damageType, loc, ... })` where `loc`
+      // is a plain string ("body", "head", ...). The prior `hitloc: { result: ... }` shape was
+      // not recognised by the destructure and silently fell back to the default "body".
+      await actor.applyBasicDamage(data.amount, {
+        damageType: damageTypeConst,
+        loc: data.hitLocation ?? 'body',
+      });
+      await updateApplied;
+    } finally {
+      if (hookId !== undefined) (Hooks as any).off('updateActor', hookId);
+      if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
+    }
+
     const after = this.snapshotStatus(actor);
 
     return {
@@ -5449,30 +5462,17 @@ export class FoundryDataAccess {
   async listActiveEffects(data: {
     actorId: string;
     filter?: 'all' | 'applied' | 'temporary' | 'conditions';
+    includeItemAEs?: boolean;
   }): Promise<any[]> {
     this.validateFoundryState();
     const actor: any = (game as any).actors?.get(data.actorId);
     if (!actor) throw new Error(`Actor not found with ID: ${data.actorId}`);
 
     const filter = data.filter ?? 'all';
-    let collection: any[];
-    switch (filter) {
-      case 'applied':
-        collection = Array.from(actor.appliedEffects ?? []);
-        break;
-      case 'temporary':
-        collection = Array.from(actor.temporaryEffects ?? []);
-        break;
-      case 'conditions':
-        collection = Array.from(actor.effects ?? []).filter(
-          (e: any) => e.isCondition,
-        );
-        break;
-      default:
-        collection = Array.from(actor.effects ?? []);
-    }
 
-    return collection.map((e: any) => ({
+    // TOOL-IDEA-002 (2026-05-14): per-effect projection helper. parentType/parentId/
+    // parentName disambiguate actor-level vs item-level AEs in the flat array result.
+    const projectEffect = (e: any, parent: any, parentType: 'Actor' | 'Item') => ({
       id: e.id,
       name: e.name,
       img: e.img ?? e.icon ?? null,
@@ -5490,7 +5490,116 @@ export class FoundryDataAccess {
         value: c.value,
         priority: c.priority ?? null,
       })),
-    }));
+      parentType,
+      parentId: parent?.id,
+      parentName: parent?.name,
+    });
+
+    // Filter predicate applied per-AE so item-level AEs get the same treatment as
+    // actor-level (e.g. filter=temporary still hides non-temporary item-AEs).
+    const applyFilter = (e: any): boolean => {
+      switch (filter) {
+        case 'applied':
+          return !e.disabled;
+        case 'temporary':
+          return !!(e.duration?.rounds || e.duration?.turns || e.duration?.seconds);
+        case 'conditions':
+          return !!e.isCondition;
+        default:
+          return true;
+      }
+    };
+
+    // Actor-level AEs: preserve original semantics by using actor.appliedEffects /
+    // actor.temporaryEffects when filter selects them (those collections already do
+    // the work in a system-aware way), otherwise iterate actor.effects + filter.
+    let actorAEs: any[];
+    if (filter === 'applied') {
+      actorAEs = Array.from(actor.appliedEffects ?? []);
+    } else if (filter === 'temporary') {
+      actorAEs = Array.from(actor.temporaryEffects ?? []);
+    } else if (filter === 'conditions') {
+      actorAEs = Array.from(actor.effects ?? []).filter((e: any) => e.isCondition);
+    } else {
+      actorAEs = Array.from(actor.effects ?? []);
+    }
+
+    const out: any[] = actorAEs.map((e: any) => projectEffect(e, actor, 'Actor'));
+
+    if (data.includeItemAEs) {
+      const items: any[] = Array.from(actor.items ?? []);
+      for (const item of items) {
+        const itemEffects: any[] = (item.effects as any)?.contents
+          ?? Array.from(item.effects ?? []);
+        for (const e of itemEffects) {
+          if (applyFilter(e)) {
+            out.push(projectEffect(e, item, 'Item'));
+          }
+        }
+      }
+    }
+
+    return out;
+  }
+
+  /**
+   * TOOL-IDEA-003 (2026-05-14): read-only AE-by-name resolver.
+   * Replaces the update-active-effect+returnFullPayload=true discovery workaround
+   * (a write tool pretending to be a read). Reuses _resolveItem → _findEffect so
+   * the resolution rules match the mutation tools' behavior exactly: effectId
+   * authoritative, effectName case-insensitive exact match. Pure read — no .update(),
+   * no deleteEmbeddedDocuments calls.
+   */
+  async getActiveEffectByName(data: {
+    target:
+      | { scope: 'actor'; actorId?: string | undefined; actorName?: string | undefined; itemId?: string | undefined; itemName?: string | undefined }
+      | { scope: 'world'; itemId?: string | undefined; itemName?: string | undefined };
+    effectId?: string | undefined;
+    effectName?: string | undefined;
+  }): Promise<any> {
+    this.validateFoundryState();
+    if (!data.effectId && !data.effectName) {
+      throw new Error('getActiveEffectByName requires one of effectId or effectName');
+    }
+    try {
+      const { item, owner, scope } = this._resolveItem(this._targetToResolverInput(data.target));
+      const effect: any = this._findEffect(item, data.effectId, data.effectName);
+      return {
+        success: true,
+        scope,
+        actorId: owner?.id ?? null,
+        itemId: item.id,
+        itemName: item.name,
+        effectId: effect.id,
+        effectName: effect.name,
+        parentType: 'Item' as const,
+        parentId: item.id,
+        parentName: item.name,
+        effect: {
+          id: effect.id,
+          name: effect.name,
+          img: effect.img ?? effect.icon ?? null,
+          statuses: Array.from(effect.statuses ?? []),
+          disabled: !!effect.disabled,
+          duration: {
+            rounds: effect.duration?.rounds ?? null,
+            turns: effect.duration?.turns ?? null,
+            seconds: effect.duration?.seconds ?? null,
+          },
+          origin: effect.origin ?? null,
+          changes: (effect.changes ?? []).map((c: any) => ({
+            key: c.key,
+            mode: c.mode,
+            value: c.value,
+            priority: c.priority ?? null,
+          })),
+        },
+      };
+    } catch (error) {
+      throw new Error(
+        `Failed to get active effect: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
   }
 
   /**
@@ -5521,10 +5630,46 @@ export class FoundryDataAccess {
       'hitLocationTables',
     ]);
     const config: any = (game as any).wfrp4e?.config ?? (globalThis as any).WFRP4E ?? {};
-    const out: Record<string, unknown> = {};
+    const values: Record<string, unknown> = {};
+    const skipped: string[] = [];
     for (const key of data.keys) {
-      if (!ALLOWED.has(key)) continue;
-      out[key] = config[key] ?? null;
+      if (!ALLOWED.has(key)) {
+        skipped.push(key);
+        continue;
+      }
+      values[key] = this.resolveI18nDeep(config[key] ?? null);
+    }
+    return { values, skipped };
+  }
+
+  /**
+   * Recursively walk a CONFIG.WFRP4E.* subtree and localize any leaf string
+   * that looks like an i18n key (matches /^WFRP4E\./). Cycle-safe via WeakSet
+   * mirror of removeSensitiveFields pattern (EVAL-010).
+   */
+  private resolveI18nDeep(value: any, visited: WeakSet<object> = new WeakSet(), depth: number = 0): any {
+    if (depth > 50) return value;
+    if (value === null || value === undefined) return value;
+    if (typeof value === 'string') {
+      if (/^WFRP4E\./.test(value)) {
+        try {
+          const localized = (game as any)?.i18n?.localize?.(value);
+          return typeof localized === 'string' && localized.length > 0 ? localized : value;
+        } catch {
+          return value;
+        }
+      }
+      return value;
+    }
+    if (typeof value !== 'object') return value;
+    if (visited.has(value)) return value;
+    visited.add(value);
+    if (Array.isArray(value)) {
+      return value.map((v) => this.resolveI18nDeep(v, visited, depth + 1));
+    }
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value)) {
+      out[k] = this.resolveI18nDeep(v, visited, depth + 1);
     }
     return out;
   }

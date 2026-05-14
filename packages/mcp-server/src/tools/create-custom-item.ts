@@ -5,25 +5,29 @@ import {
 } from '@foundry-mcp/shared';
 import { FoundryClient } from '../foundry-client.js';
 import { Logger } from '../logger.js';
+import { BaseTool, BaseToolOptions } from '../base-tool.js';
 
 export interface CreateCustomItemToolOptions {
   foundryClient: FoundryClient;
   logger: Logger;
 }
 
-export class CreateCustomItemTool {
-  private foundryClient: FoundryClient;
-  private logger: Logger;
-
-  constructor({ foundryClient, logger }: CreateCustomItemToolOptions) {
-    this.foundryClient = foundryClient;
-    this.logger = logger.child({ component: 'CreateCustomItemTool' });
+export class CreateCustomItemTool extends BaseTool {
+  constructor(options: BaseToolOptions) {
+    super(options);
   }
 
   getToolDefinitions() {
     return [
       {
         name: 'create-custom-item',
+        title: 'Create Custom Item',
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: true,
+          idempotentHint: false,
+          openWorldHint: true,
+        },
         description: `Create a custom WFRP4e Item — world-scope (the Items sidebar, Foundry's canonical item library, see https://foundryvtt.com/article/items/) or actor-embedded. Supports 25 itemType branches (18 core + 7 module-contributed) with optional Active Effects at creation time and optional compendium-clone seeding.
 
 **Destination (required, no default — caller decides):**
@@ -49,7 +53,9 @@ weapon, armour, trapping, ammunition, container, spell, prayer, talent, career, 
 **Examples:**
 - Spell at actor scope: \`{ itemType: "spell", name: "Firebolt", lore: "fire", cn: 5, destination: { type: "actor", actorName: "Hans" } }\`
 - Weapon cloned at world scope: \`{ itemType: "weapon", name: "Fire Sword", fromCompendium: "Compendium.wfrp4e-core.items.Item.<longsword-id>", damage: "SB+6", destination: { type: "world", folder: ["Homebrew", "Armor"] } }\`
-- Grimoire: \`{ itemType: "forien-armoury.grimoire", name: "Tome of Ulric", spells: [{name: "Wolf Form", uuid: "..."}], destination: { type: "world" } }\``,
+- Grimoire: \`{ itemType: "forien-armoury.grimoire", name: "Tome of Ulric", spells: [{name: "Wolf Form", uuid: "..."}], destination: { type: "world" } }\`
+
+Security: script / preApplyScript / enableScript fields are executed by Foundry under GM authority. MCP does not sandbox script content. Only invoke with scripts you wrote or audited.`,
         inputSchema: {
           type: 'object',
           additionalProperties: true,
@@ -97,7 +103,7 @@ weapon, armour, trapping, ammunition, container, spell, prayer, talent, career, 
     ];
   }
 
-  async handle(args: unknown): Promise<string> {
+  async handle(args: unknown): Promise<any> {
     const parsed = CreateCustomItemInputSchema.parse(args);
 
     const system = buildSystemForSubtype(parsed);
@@ -130,38 +136,59 @@ weapon, armour, trapping, ammunition, container, spell, prayer, talent, career, 
       fromCompendium: parsed.fromCompendium ?? null,
     });
 
-    const result: any = await this.foundryClient.query<any>('warhammer-mcp.createItem', payload);
+    const result: any = await this.query<any>('createItem', payload);
 
     return this.formatResult(result, parsed);
   }
 
+  // TOOL-IDEA-010 (2026-05-14): return MCP content envelope with always-on
+  // `structuredContent` carrying `{success, itemId, itemName, itemType, scope, folderId?,
+  // folderPath?}`. Eliminates the follow-up search/list lookup callers had to do after
+  // `create-custom-item` because itemId was buried in prose. `content[0].text` keeps
+  // the human-readable prose for chat display; structured field is for chaining.
   private formatResult(
     result: any,
     parsed: ReturnType<typeof CreateCustomItemInputSchema.parse>
-  ): string {
+  ): any {
     const data = result?.data ?? result ?? {};
     const scope = data.scope ?? parsed.destination.type;
     const base = `Created **${data.itemName ?? parsed.name}** (${data.itemType ?? parsed.itemType})`;
+
+    let prose: string;
+    const structured: any = {
+      success: data.success !== false,
+      scope,
+      itemId: data.itemId ?? null,
+      itemName: data.itemName ?? parsed.name,
+      itemType: data.itemType ?? parsed.itemType,
+    };
 
     if (scope === 'world') {
       const path =
         parsed.destination.type === 'world' && parsed.destination.folder?.length
           ? parsed.destination.folder.join(' / ')
           : '(root)';
-      let out = `${base} in the Items sidebar at **${path}**.`;
-      if (data.folderId) out += ` Folder ID: \`${data.folderId}\`.`;
-      if (parsed.returnFullPayload === true && data.itemData) {
-        out += `\n\nFull payload:\n\`\`\`json\n${JSON.stringify(data.itemData, null, 2)}\n\`\`\``;
-      }
-      return out;
+      prose = `${base} in the Items sidebar at **${path}**.`;
+      if (data.folderId) prose += ` Folder ID: \`${data.folderId}\`.`;
+      structured.folderId = data.folderId ?? null;
+      structured.folderPath = data.folderPath ?? (parsed.destination.type === 'world' ? parsed.destination.folder ?? [] : []);
+    } else {
+      const who = data.actorName ?? 'actor';
+      prose = `${base} on **${who}**.`;
+      if (data.itemId) prose += ` Item ID: \`${data.itemId}\`.`;
+      structured.actorId = data.actorId ?? null;
+      structured.actorName = data.actorName ?? null;
     }
 
-    const who = data.actorName ?? 'actor';
-    let out = `${base} on **${who}**.`;
-    if (data.itemId) out += ` Item ID: \`${data.itemId}\`.`;
     if (parsed.returnFullPayload === true && data.itemData) {
-      out += `\n\nFull payload:\n\`\`\`json\n${JSON.stringify(data.itemData, null, 2)}\n\`\`\``;
+      prose += `\n\nFull payload:\n\`\`\`json\n${JSON.stringify(data.itemData, null, 2)}\n\`\`\``;
+      structured.itemData = data.itemData;
+      if (data.effectIds) structured.effectIds = data.effectIds;
     }
-    return out;
+
+    return {
+      content: [{ type: 'text', text: prose }],
+      structuredContent: structured,
+    };
   }
 }

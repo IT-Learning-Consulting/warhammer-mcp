@@ -1,25 +1,24 @@
 import { z } from 'zod';
 import { FoundryClient } from '../foundry-client.js';
 import { Logger } from '../logger.js';
+import { BaseTool, BaseToolOptions } from '../base-tool.js';
 
-interface DiceRollToolsOptions {
-  foundryClient: FoundryClient;
-  logger: Logger;
-}
-
-export class DiceRollTools {
-  private foundryClient: FoundryClient;
-  private logger: Logger;
-
-  constructor(options: DiceRollToolsOptions) {
-    this.foundryClient = options.foundryClient;
-    this.logger = options.logger;
+export class DiceRollTools extends BaseTool {
+  constructor(options: BaseToolOptions) {
+    super(options);
   }
 
   getToolDefinitions() {
     return [
       {
         name: 'request-player-rolls',
+        title: 'Request Player Rolls',
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: false,
+          openWorldHint: true,
+        },
         description: 'Request dice rolls from players with interactive buttons. Creates roll buttons in Foundry chat that players can click. Supports both D&D 5e (d20 system) and WFRP 4e (d100 system). Examples: "Roll Weapon Skill for Hans" (WFRP), "Test Willpower against fear" (WFRP), "Roll stealth for Clark" (D&D), "Make a perception check" (D&D). VISIBILITY WORKFLOW: Before calling this function, ensure the user has specified whether they want a public or private roll. If they have already specified "public" or "private" in their request (e.g., "public performance check", "private stealth roll"), you can proceed directly. If the visibility is ambiguous or unspecified, ask: "Do you want this to be a PUBLIC roll (visible to all players) or PRIVATE roll (visible to player and GM only)?" and wait for their answer. Supports character-to-player resolution and GM fallback.',
         inputSchema: {
           type: 'object',
@@ -88,7 +87,7 @@ export class DiceRollTools {
 
       // Strip MCP-tool-only validation field; Foundry handler's strict schema rejects unknown keys.
       const { userConfirmedVisibility: _uc, ...foundryPayload } = params;
-      const response = await this.foundryClient.query<any>('warhammer-mcp.request-player-rolls', foundryPayload);
+      const response = await this.query<any>('request-player-rolls', foundryPayload);
       return `Roll request sent successfully! ${response?.message ?? ''}`;
     } catch (error) {
       this.logger.error('Error requesting player rolls', error);

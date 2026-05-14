@@ -1,19 +1,17 @@
 import { z } from 'zod';
+import { SearchCompendiumOutput, SEARCH_COMPENDIUM_OUTPUT_JSON_SCHEMA } from '@foundry-mcp/shared';
 import { FoundryClient } from '../foundry-client.js';
 import { Logger } from '../logger.js';
+import { BaseTool, BaseToolOptions } from '../base-tool.js';
 
 export interface CompendiumToolsOptions {
   foundryClient: FoundryClient;
   logger: Logger;
 }
 
-export class CompendiumTools {
-  private foundryClient: FoundryClient;
-  private logger: Logger;
-
-  constructor({ foundryClient, logger }: CompendiumToolsOptions) {
-    this.foundryClient = foundryClient;
-    this.logger = logger.child({ component: 'CompendiumTools' });
+export class CompendiumTools extends BaseTool {
+  constructor(options: BaseToolOptions) {
+    super(options);
   }
 
   /**
@@ -23,7 +21,14 @@ export class CompendiumTools {
     return [
       {
         name: 'search-compendium',
-        description: 'Enhanced search through compendium packs for items, spells, monsters, and other WFRP 4e content. Supports advanced filtering for creatures by threat level (Toughness + Wounds/10), creature species, size, and more. Perfect for encounter building and creature discovery. OPTIMIZATION TIPS: Start with broad searches using threat ranges (e.g., {min: 10, max: 15}) rather than exact values. Use minimal query terms initially and rely on filters. The default limit of 50 is optimal for discovery - avoid reducing it. Search results include key stats (threat, Wounds, Toughness) to reduce need for detailed lookups.',
+        title: 'Search Compendium',
+        annotations: {
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: true,
+        },
+        description: 'Enhanced search through compendium packs for items, spells, monsters, and other WFRP 4e content. Supports advanced filtering for creatures by threat level (Toughness + Wounds/10), creature species, size, and more. Perfect for encounter building and creature discovery. OPTIMIZATION TIPS: Start with broad searches using threat ranges (e.g., {min: 10, max: 15}) rather than exact values. Use minimal query terms initially and rely on filters. The default limit of 50 is optimal for discovery - avoid reducing it. Search results include key stats (threat, Wounds, Toughness) to reduce need for detailed lookups. Note: filters is creature-only and silently ignored for Actor/JournalEntry/Item searches that don\'t match creature shapes. packType must be top-level — placing it inside filters now throws an error with corrective guidance.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -58,8 +63,8 @@ export class CompendiumTools {
                 },
                 size: {
                   type: 'string',
-                  description: 'Creature size (WFRP 4e: "tiny", "little", "small", "average", "large", "enormous", "monstrous")',
-                  enum: ['tiny', 'little', 'small', 'average', 'large', 'enormous', 'monstrous']
+                  description: 'Creature size — WFRP4e short-form keys (avg, ltl, sml, lrg, enor, mnst, tiny). Matches system.details.size.value storage.',
+                  enum: ['tiny', 'ltl', 'sml', 'avg', 'lrg', 'enor', 'mnst']
                 },
                 spellcaster: {
                   type: 'boolean',
@@ -76,9 +81,17 @@ export class CompendiumTools {
           },
           required: ['query'],
         },
+        outputSchema: SEARCH_COMPENDIUM_OUTPUT_JSON_SCHEMA,
       },
       {
         name: 'get-compendium-item',
+        title: 'Get Compendium Item',
+        annotations: {
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: true,
+        },
         description: 'Retrieve detailed information about a specific compendium item. Use compact mode for UI performance when full details are not needed.',
         inputSchema: {
           type: 'object',
@@ -102,34 +115,40 @@ export class CompendiumTools {
       },
       {
         name: 'list-creatures-by-criteria',
+        title: 'List Creatures By Criteria',
+        annotations: {
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: true,
+        },
         description: 'OPTIMIZED CREATURE DISCOVERY: Get a comprehensive list of creatures matching specific criteria. Perfect for encounter building - returns minimal data so Claude can use built-in monster knowledge to identify suitable creatures by name, then pull full details only for final selections. Features intelligent pack prioritization (prioritizes WFRP 4e core packs, then specialized content) and high result limits for complete surveys. This replaces inefficient text searches with efficient criteria-based surveys. WFRP 4e specific.',
         inputSchema: {
           type: 'object',
           properties: {
-            challengeRating: {
+            threatLevel: {
               oneOf: [
-                { type: 'number', description: 'Exact threat level (WFRP: Toughness + Wounds/10)' },
+                { type: 'number', description: 'Exact WFRP4e threat level (TB + Wounds ÷ 10; integer 0-100)' },
                 { type: 'string', description: 'Exact threat level as string' },
                 {
                   type: 'object',
                   properties: {
-                    min: { type: 'number', description: 'Minimum CR/threat level (default: 0)' },
-                    max: { type: 'number', description: 'Maximum CR/threat level (default: 30)' }
+                    min: { type: 'number', description: 'Minimum threat level (default: 0)' },
+                    max: { type: 'number', description: 'Maximum threat level (default: 30)' }
                   },
-                  description: 'CR/threat range object (e.g., {"min": 10, "max": 15})'
+                  description: 'Threat level range object (e.g., {"min": 10, "max": 15})'
                 }
               ],
-              description: 'Filter by threat level (WFRP 4e: calculated from Toughness + Wounds/10) - accepts number, string, or range object. Use ranges for broader discovery (e.g., {"min": 10, "max": 15}) or exact values (12 or "12")'
+              description: 'WFRP4e threat level (TB + Wounds ÷ 10; integer 0-100). Accepts a single value, range object {min, max}, or omit for any level.'
             },
             creatureType: {
               type: 'string',
-              description: 'Filter by creature species (WFRP 4e species)',
-              enum: ['human', 'dwarf', 'elf', 'halfling', 'beastman', 'daemon', 'greenskin', 'undead', 'beast', 'chaos', 'animal']
+              description: 'Creature species/type — WFRP4e freeform (e.g. "human", "goblin", "beastman", "skeleton", "wolf"). Stored in system.details.species.value; matched case-insensitively. Common values: Human, Dwarf, Halfling, High Elf, Wood Elf, Beastman, Daemon, Greenskin, Goblin, Orc, Undead, Skaven, Construct, Animal. Module/world authors may write any string.'
             },
             size: {
               type: 'string',
-              description: 'Filter by creature size (WFRP 4e: tiny/little/small/average/large/enormous/monstrous)',
-              enum: ['tiny', 'little', 'small', 'average', 'large', 'enormous', 'monstrous']
+              description: 'Creature size — WFRP4e short-form (avg=average, ltl=little, sml=small, lrg=large, enor=enormous, mnst=monstrous, tiny=tiny). Matches system.details.size.value storage.',
+              enum: ['tiny', 'ltl', 'sml', 'avg', 'lrg', 'enor', 'mnst']
             },
             hasSpells: {
               type: 'boolean',
@@ -152,6 +171,13 @@ export class CompendiumTools {
       },
       {
         name: 'list-compendium-packs',
+        title: 'List Compendium Packs',
+        annotations: {
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: true,
+        },
         description: 'List all available compendium packs',
         inputSchema: {
           type: 'object',
@@ -179,12 +205,21 @@ export class CompendiumTools {
           })
         ]).optional(),
         creatureType: z.enum(['human', 'dwarf', 'elf', 'halfling', 'beastman', 'daemon', 'greenskin', 'undead', 'beast', 'chaos', 'animal']).optional(),
-        size: z.enum(['tiny', 'little', 'small', 'average', 'large', 'enormous', 'monstrous']).optional(),
+        size: z.enum(['tiny', 'ltl', 'sml', 'avg', 'lrg', 'enor', 'mnst']).optional(),
         spellcaster: z.boolean().optional(),
         hasSpecialAbilities: z.boolean().optional()
       }).optional(),
       limit: z.number().min(1).max(50).default(50),
     });
+
+    // Reject misplaced packType inside filters with corrective guidance (EVAL-008).
+    if (args && typeof args === 'object' && args.filters && typeof args.filters === 'object' && 'packType' in args.filters) {
+      throw new Error(
+        'search-compendium: packType must be a top-level argument, not inside `filters`. ' +
+        'Move it: { query: "...", packType: "Actor", filters: { creatureType: "..." } }. ' +
+        '`filters` is creature-only and silently ignored for non-creature searches.'
+      );
+    }
 
     // Add defensive parsing for MCP argument structure inconsistencies
     let parsedArgs;
@@ -215,7 +250,7 @@ export class CompendiumTools {
     const { query, packType, filters, limit } = parsedArgs;
 
     try {
-      const results = await this.foundryClient.query<any>('warhammer-mcp.searchCompendium', {
+      const results = await this.query<any>('searchCompendium', {
         query,
         packType,
         filters,
@@ -230,12 +265,17 @@ export class CompendiumTools {
         returned: limitedResults.length,
       });
 
-      return {
+      const output = {
         query,
         results: limitedResults.map((item: any) => this.formatCompendiumItem(item)),
         totalFound: results.length,
         showing: limitedResults.length,
         hasMore: results.length > limit,
+      };
+      SearchCompendiumOutput.parse(output);
+      return {
+        content: [{ type: 'text', text: JSON.stringify(output) }],
+        structuredContent: output,
       };
 
     } catch (error) {
@@ -255,7 +295,7 @@ export class CompendiumTools {
 
     try {
       // Use the proper document retrieval method that already exists in actor creation
-      const item = await this.foundryClient.query<any>('warhammer-mcp.getCompendiumDocumentFull', {
+      const item = await this.query<any>('getCompendiumDocumentFull', {
         packId: packId,
         documentId: itemId,
       });
@@ -279,13 +319,23 @@ export class CompendiumTools {
       };
 
       if (compact) {
-        // Compact response for UI performance
+        // Compact response for UI performance.
+        // TOOL-IDEA-008 (2026-05-14): tighter compact — items are name-only summaries
+        // (no nested .system tree, no embedded effects). Previous behavior kept the full
+        // item subtree (including system.description.value HTML and system.effects[].changes
+        // script payloads) which defeated the point of "compact".
         const compactStats = this.extractCompactStats(item);
+        const compactItems = (item.items || []).slice(0, 5).map((it: any) => ({
+          id: it.id,
+          name: it.name,
+          type: it.type,
+          img: it.img,
+        }));
         return {
           ...baseResponse,
           stats: compactStats,
           properties: this.extractItemProperties(item),
-          items: (item.items || []).slice(0, 5), // Limit items to prevent bloat
+          items: compactItems,
           mode: 'compact'
         };
       } else {
@@ -310,7 +360,7 @@ export class CompendiumTools {
 
   async handleListCreaturesByCriteria(args: any): Promise<any> {
     const schema = z.object({
-      challengeRating: z.union([
+      threatLevel: z.union([
         // Range object - handle both native objects and JSON strings
         z.object({
           min: z.number().optional().default(0),
@@ -326,7 +376,7 @@ export class CompendiumTools {
             return false;
           }
         }, {
-          message: 'Challenge rating/threat range must be valid JSON object with min/max numbers'
+          message: 'Threat level range must be valid JSON object with min/max numbers'
         }).transform((val) => {
           const parsed = JSON.parse(val);
           return {
@@ -338,11 +388,11 @@ export class CompendiumTools {
         z.number(),
         // String that converts to number (defensive parsing)
         z.string().refine((val) => !isNaN(parseFloat(val)), {
-          message: 'Challenge rating/threat level must be a valid number'
+          message: 'Threat level must be a valid number'
         }).transform((val) => parseFloat(val))
       ]).optional(),
-      creatureType: z.enum(['humanoid', 'dragon', 'beast', 'undead', 'fey', 'fiend', 'celestial', 'construct', 'elemental', 'giant', 'monstrosity', 'ooze', 'plant', 'aberration', 'human', 'dwarf', 'elf', 'halfling', 'beastman', 'daemon', 'greenskin', 'chaos', 'animal']).optional(),
-      size: z.enum(['tiny', 'small', 'medium', 'large', 'huge', 'gargantuan', 'little', 'average', 'enormous']).optional(),
+      creatureType: z.string().optional(),
+      size: z.enum(['tiny', 'ltl', 'sml', 'avg', 'lrg', 'enor', 'mnst']).optional(),
       hasSpells: z.union([
         z.boolean(),
         z.string().refine((val) => ['true', 'false'].includes(val.toLowerCase()), {
@@ -380,25 +430,29 @@ export class CompendiumTools {
     }
 
     try {
-      const results = await this.foundryClient.query<any>('warhammer-mcp.listCreaturesByCriteria', params);
+      const results = await this.query<any>('listCreaturesByCriteria', params);
 
       this.logger.debug('Creature criteria search completed', {
         criteriaCount: Object.keys(params).length,
-        totalFound: results.response?.creatures?.length || 0,
+        totalFound: results?.creatures?.length || 0,
         limit: params.limit,
-        packsSearched: results.response?.searchSummary?.packsSearched || 0
+        packsSearched: results?.searchSummary?.packsSearched || 0
       });
 
-      // Extract search summary for transparency
-      const searchSummary = results.response?.searchSummary || {
+      // foundry-client.ts:54-84 is the single envelope unwrap site — `results`
+      // here is already `envelope.data`, so creatures + searchSummary are
+      // top-level fields (NOT under `.data` or `.response`).
+      const searchSummary = results?.searchSummary || {
         packsSearched: 0,
         topPacks: [],
-        totalCreaturesFound: results.response?.creatures?.length || 0
+        totalCreaturesFound: results?.creatures?.length || 0
       };
 
       return {
-        creatures: (results.response?.creatures || results).map((creature: any) => this.formatCreatureListItem(creature)),
-        totalFound: results.response?.creatures?.length || results.length,
+        creatures: Array.isArray(results?.creatures)
+          ? results.creatures.map((creature: any) => this.formatCreatureListItem(creature))
+          : [],
+        totalCount: Array.isArray(results?.creatures) ? results.creatures.length : 0,
         criteria: params,
         searchSummary: {
           ...searchSummary,
@@ -424,7 +478,7 @@ export class CompendiumTools {
     this.logger.info('Listing compendium packs', { type });
 
     try {
-      const packs = await this.foundryClient.query<any>('warhammer-mcp.getAvailablePacks');
+      const packs = await this.query<any>('getAvailablePacks');
 
       // Filter by type if specified
       const filteredPacks = type
@@ -498,7 +552,7 @@ export class CompendiumTools {
 
       // WFRP Toughness Bonus + Armor
       const toughnessBonus = Math.floor((system.characteristics?.t?.value ?? 0) / 10);
-      const armorPoints = system.status?.armour?.value ?? system.status?.armour?.head;
+      const armorPoints = system.status?.armour?.value ?? system.status?.armour?.head?.value;
       if (toughnessBonus !== undefined || armorPoints !== undefined) {
         stats.toughnessAndArmor = { toughnessBonus, armorPoints: armorPoints || 0 };
       }
@@ -595,10 +649,10 @@ export class CompendiumTools {
 
     // Handle both enhanced creature index data (direct properties) and raw Foundry data (system paths)
     // WFRP 4e specific
-    const challengeRating = creature.challengeRating ?? system.details?.cr ?? system.cr;
+    const threatLevel = creature.challengeRating ?? system.details?.cr ?? system.cr;
     const creatureType = creature.creatureType ?? system.details?.type?.value ?? system.type?.value ??
       system.details?.species?.value ?? system.details?.species ?? 'unknown';
-    const size = creature.size ?? system.traits?.size ?? system.size ?? system.details?.size ?? 'medium';
+    const size = creature.size ?? system.traits?.size ?? system.size ?? system.details?.size ?? 'avg';
 
     // Use enhanced data for feature flags if available
     // WFRP magic detection
@@ -617,7 +671,7 @@ export class CompendiumTools {
       name: creature.name,
       id: creature.id,
       pack: { id: creature.pack, label: creature.packLabel },
-      challengeRating: challengeRating,
+      threatLevel: threatLevel,
       creatureType: creatureType,
       size: size,
       // Key feature flags for quick filtering (WFRP specific)
@@ -641,7 +695,7 @@ export class CompendiumTools {
 
     // Toughness/Armor (WFRP)
     const toughnessBonus = Math.floor((system.characteristics?.t?.value ?? 0) / 10);
-    const armorPoints = system.status?.armour?.value ?? system.status?.armour?.head;
+    const armorPoints = system.status?.armour?.value ?? system.status?.armour?.head?.value;
     if (toughnessBonus || armorPoints) {
       stats.toughness = { bonus: toughnessBonus, armor: armorPoints || 0 };
     }

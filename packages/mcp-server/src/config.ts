@@ -18,7 +18,7 @@ const ConfigSchema = z.object({
   }),
   server: z.object({
     name: z.string().default('foundry-mcp-server'),
-    version: z.string().default('0.4.17'),
+    version: z.string().default('1.0.0'),
   }),
 });
 

@@ -1,25 +1,29 @@
 import { ModifyItemQualitiesV2Input } from '@foundry-mcp/shared';
 import { FoundryClient } from '../foundry-client.js';
 import { Logger } from '../logger.js';
+import { BaseTool, BaseToolOptions } from '../base-tool.js';
 
 export interface ModifyItemQualitiesToolOptions {
   foundryClient: FoundryClient;
   logger: Logger;
 }
 
-export class ModifyItemQualitiesTool {
-  private foundryClient: FoundryClient;
-  private logger: Logger;
-
-  constructor({ foundryClient, logger }: ModifyItemQualitiesToolOptions) {
-    this.foundryClient = foundryClient;
-    this.logger = logger.child({ component: 'ModifyItemQualitiesTool' });
+export class ModifyItemQualitiesTool extends BaseTool {
+  constructor(options: BaseToolOptions) {
+    super(options);
   }
 
   getToolDefinitions() {
     return [
       {
         name: 'modify-item-qualities',
+        title: 'Modify Item Qualities',
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: false,
+          openWorldHint: true,
+        },
         description:
           'Add or remove qualities / flaws on an existing weapon, armour, trapping, etc. Works on actor-embedded items (destination.type="actor" + actorId/actorName + itemName/itemId) or world-scope items (destination.type="world" + itemName/itemId). Qualities and flaws are WFRP4e-canonical (damaging, accurate, fast, slow, tiring, etc.); arbitrary strings accepted but rule effects only apply to known keys. Pass-through to the Foundry-module modifyItemQualities query.',
         inputSchema: {
@@ -80,8 +84,8 @@ export class ModifyItemQualitiesTool {
       addF: parsed.addFlaws.length,
       rmF: parsed.removeFlaws.length,
     });
-    const result: any = await this.foundryClient.query<any>(
-      'warhammer-mcp.modifyItemQualities',
+    const result: any = await this.query<any>(
+      'modifyItemQualities',
       parsed
     );
     const data = result?.data ?? result ?? {};
