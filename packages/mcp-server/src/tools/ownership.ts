@@ -6,6 +6,38 @@ import { BaseTool, BaseToolOptions } from "../base-tool.js";
 // Phase 1 mcp_crud_expansion — polymorphic ownership tool.
 // 5 actions × 7 doc types (Folder is read-allowed, write-rejected per ADR-024).
 // Legacy `actorName` arg preserved as a soft alias mapped to {documentType: 'actor', name}.
+//
+// **Envelope-consumer contract (CCR-Envelope-Consumer; post-BUG-069 2026-05-14):**
+// Every query call below uses a CONCRETE response interface for the generic, never the
+// loose alias. The return is the UNWRAPPED data payload (see BaseTool.query JSDoc).
+// Failures THROW — handlers wrap in try/catch and convert to errorResponse envelopes.
+// Phase 2-9 tools must follow the same pattern. The CI guard at
+// `D:/foundry-vtt-mcp/scripts/check-envelope-consumer.sh` hard-fails on any
+// consumer-side success / data / error access on a query return and warns on
+// loose-type query calls. See `validation_rubric.md` §DP-15 for the L3 review rule.
+
+// Response shapes for the 4 Foundry-side handlers — typed so TS catches consumer drift.
+interface SetDocumentOwnershipResponse {
+  documentType: string;
+  resolvedId: string;
+  ownership: Record<string, number>;
+}
+
+interface GetDocumentOwnershipResponse {
+  documentType: string;
+  resolvedId: string;
+  ownership: Record<string, number> | null;
+  reason?: string;
+}
+
+interface BulkSetDocumentOwnershipResponse {
+  overall_success: boolean;
+  per_class: Array<{
+    documentType: string;
+    succeeded: number;
+    failed: Array<{ target: unknown; error: string }>;
+  }>;
+}
 
 const DocumentTypeEnum = z.enum([
   "actor", "item", "journal", "scene", "rolltable", "folder", "macro",
@@ -83,9 +115,19 @@ const OwnershipLevels: Record<string, number> = {
 
 function coerceLevel(input: string | number): number {
   if (typeof input === "number") return input;
+  // F10 fix (2026-05-14): pass numeric strings (including META values -10/-20) through to
+  // the Foundry-side Zod schema, which owns the META/INHERIT/standard-level validation per
+  // ADR-026. Single source of truth for level validation lives on the producer side; the
+  // mcp-server tool just coerces shape, not semantics. Pre-fix, coerceLevel rejected -10/-20
+  // here with "Invalid level" before the documented OWNERSHIP_META_LEVEL_FORBIDDEN could fire
+  // at the schema layer (F10 in validation report).
+  const asNum = Number(input);
+  if (Number.isFinite(asNum) && Math.floor(asNum) === asNum) {
+    return asNum;
+  }
   const lc = input.toLowerCase();
   if (lc in OwnershipLevels) return OwnershipLevels[lc]!;
-  throw new Error(`Invalid level "${input}" — expected one of ${Object.keys(OwnershipLevels).join(", ")} or numeric -1|0|1|2|3`);
+  throw new Error(`Invalid level "${input}" — expected one of ${Object.keys(OwnershipLevels).join(", ")} or a finite integer (Foundry-side Zod enforces -1|0|1|2|3 for standard levels; META values -10/-20 reject with OWNERSHIP_META_LEVEL_FORBIDDEN per ADR-026)`);
 }
 
 export interface OwnershipToolOptions {
@@ -209,146 +251,154 @@ export class OwnershipTool extends BaseTool {
   }
 
   private async handleAssign(args: z.infer<typeof AssignOwnershipSchema>) {
-    const input = this.resolveLegacyAlias(args);
-    this.validateSingleTarget(input, "assign");
+    try {
+      const input = this.resolveLegacyAlias(args);
+      this.validateSingleTarget(input, "assign");
 
-    const level = coerceLevel(input.level);
-    const payload: any = {
-      documentType: input.documentType,
-      ...(input.uuid ? { uuid: input.uuid } : {}),
-      ...(input.id ? { id: input.id } : {}),
-      ...(input.name ? { name: input.name } : {}),
-      level,
-    };
-    if (input.default === true) payload.default = true;
-    else if (input.userId) payload.userId = input.userId;
-    else throw new Error('ownership.assign: provide userId (per-user grant) or default:true (default-level update)');
+      const level = coerceLevel(input.level);
+      const payload: any = {
+        documentType: input.documentType,
+        ...(input.uuid ? { uuid: input.uuid } : {}),
+        ...(input.id ? { id: input.id } : {}),
+        ...(input.name ? { name: input.name } : {}),
+        level,
+      };
+      if (input.default === true) payload.default = true;
+      else if (input.userId) payload.userId = input.userId;
+      else throw new Error('ownership.assign: provide userId (per-user grant) or default:true (default-level update)');
 
-    const response = await this.query<any>("setDocumentOwnership", payload);
-
-    if (!response?.success) {
-      return this.errorResponse("assign", response?.error ?? "unknown error");
-    }
-    const data = response.data ?? {};
-    return {
-      content: [{
-        type: "text",
-        text: `${this.getLevelIcon(level)} **Ownership Assigned**\n\n` +
-          `**Document:** ${input.documentType} (${data.resolvedId ?? input.id ?? input.name})\n` +
-          `**Target:** ${input.default === true ? "default" : `user ${input.userId}`}\n` +
-          `**Permission:** ${this.getLevelName(level)}\n\n` +
-          `${this.getLevelDescription(level)}`,
-      }],
-    };
-  }
-
-  private async handleRemove(args: z.infer<typeof RemoveOwnershipSchema>) {
-    const input = this.resolveLegacyAlias(args);
-    this.validateSingleTarget(input, "remove");
-
-    const payload: any = {
-      documentType: input.documentType,
-      ...(input.uuid ? { uuid: input.uuid } : {}),
-      ...(input.id ? { id: input.id } : {}),
-      ...(input.name ? { name: input.name } : {}),
-      userId: input.userId,
-      level: 0,
-    };
-    const response = await this.query<any>("setDocumentOwnership", payload);
-
-    if (!response?.success) return this.errorResponse("remove", response?.error ?? "unknown error");
-    return {
-      content: [{
-        type: "text",
-        text: `🚫 **Ownership Removed**\n\n**Document:** ${input.documentType} (${response.data?.resolvedId ?? input.id ?? input.name})\n**User:** ${input.userId}\n\nNo permissions for this user on this document.`,
-      }],
-    };
-  }
-
-  private async handleList(args: z.infer<typeof ListOwnershipSchema>) {
-    const input = this.resolveLegacyAlias(args);
-    this.validateSingleTarget(input, "list");
-
-    const payload: any = {
-      documentType: input.documentType,
-      ...(input.uuid ? { uuid: input.uuid } : {}),
-      ...(input.id ? { id: input.id } : {}),
-      ...(input.name ? { name: input.name } : {}),
-    };
-    const response = await this.query<any>("getDocumentOwnership", payload);
-
-    if (!response?.success) return this.errorResponse("list", response?.error ?? "unknown error");
-    const data = response.data ?? {};
-    if (data.ownership === null) {
+      const data = await this.query<SetDocumentOwnershipResponse>("setDocumentOwnership", payload);
       return {
         content: [{
           type: "text",
-          text: `📋 **Ownership for ${input.documentType} (${data.resolvedId ?? input.id ?? input.name})**\n\n` +
-            `_${data.reason ?? "no ownership"}_ — ${input.documentType} has no per-user ownership map (ADR-024).`,
+          text: `${this.getLevelIcon(level)} **Ownership Assigned**\n\n` +
+            `**Document:** ${input.documentType} (${data.resolvedId ?? input.id ?? input.name})\n` +
+            `**Target:** ${input.default === true ? "default" : `user ${input.userId}`}\n` +
+            `**Permission:** ${this.getLevelName(level)}\n\n` +
+            `${this.getLevelDescription(level)}`,
         }],
       };
+    } catch (e) {
+      return this.errorResponse("assign", e instanceof Error ? e.message : String(e));
     }
+  }
 
-    const entries = Object.entries(data.ownership ?? {}).filter(([k]) => k !== "default");
-    const defaultLevel = (data.ownership ?? {}).default ?? 0;
-    let body = `📋 **Ownership for ${input.documentType} (${data.resolvedId ?? input.id ?? input.name})**\n\n`;
-    body += `**Default:** ${this.getLevelName(defaultLevel)}\n\n`;
-    if (entries.length === 0) {
-      body += `_No per-user permissions set._\n`;
-    } else {
-      body += `**Per-user permissions:**\n\n`;
-      for (const [userId, lvl] of entries) {
-        body += `${this.getLevelIcon(lvl as number)} **${userId}**: ${this.getLevelName(lvl as number)}\n`;
-      }
+  private async handleRemove(args: z.infer<typeof RemoveOwnershipSchema>) {
+    try {
+      const input = this.resolveLegacyAlias(args);
+      this.validateSingleTarget(input, "remove");
+
+      const payload: any = {
+        documentType: input.documentType,
+        ...(input.uuid ? { uuid: input.uuid } : {}),
+        ...(input.id ? { id: input.id } : {}),
+        ...(input.name ? { name: input.name } : {}),
+        userId: input.userId,
+        level: 0,
+      };
+      const data = await this.query<SetDocumentOwnershipResponse>("setDocumentOwnership", payload);
+      return {
+        content: [{
+          type: "text",
+          text: `🚫 **Ownership Removed**\n\n**Document:** ${input.documentType} (${data.resolvedId ?? input.id ?? input.name})\n**User:** ${input.userId}\n\nNo permissions for this user on this document.`,
+        }],
+      };
+    } catch (e) {
+      return this.errorResponse("remove", e instanceof Error ? e.message : String(e));
     }
-    return { content: [{ type: "text", text: body }] };
+  }
+
+  private async handleList(args: z.infer<typeof ListOwnershipSchema>) {
+    try {
+      const input = this.resolveLegacyAlias(args);
+      this.validateSingleTarget(input, "list");
+
+      const payload: any = {
+        documentType: input.documentType,
+        ...(input.uuid ? { uuid: input.uuid } : {}),
+        ...(input.id ? { id: input.id } : {}),
+        ...(input.name ? { name: input.name } : {}),
+      };
+      const data = await this.query<GetDocumentOwnershipResponse>("getDocumentOwnership", payload);
+
+      if (data.ownership === null) {
+        return {
+          content: [{
+            type: "text",
+            text: `📋 **Ownership for ${input.documentType} (${data.resolvedId ?? input.id ?? input.name})**\n\n` +
+              `_${data.reason ?? "no ownership"}_ — ${input.documentType} has no per-user ownership map (ADR-024).`,
+          }],
+        };
+      }
+
+      const entries = Object.entries(data.ownership ?? {}).filter(([k]) => k !== "default");
+      const defaultLevel = (data.ownership ?? {}).default ?? 0;
+      let body = `📋 **Ownership for ${input.documentType} (${data.resolvedId ?? input.id ?? input.name})**\n\n`;
+      body += `**Default:** ${this.getLevelName(defaultLevel)}\n\n`;
+      if (entries.length === 0) {
+        body += `_No per-user permissions set._\n`;
+      } else {
+        body += `**Per-user permissions:**\n\n`;
+        for (const [userId, lvl] of entries) {
+          body += `${this.getLevelIcon(lvl as number)} **${userId}**: ${this.getLevelName(lvl as number)}\n`;
+        }
+      }
+      return { content: [{ type: "text", text: body }] };
+    } catch (e) {
+      return this.errorResponse("list", e instanceof Error ? e.message : String(e));
+    }
   }
 
   private async handleBulkSet(args: z.infer<typeof BulkSetOwnershipSchema>) {
-    const level = coerceLevel(args.level);
-    if (args.userId && args.default) throw new Error("ownership.bulk-set: provide userId XOR default:true, not both");
-    if (!args.userId && !args.default) throw new Error("ownership.bulk-set: provide userId (per-user grant) or default:true (default-level update)");
+    try {
+      const level = coerceLevel(args.level);
+      if (args.userId && args.default) throw new Error("ownership.bulk-set: provide userId XOR default:true, not both");
+      if (!args.userId && !args.default) throw new Error("ownership.bulk-set: provide userId (per-user grant) or default:true (default-level update)");
 
-    const payload: any = { targets: args.targets, level };
-    if (args.default === true) payload.default = true;
-    else payload.userId = args.userId;
+      const payload: any = { targets: args.targets, level };
+      if (args.default === true) payload.default = true;
+      else payload.userId = args.userId;
 
-    const response = await this.query<any>("bulkSetDocumentOwnership", payload);
-    if (!response?.success) return this.errorResponse("bulk-set", response?.error ?? "unknown error");
-    const data = response.data ?? {};
-    const status = data.overall_success ? "✅ all succeeded" : "⚠️ partial failure";
-    let body = `📦 **Bulk Ownership Set** — ${status}\n\n`;
-    body += `**Target:** ${args.default === true ? "default" : `user ${args.userId}`}\n`;
-    body += `**Level:** ${this.getLevelName(level)}\n\n`;
-    for (const cls of data.per_class ?? []) {
-      body += `- **${cls.documentType}**: ${cls.succeeded} succeeded, ${cls.failed?.length ?? 0} failed\n`;
-      for (const f of cls.failed ?? []) {
-        body += `  - ❌ ${JSON.stringify(f.target)}: ${f.error}\n`;
+      const data = await this.query<BulkSetDocumentOwnershipResponse>("bulkSetDocumentOwnership", payload);
+      const status = data.overall_success ? "✅ all succeeded" : "⚠️ partial failure";
+      let body = `📦 **Bulk Ownership Set** — ${status}\n\n`;
+      body += `**Target:** ${args.default === true ? "default" : `user ${args.userId}`}\n`;
+      body += `**Level:** ${this.getLevelName(level)}\n\n`;
+      for (const cls of data.per_class ?? []) {
+        body += `- **${cls.documentType}**: ${cls.succeeded} succeeded, ${cls.failed?.length ?? 0} failed\n`;
+        for (const f of cls.failed ?? []) {
+          body += `  - ❌ ${JSON.stringify(f.target)}: ${f.error}\n`;
+        }
       }
+      return { content: [{ type: "text", text: body }] };
+    } catch (e) {
+      return this.errorResponse("bulk-set", e instanceof Error ? e.message : String(e));
     }
-    return { content: [{ type: "text", text: body }] };
   }
 
   private async handleReset(args: z.infer<typeof ResetOwnershipSchema>) {
     const input = this.resolveLegacyAlias(args);
     this.validateSingleTarget(input, "reset");
 
-    const payload: any = {
-      documentType: input.documentType,
-      ...(input.uuid ? { uuid: input.uuid } : {}),
-      ...(input.id ? { id: input.id } : {}),
-      ...(input.name ? { name: input.name } : {}),
-    };
-    const response = await this.query<any>("resetDocumentOwnership", payload);
-    if (!response?.success) return this.errorResponse("reset", response?.error ?? "unknown error");
-    return {
-      content: [{
-        type: "text",
-        text: `🔄 **Ownership Reset**\n\n` +
-          `**Document:** ${input.documentType} (${response.data?.resolvedId ?? input.id ?? input.name})\n` +
-          `All per-user entries cleared; default restored to NONE.`,
-      }],
-    };
+    try {
+      const payload: any = {
+        documentType: input.documentType,
+        ...(input.uuid ? { uuid: input.uuid } : {}),
+        ...(input.id ? { id: input.id } : {}),
+        ...(input.name ? { name: input.name } : {}),
+      };
+      const data = await this.query<SetDocumentOwnershipResponse>("resetDocumentOwnership", payload);
+      return {
+        content: [{
+          type: "text",
+          text: `🔄 **Ownership Reset**\n\n` +
+            `**Document:** ${input.documentType} (${data.resolvedId ?? input.id ?? input.name})\n` +
+            `All per-user entries cleared; default restored to NONE.`,
+        }],
+      };
+    } catch (e) {
+      return this.errorResponse("reset", e instanceof Error ? e.message : String(e));
+    }
   }
 
   private errorResponse(action: string, error: string) {

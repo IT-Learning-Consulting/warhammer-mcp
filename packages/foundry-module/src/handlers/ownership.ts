@@ -146,6 +146,68 @@ function buildMergedOwnership(
   return next;
 }
 
+// BUG-070 prevention (2026-05-14) — pre-validate userId; post-verify write persisted.
+//
+// Why this exists: Foundry's `DocumentOwnershipField._validateType` rejects ownership
+// maps whose keys aren't valid User IDs (foundry_docs/data/classes/fields.DocumentOwnershipField.md).
+// `doc.update()` returns `Promise<undefined | Document>` (foundry_docs/abstract/classes/Document.md
+// L558-576) — when validation rejects the payload, the update resolves to **undefined** rather
+// than throwing. Before this fix the handler returned a success envelope even though Foundry
+// silently dropped the write; the only signal was a console DataModelValidationError that the
+// caller never saw.
+//
+// resolveUserId catches invalid IDs (e.g. usernames like "Danny") UPFRONT with a clear error.
+// verifyOwnershipWrite catches anything that slips through pre-validation by inspecting the
+// update() return value AND re-reading the persisted state.
+
+function resolveUserId(userIdInput: string): string {
+  // Strip "User." UUID prefix if present (foundry_docs/utils/interfaces/types.ResolvedUUID.md).
+  const id = userIdInput.startsWith('User.') ? userIdInput.slice(5) : userIdInput;
+  const user = (game as any).users?.get(id);
+  if (!user) {
+    throw new Error(
+      `OWNERSHIP_INVALID_USER: "${userIdInput}" is not a valid Foundry user ID. ` +
+      `Pass a 16-char user ID or a User.<id> UUID — usernames are not accepted. ` +
+      `To resolve a username from F12: \`game.users.find(u => u.name === "<name>")?.id\`.`
+    );
+  }
+  return user.id as string;
+}
+
+function verifyOwnershipWrite(
+  _updateResult: any,
+  doc: any,
+  expected: { userId?: string; default?: boolean; level: number }
+): void {
+  // Ground truth is the post-state, not the update() return value.
+  // `doc.update()` returns `Promise<undefined | Document>` (foundry_docs/abstract/classes/Document.md
+  // L558-576). It returns the doc on a state-changing write, **but also returns `undefined` on
+  // idempotent no-ops** (payload identical to current state) AND on silent validation drops.
+  // We can't distinguish "no-op-success" from "silent-drop-failure" by the return alone — only
+  // by reading the post-state and checking it matches what we asked for. Idempotent no-ops are
+  // success: caller asked for state X, state IS X, contract satisfied.
+  const after = readOwnership(doc);
+  if (expected.default === true) {
+    if (after.default !== expected.level) {
+      throw new Error(
+        `OWNERSHIP_WRITE_NOT_PERSISTED: default level expected ${expected.level} ` +
+        `but post-update map shows ${after.default ?? 'MISSING'}. Foundry dropped the write silently — ` +
+        `check F12 console for DataModelValidationError. Common causes: invalid userId, invalid level, ` +
+        `schema constraint violation.`
+      );
+    }
+  } else if (expected.userId !== undefined) {
+    if (after[expected.userId] !== expected.level) {
+      throw new Error(
+        `OWNERSHIP_WRITE_NOT_PERSISTED: user ${expected.userId} expected level ${expected.level} ` +
+        `but post-update map shows ${after[expected.userId] ?? 'MISSING'}. Foundry dropped the write silently — ` +
+        `check F12 console for DataModelValidationError. Common causes: invalid userId, invalid level, ` +
+        `schema constraint violation.`
+      );
+    }
+  }
+}
+
 // SET — single-target write.
 export async function setDocumentOwnership(input: SetDocumentOwnershipInputType): Promise<Envelope<OwnershipPayload>> {
   const gate = validateGMAccess();
@@ -163,8 +225,13 @@ export async function setDocumentOwnership(input: SetDocumentOwnershipInputType)
   const doc = resolution.doc;
 
   return await wrappedWrite('setDocumentOwnership', async () => {
-    const merged = buildMergedOwnership(readOwnership(doc), { userId, default: isDefault, level });
-    await doc.update({ ownership: merged });
+    // BUG-070 prevention: resolve userId BEFORE the merge so invalid IDs (usernames, etc.)
+    // throw a clear error instead of getting silently dropped by Foundry's batch path.
+    const resolvedUserId = userId !== undefined ? resolveUserId(userId) : undefined;
+    const merged = buildMergedOwnership(readOwnership(doc), { userId: resolvedUserId, default: isDefault, level });
+    const updateResult = await doc.update({ ownership: merged });
+    // BUG-070 prevention: doc.update() returns undefined on silent rejection.
+    verifyOwnershipWrite(updateResult, doc, { userId: resolvedUserId, default: isDefault, level });
     return {
       success: true as const,
       data: {
@@ -236,6 +303,10 @@ export async function bulkSetDocumentOwnership(input: BulkSetDocumentOwnershipIn
   const perClass: BulkPerClassResult[] = [];
 
   return await wrappedWrite('bulkSetDocumentOwnership', async () => {
+    // BUG-070 prevention: resolve userId ONCE for the whole bulk call. Same ID used for all
+    // targets; invalid ID should reject the bulk entirely, not silently per-class-drop.
+    const resolvedUserId = userId !== undefined ? resolveUserId(userId) : undefined;
+
     for (const [documentType, group] of groups) {
       const failed: BulkPerClassFailure[] = [];
 
@@ -260,7 +331,7 @@ export async function bulkSetDocumentOwnership(input: BulkSetDocumentOwnershipIn
           failed.push({ target: t, error: resolution.error ?? 'OWNERSHIP_NOT_FOUND' });
           continue;
         }
-        const merged = buildMergedOwnership(readOwnership(resolution.doc), { userId, default: isDefault, level });
+        const merged = buildMergedOwnership(readOwnership(resolution.doc), { userId: resolvedUserId, default: isDefault, level });
         updates.push({ _id: resolution.doc.id, ownership: merged });
         resolvedDocs.push({ doc: resolution.doc, resolvedId: resolution.doc.id });
       }
@@ -283,8 +354,35 @@ export async function bulkSetDocumentOwnership(input: BulkSetDocumentOwnershipIn
           perClass.push({ documentType, succeeded: 0, failed });
           continue;
         }
+        // BUG-070 prevention: updateDocuments returns Promise<Document[]>; docs that
+        // fail validation get DROPPED but so do no-op (state-already-matches) docs.
+        // Can't distinguish from the return array alone — must check each target's
+        // actual post-state against the expected ownership entry.
         await DocClass.implementation.updateDocuments(updates);
-        perClass.push({ documentType, succeeded: updates.length, failed });
+        let succeeded = 0;
+        for (const rd of resolvedDocs) {
+          const after = readOwnership(rd.doc);
+          const matches = isDefault === true
+            ? after.default === level
+            : (resolvedUserId !== undefined && after[resolvedUserId] === level);
+          if (matches) {
+            succeeded += 1;
+          } else {
+            const observed = isDefault === true
+              ? after.default
+              : (resolvedUserId !== undefined ? after[resolvedUserId] : undefined);
+            failed.push({
+              target: { documentType, id: rd.resolvedId },
+              error:
+                `OWNERSHIP_WRITE_NOT_PERSISTED: expected level ${level} but post-update map shows ` +
+                `${observed ?? 'MISSING'}. Foundry dropped this document from the batch (per ` +
+                `foundry_docs/abstract/classes/Document.md L558-576). Check F12 console for ` +
+                `DataModelValidationError. Most common causes: invalid userId, invalid level, ` +
+                `or a downstream validation constraint.`,
+            });
+          }
+        }
+        perClass.push({ documentType, succeeded, failed });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         console.error(`[${MODULE_ID}] bulkSetDocumentOwnership ${documentType} batch failed:`, err);
@@ -319,7 +417,9 @@ export async function resetDocumentOwnership(input: ResetDocumentOwnershipInputT
 
   return await wrappedWrite('resetDocumentOwnership', async () => {
     const cleared: Record<string, number> = { default: 0 };
-    await doc.update({ ownership: cleared });
+    const updateResult = await doc.update({ ownership: cleared });
+    // BUG-070 prevention: verify the reset actually persisted.
+    verifyOwnershipWrite(updateResult, doc, { default: true, level: 0 });
     return {
       success: true as const,
       data: {
