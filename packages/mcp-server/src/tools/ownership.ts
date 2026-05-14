@@ -3,42 +3,90 @@ import { FoundryClient } from "../foundry-client.js";
 import { Logger } from "../logger.js";
 import { BaseTool, BaseToolOptions } from "../base-tool.js";
 
-// Assign ownership schema
+// Phase 1 mcp_crud_expansion — polymorphic ownership tool.
+// 5 actions × 7 doc types (Folder is read-allowed, write-rejected per ADR-024).
+// Legacy `actorName` arg preserved as a soft alias mapped to {documentType: 'actor', name}.
+
+const DocumentTypeEnum = z.enum([
+  "actor", "item", "journal", "scene", "rolltable", "folder", "macro",
+]);
+
+const LevelInput = z.union([
+  z.string(), // "none" | "limited" | "observer" | "owner" | "inherit"
+  z.number(), // -1 | 0 | 1 | 2 | 3
+]);
+
+const TargetIdShape = {
+  documentType: DocumentTypeEnum.optional(),
+  uuid: z.string().optional(),
+  id: z.string().optional(),
+  name: z.string().optional(),
+  // Legacy alias — when present, the tool maps to {documentType: 'actor', name: <value>}.
+  actorName: z.string().optional(),
+};
+
 const AssignOwnershipSchema = z.object({
-    action: z.literal("assign"),
-    actorName: z.string(),
-    userId: z.string(),
-    level: z.enum(["none", "limited", "observer", "owner"])
+  action: z.literal("assign"),
+  ...TargetIdShape,
+  userId: z.string().optional(),
+  default: z.boolean().optional(),
+  level: LevelInput,
 });
 
-// Remove ownership schema
 const RemoveOwnershipSchema = z.object({
-    action: z.literal("remove"),
-    actorName: z.string(),
-    userId: z.string()
+  action: z.literal("remove"),
+  ...TargetIdShape,
+  userId: z.string(),
 });
 
-// List ownership schema
 const ListOwnershipSchema = z.object({
-    action: z.literal("list"),
-    actorName: z.string()
+  action: z.literal("list"),
+  ...TargetIdShape,
+});
+
+const BulkSetOwnershipSchema = z.object({
+  action: z.literal("bulk-set"),
+  targets: z.array(z.object({
+    documentType: DocumentTypeEnum,
+    uuid: z.string().optional(),
+    id: z.string().optional(),
+    name: z.string().optional(),
+  })).min(1),
+  userId: z.string().optional(),
+  default: z.boolean().optional(),
+  level: LevelInput,
+});
+
+const ResetOwnershipSchema = z.object({
+  action: z.literal("reset"),
+  ...TargetIdShape,
 });
 
 const OwnershipSchema = z.discriminatedUnion("action", [
-    AssignOwnershipSchema,
-    RemoveOwnershipSchema,
-    ListOwnershipSchema
+  AssignOwnershipSchema,
+  RemoveOwnershipSchema,
+  ListOwnershipSchema,
+  BulkSetOwnershipSchema,
+  ResetOwnershipSchema,
 ]);
 
 type OwnershipArgs = z.infer<typeof OwnershipSchema>;
 
-// Foundry ownership levels
+// String → number mapping. `inherit` (-1) added per ADR-026 (per-user only).
 const OwnershipLevels: Record<string, number> = {
-    none: 0,
-    limited: 1,
-    observer: 2,
-    owner: 3
+  none: 0,
+  limited: 1,
+  observer: 2,
+  owner: 3,
+  inherit: -1,
 };
+
+function coerceLevel(input: string | number): number {
+  if (typeof input === "number") return input;
+  const lc = input.toLowerCase();
+  if (lc in OwnershipLevels) return OwnershipLevels[lc]!;
+  throw new Error(`Invalid level "${input}" — expected one of ${Object.keys(OwnershipLevels).join(", ")} or numeric -1|0|1|2|3`);
+}
 
 export interface OwnershipToolOptions {
   foundryClient: FoundryClient;
@@ -50,229 +98,296 @@ export class OwnershipTool extends BaseTool {
     super(options);
   }
 
-    getToolDefinitions() {
-        return [{
-            name: "ownership",
-            title: "Manage Ownership",
-            annotations: {
-              readOnlyHint: false,
-              destructiveHint: false,
-              idempotentHint: true,
-              openWorldHint: true,
-            },
-            description: `Manage actor ownership and permissions in Foundry VTT. Control which players can view, edit, or control actors.
+  getToolDefinitions() {
+    return [{
+      name: "ownership",
+      title: "Manage Ownership",
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: true,
+      },
+      description: `Polymorphic ownership manager — assign/remove/list/bulk-set/reset permissions across 7 document types in Foundry VTT (actor, item, journal, scene, rolltable, folder, macro). Folder is read-only here (BaseFolder has no ownership field; grant on contained docs).
 
-**Foundry VTT Ownership Levels:**
-- **none**: No access to the actor (default for non-owners)
-- **limited**: Can see actor name and limited info
-- **observer**: Can view full sheet but cannot control or edit
-- **owner**: Full control - can edit, control, and delete
-
-**Common Use Cases:**
-- Give players ownership of their characters
-- Let party observe NPC stat blocks
-- Share friendly NPCs with the party
-- Restrict access to secret villains
-- Grant GM assistants owner permissions
+**Foundry Ownership Levels:**
+- **none** (0) — No access
+- **limited** (1) — Sees name + limited info
+- **observer** (2) — Views full sheet, cannot edit
+- **owner** (3) — Full control
+- **inherit** (-1) — Per-user only: defer to default
 
 **Actions:**
-- **assign**: Set a specific permission level for a user on an actor
-- **remove**: Remove all permissions (set to none) for a user on an actor
-- **list**: View current ownership/permissions for an actor
+- **assign**: Set permission for a userId on a doc, OR set the default-level via {default: true}
+- **remove**: Revoke (set to NONE) a userId on a doc
+- **list**: Return current ownership map for a doc
+- **bulk-set**: Apply one {userId|default, level} to many targets in one call (per-class atomic; cross-class best-effort with per_class envelope)
+- **reset**: Clear all per-user entries; restore default=0
 
-**Finding User IDs:**
-- Use player names shown in Foundry VTT
-- Or use the exact user ID from Foundry's Users list
-- Case-insensitive matching supported for names
+**Identifier (any single):**
+- uuid (preferred, unambiguous) — Compendium UUIDs not yet supported
+- id + documentType
+- name + documentType
+- actorName (deprecated) — auto-maps to {documentType: actor, name}
 
-**Example Usage:**
-- Assign ownership: {action: "assign", actorName: "Hans Schmidt", userId: "player1", level: "owner"}
-- Give observer: {action: "assign", actorName: "Enemy Guard", userId: "player2", level: "observer"}
-- Remove access: {action: "remove", actorName: "Secret Villain", userId: "player1"}
-- List permissions: {action: "list", actorName: "Hans Schmidt"}`,
-            inputSchema: {
-                type: "object",
-                properties: {
-                    action: {
-                        type: "string",
-                        enum: ["assign", "remove", "list"],
-                        description: "The ownership action to perform"
-                    },
-                    actorName: {
-                        type: "string",
-                        description: "Name or ID of the actor"
-                    },
-                    userId: {
-                        type: "string",
-                        description: "[assign/remove] Player name or user ID"
-                    },
-                    level: {
-                        type: "string",
-                        enum: ["none", "limited", "observer", "owner"],
-                        description: "[assign] Permission level to grant"
-                    }
-                },
-                required: ["action", "actorName"]
-            }
-        }];
+**Examples:**
+- Assign: {action: "assign", documentType: "rolltable", name: "Random Loot", userId: "player1", level: "observer"}
+- Default: {action: "assign", documentType: "scene", id: "abc", default: true, level: 0}
+- Bulk: {action: "bulk-set", targets: [{documentType: "actor", name: "Hans"}, {documentType: "journal", name: "Dossier"}], userId: "player1", level: "observer"}
+- List: {action: "list", documentType: "macro", name: "OpenChest"}
+- Reset: {action: "reset", documentType: "rolltable", id: "xyz"}
+- Legacy: {action: "assign", actorName: "Hans", userId: "p1", level: "owner"}
+
+**Carve-outs:**
+- Folder writes reject with OWNERSHIP_FOLDER_NOT_SUPPORTED.
+- Compendium UUIDs reject with OWNERSHIP_COMPENDIUM_NOT_SUPPORTED.
+- META levels (-10, -20) reject with OWNERSHIP_META_LEVEL_FORBIDDEN.
+- Setting OWNER on a SCRIPT macro does NOT enable arbitrary-user execution — Foundry separately gates SCRIPT execution on author === user.id.`,
+      inputSchema: {
+        type: "object",
+        properties: {
+          action: {
+            type: "string",
+            enum: ["assign", "remove", "list", "bulk-set", "reset"],
+          },
+          documentType: {
+            type: "string",
+            enum: ["actor", "item", "journal", "scene", "rolltable", "folder", "macro"],
+          },
+          uuid: { type: "string", description: "Preferred identifier; Compendium UUIDs not supported in Phase 1" },
+          id: { type: "string", description: "Document id (requires documentType)" },
+          name: { type: "string", description: "Document name (requires documentType; case-sensitive)" },
+          actorName: { type: "string", description: "[deprecated] Legacy alias; auto-maps to {documentType: actor, name}" },
+          userId: { type: "string", description: "Per-user grant target (mutex with `default`)" },
+          default: { type: "boolean", description: "When true, target the default-level of the ownership map (mutex with `userId`)" },
+          level: {
+            description: "[assign/bulk-set] one of 'none'|'limited'|'observer'|'owner'|'inherit' or -1|0|1|2|3",
+          },
+          targets: {
+            type: "array",
+            description: "[bulk-set] Array of {documentType, uuid|id|name} entries",
+          },
+        },
+        required: ["action"],
+      },
+    }];
+  }
+
+  async execute(args: OwnershipArgs) {
+    this.logger.info("Executing ownership", { action: args.action });
+
+    switch (args.action) {
+      case "assign":
+        return this.handleAssign(args);
+      case "remove":
+        return this.handleRemove(args);
+      case "list":
+        return this.handleList(args);
+      case "bulk-set":
+        return this.handleBulkSet(args);
+      case "reset":
+        return this.handleReset(args);
+    }
+  }
+
+  // Map legacy `actorName` to {documentType: 'actor', name}. Logs a deprecation warning.
+  private resolveLegacyAlias(input: Record<string, any>): Record<string, any> {
+    if (input.actorName && !input.documentType && !input.name) {
+      this.logger.warn("ownership: `actorName` is deprecated — use {documentType: 'actor', name}", { actorName: input.actorName });
+      return { ...input, documentType: "actor", name: input.actorName };
+    }
+    return input;
+  }
+
+  private validateSingleTarget(input: Record<string, any>, action: string): void {
+    if (!input.documentType) {
+      throw new Error(`ownership.${action}: documentType is required (one of actor|item|journal|scene|rolltable|folder|macro)`);
+    }
+    if (!input.uuid && !input.id && !input.name) {
+      throw new Error(`ownership.${action}: provide one of uuid, id, or name to identify the document`);
+    }
+  }
+
+  private async handleAssign(args: z.infer<typeof AssignOwnershipSchema>) {
+    const input = this.resolveLegacyAlias(args);
+    this.validateSingleTarget(input, "assign");
+
+    const level = coerceLevel(input.level);
+    const payload: any = {
+      documentType: input.documentType,
+      ...(input.uuid ? { uuid: input.uuid } : {}),
+      ...(input.id ? { id: input.id } : {}),
+      ...(input.name ? { name: input.name } : {}),
+      level,
+    };
+    if (input.default === true) payload.default = true;
+    else if (input.userId) payload.userId = input.userId;
+    else throw new Error('ownership.assign: provide userId (per-user grant) or default:true (default-level update)');
+
+    const response = await this.query<any>("setDocumentOwnership", payload);
+
+    if (!response?.success) {
+      return this.errorResponse("assign", response?.error ?? "unknown error");
+    }
+    const data = response.data ?? {};
+    return {
+      content: [{
+        type: "text",
+        text: `${this.getLevelIcon(level)} **Ownership Assigned**\n\n` +
+          `**Document:** ${input.documentType} (${data.resolvedId ?? input.id ?? input.name})\n` +
+          `**Target:** ${input.default === true ? "default" : `user ${input.userId}`}\n` +
+          `**Permission:** ${this.getLevelName(level)}\n\n` +
+          `${this.getLevelDescription(level)}`,
+      }],
+    };
+  }
+
+  private async handleRemove(args: z.infer<typeof RemoveOwnershipSchema>) {
+    const input = this.resolveLegacyAlias(args);
+    this.validateSingleTarget(input, "remove");
+
+    const payload: any = {
+      documentType: input.documentType,
+      ...(input.uuid ? { uuid: input.uuid } : {}),
+      ...(input.id ? { id: input.id } : {}),
+      ...(input.name ? { name: input.name } : {}),
+      userId: input.userId,
+      level: 0,
+    };
+    const response = await this.query<any>("setDocumentOwnership", payload);
+
+    if (!response?.success) return this.errorResponse("remove", response?.error ?? "unknown error");
+    return {
+      content: [{
+        type: "text",
+        text: `🚫 **Ownership Removed**\n\n**Document:** ${input.documentType} (${response.data?.resolvedId ?? input.id ?? input.name})\n**User:** ${input.userId}\n\nNo permissions for this user on this document.`,
+      }],
+    };
+  }
+
+  private async handleList(args: z.infer<typeof ListOwnershipSchema>) {
+    const input = this.resolveLegacyAlias(args);
+    this.validateSingleTarget(input, "list");
+
+    const payload: any = {
+      documentType: input.documentType,
+      ...(input.uuid ? { uuid: input.uuid } : {}),
+      ...(input.id ? { id: input.id } : {}),
+      ...(input.name ? { name: input.name } : {}),
+    };
+    const response = await this.query<any>("getDocumentOwnership", payload);
+
+    if (!response?.success) return this.errorResponse("list", response?.error ?? "unknown error");
+    const data = response.data ?? {};
+    if (data.ownership === null) {
+      return {
+        content: [{
+          type: "text",
+          text: `📋 **Ownership for ${input.documentType} (${data.resolvedId ?? input.id ?? input.name})**\n\n` +
+            `_${data.reason ?? "no ownership"}_ — ${input.documentType} has no per-user ownership map (ADR-024).`,
+        }],
+      };
     }
 
-    async execute(args: OwnershipArgs) {
-        this.logger.info("Executing ownership", { action: args.action });
-
-        switch (args.action) {
-            case "assign":
-                return this.handleAssign(args);
-            case "remove":
-                return this.handleRemove(args);
-            case "list":
-                return this.handleList(args);
-        }
+    const entries = Object.entries(data.ownership ?? {}).filter(([k]) => k !== "default");
+    const defaultLevel = (data.ownership ?? {}).default ?? 0;
+    let body = `📋 **Ownership for ${input.documentType} (${data.resolvedId ?? input.id ?? input.name})**\n\n`;
+    body += `**Default:** ${this.getLevelName(defaultLevel)}\n\n`;
+    if (entries.length === 0) {
+      body += `_No per-user permissions set._\n`;
+    } else {
+      body += `**Per-user permissions:**\n\n`;
+      for (const [userId, lvl] of entries) {
+        body += `${this.getLevelIcon(lvl as number)} **${userId}**: ${this.getLevelName(lvl as number)}\n`;
+      }
     }
+    return { content: [{ type: "text", text: body }] };
+  }
 
-    private async handleAssign(args: {
-        actorName: string;
-        userId: string;
-        level: string;
-    }) {
-        this.logger.info("Assigning ownership", {
-            actorName: args.actorName,
-            userId: args.userId,
-            level: args.level,
-        });
+  private async handleBulkSet(args: z.infer<typeof BulkSetOwnershipSchema>) {
+    const level = coerceLevel(args.level);
+    if (args.userId && args.default) throw new Error("ownership.bulk-set: provide userId XOR default:true, not both");
+    if (!args.userId && !args.default) throw new Error("ownership.bulk-set: provide userId (per-user grant) or default:true (default-level update)");
 
-        const permissionLevel = OwnershipLevels[args.level];
+    const payload: any = { targets: args.targets, level };
+    if (args.default === true) payload.default = true;
+    else payload.userId = args.userId;
 
-        await this.query<any>(
-            "setActorOwnership",
-            {
-                actorName: args.actorName,
-                userId: args.userId,
-                permission: permissionLevel,
-            }
-        );
-
-        let levelIcon = "";
-        let levelDesc = "";
-
-        switch (args.level) {
-            case "owner":
-                levelIcon = "👑";
-                levelDesc = "Full control - can view, edit, control, and delete";
-                break;
-            case "observer":
-                levelIcon = "👁️";
-                levelDesc = "Can view full sheet but cannot control or edit";
-                break;
-            case "limited":
-                levelIcon = "🔒";
-                levelDesc = "Can see basic info only";
-                break;
-            case "none":
-                levelIcon = "🚫";
-                levelDesc = "No access";
-                break;
-        }
-
-        return {
-            content: [
-                {
-                    type: "text",
-                    text: `${levelIcon} **Ownership Assigned**\n\n**Actor:** ${args.actorName}\n**User:** ${args.userId}\n**Permission:** ${args.level.toUpperCase()}\n\n${levelDesc}\n\nThe permission change is now active in Foundry VTT.`,
-                },
-            ],
-        };
+    const response = await this.query<any>("bulkSetDocumentOwnership", payload);
+    if (!response?.success) return this.errorResponse("bulk-set", response?.error ?? "unknown error");
+    const data = response.data ?? {};
+    const status = data.overall_success ? "✅ all succeeded" : "⚠️ partial failure";
+    let body = `📦 **Bulk Ownership Set** — ${status}\n\n`;
+    body += `**Target:** ${args.default === true ? "default" : `user ${args.userId}`}\n`;
+    body += `**Level:** ${this.getLevelName(level)}\n\n`;
+    for (const cls of data.per_class ?? []) {
+      body += `- **${cls.documentType}**: ${cls.succeeded} succeeded, ${cls.failed?.length ?? 0} failed\n`;
+      for (const f of cls.failed ?? []) {
+        body += `  - ❌ ${JSON.stringify(f.target)}: ${f.error}\n`;
+      }
     }
+    return { content: [{ type: "text", text: body }] };
+  }
 
-    private async handleRemove(args: {
-        actorName: string;
-        userId: string;
-    }) {
-        this.logger.info("Removing ownership", {
-            actorName: args.actorName,
-            userId: args.userId,
-        });
+  private async handleReset(args: z.infer<typeof ResetOwnershipSchema>) {
+    const input = this.resolveLegacyAlias(args);
+    this.validateSingleTarget(input, "reset");
 
-        await this.query<any>(
-            "setActorOwnership",
-            {
-                actorName: args.actorName,
-                userId: args.userId,
-                permission: 0, // NONE
-            }
-        );
+    const payload: any = {
+      documentType: input.documentType,
+      ...(input.uuid ? { uuid: input.uuid } : {}),
+      ...(input.id ? { id: input.id } : {}),
+      ...(input.name ? { name: input.name } : {}),
+    };
+    const response = await this.query<any>("resetDocumentOwnership", payload);
+    if (!response?.success) return this.errorResponse("reset", response?.error ?? "unknown error");
+    return {
+      content: [{
+        type: "text",
+        text: `🔄 **Ownership Reset**\n\n` +
+          `**Document:** ${input.documentType} (${response.data?.resolvedId ?? input.id ?? input.name})\n` +
+          `All per-user entries cleared; default restored to NONE.`,
+      }],
+    };
+  }
 
-        return {
-            content: [
-                {
-                    type: "text",
-                    text: `🚫 **Ownership Removed**\n\n**Actor:** ${args.actorName}\n**User:** ${args.userId}\n\n${args.userId} no longer has any permissions for this actor.`,
-                },
-            ],
-        };
+  private errorResponse(action: string, error: string) {
+    return {
+      content: [{ type: "text", text: `❌ **ownership.${action} failed**\n\n${error}` }],
+      isError: true,
+    };
+  }
+
+  private getLevelName(level: number): string {
+    switch (level) {
+      case -1: return "Inherit";
+      case 0: return "None";
+      case 1: return "Limited";
+      case 2: return "Observer";
+      case 3: return "Owner";
+      default: return `Unknown(${level})`;
     }
+  }
 
-    private async handleList(args: { actorName: string }) {
-        this.logger.info("Listing ownership", { actorName: args.actorName });
-
-        const response = await this.query<any>(
-            "getActorOwnership",
-            { actorName: args.actorName }
-        );
-
-        const ownership = response?.ownership ?? {};
-        const defaultLevel = response?.defaultLevel ?? 0;
-
-        let resultText = `📋 **Ownership for ${args.actorName}**\n\n`;
-        resultText += `**Default Permission:** ${this.getLevelName(defaultLevel)}\n\n`;
-
-        const userEntries = Object.entries(ownership).filter(
-            ([userId]) => userId !== "default"
-        );
-
-        if (userEntries.length === 0) {
-            resultText += `No specific user permissions set.\n`;
-        } else {
-            resultText += `**User Permissions:**\n\n`;
-            for (const [userId, level] of userEntries) {
-                const levelName = this.getLevelName(level as number);
-                const icon = this.getLevelIcon(level as number);
-                resultText += `${icon} **${userId}**: ${levelName}\n`;
-            }
-        }
-
-        return {
-            content: [{ type: "text", text: resultText }],
-        };
+  private getLevelIcon(level: number): string {
+    switch (level) {
+      case -1: return "↩️";
+      case 0: return "🚫";
+      case 1: return "🔒";
+      case 2: return "👁️";
+      case 3: return "👑";
+      default: return "❓";
     }
+  }
 
-    private getLevelName(level: number): string {
-        switch (level) {
-            case 0:
-                return "None";
-            case 1:
-                return "Limited";
-            case 2:
-                return "Observer";
-            case 3:
-                return "Owner";
-            default:
-                return "Unknown";
-        }
+  private getLevelDescription(level: number): string {
+    switch (level) {
+      case -1: return "Defers to the document's default permission";
+      case 0: return "No access";
+      case 1: return "Can see basic info only";
+      case 2: return "Can view full sheet but cannot control or edit";
+      case 3: return "Full control — can view, edit, control, and delete";
+      default: return "";
     }
-
-    private getLevelIcon(level: number): string {
-        switch (level) {
-            case 0:
-                return "🚫";
-            case 1:
-                return "🔒";
-            case 2:
-                return "👁️";
-            case 3:
-                return "👑";
-            default:
-                return "❓";
-        }
-    }
+  }
 }
