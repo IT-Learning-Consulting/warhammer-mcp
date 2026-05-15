@@ -430,3 +430,87 @@
 [data-service-type].hidden {
   display: none;
 }
+
+/* ============================================================================ */
+/* MCP Audit — GM-whispered chat entries from notify.ts                         */
+/* ============================================================================ */
+
+.mcp-audit {
+  font-family: var(--font-primary, inherit);
+  padding: 6px 10px;
+  border-left: 4px solid;
+  margin: 2px 0;
+  border-radius: 0 4px 4px 0;
+}
+
+.mcp-audit-created   { border-color: #008000; background: rgba(0, 128, 0, 0.08); }
+.mcp-audit-updated   { border-color: #2196F3; background: rgba(33, 150, 243, 0.08); }
+.mcp-audit-deleted   { border-color: #f44336; background: rgba(244, 67, 54, 0.08); }
+.mcp-audit-warn      { border-color: #ff8c00; background: rgba(255, 140, 0, 0.10); }
+.mcp-audit-error     { border-color: #f44336; background: rgba(244, 67, 54, 0.15); }
+.mcp-audit-info      { border-color: #888888; background: rgba(136, 136, 136, 0.08); }
+.mcp-audit-lifecycle { border-color: #2196F3; background: rgba(33, 150, 243, 0.12); }
+
+.mcp-audit-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-weight: bold;
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: #ffffff;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+.mcp-audit-badge-created   { background: #008000; }
+.mcp-audit-badge-updated   { background: #2196F3; }
+.mcp-audit-badge-deleted   { background: #f44336; }
+.mcp-audit-badge-warn      { background: #ff8c00; }
+.mcp-audit-badge-error     { background: #f44336; }
+.mcp-audit-badge-info      { background: #888888; }
+.mcp-audit-badge-lifecycle { background: #2196F3; }
+
+.mcp-audit-message {
+  font-weight: 500;
+}
+
+.mcp-audit-summary {
+  margin-top: 4px;
+  font-size: 0.9em;
+  color: var(--color-text-dark-secondary, #555);
+  font-style: italic;
+}
+
+.mcp-audit-uuid {
+  margin-top: 2px;
+  font-size: 0.8em;
+  color: var(--color-text-dark-secondary, #777);
+}
+
+.mcp-audit-uuid code {
+  background: rgba(0, 0, 0, 0.08);
+  padding: 1px 4px;
+  border-radius: 2px;
+  font-family: var(--font-mono, monospace);
+}
+
+/* ============================================================================ */
+/* MCP Tooltip — pinned annotations from notify.ts for canvas-anchored ops      */
+/* ============================================================================ */
+
+.mcp-tooltip {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-weight: bold;
+  border: 2px solid;
+}
+
+.mcp-tooltip-created   { border-color: #008000; background: rgba(0, 128, 0, 0.85); color: #ffffff; }
+.mcp-tooltip-updated   { border-color: #2196F3; background: rgba(33, 150, 243, 0.85); color: #ffffff; }
+.mcp-tooltip-deleted   { border-color: #f44336; background: rgba(244, 67, 54, 0.85); color: #ffffff; }
+.mcp-tooltip-warn      { border-color: #ff8c00; background: rgba(255, 140, 0, 0.90); color: #ffffff; }
+.mcp-tooltip-error     { border-color: #f44336; background: rgba(244, 67, 54, 0.90); color: #ffffff; }
+.mcp-tooltip-info      { border-color: #888888; background: rgba(60, 60, 60, 0.85); color: #ffffff; }
+.mcp-tooltip-lifecycle { border-color: #2196F3; background: rgba(33, 150, 243, 0.85); color: #ffffff; }

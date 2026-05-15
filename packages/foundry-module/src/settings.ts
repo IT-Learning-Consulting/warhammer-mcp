@@ -1,5 +1,6 @@
 import { MODULE_ID, DEFAULT_CONFIG } from './constants.js';
 import type { BridgeConfig } from './socket-bridge.js';
+import { notify } from './notify.js';
 
 export class ModuleSettings {
   private moduleId: string = MODULE_ID;
@@ -42,7 +43,7 @@ export class ModuleSettings {
           html.find('.rebuild-index-btn').click(() => {
             const bridge = (globalThis as any).foundryMCPBridge;
             if (bridge?.dataAccess?.rebuildEnhancedCreatureIndex) {
-              ui.notifications?.info('Rebuilding enhanced creature index...');
+              notify.info('Rebuilding enhanced creature index...');
               bridge.dataAccess.rebuildEnhancedCreatureIndex();
             }
           });
@@ -151,6 +152,24 @@ export class ModuleSettings {
       config: true,
       type: Boolean,
       default: true,
+    });
+
+    game.settings.register(this.moduleId, 'auditWritesToChat', {
+      name: 'Audit MCP writes to chat',
+      hint: 'When enabled, every create / update / delete operation performed by Warhammer MCP also writes a GM-whispered chat message. Useful for keeping a durable session log. Connection events and errors always go to chat; this setting controls routine writes.',
+      scope: 'world',
+      config: true,
+      type: Boolean,
+      default: false,
+    });
+
+    game.settings.register(this.moduleId, 'mcpVerboseConsole', {
+      name: 'Verbose MCP console',
+      hint: 'When enabled, each Warhammer MCP operation expands into a grouped console block with UUID, duration, and user. Devs can also enable this via `_dev-mode` or `localStorage.warhammer_mcp_verbose = "1"`.',
+      scope: 'world',
+      config: true,
+      type: Boolean,
+      default: false,
     });
 
     game.settings.register(this.moduleId, 'autoReconnectEnabled', {
@@ -414,6 +433,6 @@ export class ModuleSettings {
       }
     }
 
-    ui.notifications.info('MCP Bridge settings have been reset to defaults');
+    notify.info('MCP Bridge settings have been reset to defaults');
   }
 }

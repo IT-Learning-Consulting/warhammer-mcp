@@ -1,4 +1,5 @@
 import { MODULE_ID, ERROR_MESSAGES, TOKEN_DISPOSITIONS } from './constants.js';
+import { notify } from './notify.js';
 // Local type definitions to avoid shared package import issues
 interface CharacterInfo {
   id: string;
@@ -493,7 +494,8 @@ class PersistentCreatureIndex {
     this.buildInProgress = true;
 
     const startTime = Date.now();
-    let progressNotification: any = null;
+    let progressHandle: ReturnType<typeof notify.progress> | null = null;
+    let progressDone = false;
     let totalErrors = 0; // Track extraction errors
 
     try {
@@ -502,20 +504,19 @@ class PersistentCreatureIndex {
       const enhancedCreatures: EnhancedCreatureIndex[] = [];
       const packFingerprints = new Map<string, PackFingerprint>();
 
-      // Show initial progress notification
-      ui.notifications?.info(`Starting enhanced creature index build from ${actorPacks.length} packs...`);
+      // Single updating progress bar via notify.progress (replaces the prior
+      // chain of disposable ui.notifications.info toasts).
+      progressHandle = notify.progress(`Starting enhanced creature index build from ${actorPacks.length} packs...`);
 
       for (let i = 0; i < actorPacks.length; i++) {
         const pack = actorPacks[i] as any;
-        const progressPercent = Math.round((i / actorPacks.length) * 100);
+        const progressPercent = i / actorPacks.length;
 
         // Update progress notification every few packs or for important packs
         if (i % 3 === 0 || pack.metadata?.label?.toLowerCase().includes('monster')) {
-          if (progressNotification) {
-            progressNotification.remove();
-          }
-          progressNotification = ui.notifications?.info(
-            `Building creature index... ${progressPercent}% (${i + 1}/${actorPacks.length}) Processing: ${pack.metadata?.label || 'Unknown'}`
+          progressHandle?.update(
+            progressPercent,
+            `Building creature index... ${Math.round(progressPercent * 100)}% (${i + 1}/${actorPacks.length}) Processing: ${pack.metadata?.label || 'Unknown'}`,
           );
         }
 
@@ -532,11 +533,9 @@ class PersistentCreatureIndex {
           // Show pack processing details for large packs
           const packSize = pack.index?.size || 0;
           if (packSize > 50) {
-            if (progressNotification) {
-              progressNotification.remove();
-            }
-            progressNotification = ui.notifications?.info(
-              `Processing large pack: ${pack.metadata.label} (${packSize} documents)...`
+            progressHandle?.update(
+              progressPercent,
+              `Processing large pack: ${pack.metadata.label} (${packSize} documents)...`,
             );
           }
 
@@ -550,26 +549,22 @@ class PersistentCreatureIndex {
           // Show milestone notifications for significant progress
           if (i === 0 || (i + 1) % 5 === 0 || i === actorPacks.length - 1) {
             const totalCreaturesSoFar = enhancedCreatures.length;
-            if (progressNotification) {
-              progressNotification.remove();
-            }
-            progressNotification = ui.notifications?.info(
-              `Index Progress: ${i + 1}/${actorPacks.length} packs complete, ${totalCreaturesSoFar} creatures indexed`
+            progressHandle?.update(
+              (i + 1) / actorPacks.length,
+              `Index Progress: ${i + 1}/${actorPacks.length} packs complete, ${totalCreaturesSoFar} creatures indexed`,
             );
           }
 
         } catch (error) {
           console.warn(`[${this.moduleId}] Failed to process pack ${pack.metadata.label}:`, error);
-          // Show error notification for pack failures
-          ui.notifications?.warn(`Warning: Failed to index pack "${pack.metadata.label}" - continuing with other packs`);
+          // Show separate warn toast for pack failures — doesn't disturb the
+          // running progress bar.
+          notify.warn(`Failed to index pack "${pack.metadata.label}" — continuing with other packs`);
         }
       }
 
-      // Clear progress notification and show final processing step
-      if (progressNotification) {
-        progressNotification.remove();
-      }
-      ui.notifications?.info(`Saving enhanced index to world database... (${enhancedCreatures.length} creatures)`);
+      // Final save step.
+      progressHandle?.update(0.95, `Saving enhanced index to world database... (${enhancedCreatures.length} creatures)`);
 
       // Create persistent index structure
       const persistentIndex: PersistentEnhancedIndex = {
@@ -589,28 +584,25 @@ class PersistentCreatureIndex {
       const errorText = totalErrors > 0 ? ` (${totalErrors} extraction errors)` : '';
       const successMessage = `Enhanced creature index complete! ${enhancedCreatures.length} creatures indexed from ${actorPacks.length} packs in ${buildTimeSeconds}s${errorText}`;
 
-      ui.notifications?.info(successMessage);
+      progressHandle?.done(successMessage);
+      progressDone = true;
 
       return enhancedCreatures;
 
     } catch (error) {
-      // Clear any progress notifications on error
-      if (progressNotification) {
-        progressNotification.remove();
-      }
-
       const errorMessage = `Failed to build enhanced creature index: ${error instanceof Error ? error.message : 'Unknown error'}`;
       console.error(`[${this.moduleId}] ${errorMessage}`);
-      ui.notifications?.error(errorMessage);
+      progressHandle?.fail(error instanceof Error ? error : errorMessage);
+      progressDone = true;
 
       throw error;
 
     } finally {
       this.buildInProgress = false;
 
-      // Ensure progress notification is cleared
-      if (progressNotification) {
-        progressNotification.remove();
+      // Defensive: clear progress bar if neither done() nor fail() ran.
+      if (progressHandle && !progressDone) {
+        progressHandle.done();
       }
     }
   }
@@ -2747,7 +2739,7 @@ export class FoundryDataAccess {
 
       if (!canExecuteRoll) {
         console.warn(`[${MODULE_ID}] Permission denied for roll execution`);
-        ui.notifications?.warn('You do not have permission to execute this roll');
+        notify.warn('You do not have permission to execute this roll');
         return;
       }
 
@@ -2810,7 +2802,7 @@ export class FoundryDataAccess {
 
       } catch (error) {
         console.error(`[${MODULE_ID}] Error executing roll:`, error);
-        ui.notifications?.error('Failed to execute roll');
+        notify.error('Failed to execute roll');
 
         // Re-enable button on error so user can try again
         button.prop('disabled', false);
@@ -3435,7 +3427,7 @@ export class FoundryDataAccess {
       }
 
       // Show notification to GM
-      ui.notifications?.info(`✅ MCP: Created new actor: ${actor.name}`);
+      notify.created('actor', actor.name, { uuid: (actor as any).uuid });
 
       return {
         success: true,
@@ -3474,7 +3466,7 @@ export class FoundryDataAccess {
         throw new Error('Actor.create returned no actor');
       }
 
-      ui.notifications?.info(`MCP: Duplicated ${source.name} → ${actor.name}`);
+      notify.created('actor', actor.name, { summary: `duplicated from ${source.name}`, uuid: (actor as any).uuid });
 
       return {
         success: true,
@@ -3562,7 +3554,7 @@ export class FoundryDataAccess {
 
       model.advance(career);
 
-      ui.notifications?.info(`MCP: Advancing ${actor.name} via ${career.name}`);
+      notify.updated('actor', actor.name ?? 'unknown', { summary: `advancing via ${career.name}`, uuid: (actor as any).uuid });
 
       return {
         success: true,
@@ -3695,6 +3687,12 @@ export class FoundryDataAccess {
           await tokenDoc.update({ name: numberedName });
         }
       }
+
+      notify.updated('token', tokenDoc.name ?? actor.name, {
+        summary: `applied template ${(template as any).name}`,
+        uuid: tokenDoc.uuid,
+        tooltip: { tokenDoc, message: `+${(template as any).name}` },
+      });
 
       return { ...result, sceneId: data.sceneId, tokenId: data.tokenId };
     } catch (error) {
@@ -3909,7 +3907,7 @@ export class FoundryDataAccess {
       const allItems = [...skillItems, ...talentItems, ...spellItems, ...traitItems, ...trappingItems];
       const created: any[] = (await (actor as any).createEmbeddedDocuments('Item', allItems, { fromTemplate: templateId })) ?? [];
 
-      ui.notifications?.info(`MCP: Applied template ${(template as any).name} to ${actor.name}`);
+      notify.updated('actor', actor.name, { summary: `applied template ${(template as any).name}`, uuid: (actor as any).uuid });
 
       return {
         success: true,
@@ -4404,17 +4402,17 @@ export class FoundryDataAccess {
             warningText = `Warning ${index + 1}`;
           }
 
-          ui.notifications?.warn(`MCP: ${warningText}`);
+          notify.warn(warningText);
         });
 
         // Show summary notification
-        ui.notifications?.info(`MCP: Updated ${actor.name} - ${updateSummary}`);
+        notify.updated('actor', actor.name ?? 'unknown', { summary: updateSummary, uuid: (actor as any).uuid });
 
         // Log to console for GM review
         console.warn(`[Warhammer MCP] Warnings for ${actor.name}:`, data.warnings);
       } else {
         // Simple success notification
-        ui.notifications?.info(`MCP: Updated ${actor.name} - ${updateSummary}`);
+        notify.updated('actor', actor.name ?? 'unknown', { summary: updateSummary, uuid: (actor as any).uuid });
       }
 
       return {
@@ -4522,7 +4520,7 @@ export class FoundryDataAccess {
       await item.update(data.updateData);
 
       const ownerLabel = scope === 'world' ? '(world)' : owner?.name ?? '(unknown)';
-      ui.notifications?.info(`MCP: Updated ${item.name} on ${ownerLabel}`);
+      notify.updated('item', item.name, { summary: `on ${ownerLabel}`, uuid: (item as any).uuid });
 
       return {
         success: true,
@@ -4619,7 +4617,7 @@ export class FoundryDataAccess {
 
         const createdItems = await actor.createEmbeddedDocuments('Item', [effectiveItemData]);
         const item: any = createdItems[0];
-        ui.notifications?.info(`MCP: Added ${item.name} to ${actor.name}`);
+        notify.created('item', item.name, { summary: `on ${actor.name}`, uuid: (item as any).uuid });
 
         const base: any = {
           success: true,
@@ -4650,7 +4648,7 @@ export class FoundryDataAccess {
       const created: any = await (Item as any).create(createPayload);
       if (!created) throw new Error('Item.create returned null');
 
-      ui.notifications?.info(`MCP: Created world item ${created.name}`);
+      notify.created('item', created.name, { summary: 'in world directory', uuid: (created as any).uuid });
 
       const base: any = {
         success: true,
@@ -4724,9 +4722,7 @@ export class FoundryDataAccess {
       const destCreated = await toActor.createEmbeddedDocuments('Item', [cloned]);
       const destItem: any = destCreated[0];
 
-      ui.notifications?.info(
-        `MCP: Traded ${data.quantity} × ${itemName} from ${fromActor.name} → ${toActor.name}`
-      );
+      notify.updated('item', itemName, { summary: `traded ${data.quantity} × from ${fromActor.name} → ${toActor.name}` });
 
       return {
         success: true,
@@ -4749,9 +4745,7 @@ export class FoundryDataAccess {
     const destCreated = await toActor.createEmbeddedDocuments('Item', [cloned]);
     const destItem: any = destCreated[0];
 
-    ui.notifications?.info(
-      `MCP: Traded ${itemName} from ${fromActor.name} → ${toActor.name}`
-    );
+    notify.updated('item', itemName, { summary: `traded from ${fromActor.name} → ${toActor.name}` });
 
     return {
       success: true,
@@ -4789,10 +4783,10 @@ export class FoundryDataAccess {
 
       if (scope === 'world') {
         await item.delete();
-        ui.notifications?.warn(`MCP: Removed world item ${itemName}`);
+        notify.deleted('item', itemName, { summary: 'world directory' });
       } else {
         await owner.deleteEmbeddedDocuments('Item', [itemId]);
-        ui.notifications?.warn(`MCP: Removed ${itemName} from ${owner.name}`);
+        notify.deleted('item', itemName, { summary: `from ${owner.name}` });
       }
 
       return {
@@ -4849,7 +4843,19 @@ export class FoundryDataAccess {
       if (!created || created.length === 0) throw new Error('Failed to create ActiveEffect');
 
       const createdEffect: any = created[0];
-      ui.notifications?.info(`MCP: Added effect "${createdEffect.name}" to ${item.name}`);
+
+      // Canvas-anchored tooltip when effect's owning item belongs to an actor
+      // that has a token placed on the current scene.
+      const ownerActorId: string | null = owner?.id ?? null;
+      const placedToken: any = ownerActorId
+        ? (globalThis as any).canvas?.tokens?.placeables?.find((t: any) => t?.actor?.id === ownerActorId)
+        : null;
+      const tokenDoc = placedToken?.document;
+      notify.created('active-effect', createdEffect.name, {
+        summary: `on ${item.name}`,
+        uuid: (createdEffect as any).uuid,
+        tooltip: tokenDoc ? { tokenDoc, message: `+${createdEffect.name}` } : undefined,
+      });
 
       const base: any = {
         success: true,
@@ -4976,7 +4982,7 @@ export class FoundryDataAccess {
       const effectId: string = effect.id;
       const effectName: string = effect.name;
       await item.deleteEmbeddedDocuments('ActiveEffect', [effectId]);
-      ui.notifications?.warn(`MCP: Removed effect "${effectName}" from ${item.name}`);
+      notify.deleted('active-effect', effectName, { summary: `from ${item.name}` });
       return {
         success: true,
         scope,
@@ -5041,7 +5047,7 @@ export class FoundryDataAccess {
 
       await scene.deleteEmbeddedDocuments('Token', [data.tokenId]);
 
-      ui.notifications?.info(`MCP: Removed token ${tokenName} from ${scene.name}`);
+      notify.deleted('token', tokenName, { summary: `from scene ${scene.name}` });
 
       return {
         success: true,
@@ -5258,6 +5264,18 @@ export class FoundryDataAccess {
 
     const after = this.snapshotStatus(actor);
 
+    // Surface canvas-anchored feedback when actor has a token on the current scene.
+    const damageDelta = (before?.wounds?.value ?? 0) - (after?.wounds?.value ?? 0);
+    const placedToken: any = (globalThis as any).canvas?.tokens?.placeables?.find(
+      (t: any) => t?.actor?.id === actor.id,
+    );
+    const tokenDoc = placedToken?.document;
+    notify.updated('actor', actor.name, {
+      summary: `damage applied (${damageDelta > 0 ? '-' : ''}${Math.abs(damageDelta)} wounds, ${data.hitLocation ?? 'body'})`,
+      uuid: actor.uuid,
+      tooltip: tokenDoc ? { tokenDoc, message: `-${Math.abs(damageDelta)} wounds` } : undefined,
+    });
+
     return {
       actorId: actor.id,
       damage: {
@@ -5293,6 +5311,18 @@ export class FoundryDataAccess {
       typeof stacked === 'object'
         ? stacked?.conditionValue ?? stacked?.flags?.wfrp4e?.value ?? value
         : value;
+
+    // Surface canvas-anchored feedback when actor has a token on the current scene.
+    const placedToken: any = (globalThis as any).canvas?.tokens?.placeables?.find(
+      (t: any) => t?.actor?.id === actor.id,
+    );
+    const tokenDoc = placedToken?.document;
+    notify.created('condition', data.conditionKey, {
+      summary: `on ${actor.name} (stack ${stackCount})`,
+      uuid: actor.uuid,
+      tooltip: tokenDoc ? { tokenDoc, message: `+${data.conditionKey}` } : undefined,
+    });
+
     return {
       actorId: actor.id,
       conditionKey: data.conditionKey,

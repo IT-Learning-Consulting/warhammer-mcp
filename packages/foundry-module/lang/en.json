@@ -32,6 +32,14 @@
       "debugLogging": {
         "name": "Debug Logging",
         "hint": "Enable detailed console logging for troubleshooting connection issues"
+      },
+      "auditWritesToChat": {
+        "name": "Audit MCP writes to chat",
+        "hint": "When enabled, every create / update / delete operation performed by Warhammer MCP also writes a GM-whispered chat message. Useful for keeping a durable session log. Connection events and errors always go to chat regardless of this setting."
+      },
+      "mcpVerboseConsole": {
+        "name": "Verbose MCP console",
+        "hint": "When enabled, each Warhammer MCP operation expands into a grouped console block with UUID, duration, and user. Devs can also enable this via _dev-mode or localStorage.warhammer_mcp_verbose = '1'."
       }
     },
     "notifications": {

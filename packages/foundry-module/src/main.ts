@@ -3,6 +3,7 @@ import { SocketBridge } from './socket-bridge.js';
 import { QueryHandlers } from './queries.js';
 import { ModuleSettings } from './settings.js';
 import { runHealthCheck, captureInitError } from './health-check.js';
+import { notify } from './notify.js';
 // Connection control now handled through settings menu
 
 /**
@@ -91,7 +92,7 @@ class FoundryMCPBridge {
 
     } catch (error) {
       console.error(`[${MODULE_ID}] Failed to initialize:`, error);
-      ui.notifications.error('Failed to initialize Warhammer MCP');
+      notify.error('Failed to initialize Warhammer MCP');
       throw error;
     }
   }
@@ -115,7 +116,7 @@ class FoundryMCPBridge {
       const validation = this.settings.validateSettings();
       if (!validation.valid) {
         console.warn(`[${MODULE_ID}] Invalid settings:`, validation.errors);
-        ui.notifications.warn(`MCP Bridge settings validation failed: ${validation.errors.join(', ')}`);
+        notify.warn(`MCP Bridge settings validation failed: ${validation.errors.join(', ')}`);
       }
 
       // Auto-connect when enabled (always automatic)
@@ -155,7 +156,7 @@ class FoundryMCPBridge {
 
         if (!indexExists) {
           console.log(`[${MODULE_ID}] Enhanced creature index not found, building automatically for better UX...`);
-          ui.notifications?.info('Building enhanced creature index for faster searches...');
+          notify.info('Building enhanced creature index for faster searches...');
 
           // Trigger index build through data access
           if (this.queryHandlers?.dataAccess?.rebuildEnhancedCreatureIndex) {
@@ -221,10 +222,8 @@ class FoundryMCPBridge {
       // Start heartbeat monitoring if enabled
       this.startHeartbeat();
 
-      // Show connection notification based on user preference
-      if (this.settings.getSetting('enableNotifications')) {
-        ui.notifications.info('🔗 Warhammer MCP connected successfully');
-      }
+      // Connection lifecycle — sticky toast + GM-whispered chat audit via notify.
+      notify.lifecycle('connection-up', 'Warhammer MCP connected successfully');
       console.log(`[${MODULE_ID}] GM connection established - Bridge active for user: ${game.user?.name}`);
 
     } catch (error) {
@@ -243,8 +242,9 @@ class FoundryMCPBridge {
           const thirtySecondsAgo = now - (30 * 1000);
 
           if (!lastShown || new Date(lastShown).getTime() < thirtySecondsAgo) {
-            ui.notifications?.warn(
-              'MCP Server not found. Install it from https://github.com/adambdooley/foundry-vtt-mcp'
+            notify.warn(
+              'MCP Server not found. Install it from https://github.com/adambdooley/foundry-vtt-mcp',
+              { sticky: true },
             );
 
             // Remember when we showed this notification
@@ -287,10 +287,8 @@ class FoundryMCPBridge {
 
       console.log(`[${MODULE_ID}] Bridge stopped`);
 
-      // Show disconnection notification based on user preference
-      if (this.settings.getSetting('enableNotifications')) {
-        ui.notifications.info('Warhammer MCP disconnected');
-      }
+      // Connection lifecycle — sticky toast + GM-whispered chat audit via notify.
+      notify.lifecycle('connection-down', 'Warhammer MCP disconnected');
 
     } catch (error) {
       console.error(`[${MODULE_ID}] Error stopping bridge:`, error);
@@ -392,7 +390,7 @@ class FoundryMCPBridge {
           // Disable further attempts until manual intervention
           await this.settings.setSetting('autoReconnectEnabled', false);
           if (this.settings.getSetting('enableNotifications')) {
-            ui.notifications.warn('⚠️ Lost connection to AI model - Auto-reconnect disabled');
+            notify.warn('Lost connection to AI model - Auto-reconnect disabled', { sticky: true });
           }
         }
       }
@@ -447,8 +445,34 @@ Hooks.once('init', async () => {
   }
 });
 
+// Register debug flag with the _dev-mode community module (if installed).
+// Lets devs toggle our verbose console output via the _dev-mode panel; falls
+// back to localStorage.warhammer_mcp_verbose / world setting mcpVerboseConsole.
+(Hooks as any).once?.('devModeReady', ({ registerPackageDebugFlag }: { registerPackageDebugFlag: (id: string) => void }) => {
+  try {
+    registerPackageDebugFlag(MODULE_ID);
+  } catch (e) {
+    console.warn(`[${MODULE_ID}] _dev-mode registration failed:`, e);
+  }
+});
+
 Hooks.once('ready', async () => {
   try {
+    // Chromium >=123 check — notify.ts uses `light-dark(oklch(...))` which
+    // requires Chromium 123+ (shipped 2024). Foundry v13's Electron meets this
+    // in practice. Warn (not fail) if below so console colors still degrade
+    // gracefully.
+    try {
+      const ua = (typeof navigator !== 'undefined' && navigator?.userAgent) || '';
+      const m = /Chrome\/(\d+)/.exec(ua);
+      const chromiumMajor = m ? parseInt(m[1], 10) : 0;
+      if (chromiumMajor && chromiumMajor < 123) {
+        console.warn(`[${MODULE_ID}] Chromium ${chromiumMajor} detected — notify.ts console colors require Chromium 123+ for full theme-safe rendering. Colors will degrade gracefully.`);
+      }
+    } catch (e) {
+      // Non-fatal — version detection failed.
+    }
+
     await foundryMCPBridge.onReady();
 
     // Schedule the 2-minute post-ready health-check banner.
@@ -489,7 +513,7 @@ Hooks.once('ready', async () => {
               console.error(`[${MODULE_ID}] GM failed to update message:`, error);
               // Notify GM about the failure
               if (game.user?.isGM) {
-                ui.notifications?.error(`Failed to update player roll message: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                notify.error('Failed to update player roll message', error instanceof Error ? error : new Error('Unknown error'));
               }
             }
           } else {
@@ -512,7 +536,7 @@ Hooks.once('ready', async () => {
               console.error(`[${MODULE_ID}] GM failed to save LEGACY roll state:`, error);
               // Notify GM about the failure so they can take action
               if (game.user?.isGM) {
-                ui.notifications?.error(`Failed to save player roll state: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                notify.error('Failed to save player roll state', error instanceof Error ? error : new Error('Unknown error'));
               }
             }
           } else {

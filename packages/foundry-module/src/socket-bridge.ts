@@ -1,4 +1,5 @@
 import { MODULE_ID, CONNECTION_STATES } from './constants.js';
+import { notify } from './notify.js';
 
 export interface BridgeConfig {
   enabled: boolean;
@@ -221,20 +222,20 @@ export class SocketBridge {
         await this.createSceneWalls(scene, sceneData.walls);
       }
 
-      ui.notifications?.info(`Scene "${sceneData.name}" created successfully!`);
+      notify.created('scene', sceneData.name);
 
       // Auto-activate the scene if enabled
       const autoActivate = true; // You might want to make this configurable
       if (autoActivate) {
         await scene.activate();
-        ui.notifications?.info(`Switched to "${sceneData.name}" - Ready for token placement!`);
+        notify.info(`Switched to scene "${sceneData.name}" — ready for token placement`);
       }
 
       this.log(`Scene "${sceneData.name}" created and activated`);
 
     } catch (error) {
       this.log(`Failed to create scene from generated map: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      ui.notifications?.error(`Failed to create scene: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      notify.error('Failed to create scene', error instanceof Error ? error : new Error('Unknown error'));
     }
   }
 
@@ -276,15 +277,15 @@ export class SocketBridge {
 
       if (wallDocuments.length > 0) {
         await scene.createEmbeddedDocuments("Wall", wallDocuments);
-        ui.notifications?.info(`Created ${wallDocuments.length} walls in scene "${scene.name}"`);
+        notify.created('wall', `${wallDocuments.length} walls`, { summary: `in scene "${scene.name}"` });
       } else {
         this.log('No valid walls to create');
-        ui.notifications?.warn('No valid walls could be created from detection data');
+        notify.warn('No valid walls could be created from detection data');
       }
 
     } catch (error) {
       this.log(`Failed to create walls: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      ui.notifications?.warn(`Some walls could not be created: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      notify.warn(`Some walls could not be created: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 

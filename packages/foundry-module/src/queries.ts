@@ -3,6 +3,7 @@ import { MODULE_ID } from './constants.js';
 import { FoundryDataAccess } from './data-access.js';
 import { wrappedWrite } from './transaction-manager.js';
 import { permissionManager } from './permissions.js';
+import { notify } from './notify.js';
 // Phase 1 mcp_crud_expansion — polymorphic ownership handlers.
 import {
   setDocumentOwnership as setDocumentOwnershipHandler,
@@ -30,10 +31,22 @@ import {
 // Replaces 5 inline handlers (handleCreateJournalEntry, handleListJournals,
 // handleGetJournalContent, handleUpdateJournalContent, handleDeleteJournalEntry).
 import { dispatchJournal as dispatchJournalHandler } from './handlers/journal.js';
-// Phase 4 mcp_crud_expansion — Scene umbrella dispatcher (11 actions).
+// Phase 4 mcp_crud_expansion — Scene umbrella dispatcher (9 actions post-Phase-5).
 // Replaces 5 inline handlers (handleGetActiveScene, handleListScenes,
-// handleSwitchScene, handleAddActorsToScene, handleDeleteToken).
+// handleSwitchScene, handleAddActorsToScene, handleDeleteToken). Phase 5 retired
+// the 2 token-action sub-keys (add-tokens, delete-token) — they live on the
+// `token` umbrella now (handlers/token.ts add / delete-token actions).
 import { dispatchScene as dispatchSceneHandler } from './handlers/scene.js';
+// Phase 5 mcp_crud_expansion — 7 per-doc-type embedded-CRUD umbrellas.
+// Each handler module owns input strict-parse, GM gate, transaction wrapping,
+// DP-16 post-verify, and typed envelope per action.
+import { dispatchToken as dispatchTokenHandler } from './handlers/token.js';
+import { dispatchLight as dispatchLightHandler } from './handlers/light.js';
+import { dispatchNote as dispatchNoteHandler } from './handlers/note.js';
+import { dispatchSound as dispatchSoundHandler } from './handlers/sound.js';
+import { dispatchRegion as dispatchRegionHandler } from './handlers/region.js';
+import { dispatchTile as dispatchTileHandler } from './handlers/tile.js';
+import { dispatchTemplate as dispatchTemplateHandler } from './handlers/template.js';
 import {
   // actor domain
   GetCharacterInfoInput,
@@ -154,6 +167,14 @@ export class QueryHandlers {
     // (createJournalEntry / listJournals / getJournalContent / updateJournalContent /
     // deleteJournalEntry). 13 actions dispatched in handlers/journal.ts.
     CONFIG.queries[`${modulePrefix}.journal`] = this.handleJournal.bind(this);
+    // Phase 5 mcp_crud_expansion — 7 embedded-doc CRUD umbrellas.
+    CONFIG.queries[`${modulePrefix}.token`] = this.handleToken.bind(this);
+    CONFIG.queries[`${modulePrefix}.light`] = this.handleLight.bind(this);
+    CONFIG.queries[`${modulePrefix}.note`] = this.handleNote.bind(this);
+    CONFIG.queries[`${modulePrefix}.sound`] = this.handleSound.bind(this);
+    CONFIG.queries[`${modulePrefix}.region`] = this.handleRegion.bind(this);
+    CONFIG.queries[`${modulePrefix}.tile`] = this.handleTile.bind(this);
+    CONFIG.queries[`${modulePrefix}.template`] = this.handleTemplate.bind(this);
     CONFIG.queries[`${modulePrefix}.deleteActor`] = this.handleDeleteActor.bind(this);
     CONFIG.queries[`${modulePrefix}.request-player-rolls`] = this.handleRequestPlayerRolls.bind(this);
     CONFIG.queries[`${modulePrefix}.getEnhancedCreatureIndex`] = this.handleGetEnhancedCreatureIndex.bind(this);
@@ -313,7 +334,7 @@ export class QueryHandlers {
         if (!createdItems || createdItems.length === 0) throw new Error('Failed to create item on actor');
 
         const createdItem = createdItems[0];
-        ui.notifications?.info(`MCP: Added ${createdItem.name} to ${actor.name} (from compendium)`);
+        notify.created('item', createdItem.name ?? 'unknown', { summary: `on ${actor.name} from compendium`, uuid: (createdItem as any).uuid });
 
         const payload = {
           itemId: createdItem.id,
@@ -454,6 +475,8 @@ export class QueryHandlers {
 
   // Phase 4 mcp_crud_expansion — handleAddActorsToScene + handleDeleteToken
   // folded into handleScene umbrella (action: 'add-tokens' / 'delete-token').
+  // Phase 5 mcp_crud_expansion — those 2 actions migrated OUT of scene umbrella
+  // and into the new `token` umbrella (handleToken; actions 'add' / 'delete-token').
 
   private async handleValidateWritePermissions(data: unknown): Promise<any> {
     try {
@@ -488,6 +511,85 @@ export class QueryHandlers {
     } catch (error) {
       rethrowAsInvalidInput(error);
       throw new Error(`Failed to dispatch journal action: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  // Phase 5 mcp_crud_expansion — 7 per-doc-type embedded-CRUD umbrella entry points.
+  // Each delegates to a handlers/<type>.ts dispatchX which owns GM gate, strict-parse,
+  // transaction wrapping, DP-16 post-verify, and typed envelope.
+  //
+  // `token` dispatcher needs the dataAccess facade for its migrated `add` and
+  // `delete-token` actions (formerly scene.add-tokens / scene.delete-token).
+  // The other 6 umbrellas operate via direct scene.<collection>.<verb> calls
+  // and do not need the data-access facade.
+
+  async handleToken(data: unknown): Promise<any> {
+    try {
+      this.dataAccess.validateFoundryState();
+      return await dispatchTokenHandler(data, this.dataAccess);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to dispatch token action: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  async handleLight(data: unknown): Promise<any> {
+    try {
+      this.dataAccess.validateFoundryState();
+      return await dispatchLightHandler(data);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to dispatch light action: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  async handleNote(data: unknown): Promise<any> {
+    try {
+      this.dataAccess.validateFoundryState();
+      return await dispatchNoteHandler(data);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to dispatch note action: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  async handleSound(data: unknown): Promise<any> {
+    try {
+      this.dataAccess.validateFoundryState();
+      return await dispatchSoundHandler(data);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to dispatch sound action: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  async handleRegion(data: unknown): Promise<any> {
+    try {
+      this.dataAccess.validateFoundryState();
+      return await dispatchRegionHandler(data);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to dispatch region action: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  async handleTile(data: unknown): Promise<any> {
+    try {
+      this.dataAccess.validateFoundryState();
+      return await dispatchTileHandler(data);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to dispatch tile action: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  async handleTemplate(data: unknown): Promise<any> {
+    try {
+      this.dataAccess.validateFoundryState();
+      return await dispatchTemplateHandler(data);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to dispatch template action: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
@@ -676,7 +778,10 @@ export class QueryHandlers {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       const parsed = CreateActorInput.strict().parse(data ?? {});
-      return await wrappedWrite('createActor', async () => ({ success: true, data: await this.dataAccess.createActor(parsed) }));
+      const actorData = parsed.folderId
+        ? { ...parsed.actorData, folder: parsed.folderId }
+        : parsed.actorData;
+      return await wrappedWrite('createActor', async () => ({ success: true, data: await this.dataAccess.createActor({ actorData }) }));
     } catch (error) {
       rethrowAsInvalidInput(error);
       throw new Error(`Failed to create actor: ${error instanceof Error ? error.message : 'Unknown error'}`);
