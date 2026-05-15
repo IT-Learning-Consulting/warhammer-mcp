@@ -105,6 +105,20 @@ export class ModuleSettings {
       default: true,
     });
 
+    // Phase 1 mcp_diagnostic_tool — opt-in gate for the diagnostic MCP surface.
+    // HC2 / CCR-2: read-only diagnostic tools (recent-errors, world-issues,
+    // support-snapshot, and future Tier 2/3 actions) are GATED behind this
+    // setting AND validateGMAccess(). Default OFF — only power-user GMs +
+    // developers should enable.
+    game.settings.register(this.moduleId, 'enableDiagnosticTools', {
+      name: 'Enable Diagnostic Tools',
+      hint: 'Allow Claude / AI tools to call the warhammer-mcp.diagnostic surface. Read-only — exposes errors, world-issues, support snapshot, content scans, dev introspection. Off by default — recommended for power-user GMs and developers only.',
+      scope: 'world',
+      config: true,
+      type: Boolean,
+      default: false,
+    });
+
     // ============================================================================
     // SECTION 3: SAFETY CONTROLS - Limits on AI model's Actions
     // ============================================================================
@@ -303,6 +317,8 @@ export class ModuleSettings {
       'enabled', 'serverHost', 'serverPort',
       // Permissions
       'allowWriteOperations',
+      // Diagnostic surface (Phase 1 mcp_diagnostic_tool)
+      'enableDiagnosticTools',
       // Safety Controls
       'maxActorsPerRequest',
       // Enhanced Creature Index
@@ -417,6 +433,8 @@ export class ModuleSettings {
       'enabled', 'serverHost', 'serverPort',
       // Permissions
       'allowWriteOperations',
+      // Diagnostic surface (Phase 1 mcp_diagnostic_tool)
+      'enableDiagnosticTools',
       // Safety Controls
       'maxActorsPerRequest',
       // Enhanced Creature Index

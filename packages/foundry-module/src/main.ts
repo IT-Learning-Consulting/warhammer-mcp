@@ -2,7 +2,7 @@ import { MODULE_ID } from './constants.js';
 import { SocketBridge } from './socket-bridge.js';
 import { QueryHandlers } from './queries.js';
 import { ModuleSettings } from './settings.js';
-import { runHealthCheck, captureInitError } from './health-check.js';
+import { runHealthCheck, captureInitError, installRuntimeCapture } from './health-check.js';
 import { notify } from './notify.js';
 // Connection control now handled through settings menu
 
@@ -438,6 +438,19 @@ const foundryMCPBridge = new FoundryMCPBridge();
 
 // Foundry VTT Hooks
 Hooks.once('init', async () => {
+  // Phase 1 mcp_diagnostic_tool — install runtime error/warning capture as
+  // early as possible so even initialize() failures land in the buffer. Wrap
+  // in try/catch so a defect in the installer doesn't kill module init
+  // (Phase 1 Risk: capture surface itself failing). Capture is OPT-IN to
+  // READ (handlers/diagnostic.ts gates on enableDiagnosticTools), but
+  // installation is unconditional — turning the setting on mid-session
+  // should immediately have history.
+  try {
+    installRuntimeCapture();
+  } catch (e) {
+    captureInitError('installRuntimeCapture', e);
+  }
+
   try {
     await foundryMCPBridge.initialize();
   } catch (error) {

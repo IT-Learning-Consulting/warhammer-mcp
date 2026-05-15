@@ -37,6 +37,10 @@ import { dispatchJournal as dispatchJournalHandler } from './handlers/journal.js
 // the 2 token-action sub-keys (add-tokens, delete-token) — they live on the
 // `token` umbrella now (handlers/token.ts add / delete-token actions).
 import { dispatchScene as dispatchSceneHandler } from './handlers/scene.js';
+// Phase 1 mcp_diagnostic_tool — Diagnostic umbrella dispatcher (Tier 1: 3 actions).
+// Read-only: recent-errors / world-issues / support-snapshot. Phase 2 (Tier 2
+// content-health) + Phase 3 (Tier 3 dev introspection) extend the union.
+import { dispatchDiagnostic as dispatchDiagnosticHandler } from './handlers/diagnostic.js';
 // Phase 5 mcp_crud_expansion — 7 per-doc-type embedded-CRUD umbrellas.
 // Each handler module owns input strict-parse, GM gate, transaction wrapping,
 // DP-16 post-verify, and typed envelope per action.
@@ -167,6 +171,9 @@ export class QueryHandlers {
     // (createJournalEntry / listJournals / getJournalContent / updateJournalContent /
     // deleteJournalEntry). 13 actions dispatched in handlers/journal.ts.
     CONFIG.queries[`${modulePrefix}.journal`] = this.handleJournal.bind(this);
+    // Phase 1 mcp_diagnostic_tool — read-only diagnostic surface. GM-gated +
+    // setting-gated (enableDiagnosticTools, default false) in the dispatcher.
+    CONFIG.queries[`${modulePrefix}.diagnostic`] = this.handleDiagnostic.bind(this);
     // Phase 5 mcp_crud_expansion — 7 embedded-doc CRUD umbrellas.
     CONFIG.queries[`${modulePrefix}.token`] = this.handleToken.bind(this);
     CONFIG.queries[`${modulePrefix}.light`] = this.handleLight.bind(this);
@@ -511,6 +518,22 @@ export class QueryHandlers {
     } catch (error) {
       rethrowAsInvalidInput(error);
       throw new Error(`Failed to dispatch journal action: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  // Phase 1 mcp_diagnostic_tool — Tier 1 read-only diagnostic dispatcher.
+  // Tier 1 sub-actions (recent-errors / world-issues / support-snapshot) do
+  // NOT call validateFoundryState() per plan Design Decisions row 10 —
+  // game.issues, the runtime ring buffer, and SupportDetails are always
+  // available, and the diagnostic surface is most valuable precisely when
+  // Foundry state is half-broken. Dispatcher owns the dual gate
+  // (validateGMAccess + enableDiagnosticTools setting).
+  private async handleDiagnostic(data: unknown): Promise<any> {
+    try {
+      return await dispatchDiagnosticHandler(data, this.dataAccess);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to dispatch diagnostic action: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 

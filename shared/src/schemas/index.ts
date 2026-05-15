@@ -31,3 +31,5 @@ export * from './sound.js';
 export * from './region.js';
 export * from './tile.js';
 export * from './template.js';
+// Phase 1 mcp_diagnostic_tool — diagnostic umbrella (recent-errors / world-issues / support-snapshot).
+export * from './diagnostic.js';

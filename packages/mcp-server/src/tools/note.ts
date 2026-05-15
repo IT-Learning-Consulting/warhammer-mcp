@@ -168,11 +168,11 @@ export class NoteTool extends BaseTool {
             },
             // create/update writable fields
             entryId: {
-              type: 'string',
+              type: ['string', 'null'],
               description: '[create/update.changes] Linked JournalEntry document ID (nullable — pass null to unlink).',
             },
             pageId: {
-              type: 'string',
+              type: ['string', 'null'],
               description: '[create/update.changes] Linked JournalEntryPage ID within the entry (nullable).',
             },
             x: { type: 'number', description: '[create] Required x-coordinate.' },

@@ -67,6 +67,16 @@ import { UpdateActiveEffectTool } from './tools/update-active-effect.js';
 import { DeleteActiveEffectTool } from './tools/delete-active-effect.js';
 // TOOL-IDEA-003 (2026-05-14): read-only AE-by-name resolver.
 import { GetActiveEffectByNameTool } from './tools/get-active-effect-by-name.js';
+// Phase 1 mcp_diagnostic_tool — read-only diagnostic umbrella (3 actions in v1).
+import { DiagnosticTool } from './tools/diagnostic.js';
+// Phase 5 mcp_crud_expansion — 7 per-doc-type embedded-CRUD umbrellas.
+import { TokenTool } from './tools/token.js';
+import { LightTool } from './tools/light.js';
+import { NoteTool } from './tools/note.js';
+import { SoundTool } from './tools/sound.js';
+import { RegionTool } from './tools/region.js';
+import { TileTool } from './tools/tile.js';
+import { TemplateTool } from './tools/template.js';
 
 const CONTROL_HOST = '127.0.0.1';
 
@@ -291,6 +301,16 @@ async function startBackend(): Promise<void> {
   const deleteActiveEffectTool = new DeleteActiveEffectTool({ foundryClient, logger });
   // TOOL-IDEA-003 (2026-05-14).
   const getActiveEffectByNameTool = new GetActiveEffectByNameTool({ foundryClient, logger });
+  // Phase 5 mcp_crud_expansion — 7 per-doc-type embedded-CRUD umbrellas.
+  const tokenTool = new TokenTool({ foundryClient, logger });
+  const lightTool = new LightTool({ foundryClient, logger });
+  const noteTool = new NoteTool({ foundryClient, logger });
+  const soundTool = new SoundTool({ foundryClient, logger });
+  const regionTool = new RegionTool({ foundryClient, logger });
+  const tileTool = new TileTool({ foundryClient, logger });
+  const templateTool = new TemplateTool({ foundryClient, logger });
+  // Phase 1 mcp_diagnostic_tool — read-only diagnostic umbrella (Tier 1).
+  const diagnosticTool = new DiagnosticTool({ foundryClient, logger });
 
   const registry = new ToolRegistry();
   registry.register('get-character', (args) => characterTools.handleGetCharacter(args));
@@ -346,6 +366,17 @@ async function startBackend(): Promise<void> {
   // (list-journals / get-journal-content / create-journal-entry / update-journal-content /
   // delete-journal-entry). 13 actions dispatched server-side.
   registry.register('journal', (args) => journalTools.execute(args));
+  // Phase 5 mcp_crud_expansion — 7 per-doc-type embedded-CRUD umbrellas.
+  registry.register('token', (args) => tokenTool.execute(args));
+  registry.register('light', (args) => lightTool.execute(args));
+  registry.register('note', (args) => noteTool.execute(args));
+  registry.register('sound', (args) => soundTool.execute(args));
+  registry.register('region', (args) => regionTool.execute(args));
+  registry.register('tile', (args) => tileTool.execute(args));
+  registry.register('template', (args) => templateTool.execute(args));
+  // Phase 1 mcp_diagnostic_tool — read-only diagnostic umbrella. Foundry-side
+  // dispatcher gates on validateGMAccess + enableDiagnosticTools setting.
+  registry.register('diagnostic', (args) => diagnosticTool.execute(args));
   // Phase 4 mcp_crud_expansion — add-actors-to-scene + delete-token folded into scene umbrella.
   registry.register('delete-actor', (args) => worldDeleteTools.handleDeleteActor(args));
 
@@ -411,6 +442,16 @@ async function startBackend(): Promise<void> {
     ...deleteActiveEffectTool.getToolDefinitions(),
     // TOOL-IDEA-003 (2026-05-14).
     ...getActiveEffectByNameTool.getToolDefinitions(),
+    // Phase 5 mcp_crud_expansion — 7 per-doc-type embedded-CRUD umbrellas.
+    ...tokenTool.getToolDefinitions(),
+    ...lightTool.getToolDefinitions(),
+    ...noteTool.getToolDefinitions(),
+    ...soundTool.getToolDefinitions(),
+    ...regionTool.getToolDefinitions(),
+    ...tileTool.getToolDefinitions(),
+    ...templateTool.getToolDefinitions(),
+    // Phase 1 mcp_diagnostic_tool — diagnostic umbrella (3 actions in v1).
+    ...diagnosticTool.getToolDefinitions(),
 
   ];
 
