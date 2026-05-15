@@ -462,7 +462,8 @@ export async function addTokens(
       data: {
         success: true,
         sceneId,
-        added: (result?.added as number) ?? 0,
+        // F12: fallback to tokenIds.length when the underlying facade omits `added`.
+        added: (result?.added as number) ?? ((result?.tokenIds as string[])?.length ?? 0),
         tokenIds: (result?.tokenIds as string[]) ?? [],
         placement: (result?.placement as string) ?? input.placement ?? 'random',
       } satisfies TokenAddResponse,

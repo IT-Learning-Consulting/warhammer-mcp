@@ -218,9 +218,12 @@ export async function updateTemplate(data: unknown): Promise<Envelope<TemplateUp
     const persisted = getEmbeddedOrThrow<any>(scene, 'templates', input.templateId, 'MeasuredTemplate');
 
     // Spot-check scalar fields (flags and texture are nested/nullable — skip deep verify).
+    // F08: compare against `_source` (raw stored data) — `persisted[field]` returns derived
+    // objects for ColorField (Color instance), TextureField, etc., which `!== requestedString`
+    // always, producing false-positive TEMPLATE_WRITE_NOT_PERSISTED on multi-field updates.
     for (const [field, requestedValue] of Object.entries(requestedChanges)) {
       if (field === 'flags' || field === 'texture') continue;
-      const persistedValue = (persisted as any)[field];
+      const persistedValue = (persisted._source as any)?.[field];
       if (persistedValue !== requestedValue) {
         throw new Error(
           `TEMPLATE_WRITE_NOT_PERSISTED: field "${field}" expected ${JSON.stringify(requestedValue)} ` +

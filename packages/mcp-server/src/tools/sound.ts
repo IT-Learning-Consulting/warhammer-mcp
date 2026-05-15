@@ -90,11 +90,13 @@ function formatSoundView(s: SoundViewModel): string {
 }
 
 function formatSoundListItem(s: SoundListItem): string {
+  // F13: render `hidden=yes/no` explicitly per item so filter verification workflows can
+  // read the field unconditionally (was conditional on s.hidden being true).
   return (
     `- \`${s.id}\` @ scene \`${s.sceneId}\`` +
     ` · vol=${s.volume}` +
-    (s.path ? ` · ${s.path}` : ' · _(no path)_') +
-    (s.hidden ? ' · _hidden_' : '')
+    ` · hidden=${s.hidden ? 'yes' : 'no'}` +
+    (s.path ? ` · ${s.path}` : ' · _(no path)_')
   );
 }
 

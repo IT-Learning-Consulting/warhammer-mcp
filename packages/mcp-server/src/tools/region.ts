@@ -168,7 +168,7 @@ export class RegionTool extends BaseTool {
 - executeMacro: {uuid?: string|null, everyone?: bool, events?: regionEvent[]}
 - adjustDarknessLevel: {mode?: 0|1|2, modifier?: 0–1}
 - suppressWeather: {} (no system fields)
-- displayScrollingText: {text: string (req), color?, visibility?, once?, events?: regionEvent[]}
+- displayScrollingText: {text: string (req), color: string (req, 6-char hex), visibility?, once?, events: [] — must be EMPTY per BUG-078 (Foundry rejects non-empty events for this subtype)}
 - executeScript: {source: string (req), events?: regionEvent[]}
 - pauseGame: {once?: bool}
 

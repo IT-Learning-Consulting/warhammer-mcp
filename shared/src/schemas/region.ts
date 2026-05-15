@@ -26,8 +26,17 @@ const RegionVisibilityEnum = z
   .max(2)
   .describe('CONST.REGION_VISIBILITY: 0=LAYER, 1=GAMEMASTER, 2=ALWAYS');
 
-// 16 region events from CONST.REGION_EVENTS (Phase 0 probe).
-const REGION_EVENTS = [
+// 16 region events from CONST.REGION_EVENTS (Phase 0 probe). Reference only.
+// Per-subtype `events` SetField in Foundry's _createEventsField() restricts choices
+// per subtype, but the restriction list is NOT exposed via schema.fields.events.element.choices
+// (live F12 probe: all 3 event-carrying subtypes return choices: []). The actual
+// restriction is enforced in each subtype's strict-mode validate flow (varies per subtype:
+// executeMacro/executeScript log non-fatal warnings; displayScrollingText rejects writes).
+// Zod defers to Foundry's runtime: events is `z.array(z.string())` here; invalid strings
+// surface as DataModelValidationError in console; displayScrollingText writes with
+// non-empty events surface as BEHAVIOR_WRITE_NOT_PERSISTED via DP-16 post-verify.
+// See bugs_to_fix.md BUG-078 for the displayScrollingText events upstream issue.
+const REGION_EVENTS_REFERENCE = [
   'regionBoundary',
   'behaviorActivated', 'behaviorDeactivated',
   'behaviorViewed', 'behaviorUnviewed',
@@ -37,8 +46,8 @@ const REGION_EVENTS = [
   'tokenTurnStart', 'tokenTurnEnd',
   'tokenRoundStart', 'tokenRoundEnd',
 ] as const;
-
-const RegionEventEnum = z.enum(REGION_EVENTS);
+// Exported only to keep the spike-sentinel evidence linked from this file; not used in schemas.
+export const _REGION_EVENTS_REFERENCE = REGION_EVENTS_REFERENCE;
 
 const RegionElevationInput = z
   .object({
@@ -129,7 +138,8 @@ const TeleportTokenSystem = z
 
 const ExecuteMacroSystem = z
   .object({
-    events: z.array(RegionEventEnum).optional(),
+    // F06: events is z.array(z.string()) — Foundry's per-subtype validator is authoritative.
+    events: z.array(z.string()).optional(),
     uuid: z.string().nullable().optional(),
     everyone: z.boolean().optional(),
   })
@@ -146,9 +156,16 @@ const SuppressWeatherSystem = z.object({}).strict();
 
 const DisplayScrollingTextSystem = z
   .object({
-    events: z.array(RegionEventEnum).optional(),
+    // F06: Foundry strict-validates displayScrollingText.system.events and rejects ANY
+    // non-empty array (including valid token events). Constrain to empty until
+    // upstream BUG-078 resolves; protects callers from silent BEHAVIOR_WRITE_NOT_PERSISTED.
+    events: z
+      .array(z.string())
+      .max(0, 'displayScrollingText.system.events must be empty (Foundry rejects non-empty arrays for this subtype — BUG-078).')
+      .optional(),
     text: z.string().min(1),
-    color: z.string().optional(),
+    // F07: color is required by Foundry's ColorField — write fails silently without it.
+    color: z.string(),
     visibility: RegionVisibilityEnum.optional(),
     once: z.boolean().optional(),
   })
@@ -156,7 +173,8 @@ const DisplayScrollingTextSystem = z
 
 const ExecuteScriptSystem = z
   .object({
-    events: z.array(RegionEventEnum).optional(),
+    // F06: events is z.array(z.string()) — Foundry's per-subtype validator is authoritative.
+    events: z.array(z.string()).optional(),
     source: z.string(),
   })
   .strict();

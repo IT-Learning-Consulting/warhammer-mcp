@@ -24,8 +24,17 @@ const TemplateWritableFields = {
   direction: z.number().min(0).max(360).optional(),
   angle: z.number().min(0).max(360).optional(),
   width: z.number().optional(),
-  borderColor: z.string().optional(),
-  fillColor: z.string().optional(),
+  // F09: Foundry's MeasuredTemplate ColorField stores 6-char hex only — passing 8-char
+  // alpha-hex (#RRGGBBAA) silently corrupts the value (e.g. #0000ff80 → #00ff80, blue byte lost).
+  // Constrain at the Zod layer so callers get a clear error instead of silent corruption.
+  borderColor: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/, 'Color must be 6-char hex (#RRGGBB). Alpha-hex not supported by Foundry ColorField.')
+    .optional(),
+  fillColor: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/, 'Color must be 6-char hex (#RRGGBB). Alpha-hex not supported by Foundry ColorField.')
+    .optional(),
   texture: z.string().nullable().optional(),
   hidden: z.boolean().optional(),
   flags: z.record(z.unknown()).optional(),
