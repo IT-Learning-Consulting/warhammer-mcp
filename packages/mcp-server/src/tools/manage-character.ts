@@ -3,6 +3,30 @@ import { FoundryClient } from "../foundry-client.js";
 import { Logger } from "../logger.js";
 import { BaseTool, BaseToolOptions } from "../base-tool.js";
 
+// BUG-077 fix — typed-generic interfaces for BaseTool.query() callers per BUG-069 prevention stack.
+// Mirrors the module-level convention introduced for CreateActorSchema/Result in actor-creation.ts.
+interface CharacterInfoResult {
+    id: string;
+    name: string;
+    type: string;
+    system: any;  // wfrp4e actor.system tree — broad; per-handler narrowing belongs in a later hygiene pass
+    items?: Array<{ id: string; name: string; type: string; [key: string]: any }>;
+    [key: string]: any;
+}
+
+interface CompendiumSearchItem {
+    type: string;
+    name: string;
+    pack: string;
+    id?: string;
+    _id?: string;
+    [key: string]: any;
+}
+
+// updateActor / updateItem / addItemFromCompendium return values are unused by callers (fire-and-forget writes).
+// `unknown` (not `any`) forces a future explicit narrow if any handler starts reading the result.
+type WriteResult = unknown;
+
 // Update stats schema
 const UpdateStatsSchema = z.object({
     action: z.literal("update-stats"),
@@ -26,14 +50,25 @@ const UpdateStatsSchema = z.object({
         resilience: z.number().optional(),
         resolve: z.number().optional(),
         // Physical details
-        age: z.number().optional(),
+        age: z.union([z.string(), z.number()]).optional(),
         height: z.string().optional(),
         weight: z.string().optional(),
         hair: z.string().optional(),
         eyes: z.string().optional(),
         gender: z.string().optional(),
         distinguishingMarks: z.string().optional(),
-        starSign: z.string().optional()
+        starSign: z.string().optional(),
+        // PC creation details
+        motivation: z.string().optional(),
+        move: z.union([z.string(), z.number()]).optional(),
+        class: z.string().optional(),
+        career: z.string().optional(),
+        careerlevel: z.string().optional(),
+        personalAmbitionShort: z.string().optional(),
+        personalAmbitionLong: z.string().optional(),
+        partyAmbitionName: z.string().optional(),
+        partyAmbitionShort: z.string().optional(),
+        partyAmbitionLong: z.string().optional()
     })
 });
 
@@ -72,7 +107,8 @@ const AddXPLogSchema = z.object({
     characterName: z.string(),
     amount: z.number(),
     reason: z.string(),
-    type: z.enum(["earned", "spent"]).default("earned")
+    type: z.enum(["earned", "spent"]).default("earned"),
+    updateTotal: z.boolean().default(false)
 });
 
 const ManageCharacterSchema = z.discriminatedUnion("action", [
@@ -108,26 +144,29 @@ export class ManageCharacterTool extends BaseTool {
             description: `Unified character management for WFRP 4e - update stats, skills, talents, notes, and experience logs.
 
 **Actions:**
-- **update-stats**: Set characteristics, status values, physical details (GM override - no restrictions)
+- **update-stats**: Set characteristics, status values, physical details, PC creation fields (GM override - no restrictions)
 - **update-skill-talent**: Modify existing skill/talent advances or modifiers
 - **add-skill-talent**: Add skill or talent from compendium
 - **update-notes**: Update GM notes or biography
-- **add-xp-log**: Add experience log entry
+- **add-xp-log**: Add experience log entry; pass updateTotal:true to atomically increment experience.total alongside the log entry
 
 **Update Stats** (Direct value setting):
 Use for quick stat changes, character creation, testing, or corrections where you just need to SET a value.
 - Characteristics: weaponSkill, ballisticSkill, strength, toughness, initiative, agility, dexterity, intelligence, willpower, fellowship (0-100)
 - Status: currentWounds, fortune, fate, resilience, resolve
 - Physical: age, height, weight, hair, eyes, gender, distinguishingMarks, starSign
+- PC creation: motivation, move, class, career, careerlevel, personalAmbitionShort, personalAmbitionLong, partyAmbitionName, partyAmbitionShort, partyAmbitionLong
 
 **Note:** For awarding bonus Fortune/Fate with proper narrative ceremony, use the /wfrp-resources skill (grant-fate / spend-fortune actions).
 
 **Examples:**
 - Update stats: action="update-stats", characterName="Hans", updates={strength: 40, fortune: 3}
+- Update PC creation fields: action="update-stats", characterName="Hans", updates={career: "Soldier", careerlevel: "Sergeant", personalAmbitionShort: "Find my missing brother"}
 - Update skill: action="update-skill-talent", characterName="Hans", itemName="Melee (Basic)", updates={advances: 5}
 - Add talent: action="add-skill-talent", characterName="Hans", itemName="Strike Mighty Blow", itemType="talent"
 - Update notes: action="update-notes", characterName="Hans", noteType="gmnotes", content="Suspicious behavior"
-- Add XP: action="add-xp-log", characterName="Hans", amount=50, reason="Defeated ogre", type="earned"`,
+- Add XP: action="add-xp-log", characterName="Hans", amount=50, reason="Defeated ogre", type="earned"
+- Add XP with total increment: action="add-xp-log", characterName="Hans", amount=20, reason="Random species bonus", type="earned", updateTotal=true`,
             inputSchema: {
                 type: "object",
                 properties: {
@@ -160,7 +199,7 @@ Use for quick stat changes, character creation, testing, or corrections where yo
                             resilience: { type: "number" },
                             resolve: { type: "number" },
                             // Physical
-                            age: { type: "number" },
+                            age: { type: ["string", "number"] },
                             height: { type: "string" },
                             weight: { type: "string" },
                             hair: { type: "string" },
@@ -168,6 +207,17 @@ Use for quick stat changes, character creation, testing, or corrections where yo
                             gender: { type: "string" },
                             distinguishingMarks: { type: "string" },
                             starSign: { type: "string" },
+                            // PC creation details
+                            motivation: { type: "string" },
+                            move: { type: ["string", "number"] },
+                            class: { type: "string" },
+                            career: { type: "string" },
+                            careerlevel: { type: "string" },
+                            personalAmbitionShort: { type: "string" },
+                            personalAmbitionLong: { type: "string" },
+                            partyAmbitionName: { type: "string" },
+                            partyAmbitionShort: { type: "string" },
+                            partyAmbitionLong: { type: "string" },
                             // Skill/talent updates
                             advances: { type: "number" },
                             modifier: { type: "number" }
@@ -196,6 +246,11 @@ Use for quick stat changes, character creation, testing, or corrections where yo
                         type: "string",
                         enum: ["earned", "spent"],
                         description: "XP type (for add-xp-log)"
+                    },
+                    updateTotal: {
+                        type: "boolean",
+                        description: "When true, atomically increment experience.total alongside the log entry (for add-xp-log). Default false preserves existing log-only behavior.",
+                        default: false
                     }
                 },
                 required: ["action", "characterName"]
@@ -224,7 +279,7 @@ Use for quick stat changes, character creation, testing, or corrections where yo
         this.logger.info("Updating character stats", { characterName: args.characterName });
 
         // Get character first
-        const character = await this.query<any>("getCharacterInfo", {
+        const character = await this.query<CharacterInfoResult>("getCharacterInfo", {
             characterName: args.characterName
         });
 
@@ -300,12 +355,86 @@ Use for quick stat changes, character creation, testing, or corrections where yo
             else if (lowerKey === 'starsign') {
                 updateData['system.details.starsign.value'] = value;
             }
+            // PC creation details — Phase 1 wfrp_pc_creation.
+            // Note the .value vs flat-hyphenated asymmetry: motivation/move/class/career/careerlevel
+            // use a `.value` sub-key; the 5 ambition fields store the string directly at a
+            // hyphenated path (wfrp4e.js:5385-5393).
+            else if (lowerKey === 'motivation') {
+                updateData['system.details.motivation.value'] = value;
+            }
+            else if (lowerKey === 'move') {
+                updateData['system.details.move.value'] = value;
+            }
+            else if (lowerKey === 'class') {
+                updateData['system.details.class.value'] = value;
+            }
+            else if (lowerKey === 'career') {
+                updateData['system.details.career.value'] = value;
+            }
+            else if (lowerKey === 'careerlevel') {
+                updateData['system.details.careerlevel.value'] = value;
+            }
+            else if (lowerKey === 'personalambitionshort') {
+                updateData['system.details.personal-ambitions.short-term'] = value;
+            }
+            else if (lowerKey === 'personalambitionlong') {
+                updateData['system.details.personal-ambitions.long-term'] = value;
+            }
+            else if (lowerKey === 'partyambitionname') {
+                updateData['system.details.party-ambitions.name'] = value;
+            }
+            else if (lowerKey === 'partyambitionshort') {
+                updateData['system.details.party-ambitions.short-term'] = value;
+            }
+            else if (lowerKey === 'partyambitionlong') {
+                updateData['system.details.party-ambitions.long-term'] = value;
+            }
         }
 
-        await this.query<any>("updateActor", {
+        await this.query<WriteResult>("updateActor", {
             actorId: character.id,
             updateData
         });
+
+        // DP-16 post-write verification (CCR-5 / Q1 lock — applied to the 10 new fields only;
+        // backfilling the 12 legacy fields is v2 hygiene).
+        const newFieldVerifyMap: Record<string, string> = {
+            motivation: 'system.details.motivation.value',
+            move: 'system.details.move.value',
+            class: 'system.details.class.value',
+            career: 'system.details.career.value',
+            careerlevel: 'system.details.careerlevel.value',
+            personalAmbitionShort: 'system.details.personal-ambitions.short-term',
+            personalAmbitionLong: 'system.details.personal-ambitions.long-term',
+            partyAmbitionName: 'system.details.party-ambitions.name',
+            partyAmbitionShort: 'system.details.party-ambitions.short-term',
+            partyAmbitionLong: 'system.details.party-ambitions.long-term',
+        };
+        const newFieldsInPayload = Object.entries(args.updates).filter(
+            ([k, v]) => v !== undefined && newFieldVerifyMap[k] !== undefined,
+        );
+        if (newFieldsInPayload.length > 0) {
+            const verifyActor = await this.query<CharacterInfoResult>("getCharacterInfo", {
+                characterName: args.characterName,
+            });
+            for (const [apiKey, requestedValue] of newFieldsInPayload) {
+                const path = newFieldVerifyMap[apiKey]!.split('.');
+                let cursor: any = verifyActor;
+                for (const segment of path) {
+                    cursor = cursor?.[segment];
+                    if (cursor === undefined) break;
+                }
+                const actual = cursor;
+                // String coercion tolerance for `move` (number → string per Foundry StringField)
+                // and any other string field receiving a numeric input.
+                const equivalent = String(actual) === String(requestedValue);
+                if (!equivalent) {
+                    throw new Error(
+                        `UPDATE_STATS_NOT_PERSISTED: ${apiKey} expected ${JSON.stringify(requestedValue)}, got ${JSON.stringify(actual)}`,
+                    );
+                }
+            }
+        }
 
         let result = `✅ Updated stats for **${character.name}**\n`;
         const updates = Object.entries(args.updates).filter(([_, v]) => v !== undefined);
@@ -324,7 +453,7 @@ Use for quick stat changes, character creation, testing, or corrections where yo
         this.logger.info("Updating skill/talent", { characterName: args.characterName, itemName: args.itemName });
 
         // Get character
-        const character = await this.query<any>("getCharacterInfo", {
+        const character = await this.query<CharacterInfoResult>("getCharacterInfo", {
             characterName: args.characterName
         });
 
@@ -350,7 +479,7 @@ Use for quick stat changes, character creation, testing, or corrections where yo
             updateData['system.modifier.value'] = args.updates.modifier;
         }
 
-        await this.query<any>("updateItem", {
+        await this.query<WriteResult>("updateItem", {
             actorId: character.id,
             itemId: item.id,
             updateData
@@ -372,7 +501,7 @@ Use for quick stat changes, character creation, testing, or corrections where yo
         this.logger.info("Adding skill/talent", { characterName: args.characterName, itemName: args.itemName });
 
         // Get character
-        const character = await this.query<any>("getCharacterInfo", {
+        const character = await this.query<CharacterInfoResult>("getCharacterInfo", {
             characterName: args.characterName
         });
 
@@ -390,7 +519,7 @@ Use for quick stat changes, character creation, testing, or corrections where yo
         }
 
         // Search compendium
-        const searchResults = await this.query<any>("searchCompendium", {
+        const searchResults = await this.query<CompendiumSearchItem[]>("searchCompendium", {
             query: args.itemName,
             packType: "Item"
         });
@@ -415,7 +544,7 @@ Use for quick stat changes, character creation, testing, or corrections where yo
         const compendiumUuid = `Compendium.${compendiumItem.pack}.${compendiumItem.id || compendiumItem._id}`;
 
         // Add from compendium
-        await this.query<any>("addItemFromCompendium", {
+        await this.query<WriteResult>("addItemFromCompendium", {
             actorId: character.id,
             compendiumId: compendiumUuid
         });
@@ -423,7 +552,7 @@ Use for quick stat changes, character creation, testing, or corrections where yo
         // If advances specified, update them
         if (args.advances) {
             // Get the newly added item
-            const updatedCharacter = await this.query<any>("getCharacterInfo", {
+            const updatedCharacter = await this.query<CharacterInfoResult>("getCharacterInfo", {
                 characterName: args.characterName
             });
 
@@ -432,7 +561,7 @@ Use for quick stat changes, character creation, testing, or corrections where yo
             );
 
             if (newItem) {
-                await this.query<any>("updateItem", {
+                await this.query<WriteResult>("updateItem", {
                     actorId: character.id,
                     itemId: newItem.id,
                     updateData: {
@@ -450,7 +579,7 @@ Use for quick stat changes, character creation, testing, or corrections where yo
         this.logger.info("Updating character notes", { characterName: args.characterName, noteType: args.noteType });
 
         // Get character
-        const character = await this.query<any>("getCharacterInfo", {
+        const character = await this.query<CharacterInfoResult>("getCharacterInfo", {
             characterName: args.characterName
         });
 
@@ -470,7 +599,7 @@ Use for quick stat changes, character creation, testing, or corrections where yo
             updateData['system.details.biography.value'] = newContent;
         }
 
-        await this.query<any>("updateActor", {
+        await this.query<WriteResult>("updateActor", {
             actorId: character.id,
             updateData
         });
@@ -480,10 +609,14 @@ Use for quick stat changes, character creation, testing, or corrections where yo
     }
 
     private async handleAddXPLog(args: z.infer<typeof AddXPLogSchema>): Promise<string> {
-        this.logger.info("Adding XP log entry", { characterName: args.characterName, amount: args.amount });
+        this.logger.info("Adding XP log entry", {
+            characterName: args.characterName,
+            amount: args.amount,
+            updateTotal: args.updateTotal,
+        });
 
         // Get character
-        const character = await this.query<any>("getCharacterInfo", {
+        const character = await this.query<CharacterInfoResult>("getCharacterInfo", {
             characterName: args.characterName
         });
 
@@ -504,14 +637,41 @@ Use for quick stat changes, character creation, testing, or corrections where yo
         // Update log
         const updatedLog = [...existingLog, newEntry];
 
-        await this.query<any>("updateActor", {
+        // BUG-043 merge-once: pack log append + optional total increment into one updateActor call.
+        const updateData: Record<string, any> = {
+            'system.details.experience.log': updatedLog,
+        };
+        let expectedTotal: number | undefined;
+        if (args.updateTotal) {
+            const currentTotal = character.system?.details?.experience?.total ?? 0;
+            const delta = args.type === "earned" ? Math.abs(args.amount) : -Math.abs(args.amount);
+            expectedTotal = currentTotal + delta;
+            updateData['system.details.experience.total'] = expectedTotal;
+        }
+
+        await this.query<WriteResult>("updateActor", {
             actorId: character.id,
-            updateData: {
-                'system.details.experience.log': updatedLog
-            }
+            updateData,
         });
 
+        // DP-16 post-write verification (CCR-5 / Q1 lock) — only when updateTotal:true.
+        // Log-only path remains unverified to preserve legacy behavior (Rule 11).
+        if (args.updateTotal && expectedTotal !== undefined) {
+            const verifyActor = await this.query<CharacterInfoResult>("getCharacterInfo", {
+                characterName: args.characterName,
+            });
+            const actualTotal = verifyActor?.system?.details?.experience?.total;
+            if (actualTotal !== expectedTotal) {
+                throw new Error(
+                    `XP_TOTAL_NOT_PERSISTED: expected ${expectedTotal}, got ${actualTotal}`,
+                );
+            }
+        }
+
         const sign = args.type === "earned" ? "+" : "-";
-        return `✅ Added XP log for **${character.name}**: ${sign}${args.amount} XP - ${args.reason}`;
+        const totalSuffix = args.updateTotal && expectedTotal !== undefined
+            ? ` (total → ${expectedTotal})`
+            : '';
+        return `✅ Added XP log for **${character.name}**: ${sign}${args.amount} XP - ${args.reason}${totalSuffix}`;
     }
 }

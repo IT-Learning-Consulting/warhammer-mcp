@@ -1,11 +1,10 @@
-// Phase 4 mcp_crud_expansion — Scene umbrella tool (11 actions).
+// Phase 4 mcp_crud_expansion — Scene umbrella tool (9 actions).
+// Phase 5: add-tokens / delete-token migrated to the dedicated `token` umbrella.
 //
-// Replaces the 5-tool surface (get-current-scene / get-world-info / list-scenes
-// / switch-scene + the 2 standalone tools add-actors-to-scene / delete-token)
-// with a single `scene` umbrella tool. `get-world-info` is extracted to its
-// own `world` tool (see tools/world.ts) — it was mis-bucketed here historically.
-// `switch-scene` is replaced by the pair {activate, view} (per Foundry's split:
-// Scene.activate sets world-active + GM camera; Scene.view is per-user camera).
+// `get-world-info` is extracted to its own `world` tool (see tools/world.ts) —
+// it was mis-bucketed here historically. `switch-scene` is replaced by the pair
+// {activate, view} (per Foundry's split: Scene.activate sets world-active + GM
+// camera; Scene.view is per-user camera).
 //
 // **CCR-Envelope-Consumer:** every handler uses a concrete typed generic on
 // `this.query<...>` — no `<any>`. Each handler wraps its query call in
@@ -31,8 +30,6 @@ import {
   type SceneThumbnailResponse,
   type SceneGetResponse,
   type SceneListResponse,
-  type SceneAddTokensResponse,
-  type SceneDeleteTokenResponse,
   type SceneViewModel,
   type SceneTokenView,
 } from '@foundry-mcp/shared';
@@ -134,7 +131,7 @@ export class SceneTool extends BaseTool {
           openWorldHint: true,
         },
         description:
-          `Manage Foundry VTT Scenes with entity-level CRUD + token placement via 11 actions.
+          `Manage Foundry VTT Scenes via 9 actions (entity-level CRUD + activation + view + thumbnail + list). Token placement lives on the dedicated \`token\` umbrella.
 
 **Actions:**
 - **create**: Create a Scene. Required: name. Optional: full SceneConfig surface (background, grid, fog, environment, foreground, dimensions, padding, FK fields journal/playlist/folder, ownership, flags, navigation). Returns full SceneView.
@@ -146,8 +143,6 @@ export class SceneTool extends BaseTool {
 - **thumbnail**: Regenerate scene thumbnail via createThumbnail({width, height, format, quality}). All four optional (defaults: 300×100 webp @ 0.8).
 - **get**: Fetch a single scene (defaults to active when sceneId omitted). includeTokens=true adds token list; includeHidden=true includes hidden tokens.
 - **list**: List world scenes. filter=substring (case-insensitive), include_active_only=true, page/pageSize (1-100), countOnly=true for cheap inventory probe.
-- **add-tokens**: Drop tokens for one or more actors. actorIds[] required; quantities[] parallel-array (default 1); placement='random'|'grid'|'center'; hidden optional; sceneId defaults to active.
-- **delete-token**: Remove a single token. sceneId + tokenId required.
 
 **FK fields:** journal, journalEntryPage, playlist, playlistSound, folder are ForeignDocumentFields that Foundry does NOT auto-NULL on referent delete. get's formatter flags stale FKs via \`journalLinked: false\`.
 
@@ -172,19 +167,13 @@ export class SceneTool extends BaseTool {
                 'thumbnail',
                 'get',
                 'list',
-                'add-tokens',
-                'delete-token',
               ],
               description: 'The scene action to perform.',
             },
             sceneId: {
               type: 'string',
               description:
-                '[update/delete/clone/activate/view/thumbnail/get/add-tokens/delete-token] Scene document ID. Optional on get (defaults to active) + add-tokens (defaults to active).',
-            },
-            tokenId: {
-              type: 'string',
-              description: '[delete-token] Token document ID to remove from the scene.',
+                '[update/delete/clone/activate/view/thumbnail/get] Scene document ID. Optional on get (defaults to active).',
             },
             name: {
               type: 'string',
@@ -254,11 +243,6 @@ export class SceneTool extends BaseTool {
             // thumbnail
             quality: { type: 'number', minimum: 0, maximum: 1, description: '[thumbnail] JPEG/WebP quality 0-1 (default 0.8).' },
             format: { type: 'string', description: '[thumbnail] Image format (default "webp").' },
-            // add-tokens
-            actorIds: { type: 'array', items: { type: 'string' }, description: '[add-tokens] Actor document IDs. Length ≥ 1.' },
-            quantities: { type: 'array', items: { type: 'integer', minimum: 1 }, description: '[add-tokens] Parallel array — quantities[i] tokens for actorIds[i]. Default 1 each.' },
-            placement: { type: 'string', enum: ['random', 'grid', 'center'], description: '[add-tokens] Token placement strategy (default "random").' },
-            hidden: { type: 'boolean', description: '[add-tokens] If true, place tokens hidden from players.' },
           },
           required: ['action'],
         },
@@ -287,10 +271,6 @@ export class SceneTool extends BaseTool {
         return this.handleGet(args);
       case 'list':
         return this.handleList(args);
-      case 'add-tokens':
-        return this.handleAddTokens(args);
-      case 'delete-token':
-        return this.handleDeleteToken(args);
     }
   }
 
@@ -427,30 +407,4 @@ export class SceneTool extends BaseTool {
     }
   }
 
-  private async handleAddTokens(args: ArgsFor<'add-tokens'>) {
-    try {
-      const data = await this.query<SceneAddTokensResponse>('scene', args);
-      const perActorLines = data.perActor
-        .map((p) => `- \`${p.actorId}\`: ${p.placed} placed`)
-        .join('\n');
-      const text =
-        `🪙 **Tokens Placed**\n\n**Scene:** ${data.sceneName} (\`${data.sceneId}\`)\n` +
-        `**Total placed:** ${data.placedTokens.length}\n\n` +
-        `### Per actor\n${perActorLines}\n\n` +
-        `### Placed tokens\n${formatTokensSummary(data.placedTokens)}`;
-      return { content: [{ type: 'text' as const, text }] };
-    } catch (e) {
-      return errorContent('add-tokens', e instanceof Error ? e.message : String(e));
-    }
-  }
-
-  private async handleDeleteToken(args: ArgsFor<'delete-token'>) {
-    try {
-      const data = await this.query<SceneDeleteTokenResponse>('scene', args);
-      const text = `🗑️ **Token Deleted**\n\n**Scene:** ${data.sceneName} (\`${data.sceneId}\`)\n**Deleted token:** \`${data.deletedTokenId}\`\n**Remaining tokens on scene:** ${data.remainingTokens}`;
-      return { content: [{ type: 'text' as const, text }] };
-    } catch (e) {
-      return errorContent('delete-token', e instanceof Error ? e.message : String(e));
-    }
-  }
 }

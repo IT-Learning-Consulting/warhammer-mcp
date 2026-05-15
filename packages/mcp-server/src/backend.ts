@@ -314,6 +314,7 @@ async function startBackend(): Promise<void> {
   // 11 actions dispatched server-side. get-world-info extracted to `world` tool.
   registry.register('scene', (args) => sceneTool.execute(args));
   registry.register('get-world-info', (args) => worldTool.handleGetWorldInfo(args));
+  registry.register('create-actor', (args) => actorCreationTools.handleCreateActor(args));
   registry.register('create-actor-from-compendium', (args) => actorCreationTools.handleCreateActorFromCompendium(args));
   registry.register('get-compendium-entry-full', (args) => actorCreationTools.handleGetCompendiumEntryFull(args));
   registry.register('request-player-rolls', (args) => diceRollTools.handleRequestPlayerRolls(args));

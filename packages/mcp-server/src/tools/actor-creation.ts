@@ -8,6 +8,18 @@ export interface ActorCreationToolsOptions {
   logger: Logger;
 }
 
+const CreateActorSchema = z.object({
+  name: z.string().min(1, 'Name is required'),
+  type: z.enum(['character', 'npc', 'creature']),
+  systemData: z.record(z.unknown()).optional(),
+  folderId: z.string().optional(),
+});
+
+interface CreateActorResult {
+  id: string;
+  name: string;
+  type: string;
+}
 
 export class ActorCreationTools extends BaseTool {
   constructor(options: BaseToolOptions) {
@@ -89,6 +101,47 @@ export class ActorCreationTools extends BaseTool {
             },
           },
           required: ['packId', 'itemId', 'names'],
+        },
+      },
+      {
+        name: 'create-actor',
+        title: 'Create Actor',
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: false,
+          openWorldHint: true,
+        },
+        description: `Create a world actor of type 'character', 'npc', or 'creature' with optional system data and folder placement. Unlike create-actor-from-compendium, this creates a blank actor whose shape is fully caller-controlled. Wraps the Foundry-side createActor query (GM-gated, transaction-wrapped).
+
+**\`_preCreate\` auto-embed behavior (wfrp4e system hook):**
+- **type='character'**: NO PROMPT. The wfrp4e system silently auto-embeds basic skills + 3 coin items (Gold Crowns / Silver Shillings / Brass Pennies, quantity 0). Use this for /wfrp-build-pc flows where the PC sheet should land pre-populated.
+- **type='npc'**: TRIGGERS A BLOCKING DialogV2.confirm asking whether to add basic skills + money. Since MCP calls are headless, the dialog will block the response — typical resolution is to dismiss it via the Foundry UI, or pre-populate \`systemData\` to satisfy the system check. Avoid calling for 'npc' from autonomous flows unless you have a strategy for the dialog.
+- **type='creature'**: same blocking dialog as 'npc'. Same caveat applies.
+
+**Post-write verification (CCR-5 / DP-16):** the handler asserts the returned actor has a non-empty id and the name matches the request, throwing CREATE_ACTOR_NOT_PERSISTED on mismatch.`,
+        inputSchema: {
+          type: 'object',
+          properties: {
+            name: {
+              type: 'string',
+              description: 'Actor name (required, non-empty).',
+            },
+            type: {
+              type: 'string',
+              enum: ['character', 'npc', 'creature'],
+              description: 'Actor type. See description for _preCreate dialog warnings on npc/creature.',
+            },
+            systemData: {
+              type: 'object',
+              description: 'Optional system-tree fields to set at creation time (e.g., { details: { species: { value: "human" } } }). Merged as actorData.system.',
+            },
+            folderId: {
+              type: 'string',
+              description: 'Optional Folder ID for placement in the world actor sidebar.',
+            },
+          },
+          required: ['name', 'type'],
         },
       },
       {
@@ -188,6 +241,46 @@ export class ActorCreationTools extends BaseTool {
     } catch (error) {
       this.logger.error('create-actor-from-compendium failed', error);
       throw new Error(`Failed to create actor from compendium: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Create a blank actor (character / npc / creature) with optional system data and folder placement.
+   * Wraps the Foundry-side createActor query. DP-16 post-write verification asserts the persisted
+   * actor matches the request before returning.
+   */
+  async handleCreateActor(args: any): Promise<any> {
+    const { name, type, systemData, folderId } = CreateActorSchema.parse(args);
+
+    this.logger.info('Creating actor', { name, type, hasSystemData: !!systemData, hasFolderId: !!folderId });
+
+    try {
+      const result = await this.query<CreateActorResult>('createActor', {
+        actorData: {
+          name,
+          type,
+          ...(systemData ? { system: systemData } : {}),
+        },
+        ...(folderId ? { folderId } : {}),
+      });
+
+      // DP-16 post-write verification (CCR-5 / BUG-070).
+      if (!result?.id) {
+        throw new Error(`CREATE_ACTOR_NOT_PERSISTED: createActor returned no id for "${name}"`);
+      }
+      if (result.name !== name) {
+        throw new Error(
+          `CREATE_ACTOR_NOT_PERSISTED: persisted name "${result.name}" does not match requested "${name}"`,
+        );
+      }
+
+      return {
+        summary: `✅ Created ${type} actor "${result.name}" (ID: ${result.id})`,
+        actor: result,
+      };
+    } catch (error) {
+      this.logger.error('create-actor failed', error);
+      throw new Error(`Failed to create actor: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 

@@ -2,8 +2,8 @@
 //
 // Single `scene` MCP tool with 11 actions on Scene + embedded TokenDocument.
 // Replaces the 5 legacy schemas previously in this file (GetActiveSceneInput,
-// ListScenesInput, SwitchSceneInput, AddActorsToSceneInput, DeleteTokenInput)
-// plus folds the standalone add-actors-to-scene and delete-token tools.
+// ListScenesInput, SwitchSceneInput) plus folds Scene-level actions.
+// Phase 5: add-tokens / delete-token migrated to the `token` umbrella.
 //
 // Phase 0 probe anchors (verified via F12 paste 2026-05-14, see
 // `.agents/research/mcp_crud_expansion/phase4_probes.md`):
@@ -293,32 +293,8 @@ export const SceneListInput = z
   })
   .strict();
 
-// BUG-051 hotfix carry-forward: prototype-token pattern. quantities[i] = number
-// of tokens to drop for actorIds[i]. Missing → 1 each. Lets one world actor
-// with prototypeToken.actorLink=false produce N unlinked tokens each carrying
-// its own ActorDelta. sceneId optional (TOOL-IDEA-004 carry-forward).
-// Note: quantities.length === actorIds.length is enforced at handler time
-// (`.refine()` cannot be used on discriminatedUnion branches in Zod v3).
-export const SceneAddTokensInput = z
-  .object({
-    action: z.literal('add-tokens'),
-    actorIds: z.array(FOUNDRY_ID).min(1),
-    quantities: z.array(z.number().int().positive()).optional(),
-    placement: z.enum(['random', 'grid', 'center']).optional(),
-    hidden: z.boolean().optional(),
-    sceneId: FOUNDRY_ID.optional(),
-  })
-  .strict();
-
-// BUG-051 hotfix companion. Single-token delete; pairs with add-tokens for
-// encounter unwind + orphan-token cleanup.
-export const SceneDeleteTokenInput = z
-  .object({
-    action: z.literal('delete-token'),
-    sceneId: FOUNDRY_ID,
-    tokenId: FOUNDRY_ID,
-  })
-  .strict();
+// Phase 5: SceneAddTokensInput / SceneDeleteTokenInput retired — those actions
+// now live on the dedicated `token` umbrella (shared/src/schemas/token.ts).
 
 // ── Discriminated-union umbrella ─────────────────────────────────────────────
 
@@ -332,8 +308,6 @@ export const SceneToolInput = z.discriminatedUnion('action', [
   SceneThumbnailInput,
   SceneGetInput,
   SceneListInput,
-  SceneAddTokensInput,
-  SceneDeleteTokenInput,
 ]);
 
 export type SceneToolInputType = z.infer<typeof SceneToolInput>;
@@ -346,8 +320,6 @@ export type SceneViewInputType = z.infer<typeof SceneViewInput>;
 export type SceneThumbnailInputType = z.infer<typeof SceneThumbnailInput>;
 export type SceneGetInputType = z.infer<typeof SceneGetInput>;
 export type SceneListInputType = z.infer<typeof SceneListInput>;
-export type SceneAddTokensInputType = z.infer<typeof SceneAddTokensInput>;
-export type SceneDeleteTokenInputType = z.infer<typeof SceneDeleteTokenInput>;
 
 // ── Concrete response shapes (CCR-Envelope-Consumer §3) ──────────────────────
 //
@@ -454,7 +426,7 @@ export interface SceneViewModel {
   ownership: { default: number; [userId: string]: number };
 }
 
-// Sparse token shape surfaced in get includeTokens / add-tokens response.
+// Sparse token shape surfaced in scene.get includeTokens response.
 export interface SceneTokenView {
   id: string;
   name: string;
@@ -567,23 +539,6 @@ export type SceneListResponse =
   | SceneListBareResponse
   | SceneListPaginatedResponse
   | SceneListCountOnlyResponse;
-
-export interface SceneAddTokensResponse {
-  success: true;
-  sceneId: string;
-  sceneName: string;
-  placedTokens: SceneTokenView[];
-  // Per-actor placement count summary (useful when quantities provided).
-  perActor: Array<{ actorId: string; placed: number }>;
-}
-
-export interface SceneDeleteTokenResponse {
-  success: true;
-  sceneId: string;
-  sceneName: string;
-  deletedTokenId: string;
-  remainingTokens: number;
-}
 
 // ── Legacy / unrelated schemas retained ──────────────────────────────────────
 //

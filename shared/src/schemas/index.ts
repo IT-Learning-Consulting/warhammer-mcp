@@ -18,3 +18,16 @@ export * from './get-active-effect-by-name.js';
 export * from './ownership.js';
 export * from './targets.js';
 export * from './outputs.js';
+// Phase 5 mcp_crud_expansion — shared embedded-doc sub-schemas + helpers.
+export * from './light-data.js';
+export * from './texture-data.js';
+export * from './region-shape.js';
+export * from './format-fk-link.js';
+// Phase 5 mcp_crud_expansion — 7 per-doc-type umbrella schemas.
+export * from './token.js';
+export * from './light.js';
+export * from './note.js';
+export * from './sound.js';
+export * from './region.js';
+export * from './tile.js';
+export * from './template.js';

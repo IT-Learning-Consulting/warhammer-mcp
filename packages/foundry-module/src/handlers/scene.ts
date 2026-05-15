@@ -1,12 +1,9 @@
-// Phase 4 mcp_crud_expansion — Scene handlers (umbrella, 11 actions).
+// Phase 4 mcp_crud_expansion — Scene handlers (umbrella, 9 actions).
+// Phase 5: addTokens / deleteTokenAction migrated to handlers/token.ts.
 //
-// Foundry-side write/read surface for the `scene` MCP umbrella tool. Replaces
-// the 5 legacy scene handlers previously inlined in queries.ts
-// (handleGetActiveScene / handleListScenes / handleSwitchScene /
-// handleAddActorsToScene / handleDeleteToken) plus folds the 6 new actions:
-// create / update / delete / clone / activate / view / thumbnail. The legacy
-// `switch-scene` is replaced by `activate` (Scene.activate sets world-active
-// AND switches GM view) + `view` (per-user canvas view only).
+// Foundry-side write/read surface for the `scene` MCP umbrella tool.
+// Actions: create / update / delete / clone / activate / view / thumbnail / get / list.
+// Token lifecycle (add/delete-token) lives on handlers/token.ts since Phase 5.
 //
 // CCR-Trust: every write function starts with validateGMAccess().
 // CCR-Transactions: every write routes through wrappedWrite('scene.<name>', ...).
@@ -30,8 +27,6 @@ import {
   SceneThumbnailInput,
   SceneGetInput,
   SceneListInput,
-  SceneAddTokensInput,
-  SceneDeleteTokenInput,
   type SceneToolInputType,
   type SceneCreateInputType,
   type SceneUpdateInputType,
@@ -42,8 +37,6 @@ import {
   type SceneThumbnailInputType,
   type SceneGetInputType,
   type SceneListInputType,
-  type SceneAddTokensInputType,
-  type SceneDeleteTokenInputType,
   type SceneViewModel,
   type SceneTokenView,
   type SceneListEntry,
@@ -56,8 +49,6 @@ import {
   type SceneThumbnailResponse,
   type SceneGetResponse,
   type SceneListResponse,
-  type SceneAddTokensResponse,
-  type SceneDeleteTokenResponse,
 } from '@foundry-mcp/shared';
 import { wrappedWrite } from '../transaction-manager.js';
 
@@ -77,23 +68,13 @@ type SceneResponse =
   | SceneViewResponse
   | SceneThumbnailResponse
   | SceneGetResponse
-  | SceneListResponse
-  | SceneAddTokensResponse
-  | SceneDeleteTokenResponse;
+  | SceneListResponse;
 
 // Minimal data-access surface the dispatcher needs. queries.ts passes its own
 // FoundryDataAccess instance in; we type just the methods we touch so the
 // handler file doesn't import the heavy data-access.ts directly.
 export interface SceneDataAccessFacade {
   validateFoundryState(): void;
-  addActorsToScene(input: {
-    actorIds: string[];
-    quantities?: number[];
-    placement: string;
-    hidden: boolean;
-    sceneId?: string;
-  }): Promise<any>;
-  deleteToken(input: { sceneId: string; tokenId: string }): Promise<any>;
   listScenes(input: any): Promise<any>;
 }
 
@@ -738,128 +719,6 @@ function normalizeListEntry(s: any): SceneListEntry {
   return serializeListEntry(s);
 }
 
-// ── 10. addTokens ───────────────────────────────────────────────────────────
-
-export async function addTokens(
-  data: unknown,
-  dataAccess: SceneDataAccessFacade,
-): Promise<Envelope<SceneAddTokensResponse>> {
-  const gate = validateGMAccess();
-  if (!gate.allowed) return { success: false, error: 'Access denied: addTokens requires GM' };
-
-  const input: SceneAddTokensInputType = SceneAddTokensInput_strict_parse(data);
-
-  // Handler-level quantities/actorIds length check (couldn't use .refine() on
-  // discriminatedUnion branch in Zod v3 — see shared/schemas/scene.ts).
-  if (input.quantities && input.quantities.length !== input.actorIds.length) {
-    throw new Error(
-      `SCENE_INVALID_INPUT: quantities length (${input.quantities.length}) must match ` +
-        `actorIds length (${input.actorIds.length})`,
-    );
-  }
-
-  return wrappedWrite('scene.addTokens', async () => {
-    const result = await dataAccess.addActorsToScene({
-      actorIds: input.actorIds,
-      ...(input.quantities ? { quantities: input.quantities } : {}),
-      placement: input.placement ?? 'random',
-      hidden: input.hidden ?? false,
-      ...(input.sceneId ? { sceneId: input.sceneId } : {}),
-    });
-
-    // Normalize the dataAccess return into our envelope shape.
-    const sceneIdResolved =
-      input.sceneId ?? (game as any).scenes?.active?.id ?? (game as any).scenes?.current?.id;
-    const scene = sceneIdResolved ? (game as any).scenes?.get(sceneIdResolved) : null;
-
-    // data-access.addActorsToScene returns:
-    //   { success, tokensCreated, tokenIds, tokens: [{id, name, actorId}], sceneId, sceneName, errors? }
-    // (See foundry-module/src/data-access.ts:2089-2101. TOOL-IDEA-005 carry-forward.)
-    // We re-serialize each token's full SceneTokenView by reading the live doc
-    // from scene.tokens so the placedTokens array carries position/size/disposition.
-    let placedTokens: SceneTokenView[] = [];
-    let perActor: Array<{ actorId: string; placed: number }> = [];
-    const rawTokens: Array<{ id: string; name?: string; actorId?: string }> =
-      Array.isArray((result as any)?.tokens)
-        ? (result as any).tokens
-        : Array.isArray((result as any)?.placedTokens)
-          ? (result as any).placedTokens
-          : Array.isArray(result)
-            ? (result as any)
-            : [];
-    placedTokens = rawTokens
-      .map((t) => {
-        const id = typeof t === 'string' ? t : t.id;
-        const td = scene?.tokens?.get?.(id);
-        return td ? serializeToken(td) : null;
-      })
-      .filter((t): t is SceneTokenView => t !== null);
-
-    if (result && Array.isArray((result as any).perActor)) {
-      perActor = (result as any).perActor;
-    } else {
-      // Bucket placedTokens back to per-actor counts. data-access doesn't return
-      // perActor, so derive from the actorId on each placed token.
-      const counts = new Map<string, number>();
-      for (const t of placedTokens) {
-        if (t.actorId) counts.set(t.actorId, (counts.get(t.actorId) ?? 0) + 1);
-      }
-      perActor = input.actorIds.map((actorId, i) => ({
-        actorId,
-        placed: counts.get(actorId) ?? input.quantities?.[i] ?? 1,
-      }));
-    }
-
-    return {
-      success: true as const,
-      data: {
-        success: true,
-        sceneId: sceneIdResolved ?? '',
-        sceneName: scene?.name ?? '',
-        placedTokens,
-        perActor,
-      } satisfies SceneAddTokensResponse,
-    };
-  });
-}
-
-// ── 11. deleteTokenAction ───────────────────────────────────────────────────
-
-export async function deleteTokenAction(
-  data: unknown,
-  dataAccess: SceneDataAccessFacade,
-): Promise<Envelope<SceneDeleteTokenResponse>> {
-  const gate = validateGMAccess();
-  if (!gate.allowed) return { success: false, error: 'Access denied: deleteToken requires GM' };
-
-  const input: SceneDeleteTokenInputType = SceneDeleteTokenInput_strict_parse(data);
-  const scene = getSceneOrThrow(input.sceneId);
-
-  return wrappedWrite('scene.deleteToken', async () => {
-    await dataAccess.deleteToken({ sceneId: input.sceneId, tokenId: input.tokenId });
-
-    // DP-16 post-verify: token should be gone from scene.tokens collection.
-    const stillPresent = scene.tokens?.get?.(input.tokenId);
-    if (stillPresent) {
-      throw new Error(
-        `SCENE_WRITE_NOT_PERSISTED: token "${input.tokenId}" still present on scene ` +
-          `"${input.sceneId}" after delete`,
-      );
-    }
-
-    return {
-      success: true as const,
-      data: {
-        success: true,
-        sceneId: input.sceneId,
-        sceneName: scene.name as string,
-        deletedTokenId: input.tokenId,
-        remainingTokens: scene.tokens?.size ?? 0,
-      } satisfies SceneDeleteTokenResponse,
-    };
-  });
-}
-
 // ── Dispatcher ──────────────────────────────────────────────────────────────
 
 export async function dispatchScene(
@@ -893,10 +752,10 @@ export async function dispatchScene(
       return getScene(input);
     case 'list':
       return listScenesAction(input, dataAccess);
-    case 'add-tokens':
-      return addTokens(input, dataAccess);
-    case 'delete-token':
-      return deleteTokenAction(input, dataAccess);
+    default: {
+      const _exhaustive: never = input;
+      throw new Error(`Invalid scene action: ${JSON.stringify(_exhaustive)}`);
+    }
   }
 }
 
@@ -928,12 +787,6 @@ function SceneGetInput_strict_parse(data: unknown): SceneGetInputType {
 }
 function SceneListInput_strict_parse(data: unknown): SceneListInputType {
   return SceneListInput.strict().parse(data ?? {});
-}
-function SceneAddTokensInput_strict_parse(data: unknown): SceneAddTokensInputType {
-  return SceneAddTokensInput.strict().parse(data ?? {});
-}
-function SceneDeleteTokenInput_strict_parse(data: unknown): SceneDeleteTokenInputType {
-  return SceneDeleteTokenInput.strict().parse(data ?? {});
 }
 
 // stripUndefined currently unused-export-safe; retained for symmetry with
