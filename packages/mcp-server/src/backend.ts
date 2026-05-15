@@ -23,7 +23,11 @@ import { ManageInventoryTool } from './tools/manage-inventory.js';
 
 import { CompendiumTools } from './tools/compendium.js';
 
-import { SceneTools } from './tools/scene.js';
+// Phase 4 mcp_crud_expansion — single `scene` umbrella tool (11 actions)
+// replaces SceneTools (5 legacy tools) + AddActorsToSceneTool + DeleteTokenTool.
+// get-world-info extracted to a sibling `world` tool.
+import { SceneTool } from './tools/scene.js';
+import { WorldTool } from './tools/world.js';
 
 import { ActorCreationTools } from './tools/actor-creation.js';
 
@@ -53,8 +57,8 @@ import { ApplyTemplateToTokenTool } from './tools/apply-template-to-token.js';
 import { GetWfrpConfigTool } from './tools/get-wfrp-config.js';
 import { JournalTools } from './tools/journal.js';
 import { WorldDeleteTools } from './tools/world-delete.js';
-import { AddActorsToSceneTool } from './tools/add-actors-to-scene.js';
-import { DeleteTokenTool } from './tools/delete-token.js';
+// Phase 4 mcp_crud_expansion — AddActorsToSceneTool + DeleteTokenTool folded
+// into the scene umbrella (actions: 'add-tokens' / 'delete-token').
 import { CreateCustomItemTool } from './tools/create-custom-item.js';
 import { TradeItemTool } from './tools/trade-item.js';
 import { ModifyItemQualitiesTool } from './tools/modify-item-qualities.js';
@@ -247,7 +251,8 @@ async function startBackend(): Promise<void> {
 
   const compendiumTools = new CompendiumTools({ foundryClient, logger });
 
-  const sceneTools = new SceneTools({ foundryClient, logger });
+  const sceneTool = new SceneTool({ foundryClient, logger });
+  const worldTool = new WorldTool({ foundryClient, logger });
 
   const actorCreationTools = new ActorCreationTools({ foundryClient, logger });
 
@@ -272,8 +277,7 @@ async function startBackend(): Promise<void> {
   const getWfrpConfigTool = new GetWfrpConfigTool({ foundryClient, logger });
   const journalTools = new JournalTools({ foundryClient, logger });
   const worldDeleteTools = new WorldDeleteTools({ foundryClient, logger });
-  const addActorsToSceneTool = new AddActorsToSceneTool({ foundryClient, logger });
-  const deleteTokenTool = new DeleteTokenTool({ foundryClient, logger });
+  // Phase 4 mcp_crud_expansion — addActorsToSceneTool + deleteTokenTool folded into sceneTool.
   const duplicateActorTool = new DuplicateActorTool({ foundryClient, logger });
   const listActorItemsTool = new ListActorItemsTool({ foundryClient, logger });
   const applyNpcCareerAdvanceTool = new ApplyNpcCareerAdvanceTool({ foundryClient, logger });
@@ -305,14 +309,16 @@ async function startBackend(): Promise<void> {
   registry.register('get-compendium-item', (args) => compendiumTools.handleGetCompendiumItem(args));
   registry.register('list-creatures-by-criteria', (args) => compendiumTools.handleListCreaturesByCriteria(args));
   registry.register('list-compendium-packs', (args) => compendiumTools.handleListCompendiumPacks(args));
-  registry.register('get-current-scene', (args) => sceneTools.handleGetCurrentScene(args));
-  registry.register('get-world-info', (args) => sceneTools.handleGetWorldInfo(args));
+  // Phase 4 mcp_crud_expansion — single `scene` umbrella replaces 5 legacy tool keys
+  // (get-current-scene, list-scenes, switch-scene, add-actors-to-scene, delete-token).
+  // 11 actions dispatched server-side. get-world-info extracted to `world` tool.
+  registry.register('scene', (args) => sceneTool.execute(args));
+  registry.register('get-world-info', (args) => worldTool.handleGetWorldInfo(args));
   registry.register('create-actor-from-compendium', (args) => actorCreationTools.handleCreateActorFromCompendium(args));
   registry.register('get-compendium-entry-full', (args) => actorCreationTools.handleGetCompendiumEntryFull(args));
   registry.register('request-player-rolls', (args) => diceRollTools.handleRequestPlayerRolls(args));
   registry.register('ownership', (args) => ownershipTool.execute(args));
-  registry.register('list-scenes', (args) => sceneTools.listScenes(args));
-  registry.register('switch-scene', (args) => sceneTools.switchScene(args));
+  // Phase 4 mcp_crud_expansion — list-scenes + switch-scene folded into scene umbrella.
   registry.register('rolltable', (args) => rollTableTool.execute(args));
   registry.register('get-combat', (args) => manageCombatTools.handleGetCombat(args));
   registry.register('list-combatants', (args) => manageCombatTools.handleListCombatants(args));
@@ -335,14 +341,12 @@ async function startBackend(): Promise<void> {
   registry.register('add-item-from-compendium', (args) => addItemFromCompendiumTool.handle(args));
   registry.register('delete-item', (args) => deleteItemTool.handle(args));
   registry.register('get-wfrp-config', (args) => getWfrpConfigTool.handle(args));
-  registry.register('list-journals', (args) => journalTools.handleListJournals(args));
-  registry.register('get-journal-content', (args) => journalTools.handleGetJournalContent(args));
-  registry.register('create-journal-entry', (args) => journalTools.handleCreateJournalEntry(args));
-  registry.register('update-journal-content', (args) => journalTools.handleUpdateJournalContent(args));
-  registry.register('add-actors-to-scene', (args) => addActorsToSceneTool.handle(args));
-  registry.register('delete-token', (args) => deleteTokenTool.handle(args));
+  // Phase 3 mcp_crud_expansion — single `journal` umbrella replaces 5 legacy tool keys
+  // (list-journals / get-journal-content / create-journal-entry / update-journal-content /
+  // delete-journal-entry). 13 actions dispatched server-side.
+  registry.register('journal', (args) => journalTools.execute(args));
+  // Phase 4 mcp_crud_expansion — add-actors-to-scene + delete-token folded into scene umbrella.
   registry.register('delete-actor', (args) => worldDeleteTools.handleDeleteActor(args));
-  registry.register('delete-journal-entry', (args) => worldDeleteTools.handleDeleteJournalEntry(args));
 
   const allTools = [
 
@@ -353,7 +357,9 @@ async function startBackend(): Promise<void> {
 
     ...compendiumTools.getToolDefinitions(),
 
-    ...sceneTools.getToolDefinitions(),
+    ...sceneTool.getToolDefinitions(),
+
+    ...worldTool.getToolDefinitions(),
 
     ...actorCreationTools.getToolDefinitions(),
 
@@ -385,9 +391,7 @@ async function startBackend(): Promise<void> {
 
     ...worldDeleteTools.getToolDefinitions(),
 
-    ...addActorsToSceneTool.getToolDefinitions(),
-
-    ...deleteTokenTool.getToolDefinitions(),
+    // Phase 4 mcp_crud_expansion — add-actors-to-scene + delete-token folded into scene umbrella.
 
     ...duplicateActorTool.getToolDefinitions(),
     ...listActorItemsTool.getToolDefinitions(),

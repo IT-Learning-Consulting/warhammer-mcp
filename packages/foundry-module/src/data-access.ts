@@ -1720,123 +1720,11 @@ export class FoundryDataAccess {
 
   // ===== PHASE 2 & 3: WRITE OPERATIONS =====
 
-  /**
-   * Create journal entry for quests
-   */
-  async createJournalEntry(request: { name: string; content: string; folderName?: string }): Promise<{ id: string; name: string }> {
-    this.validateFoundryState();
-
-    try {
-      // Create journal entry with proper Foundry v13 structure
-      const journalData = {
-        name: request.name,
-        pages: [{
-          type: 'text',
-          name: 'Quest Details', // Use generic page name to avoid title repetition
-          text: {
-            content: request.content
-          }
-        }],
-        ownership: { default: 0 }, // GM only by default
-        folder: await this.getOrCreateFolder(request.folderName || request.name, 'JournalEntry')
-      };
-
-      const journal = await JournalEntry.create(journalData);
-
-      if (!journal) {
-        throw new Error('Failed to create journal entry');
-      }
-
-      const result = {
-        id: journal.id,
-        name: journal.name || request.name,
-      };
-
-      this.auditLog('createJournalEntry', request, 'success');
-      return result;
-
-    } catch (error) {
-      this.auditLog('createJournalEntry', request, 'failure', error instanceof Error ? error.message : 'Unknown error');
-      throw error;
-    }
-  }
-
-  /**
-   * List all journal entries
-   */
-  async listJournals(): Promise<Array<{ id: string; name: string; type: string }>> {
-    this.validateFoundryState();
-
-    return game.journal.map((journal: any) => ({
-      id: journal.id || '',
-      name: journal.name || '',
-      type: 'JournalEntry',
-    }));
-  }
-
-  /**
-   * Get journal entry content
-   */
-  async getJournalContent(journalId: string): Promise<{ content: string } | null> {
-    this.validateFoundryState();
-
-    const journal = game.journal.get(journalId);
-    if (!journal) {
-      return null;
-    }
-
-    // Get first text page content
-    const firstPage = journal.pages.find((page: any) => page.type === 'text');
-    if (!firstPage) {
-      return { content: '' };
-    }
-
-    return {
-      content: firstPage.text?.content || '',
-    };
-  }
-
-  /**
-   * Update journal entry content
-   */
-  async updateJournalContent(request: { journalId: string; content: string }): Promise<{ success: boolean }> {
-    this.validateFoundryState();
-
-    try {
-
-      const journal = game.journal.get(request.journalId);
-      if (!journal) {
-        throw new Error('Journal entry not found');
-      }
-
-
-      // Update first text page or create one if none exists
-      const firstPage = journal.pages.find((page: any) => page.type === 'text');
-
-      if (firstPage) {
-        // Update existing page
-        await firstPage.update({
-          'text.content': request.content,
-        });
-      } else {
-        // Create new text page
-        await journal.createEmbeddedDocuments('JournalEntryPage', [{
-          type: 'text',
-          name: 'Quest Details', // Use generic page name to avoid title repetition
-          text: {
-            content: request.content,
-          },
-        }]);
-      }
-
-      this.auditLog('updateJournalContent', request, 'success');
-      return { success: true };
-
-    } catch (error) {
-      this.auditLog('updateJournalContent', request, 'failure', error instanceof Error ? error.message : 'Unknown error');
-      throw error;
-    }
-  }
+  // Phase 3 mcp_crud_expansion — journal CRUD methods retired here.
+  // The 4 legacy methods (createJournalEntry, listJournals, getJournalContent,
+  // updateJournalContent) + deleteJournalEntry are superseded by the 13-action
+  // `journal` umbrella in `handlers/journal.ts`. Logic inlined there per Q&A R3
+  // suggestion A1 (retire the dual-layer abstraction).
 
   async deleteActor(data: { id: string }): Promise<{ success: boolean }> {
     this.validateFoundryState();
@@ -1850,17 +1738,8 @@ export class FoundryDataAccess {
     return { success: true };
   }
 
-  async deleteJournalEntry(data: { id: string }): Promise<{ success: boolean }> {
-    this.validateFoundryState();
-    const journal = game.journal?.get(data.id);
-    if (!journal) {
-      this.auditLog('deleteJournalEntry', data, 'failure', 'not found');
-      return { success: false };
-    }
-    await journal.delete();
-    this.auditLog('deleteJournalEntry', data, 'success');
-    return { success: true };
-  }
+  // Phase 3 mcp_crud_expansion — deleteJournalEntry retired here.
+  // Superseded by handlers/journal.ts deleteEntry (BUG-070 post-verify included).
 
   /**
    * Create actors from compendium entries with custom names

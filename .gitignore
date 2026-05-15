@@ -102,3 +102,6 @@ test-results/
 !installer/nsis/*.exe
 *.log
 *.log*
+
+# Eval rig LevelDB snapshots (96 MB binaries) — restore via *.ps1 scripts
+packages/mcp-server/test-fixtures/eval-world-snapshot/

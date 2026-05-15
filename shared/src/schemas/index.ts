@@ -6,6 +6,7 @@ export * from './scene.js';
 export * from './combat.js';
 export * from './conditions.js';
 export * from './meta.js';
+export * from './journal.js';
 export * from './create-custom/index.js';
 export * from './trade-item.js';
 export * from './modify-item-qualities.js';

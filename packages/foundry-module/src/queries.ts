@@ -26,6 +26,14 @@ import {
   drawManyFromTable as drawManyFromTableHandler,
   importRollTableFromCompendium as importRollTableFromCompendiumHandler,
 } from './handlers/rolltable.js';
+// Phase 3 mcp_crud_expansion — Journal umbrella dispatcher (13 actions).
+// Replaces 5 inline handlers (handleCreateJournalEntry, handleListJournals,
+// handleGetJournalContent, handleUpdateJournalContent, handleDeleteJournalEntry).
+import { dispatchJournal as dispatchJournalHandler } from './handlers/journal.js';
+// Phase 4 mcp_crud_expansion — Scene umbrella dispatcher (11 actions).
+// Replaces 5 inline handlers (handleGetActiveScene, handleListScenes,
+// handleSwitchScene, handleAddActorsToScene, handleDeleteToken).
+import { dispatchScene as dispatchSceneHandler } from './handlers/scene.js';
 import {
   // actor domain
   GetCharacterInfoInput,
@@ -63,25 +71,20 @@ import {
   GetAvailablePacksInput,
   GetCompendiumDocumentFullInput,
   GetEnhancedCreatureIndexInput,
-  // scene domain
-  GetActiveSceneInput,
-  ListScenesInput,
-  SwitchSceneInput,
-  AddActorsToSceneInput,
-  DeleteTokenInput,
+  // scene domain — Phase 4: 5 legacy schemas folded into SceneToolInput umbrella.
+  // Only ApplyTemplateToTokenInput stays (separate prototype-token-routing tool).
   ApplyTemplateToTokenInput,
-  // meta (journal, rolltable, ping, world, player rolls)
+  // meta (rolltable, ping, world, player rolls)
   PingInput,
   GetWorldInfoInput,
   GetWfrp4eConfigInput,
-  CreateJournalEntryInput,
-  ListJournalsInput,
-  GetJournalContentInput,
-  UpdateJournalContentInput,
+  // Phase 3 mcp_crud_expansion — journal CRUD moved to journal.ts umbrella.
+  // CreateJournalEntryInput / ListJournalsInput / GetJournalContentInput /
+  // UpdateJournalContentInput / DeleteJournalEntryInput retired here; handler
+  // parses against JournalToolInput from @foundry-mcp/shared/journal.
   RequestPlayerRollsInput,
   // RollTable schemas moved to handlers/rolltable.ts (Phase 2; parsed handler-side).
   DeleteActorInput,
-  DeleteJournalEntryInput,
   // combat domain (Phase 4b)
   GetCombatInput,
   ListCombatantsInput,
@@ -138,22 +141,20 @@ export class QueryHandlers {
     CONFIG.queries[`${modulePrefix}.addItemFromCompendium`] = this.handleAddItemFromCompendium.bind(this);
     CONFIG.queries[`${modulePrefix}.listCreaturesByCriteria`] = this.handleListCreaturesByCriteria.bind(this);
     CONFIG.queries[`${modulePrefix}.getAvailablePacks`] = this.handleGetAvailablePacks.bind(this);
-    CONFIG.queries[`${modulePrefix}.getActiveScene`] = this.handleGetActiveScene.bind(this);
-    CONFIG.queries[`${modulePrefix}.list-scenes`] = this.handleListScenes.bind(this);
-    CONFIG.queries[`${modulePrefix}.switch-scene`] = this.handleSwitchScene.bind(this);
     CONFIG.queries[`${modulePrefix}.getWorldInfo`] = this.handleGetWorldInfo.bind(this);
     CONFIG.queries[`${modulePrefix}.ping`] = this.handlePing.bind(this);
     CONFIG.queries[`${modulePrefix}.createActorFromCompendium`] = this.handleCreateActorFromCompendium.bind(this);
     CONFIG.queries[`${modulePrefix}.getCompendiumDocumentFull`] = this.handleGetCompendiumDocumentFull.bind(this);
-    CONFIG.queries[`${modulePrefix}.addActorsToScene`] = this.handleAddActorsToScene.bind(this);
-    CONFIG.queries[`${modulePrefix}.deleteToken`] = this.handleDeleteToken.bind(this);
+    // Phase 4 mcp_crud_expansion — single `scene` umbrella replaces 5 legacy keys
+    // (getActiveScene, list-scenes, switch-scene, addActorsToScene, deleteToken).
+    // 11 actions dispatched in handlers/scene.ts.
+    CONFIG.queries[`${modulePrefix}.scene`] = this.handleScene.bind(this);
     CONFIG.queries[`${modulePrefix}.validateWritePermissions`] = this.handleValidateWritePermissions.bind(this);
-    CONFIG.queries[`${modulePrefix}.createJournalEntry`] = this.handleCreateJournalEntry.bind(this);
-    CONFIG.queries[`${modulePrefix}.listJournals`] = this.handleListJournals.bind(this);
-    CONFIG.queries[`${modulePrefix}.getJournalContent`] = this.handleGetJournalContent.bind(this);
-    CONFIG.queries[`${modulePrefix}.updateJournalContent`] = this.handleUpdateJournalContent.bind(this);
+    // Phase 3 mcp_crud_expansion — single `journal` umbrella replaces 5 legacy keys
+    // (createJournalEntry / listJournals / getJournalContent / updateJournalContent /
+    // deleteJournalEntry). 13 actions dispatched in handlers/journal.ts.
+    CONFIG.queries[`${modulePrefix}.journal`] = this.handleJournal.bind(this);
     CONFIG.queries[`${modulePrefix}.deleteActor`] = this.handleDeleteActor.bind(this);
-    CONFIG.queries[`${modulePrefix}.deleteJournalEntry`] = this.handleDeleteJournalEntry.bind(this);
     CONFIG.queries[`${modulePrefix}.request-player-rolls`] = this.handleRequestPlayerRolls.bind(this);
     CONFIG.queries[`${modulePrefix}.getEnhancedCreatureIndex`] = this.handleGetEnhancedCreatureIndex.bind(this);
     // Deprecation wrappers — old actor-only ownership keys (PRD R1.5).
@@ -357,22 +358,16 @@ export class QueryHandlers {
     }
   }
 
-  private async handleGetActiveScene(data: unknown): Promise<any> {
+  // Phase 4 mcp_crud_expansion — single umbrella entry point for all 11 scene
+  // actions. Validates Foundry-side state then delegates to dispatchScene
+  // (handlers/scene.ts) which routes by `args.action`.
+  private async handleScene(data: unknown): Promise<any> {
     try {
-      const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
-      // TOOL-IDEA-007 (2026-05-14): forward sceneId so non-active scene inspection works.
-      const parsed = GetActiveSceneInput.strict().parse(data ?? {});
-      return {
-        success: true,
-        data: await this.dataAccess.getActiveScene(
-          parsed.sceneId ? { sceneId: parsed.sceneId } : {}
-        ),
-      };
+      return await dispatchSceneHandler(data, this.dataAccess);
     } catch (error) {
       rethrowAsInvalidInput(error);
-      throw new Error(`Failed to get active scene: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(`Failed to dispatch scene action: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
@@ -457,41 +452,8 @@ export class QueryHandlers {
     }
   }
 
-  private async handleAddActorsToScene(data: unknown): Promise<any> {
-    try {
-      const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
-      this.dataAccess.validateFoundryState();
-      const parsed = AddActorsToSceneInput.parse(data ?? {});
-      return await wrappedWrite('addActorsToScene', async () => {
-        // TOOL-IDEA-004 (2026-05-14): forward sceneId for non-active scene targeting.
-        const result = await this.dataAccess.addActorsToScene({
-          actorIds: parsed.actorIds,
-          ...(parsed.quantities ? { quantities: parsed.quantities } : {}),
-          placement: parsed.placement || 'random',
-          hidden: parsed.hidden || false,
-          ...(parsed.sceneId ? { sceneId: parsed.sceneId } : {}),
-        });
-        return { success: true, data: result };
-      });
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to add actors to scene: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
-
-  private async handleDeleteToken(data: unknown): Promise<any> {
-    try {
-      const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
-      this.dataAccess.validateFoundryState();
-      const parsed = DeleteTokenInput.strict().parse(data ?? {});
-      return await wrappedWrite('deleteToken', async () => ({ success: true, data: await this.dataAccess.deleteToken(parsed) }));
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to delete token: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
+  // Phase 4 mcp_crud_expansion — handleAddActorsToScene + handleDeleteToken
+  // folded into handleScene umbrella (action: 'add-tokens' / 'delete-token').
 
   private async handleValidateWritePermissions(data: unknown): Promise<any> {
     try {
@@ -513,79 +475,19 @@ export class QueryHandlers {
     }
   }
 
-  async handleCreateJournalEntry(data: unknown): Promise<any> {
+  // Phase 3 mcp_crud_expansion — Journal umbrella dispatcher (13 actions).
+  // Replaces 5 legacy inline handlers: handleCreateJournalEntry, handleListJournals,
+  // handleGetJournalContent, handleUpdateJournalContent, handleDeleteJournalEntry.
+  // The free-function dispatchJournal in handlers/journal.ts owns input strict-parse,
+  // GM access gate, transaction wrapping, BUG-070 post-verify, and the typed
+  // response envelope per action.
+  async handleJournal(data: unknown): Promise<any> {
     try {
-      const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
-      const parsed = CreateJournalEntryInput.strict().parse(data ?? {});
-      return await wrappedWrite('createJournalEntry', async () => {
-        const result = await this.dataAccess.createJournalEntry({
-          name: parsed.name,
-          content: parsed.content,
-        });
-        return { success: true, data: result };
-      });
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to create journal entry: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
-
-  async handleListJournals(data: unknown): Promise<any> {
-    try {
-      const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
-      const parsed = ListJournalsInput.strict().parse(data ?? {});
-      let journals: Array<{ id: string; name: string; type: string; content?: string }> =
-        await this.dataAccess.listJournals();
-      if (parsed.filterQuests === true) {
-        journals = journals.filter(j => /^quest:/i.test(j.name));
-      }
-      if (parsed.includeContent === true) {
-        journals = await Promise.all(
-          journals.map(async j => {
-            const body = await this.dataAccess.getJournalContent(j.id);
-            return { ...j, content: body?.content ?? '' };
-          })
-        );
-      }
-      return { success: true, data: journals };
+      return await dispatchJournalHandler(data);
     } catch (error) {
       rethrowAsInvalidInput(error);
-      throw new Error(`Failed to list journals: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
-
-  async handleGetJournalContent(data: unknown): Promise<any> {
-    try {
-      const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
-      this.dataAccess.validateFoundryState();
-      const parsed = GetJournalContentInput.strict().parse(data ?? {});
-      return { success: true, data: await this.dataAccess.getJournalContent(parsed.journalId) };
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to get journal content: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
-
-  async handleUpdateJournalContent(data: unknown): Promise<any> {
-    try {
-      const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
-      this.dataAccess.validateFoundryState();
-      const parsed = UpdateJournalContentInput.strict().parse(data ?? {});
-      return await wrappedWrite('updateJournalContent', async () => {
-        const result = await this.dataAccess.updateJournalContent({
-          journalId: parsed.journalId,
-          content: parsed.content,
-        });
-        return { success: true, data: result };
-      });
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to update journal content: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(`Failed to dispatch journal action: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
@@ -764,31 +666,10 @@ export class QueryHandlers {
     }
   }
 
-  private async handleListScenes(data: unknown): Promise<any> {
-    try {
-      const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
-      this.dataAccess.validateFoundryState();
-      const parsed = ListScenesInput.strict().parse(data ?? {});
-      return { success: true, data: await this.dataAccess.listScenes(parsed as any) };
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to list scenes: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
-
-  private async handleSwitchScene(data: unknown): Promise<any> {
-    try {
-      const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
-      this.dataAccess.validateFoundryState();
-      const parsed = SwitchSceneInput.strict().parse(data ?? {});
-      return await wrappedWrite('switchScene', async () => ({ success: true, data: await this.dataAccess.switchScene(parsed) }));
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to switch scene: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
+  // Phase 4 mcp_crud_expansion — handleListScenes folded into handleScene umbrella
+  // (action: 'list'). handleSwitchScene removed; clean-break replacement is the
+  // pair `scene { action: 'activate' }` (world-active) + `scene { action: 'view' }`
+  // (per-user canvas view).
 
   private async handleCreateActor(data: unknown): Promise<any> {
     try {
@@ -922,17 +803,9 @@ export class QueryHandlers {
     }
   }
 
-  private async handleDeleteJournalEntry(data: unknown): Promise<any> {
-    try {
-      const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
-      const parsed = DeleteJournalEntryInput.strict().parse(data ?? {});
-      return await wrappedWrite('deleteJournalEntry', async () => ({ success: true, data: await this.dataAccess.deleteJournalEntry(parsed) }));
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to delete journal entry: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
+  // Phase 3 mcp_crud_expansion — handleDeleteJournalEntry retired. The
+  // `journal { action: "delete-entry" }` umbrella variant supersedes it
+  // (free-function deleteEntry in handlers/journal.ts).
 
   private async handleModifyItemQualities(data: unknown): Promise<any> {
     try {

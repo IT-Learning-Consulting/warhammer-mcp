@@ -91,24 +91,10 @@ export const GetWfrp4eConfigInput = z.object({
   keys: z.array(z.string()).min(1),
 }).strict();
 
-export const CreateJournalEntryInput = z.object({
-  name: z.string(),
-  content: z.string(),
-}).strict();
-
-export const ListJournalsInput = z.object({
-  filterQuests: z.boolean().optional(),
-  includeContent: z.boolean().optional(),
-}).strict();
-
-export const GetJournalContentInput = z.object({
-  journalId: z.string(),
-}).strict();
-
-export const UpdateJournalContentInput = z.object({
-  journalId: z.string(),
-  content: z.string(),
-}).strict();
+// Journal Input schemas retired in Phase 3 mcp_crud_expansion. The 5 legacy
+// schemas (CreateJournalEntryInput, ListJournalsInput, GetJournalContentInput,
+// UpdateJournalContentInput, DeleteJournalEntryInput) are superseded by the
+// `journal` umbrella schemas in `./journal.ts`. See JournalToolInput.
 
 export const RequestPlayerRollsInput = z.object({
   rollType: z.string(),
@@ -270,6 +256,5 @@ export const DeleteActorInput = z.object({
   id: z.string().min(1),
 }).strict();
 
-export const DeleteJournalEntryInput = z.object({
-  id: z.string().min(1),
-}).strict();
+// DeleteJournalEntryInput retired in Phase 3 mcp_crud_expansion — folded into
+// the `journal` umbrella as action: "delete-entry". See ./journal.ts.
