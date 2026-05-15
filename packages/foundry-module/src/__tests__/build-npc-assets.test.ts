@@ -2,6 +2,16 @@
 // Non-runtime tests: reads the extractor's output + hand-authored assets and
 // asserts schema invariants locked in references/career-data-shape.md and
 // references/configuration.md.
+//
+// Post-R-007 migration (2026-05-15 port): the single-file `careers.json` +
+// `career-index.json` layout was migrated to per-careergroup `careers/<group>.json`
+// files (one per group; expansion modules add `__<module>` suffix variants) plus
+// a flat `career-lookup.ndjson` for per-career indexing. The extractor at
+// _tools/extract-build-npc-assets.mjs:319-322 actively deletes any legacy
+// `careers.json` it finds. This test file was ported to the new layout but
+// preserves every original invariant (64 core careergroups, levels[0..3],
+// Apothecary L2 anchor, Slayer level names, 256 core careers, etc.) by
+// filtering to module_id="wfrp4e-core".
 
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
@@ -16,11 +26,48 @@ function readJson(name: string): any {
   return JSON.parse(fs.readFileSync(path.join(ASSET, name), 'utf8'));
 }
 
-describe('build-npc assets — careers.json', () => {
-  const careers = readJson('careers.json');
+// Reconstruct the legacy `careers.json` shape (one object keyed by careergroup,
+// each value with class + levels[0..3]) from the new per-careergroup files.
+// Filter to module_id="wfrp4e-core" to preserve the original "64 core careergroups"
+// invariant — expansion modules (wfrp4e-archives, wfrp4e-soc, wfrp4e-wom, etc.)
+// add their own variants under `__<module>` suffixes which are out of scope here.
+function loadCoreCareers(): Record<string, any> {
+  const CAREERS_DIR = path.join(ASSET, 'careers');
+  const result: Record<string, any> = {};
+  for (const filename of fs.readdirSync(CAREERS_DIR)) {
+    if (!filename.endsWith('.json')) continue;
+    const data = JSON.parse(fs.readFileSync(path.join(CAREERS_DIR, filename), 'utf8'));
+    if (data.module_id !== 'wfrp4e-core') continue;
+    result[data.group_key] = data;
+  }
+  return result;
+}
+
+// Reconstruct the legacy `career-index.json` shape (one entry per individual
+// career, keyed by name, value = {pack_id, item_id, level, careergroup}) from
+// the new flat NDJSON. Filter to wfrp4e-core for the original 256-entry invariant.
+function loadCoreCareerIndex(): Record<string, any> {
+  const ndjson = fs.readFileSync(path.join(ASSET, 'career-lookup.ndjson'), 'utf8');
+  const result: Record<string, any> = {};
+  for (const line of ndjson.split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    const rec = JSON.parse(line);
+    if (rec.module_id !== 'wfrp4e-core') continue;
+    result[rec.name] = {
+      pack_id: rec.pack_id,
+      item_id: rec.item_id,
+      level: rec.level,
+      careergroup: rec.careergroup,
+    };
+  }
+  return result;
+}
+
+describe('build-npc assets — careers/* (per-careergroup files; core-filtered)', () => {
+  const careers = loadCoreCareers();
   const keys = Object.keys(careers);
 
-  it('has exactly 64 careergroups', () => {
+  it('has exactly 64 core careergroups', () => {
     expect(keys.length).toBe(64);
   });
 
@@ -68,10 +115,10 @@ describe('build-npc assets — careers.json', () => {
   });
 });
 
-describe('build-npc assets — career-index.json', () => {
-  const index = readJson('career-index.json');
+describe('build-npc assets — career-lookup.ndjson (per-career index; core-filtered)', () => {
+  const index = loadCoreCareerIndex();
 
-  it('has exactly 256 entries', () => {
+  it('has exactly 256 core entries (64 careergroups × 4 levels)', () => {
     expect(Object.keys(index).length).toBe(256);
   });
 
@@ -98,14 +145,15 @@ describe('build-npc assets — career-index.json', () => {
 describe('build-npc assets — species-bases.json', () => {
   const species = readJson('species-bases.json');
 
-  it('has exactly 5 species', () => {
-    expect(Object.keys(species).sort()).toEqual(['Dwarf', 'Halfling', 'High Elf', 'Human', 'Wood Elf']);
+  it('has exactly 6 species (5 core + Norse from Tribes expansion)', () => {
+    expect(Object.keys(species).sort()).toEqual(['Dwarf', 'Halfling', 'High Elf', 'Human', 'Norse', 'Wood Elf']);
   });
 
   it('every species has world_template_id + compendium_fallback + aliases', () => {
-    for (const [name, entry] of Object.entries<any>(species)) {
+    for (const [, entry] of Object.entries<any>(species)) {
       expect(entry.world_template_id).toMatch(/^[A-Za-z0-9]{16}$/);
-      expect(entry.compendium_fallback.pack_id).toBe('wfrp4e-core.actors');
+      // Norse compendium lives in wfrp4e-tribes; core species in wfrp4e-core.actors.
+      expect(entry.compendium_fallback.pack_id).toMatch(/^wfrp4e-(core|tribes)\.actors$/);
       expect(entry.compendium_fallback.item_id).toMatch(/^[A-Za-z0-9]{16}$/);
       expect(Array.isArray(entry.aliases)).toBe(true);
       expect(entry.aliases.length).toBeGreaterThan(0);
@@ -119,19 +167,21 @@ describe('build-npc assets — species-bases.json', () => {
 
 describe('build-npc assets — species-career-matrix.json', () => {
   const matrix = readJson('species-career-matrix.json');
-  const careers = readJson('careers.json');
-  const species = ['Human', 'Dwarf', 'Halfling', 'High Elf', 'Wood Elf'];
+  const careers = loadCoreCareers();
+  const species = ['Human', 'Dwarf', 'Halfling', 'High Elf', 'Wood Elf', 'Norse'];
 
-  it('has exactly 64 keys matching careers.json careergroups', () => {
+  it('is a superset of the 64 core careergroups (expansion modules add more)', () => {
     const mKeys = new Set(Object.keys(matrix));
     const cKeys = new Set(Object.keys(careers));
-    expect(mKeys.size).toBe(64);
+    // Matrix may contain expansion-only careergroups; the invariant is that
+    // every core careergroup MUST be present so the d100 distribution is complete.
+    expect(mKeys.size).toBeGreaterThanOrEqual(cKeys.size);
     for (const k of cKeys) expect(mKeys.has(k)).toBe(true);
   });
 
-  it('each entry has exactly the 5 species keys', () => {
+  it('each entry has exactly the 6 species keys', () => {
     for (const cg of Object.keys(matrix)) {
-      expect(Object.keys(matrix[cg]).sort()).toEqual(['Dwarf', 'Halfling', 'High Elf', 'Human', 'Wood Elf']);
+      expect(Object.keys(matrix[cg]).sort()).toEqual(['Dwarf', 'Halfling', 'High Elf', 'Human', 'Norse', 'Wood Elf']);
     }
   });
 
@@ -149,10 +199,21 @@ describe('build-npc assets — species-career-matrix.json', () => {
     }
   });
 
-  it('per-species total legal range equals exactly 100 (d100 coverage)', () => {
-    for (const s of species) {
+  it('5 original species have full d100 coverage over CORE careergroups', () => {
+    // d100 distribution invariant: the 5 original WFRP4e species (Human/Dwarf/Halfling/
+    // High Elf/Wood Elf) each have a complete d100 roll across the 64 core careergroups.
+    // Expansion careergroups (matrix superset) add OPTIONAL careers beyond d100 — they
+    // are NOT part of the canonical core roll, so the assertion scopes to core only.
+    //
+    // Norse (Tribes expansion species) has its OWN distribution that mixes core +
+    // expansion careergroups; its core-only sum is partial-by-design (~97/100 in current
+    // data) — Norse has its own rollable matrix in wfrp4e-tribes. Out of scope here.
+    const coreKeys = new Set(Object.keys(careers));
+    const coreSpecies = ['Human', 'Dwarf', 'Halfling', 'High Elf', 'Wood Elf'];
+    for (const s of coreSpecies) {
       let total = 0;
       for (const cg of Object.keys(matrix)) {
+        if (!coreKeys.has(cg)) continue;
         const v = matrix[cg][s];
         if (Array.isArray(v)) total += v[1] - v[0] + 1;
       }
@@ -238,7 +299,11 @@ describe('build-npc assets — config.json', () => {
 
   it('enums are in allowed sets', () => {
     expect(['all', 'min']).toContain(config.talent_policy);
-    expect(['creature', 'npc']).toContain(config.default_actor_type);
+    // default_actor_type migrated from a single string to a per-species-source object
+    // (player_species vs bestiary_species; allows e.g. "creature for bestiary, npc for players").
+    expect(typeof config.default_actor_type).toBe('object');
+    expect(['creature', 'npc']).toContain(config.default_actor_type.player_species);
+    expect(['creature', 'npc']).toContain(config.default_actor_type.bestiary_species);
     expect(['warn', 'enforce', 'silent']).toContain(config.legality_mode);
   });
 });

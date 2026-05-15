@@ -36,16 +36,22 @@ describe('handler envelope — read (handleListActors)', () => {
   });
 });
 
-describe('handler envelope — scene-read (handleGetActiveScene)', () => {
-  it('returns { success: true, data } on success', async () => {
+describe('handler envelope — scene umbrella (handleScene action=list)', () => {
+  // Phase 4 mcp_crud_expansion — 5 legacy scene handlers folded into the
+  // `scene` umbrella. The list action is the simplest envelope test because
+  // it delegates to dataAccess.listScenes (stubbable) rather than touching
+  // the live game.scenes collection. Other actions (create/update/delete/
+  // clone/activate/view/thumbnail/get) exercise Foundry document calls and
+  // are covered by live smoke at validate stage.
+  it('returns { success: true, data } on action=list', async () => {
     const qh = makeHandlers();
-    (qh.dataAccess as any).getActiveScene = async () => ({
-      id: 's1',
-      name: 'Stage',
-    });
-    const result = await (qh as any).handleGetActiveScene({});
-    expectEnvelope<{ id: string; name: string }>(result);
-    expect(result.data.name).toBe('Stage');
+    (qh.dataAccess as any).listScenes = async () => [
+      { id: 's1', name: 'Stage', active: true, navigation: true },
+    ];
+    const result = await (qh as any).handleScene({ action: 'list' });
+    expectEnvelope<{ success: true; scenes: Array<{ id: string; name: string }> }>(result);
+    expect(result.data.scenes).toHaveLength(1);
+    expect(result.data.scenes[0].id).toBe('s1');
   });
 });
 
@@ -83,41 +89,10 @@ describe('handler envelope — item-write (handleCreateItem)', () => {
   });
 });
 
-describe('handler envelope — journal-write (handleCreateJournalEntry)', () => {
-  it('returns { success: true, data } on success', async () => {
-    const qh = makeHandlers();
-    (qh.dataAccess as any).createJournalEntry = async () => ({
-      journalId: 'j1',
-      name: 'Log',
-    });
-    const result = await qh.handleCreateJournalEntry({
-      name: 'Log',
-      content: 'hello',
-    });
-    expectEnvelope<{ journalId: string; name: string }>(result);
-    expect(result.data.journalId).toBe('j1');
-  });
-});
-
-describe('handler envelope — rolltable-write (handleCreateRollTable)', () => {
-  it('returns { success: true, data } on success', async () => {
-    const qh = makeHandlers();
-    (globalThis as any).RollTable = class {
-      static async create(tableData: any) {
-        return {
-          id: 't1',
-          name: tableData.name,
-          createEmbeddedDocuments: async () => {},
-        };
-      }
-    };
-    const result = await (qh as any).handleCreateRollTable({
-      tableData: { name: 'Mishaps', results: [] },
-    });
-    expectEnvelope<{ id: string; name: string }>(result);
-    expect(result.data.name).toBe('Mishaps');
-  });
-});
+// Phase 3 mcp_crud_expansion — journal-write test removed (handleCreateJournalEntry retired;
+// covered by handleJournal umbrella tests).
+// Phase 2 mcp_crud_expansion — rolltable-write test removed (input shape changed; shim still
+// works but the umbrella tests in dispatchRollTable cover the action surface).
 
 // Phase 4b — envelope tests for 11 new handlers.
 

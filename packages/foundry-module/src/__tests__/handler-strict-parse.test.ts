@@ -33,19 +33,19 @@ const methodCases: Array<[string, string]> = [
   ['handleAddItemFromCompendium', 'addItemFromCompendium'],
   ['handleListCreaturesByCriteria', 'listCreaturesByCriteria'],
   ['handleGetAvailablePacks', 'getAvailablePacks'],
-  ['handleGetActiveScene', 'getActiveScene'],
-  ['handleListScenes', 'list-scenes'],
-  ['handleSwitchScene', 'switch-scene'],
+  // Phase 4 mcp_crud_expansion — 5 legacy scene handlers folded into umbrella.
+  // 11 actions now dispatched via handleScene (action: 'create' | 'update' |
+  // 'delete' | 'clone' | 'activate' | 'view' | 'thumbnail' | 'get' | 'list' |
+  // 'add-tokens' | 'delete-token'). One strict-parse test per umbrella entry.
+  ['handleScene', 'scene'],
   ['handleGetWorldInfo', 'getWorldInfo'],
   ['handlePing', 'ping'],
   ['handleCreateActorFromCompendium', 'createActorFromCompendium'],
   ['handleGetCompendiumDocumentFull', 'getCompendiumDocumentFull'],
-  ['handleAddActorsToScene', 'addActorsToScene'],
+  // handleAddActorsToScene folded into handleScene umbrella (action: 'add-tokens')
   ['handleValidateWritePermissions', 'validateWritePermissions'],
-  ['handleCreateJournalEntry', 'createJournalEntry'],
-  ['handleListJournals', 'listJournals'],
-  ['handleGetJournalContent', 'getJournalContent'],
-  ['handleUpdateJournalContent', 'updateJournalContent'],
+  // Phase 3 mcp_crud_expansion — 4 legacy journal handlers folded into handleJournal umbrella
+  // (handleCreateJournalEntry, handleListJournals, handleGetJournalContent, handleUpdateJournalContent).
   ['handleRequestPlayerRolls', 'request-player-rolls'],
   ['handleGetEnhancedCreatureIndex', 'getEnhancedCreatureIndex'],
   ['handleSetActorOwnership', 'setActorOwnership'],
@@ -84,8 +84,8 @@ const methodCases: Array<[string, string]> = [
   ['handleApplyNpcCareerAdvance', 'applyNpcCareerAdvance'],
   // Phase 4h
   ['handleApplyTemplate', 'applyTemplate'],
-  // Phase 4h post-hotfix (BUG-051)
-  ['handleDeleteToken', 'deleteToken'],
+  // Phase 4h post-hotfix (BUG-051) — handleDeleteToken folded into handleScene
+  // umbrella (action: 'delete-token').
   // apply-template-to-token — prototype-sheet routing primitive
   ['handleApplyTemplateToToken', 'applyTemplateToToken'],
   // Phase 1 mcp_crud_expansion — polymorphic ownership.
