@@ -134,11 +134,11 @@ export class SceneTool extends BaseTool {
           `Manage Foundry VTT Scenes via 9 actions (entity-level CRUD + activation + view + thumbnail + list). Token placement lives on the dedicated \`token\` umbrella.
 
 **Actions:**
-- **create**: Create a Scene. Required: name. Optional: full SceneConfig surface (background, grid, fog, environment, foreground, dimensions, padding, FK fields journal/playlist/folder, ownership, flags, navigation). Returns full SceneView.
+- **create**: Create a Scene. Required: name. Optional: full SceneConfig surface (background, grid, fog, environment, foreground, dimensions, padding, FK fields journal/playlist/folder, ownership, flags, navigation). Returns full SceneView. **Dimension auto-fit (BUG-080 fix):** when \`background.src\` is set and both \`width\` and \`height\` are omitted (or null), the handler probes the texture and sets scene dimensions to the image's natural width/height. Pass explicit \`width\`/\`height\` to override.
 - **update**: Partial-diff update. sceneId + changes (≥1 field). Same writable surface as create; name optional.
 - **delete**: Permanently delete a Scene + all embedded tokens/walls/lights/notes/regions/sounds/drawings/templates/tiles. ⚠️ Irreversible.
 - **clone**: Duplicate a Scene with newName + optional overrides. Single-step persist.
-- **activate**: Make the scene world-active (Scene.activate). Sets active=true + switches GM camera. Use **view** for per-user camera only.
+- **activate**: Make the scene world-active (Scene.activate). Sets active=true + switches GM camera. Use **view** for per-user camera only. **⚠️ BUG-081 race-condition warning:** sequence \`activate\` AFTER any \`<embedded>.create\` (light / tile / token / template / sound / note / region) calls on the SAME scene. Firing them in parallel drops in-flight embedded writes silently — each create returns a SUCCESS envelope, but activation's data re-sync overwrites pending writes, so \`<embedded>.list\` afterward shows fewer docs than were created. Workaround: emit the embedded creates in one batch, await them, then call \`activate\` in a second batch.
 - **view**: Switch the LOCAL user's canvas to the scene. Does NOT change world-active state.
 - **thumbnail**: Regenerate scene thumbnail via createThumbnail({width, height, format, quality}). All four optional (defaults: 300×100 webp @ 0.8).
 - **get**: Fetch a single scene (defaults to active when sceneId omitted). includeTokens=true adds token list; includeHidden=true includes hidden tokens.

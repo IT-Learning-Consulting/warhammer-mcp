@@ -2,7 +2,6 @@ import { z } from 'zod';
 import { MODULE_ID } from './constants.js';
 import { FoundryDataAccess } from './data-access.js';
 import { wrappedWrite } from './transaction-manager.js';
-import { permissionManager } from './permissions.js';
 import { notify } from './notify.js';
 // Phase 1 mcp_crud_expansion — polymorphic ownership handlers.
 import {
@@ -58,7 +57,6 @@ import {
   CreateActorInput,
   UpdateActorInput,
   CreateActorFromCompendiumInput,
-  ValidateWritePermissionsInput,
   SetActorOwnershipInput,
   GetActorOwnershipInput,
   // Phase 1 mcp_crud_expansion — polymorphic ownership schemas.
@@ -66,11 +64,6 @@ import {
   GetDocumentOwnershipInput,
   BulkSetDocumentOwnershipInput,
   ResetDocumentOwnershipInput,
-  GetFriendlyNPCsInput,
-  GetConnectedPlayersInput,
-  GetPartyCharactersInput,
-  FindPlayersInput,
-  FindActorInput,
   DuplicateActorInput,
   ApplyNpcCareerAdvanceInput,
   ApplyTemplateInput,
@@ -87,7 +80,6 @@ import {
   ListCreaturesByCriteriaInput,
   GetAvailablePacksInput,
   GetCompendiumDocumentFullInput,
-  GetEnhancedCreatureIndexInput,
   // scene domain — Phase 4: 5 legacy schemas folded into SceneToolInput umbrella.
   // Only ApplyTemplateToTokenInput stays (separate prototype-token-routing tool).
   ApplyTemplateToTokenInput,
@@ -166,7 +158,6 @@ export class QueryHandlers {
     // (getActiveScene, list-scenes, switch-scene, addActorsToScene, deleteToken).
     // 11 actions dispatched in handlers/scene.ts.
     CONFIG.queries[`${modulePrefix}.scene`] = this.handleScene.bind(this);
-    CONFIG.queries[`${modulePrefix}.validateWritePermissions`] = this.handleValidateWritePermissions.bind(this);
     // Phase 3 mcp_crud_expansion — single `journal` umbrella replaces 5 legacy keys
     // (createJournalEntry / listJournals / getJournalContent / updateJournalContent /
     // deleteJournalEntry). 13 actions dispatched in handlers/journal.ts.
@@ -184,7 +175,6 @@ export class QueryHandlers {
     CONFIG.queries[`${modulePrefix}.template`] = this.handleTemplate.bind(this);
     CONFIG.queries[`${modulePrefix}.deleteActor`] = this.handleDeleteActor.bind(this);
     CONFIG.queries[`${modulePrefix}.request-player-rolls`] = this.handleRequestPlayerRolls.bind(this);
-    CONFIG.queries[`${modulePrefix}.getEnhancedCreatureIndex`] = this.handleGetEnhancedCreatureIndex.bind(this);
     // Deprecation wrappers — old actor-only ownership keys (PRD R1.5).
     CONFIG.queries[`${modulePrefix}.setActorOwnership`] = this.handleSetActorOwnership.bind(this);
     CONFIG.queries[`${modulePrefix}.getActorOwnership`] = this.handleGetActorOwnership.bind(this);
@@ -193,11 +183,6 @@ export class QueryHandlers {
     CONFIG.queries[`${modulePrefix}.getDocumentOwnership`] = this.handleGetDocumentOwnership.bind(this);
     CONFIG.queries[`${modulePrefix}.bulkSetDocumentOwnership`] = this.handleBulkSetDocumentOwnership.bind(this);
     CONFIG.queries[`${modulePrefix}.resetDocumentOwnership`] = this.handleResetDocumentOwnership.bind(this);
-    CONFIG.queries[`${modulePrefix}.getFriendlyNPCs`] = this.handleGetFriendlyNPCs.bind(this);
-    CONFIG.queries[`${modulePrefix}.getPartyCharacters`] = this.handleGetPartyCharacters.bind(this);
-    CONFIG.queries[`${modulePrefix}.getConnectedPlayers`] = this.handleGetConnectedPlayers.bind(this);
-    CONFIG.queries[`${modulePrefix}.findPlayers`] = this.handleFindPlayers.bind(this);
-    CONFIG.queries[`${modulePrefix}.findActor`] = this.handleFindActor.bind(this);
     CONFIG.queries[`${modulePrefix}.createActor`] = this.handleCreateActor.bind(this);
     CONFIG.queries[`${modulePrefix}.updateActor`] = this.handleUpdateActor.bind(this);
     CONFIG.queries[`${modulePrefix}.updateItem`] = this.handleUpdateItem.bind(this);
@@ -485,25 +470,9 @@ export class QueryHandlers {
   // Phase 5 mcp_crud_expansion — those 2 actions migrated OUT of scene umbrella
   // and into the new `token` umbrella (handleToken; actions 'add' / 'delete-token').
 
-  private async handleValidateWritePermissions(data: unknown): Promise<any> {
-    try {
-      const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
-      this.dataAccess.validateFoundryState();
-      const parsed = ValidateWritePermissionsInput.strict().parse(data ?? {});
-      const check = permissionManager.checkWritePermission(parsed.operation);
-      const payload = {
-        allowed: check.allowed,
-        ...(check.reason ? { reason: check.reason } : {}),
-        ...(check.requiresConfirmation ? { requiresConfirmation: check.requiresConfirmation } : {}),
-        ...(check.warnings ? { warnings: check.warnings } : {}),
-      };
-      return { success: true, data: payload };
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to validate write permissions: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
+  // BUG-009 (2026-05-16) — handleValidateWritePermissions removed; never had an
+  // MCP-tool consumer. permissionManager.checkWritePermission is still used
+  // server-side via wrappedWrite.
 
   // Phase 3 mcp_crud_expansion — Journal umbrella dispatcher (13 actions).
   // Replaces 5 legacy inline handlers: handleCreateJournalEntry, handleListJournals,
@@ -629,18 +598,8 @@ export class QueryHandlers {
     }
   }
 
-  async handleGetEnhancedCreatureIndex(data: unknown): Promise<any> {
-    try {
-      const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
-      this.dataAccess.validateFoundryState();
-      GetEnhancedCreatureIndexInput.strict().parse(data ?? {});
-      return { success: true, data: await this.dataAccess.getEnhancedCreatureIndex() };
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to get enhanced creature index: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
+  // BUG-009 (2026-05-16) — handleGetEnhancedCreatureIndex removed; no MCP-tool
+  // consumer. dataAccess.getEnhancedCreatureIndex retained pending review.
 
   // PRD R1.5 — deprecation wrappers. Old actor-only ownership keys are kept
   // exported so cached legacy callers fail loudly with a pointer at the new
@@ -726,70 +685,11 @@ export class QueryHandlers {
     }
   }
 
-  async handleGetFriendlyNPCs(data: unknown): Promise<any> {
-    try {
-      const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
-      this.dataAccess.validateFoundryState();
-      GetFriendlyNPCsInput.strict().parse(data ?? {});
-      return { success: true, data: await this.dataAccess.getFriendlyNPCs() };
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to get friendly NPCs: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
-
-  async handleGetConnectedPlayers(data: unknown): Promise<any> {
-    try {
-      const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
-      this.dataAccess.validateFoundryState();
-      GetConnectedPlayersInput.strict().parse(data ?? {});
-      return { success: true, data: await this.dataAccess.getConnectedPlayers() };
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to get connected players: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
-
-  private async handleGetPartyCharacters(data: unknown): Promise<any> {
-    try {
-      const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
-      this.dataAccess.validateFoundryState();
-      GetPartyCharactersInput.strict().parse(data ?? {});
-      return { success: true, data: await this.dataAccess.getPartyCharacters() };
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to get party characters: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
-
-  private async handleFindPlayers(data: unknown): Promise<any> {
-    try {
-      const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
-      this.dataAccess.validateFoundryState();
-      const parsed = FindPlayersInput.strict().parse(data ?? {});
-      return { success: true, data: await this.dataAccess.findPlayers(parsed) };
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to find players: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
-
-  private async handleFindActor(data: unknown): Promise<any> {
-    try {
-      const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
-      this.dataAccess.validateFoundryState();
-      const parsed = FindActorInput.strict().parse(data ?? {});
-      return { success: true, data: await this.dataAccess.findActor(parsed) };
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to find actor: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
+  // BUG-009 (2026-05-16) — 5 orphan handlers removed (handleGetFriendlyNPCs,
+  // handleGetConnectedPlayers, handleGetPartyCharacters, handleFindPlayers,
+  // handleFindActor). None had an MCP-tool consumer; staged in Phase 2 for
+  // a /wfrp-session-prep wrapper that never landed (per BUG-038 retrospective).
+  // dataAccess methods retained pending review.
 
   // Phase 4 mcp_crud_expansion — handleListScenes folded into handleScene umbrella
   // (action: 'list'). handleSwitchScene removed; clean-break replacement is the
@@ -1024,6 +924,10 @@ export class QueryHandlers {
         }
 
         await item.update(updateData);
+        notify.updated('item', item.name, {
+          summary: `qualities modified on ${ownerLabel}`,
+          uuid: (item as any).uuid,
+        });
         return { success: true, data: { itemName: item.name, owner: ownerLabel } };
       });
     } catch (error) {

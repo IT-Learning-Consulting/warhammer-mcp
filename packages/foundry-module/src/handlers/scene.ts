@@ -315,7 +315,63 @@ export async function createScene(data: unknown): Promise<Envelope<SceneCreateRe
   const requestedChanges: Record<string, unknown> = { ...rest };
 
   return wrappedWrite('scene.createScene', async () => {
-    const payload = deepStripUndefined({ ...rest });
+    const payload = deepStripUndefined({ ...rest }) as Record<string, any>;
+
+    // BUG-080 (2026-05-16) — when caller supplies a background image but no
+    // explicit dimensions, probe the texture and auto-fit width/height to the
+    // image's natural size. Otherwise Foundry's data-layer default of
+    // 4000×3000 leaves the image fit-scaled and entity coordinates land in
+    // the empty margin. Wrapped in try/catch — on probe failure (file missing,
+    // unsupported format, headless runtime without PIXI), fall through to the
+    // default Foundry behavior with a console warning.
+    const bgSrc: string | null =
+      (payload.background && typeof payload.background.src === 'string')
+        ? payload.background.src
+        : null;
+    const widthOmitted = payload.width === undefined || payload.width === null;
+    const heightOmitted = payload.height === undefined || payload.height === null;
+    if (bgSrc && widthOmitted && heightOmitted) {
+      try {
+        const loader = (globalThis as any).loadTexture;
+        if (typeof loader === 'function') {
+          // BUG-082 (2026-05-16) — Foundry's `loadTexture` hangs (no fast-fail)
+          // on missing or unsupported texture paths instead of rejecting
+          // quickly. Without a timeout the outer wrappedWrite call exceeds
+          // the MCP socket-bridge query timeout (~30s) and the entire
+          // scene.create returns a stale "Query timeout" error envelope to
+          // the caller — even though the probe was meant to be best-effort.
+          // Race the loader against a 5s timeout so a missing-asset path
+          // falls through to Foundry's 4000×3000 default with a console.warn
+          // instead of failing the whole create.
+          const PROBE_TIMEOUT_MS = 5000;
+          let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+          const timeoutPromise = new Promise<never>((_, reject) => {
+            timeoutHandle = setTimeout(
+              () => reject(new Error(`loadTexture probe timed out after ${PROBE_TIMEOUT_MS}ms`)),
+              PROBE_TIMEOUT_MS,
+            );
+          });
+          try {
+            const texture: any = await Promise.race([loader(bgSrc), timeoutPromise]);
+            const w = texture?.baseTexture?.width ?? texture?.width;
+            const h = texture?.baseTexture?.height ?? texture?.height;
+            if (typeof w === 'number' && typeof h === 'number' && w > 0 && h > 0) {
+              payload.width = w;
+              payload.height = h;
+            }
+          } finally {
+            if (timeoutHandle) clearTimeout(timeoutHandle);
+          }
+        }
+      } catch (probeErr) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[scene.createScene] BUG-080 dimension probe failed for "${bgSrc}":`,
+          probeErr,
+        );
+      }
+    }
+
     const SceneCls = (globalThis as any).Scene as any;
     const created = await SceneCls.create(payload);
     if (!created) {
@@ -516,6 +572,22 @@ export async function activateScene(data: unknown): Promise<Envelope<SceneActiva
   const previousActive = (game as any).scenes?.active;
   const previousActiveId = previousActive?.id ?? null;
 
+  // BUG-081 (2026-05-16) — race condition footgun. When `scene.activate` is
+  // fired in the same parallel batch as `<embedded>.create` calls on the same
+  // scene (light / tile / token / template / sound / note / region), Foundry's
+  // activation re-sync overwrites embedded writes that are still in flight at
+  // the moment activate() commits. Each create returns a SUCCESS envelope
+  // synchronously (DP-16 post-verify sees the doc in-memory), but `<embedded>.list`
+  // afterward finds only a subset persisted.
+  //
+  // TODO(BUG-081): the proper fix is to await any in-flight `wrappedWrite`
+  // transactions targeting this scene before triggering Scene.activate(). The
+  // current transaction-manager API (`startTransaction(operation: string)` +
+  // singleton instance) does not expose per-scene pending-op visibility — a
+  // pending-ops registry keyed by scene id would need to be added first.
+  // Until then, callers MUST sequence `scene.activate` AFTER any embedded
+  // creates on the same scene. The mcp-server tool description for the
+  // `activate` action surfaces this constraint.
   return wrappedWrite('scene.activateScene', async () => {
     await scene.activate();
 

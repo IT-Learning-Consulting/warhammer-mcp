@@ -1725,7 +1725,10 @@ export class FoundryDataAccess {
       this.auditLog('deleteActor', data, 'failure', 'not found');
       return { success: false };
     }
+    const actorName = actor.name;
+    const actorUuid = (actor as any).uuid;
     await actor.delete();
+    notify.deleted('actor', actorName, { uuid: actorUuid });
     this.auditLog('deleteActor', data, 'success');
     return { success: true };
   }
@@ -1811,6 +1814,12 @@ export class FoundryDataAccess {
         totalRequested: quantity,
         totalCreated: createdActors.length,
       };
+
+      if (createdActors.length > 0) {
+        notify.created('actor', `${createdActors.length} actor(s)`, {
+          summary: `from compendium (${request.creatureType})`,
+        });
+      }
 
       this.auditLog('createActorFromCompendium', request, 'success');
       return result;
@@ -1917,7 +1926,7 @@ export class FoundryDataAccess {
         } catch (error) {
           const errorMsg = `Failed to create actor ${i + 1}: ${error instanceof Error ? error.message : 'Unknown error'}`;
           errors.push(errorMsg);
-          console.error(`[${MODULE_ID}] ${errorMsg}`, error);
+          notify.warn(`Failed to create actor ${i + 1}/${finalQuantity}: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
       }
 
@@ -1945,6 +1954,12 @@ export class FoundryDataAccess {
         tokensPlaced,
         errors: errors.length > 0 ? errors : undefined,
       };
+
+      if (createdActors.length > 0) {
+        notify.created('actor', `${createdActors.length} actor(s)`, {
+          summary: `from ${packId}/${itemId}`,
+        });
+      }
 
       this.auditLog('createActorFromCompendiumEntry', request, 'success');
       return result;
@@ -2055,7 +2070,7 @@ export class FoundryDataAccess {
             const position = this.calculateTokenPosition(placement.placement, scene, tokenData.length, placement.coordinates);
 
             if (tokenDoc.texture?.src?.startsWith('http')) {
-              console.error(`[${this.moduleId}] Token texture still has remote URL, clearing: ${tokenDoc.texture.src}`);
+              notify.warn(`Token texture still remote: ${tokenDoc.texture.src} — placement may render poorly`);
               tokenDoc.texture.src = null;
             }
 
@@ -2073,6 +2088,12 @@ export class FoundryDataAccess {
       }
 
       const createdTokens = await scene.createEmbeddedDocuments('Token', tokenData);
+
+      if (createdTokens.length > 0) {
+        notify.created('token', `${createdTokens.length} token(s)`, {
+          summary: `on ${scene.name}`,
+        });
+      }
 
       // TOOL-IDEA-005 (2026-05-14): surface placed token names alongside IDs so callers
       // chaining encounter-builder workflows can read auto-counter-renamed names (e.g.
@@ -2168,7 +2189,7 @@ export class FoundryDataAccess {
 
       return createdDocs[0];
     } catch (error) {
-      console.error(`[${this.moduleId}] Actor creation failed:`, error);
+      notify.error('Actor creation failed', error instanceof Error ? error : new Error(String(error)));
       throw error;
     }
   }
@@ -2331,13 +2352,17 @@ export class FoundryDataAccess {
       // Note: Click handlers are attached globally via renderChatMessageHTML hook in main.ts
       // This ensures all users get the handlers when they see the message
 
+      notify.created('mcp', 'Roll request', {
+        summary: `to ${data.targetPlayer}: ${data.rollType}`,
+      });
+
       return {
         success: true,
         message: `Roll request sent to ${playerInfo.targetName}. ${data.isPublic ? 'Public roll' : 'Private roll'} button created in chat.`
       };
 
     } catch (error) {
-      console.error(`[${MODULE_ID}] Error creating roll request:`, error);
+      notify.error('Failed to create roll request', error instanceof Error ? error : new Error(String(error)));
       return {
         success: false,
         message: '',
@@ -3945,6 +3970,8 @@ export class FoundryDataAccess {
   }
 
   // BUG-051 — resolve wfrp4e `(Any)` skill-spec wildcard to a concrete specialisation.
+  // BUG-052 (2026-05-16) — widened to also match `( )` (empty), `(*)`, and `(Hysh)`-style
+  // single-token placeholders used by owb1 caster templates (Shaman Channelling).
   // Correlates with already-resolved lore (Channelling) and trapping weapon-group (Melee/Ranged).
   // Falls through to name-as-is for unrecognised bases — caller's findSkill may still resolve.
   private resolveSkillWildcard(
@@ -3952,7 +3979,9 @@ export class FoundryDataAccess {
     context: { lores: string[]; weaponGroups: string[] },
     choices: { specialisations?: Record<string, string[]> | undefined } = {},
   ): string {
-    const ANY_SUFFIX = /\s\(Any\)$/;
+    // Matches: " (Any)", " ( )", " (  )", " (*)" — empty-or-explicit-wildcard markers.
+    // Concrete specialisations like " (Polearm)" / " (Aqshy)" are NOT matched and pass through.
+    const ANY_SUFFIX = /\s\((?:Any|\s*|\*)\)$/;
     if (!ANY_SUFFIX.test(name)) return name;
 
     const base = name.replace(ANY_SUFFIX, '');
@@ -4942,6 +4971,11 @@ export class FoundryDataAccess {
 
       await effect.update(updatePayload);
 
+      notify.updated('active-effect', effect.name, {
+        summary: `on ${item.name}`,
+        uuid: (effect as any).uuid,
+      });
+
       const base: any = {
         success: true,
         scope,
@@ -5155,6 +5189,10 @@ export class FoundryDataAccess {
         break;
     }
 
+    notify.updated('combat', combat.id, {
+      summary: `action: ${data.action}, round ${combat.round}`,
+    });
+
     return {
       combatId: combat.id,
       round: combat.round,
@@ -5192,6 +5230,11 @@ export class FoundryDataAccess {
     }
 
     const created: any[] = await combat.createEmbeddedDocuments('Combatant', creates);
+    if (created.length > 0) {
+      notify.created('combatant', `${created.length} combatant(s)`, {
+        summary: `to combat ${combat.id}`,
+      });
+    }
     return { added: created.map((c: any) => c.id).filter(Boolean) };
   }
 
@@ -5203,6 +5246,9 @@ export class FoundryDataAccess {
     const combat: any = this.resolveCombat(data.combatId);
     if (!combat) throw new Error('No combat found');
     await combat.deleteEmbeddedDocuments('Combatant', data.combatantIds);
+    notify.deleted('combatant', `${data.combatantIds.length} combatant(s)`, {
+      summary: `from combat ${combat.id}`,
+    });
     return { removed: data.combatantIds };
   }
 
@@ -5212,6 +5258,7 @@ export class FoundryDataAccess {
     if (!combat) throw new Error('No combat found');
     const id: string = combat.id;
     await combat.delete();
+    notify.deleted('combat', id, { summary: 'combat ended' });
     return { ended: id };
   }
 
@@ -5347,6 +5394,10 @@ export class FoundryDataAccess {
         : stacked
           ? 1
           : 0;
+    notify.deleted('condition', data.conditionKey, {
+      summary: `from ${actor.name} (${count} stack(s) removed)`,
+      uuid: (actor as any).uuid,
+    });
     return {
       actorId: actor.id,
       conditionKey: data.conditionKey,

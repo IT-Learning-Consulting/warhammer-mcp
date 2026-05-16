@@ -157,8 +157,8 @@ export class DiagnosticTool extends BaseTool {
           {
             type: 'text' as const,
             text:
-              `**Recent errors** (${data.events.length} of ${data.bufferSize})${filterSuffix}` +
-              `${data.bufferFull ? ' — buffer full, older events evicted' : ''}\n\n` +
+              `**Recent errors** (${data.events.length} of ${data.bufferSize})${filterSuffix}\n\n` +
+              `Buffer: ${data.bufferSize}/200${data.bufferFull ? ' (full, FIFO eviction active)' : ''}.\n\n` +
               `${lines.join('\n')}`,
           },
         ],

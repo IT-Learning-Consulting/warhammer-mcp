@@ -1,5 +1,5 @@
 import { MODULE_ID, CONNECTION_STATES } from './constants.js';
-import { notify } from './notify.js';
+import { notify, type ProgressHandle } from './notify.js';
 
 export interface BridgeConfig {
   enabled: boolean;
@@ -22,6 +22,7 @@ export class SocketBridge {
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private reconnectTimer: any = null;
+  private reconnectHandle: ProgressHandle | null = null;
 
   constructor(private config: BridgeConfig) {
     this.maxReconnectAttempts = config.reconnectAttempts;
@@ -53,6 +54,10 @@ export class SocketBridge {
           clearTimeout(connectTimeout);
           this.connectionState = CONNECTION_STATES.CONNECTED;
           this.reconnectAttempts = 0;
+          if (this.reconnectHandle) {
+            this.reconnectHandle.done('MCP reconnected');
+            this.reconnectHandle = null;
+          }
           this.log('Connected to MCP server');
           this.setupEventHandlers();
           resolve();
@@ -62,10 +67,13 @@ export class SocketBridge {
           clearTimeout(connectTimeout);
           // Use more informative message for connection failures
           const isFirstAttempt = this.reconnectAttempts === 0;
-          const errorMsg = isFirstAttempt ? 
+          const errorMsg = isFirstAttempt ?
             'MCP server not available (this is normal if server isn\'t running)' :
             `Connection error after ${this.reconnectAttempts} attempts: ${error}`;
           this.log(errorMsg);
+          if (!isFirstAttempt) {
+            notify.error(`MCP WebSocket error: ${errorMsg}`);
+          }
           this.connectionState = CONNECTION_STATES.DISCONNECTED;
           this.scheduleReconnect();
           reject(new Error('WebSocket connection failed'));
@@ -74,12 +82,17 @@ export class SocketBridge {
         this.ws.onclose = (event) => {
           this.log(`Disconnected: ${event.reason || 'Connection closed'}`);
           this.connectionState = CONNECTION_STATES.DISCONNECTED;
-          
+
           if (event.wasClean) {
-            // Clean disconnect, don't reconnect
+            // Clean disconnect (manual stop() via code 1000) — stop() already
+            // emitted notify.lifecycle('connection-down', ...). Don't double-fire.
             return;
           }
-          
+
+          notify.lifecycle(
+            'connection-down',
+            `MCP disconnected: ${event.reason || 'connection closed'}`,
+          );
           this.scheduleReconnect();
         };
 
@@ -113,6 +126,14 @@ export class SocketBridge {
     this.ws.onmessage = (event) => {
       try {
         const message = JSON.parse(event.data);
+        // R1.8 — every inbound message proves the connection is live.
+        // Bridge is wired into window.foundryMCPBridge at main.ts:437;
+        // call the public updateLastActivity() method when available.
+        try {
+          (window as any).foundryMCPBridge?.updateLastActivity?.();
+        } catch {
+          // Bridge not yet wired (init race) — heartbeat will recover.
+        }
         this.handleMessage(message);
       } catch (error) {
         this.log(`Failed to parse message: ${error}`);
@@ -333,6 +354,15 @@ export class SocketBridge {
   private scheduleReconnect(): void {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
       this.log(`Max reconnection attempts reached (${this.maxReconnectAttempts})`);
+      // R1.5 — terminal lifecycle event when retries are exhausted.
+      if (this.reconnectHandle) {
+        this.reconnectHandle.fail(`MCP failed to reconnect after ${this.maxReconnectAttempts} attempts`);
+        this.reconnectHandle = null;
+      }
+      notify.lifecycle(
+        'connection-down',
+        `MCP failed to reconnect after ${this.maxReconnectAttempts} attempts`,
+      );
       return;
     }
 
@@ -342,6 +372,17 @@ export class SocketBridge {
 
     const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000); // Exponential backoff, max 30s
     this.reconnectAttempts++;
+
+    // R1.4 — rolling sticky toast that updates in place across attempts.
+    const message = `MCP reconnecting... attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts}`;
+    if (!this.reconnectHandle) {
+      this.reconnectHandle = notify.progress(message);
+    } else {
+      this.reconnectHandle.update(
+        this.reconnectAttempts / this.maxReconnectAttempts,
+        message,
+      );
+    }
 
     this.log(`Scheduling reconnection attempt ${this.reconnectAttempts} in ${delay}ms`);
     this.connectionState = CONNECTION_STATES.RECONNECTING;

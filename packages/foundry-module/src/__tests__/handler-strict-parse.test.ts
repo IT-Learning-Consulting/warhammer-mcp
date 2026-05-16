@@ -43,15 +43,14 @@ const methodCases: Array<[string, string]> = [
   ['handleCreateActorFromCompendium', 'createActorFromCompendium'],
   ['handleGetCompendiumDocumentFull', 'getCompendiumDocumentFull'],
   // handleAddActorsToScene folded into handleScene umbrella (action: 'add-tokens')
-  ['handleValidateWritePermissions', 'validateWritePermissions'],
+  // BUG-009 (2026-05-16): handleValidateWritePermissions removed (no MCP-tool consumer).
   // Phase 3 mcp_crud_expansion — 4 legacy journal handlers folded into handleJournal umbrella
   // (handleCreateJournalEntry, handleListJournals, handleGetJournalContent, handleUpdateJournalContent).
   ['handleRequestPlayerRolls', 'request-player-rolls'],
-  ['handleGetEnhancedCreatureIndex', 'getEnhancedCreatureIndex'],
+  // BUG-009 (2026-05-16): handleGetEnhancedCreatureIndex removed (no MCP-tool consumer).
   ['handleSetActorOwnership', 'setActorOwnership'],
   ['handleGetActorOwnership', 'getActorOwnership'],
-  ['handleGetFriendlyNPCs', 'getFriendlyNPCs'],
-  ['handleGetConnectedPlayers', 'getConnectedPlayers'],
+  // BUG-009 (2026-05-16): handleGetFriendlyNPCs / handleGetConnectedPlayers removed.
   ['handleCreateActor', 'createActor'],
   ['handleUpdateActor', 'updateActor'],
   ['handleUpdateItem', 'updateItem'],
@@ -64,9 +63,8 @@ const methodCases: Array<[string, string]> = [
   ['handleGetRollTable', 'getRollTable'],
   ['handleRollOnTable', 'rollOnTable'],
   ['handleDeleteRollTable', 'deleteRollTable'],
-  ['handleGetPartyCharacters', 'getPartyCharacters'],
-  ['handleFindPlayers', 'findPlayers'],
-  ['handleFindActor', 'findActor'],
+  // BUG-009 (2026-05-16): handleGetPartyCharacters / handleFindPlayers / handleFindActor
+  // removed (no MCP-tool consumer; staged in Phase 2 for /wfrp-session-prep that never landed).
   // Phase 4b
   ['handleGetCombat', 'getCombat'],
   ['handleListCombatants', 'listCombatants'],

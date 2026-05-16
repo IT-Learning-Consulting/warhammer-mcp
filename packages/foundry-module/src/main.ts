@@ -88,6 +88,7 @@ class FoundryMCPBridge {
       (window as any).foundryMCPBridge.dataAccess = this.queryHandlers.dataAccess;
 
       this.isInitialized = true;
+      notify.lifecycle('init', 'Warhammer MCP initialized');
       console.log(`[${MODULE_ID}] Module initialized successfully`);
 
     } catch (error) {
@@ -362,14 +363,25 @@ class FoundryMCPBridge {
     try {
       // Lightweight connection check - just verify socket state
       if (!this.socketBridge || !this.socketBridge.isConnected()) {
+        const intervalMs = (this.settings.getSetting('heartbeatInterval') as number) * 1000;
+        // R1.8 part 2 — parameterize threshold to 2x heartbeat interval.
+        // Default settings.heartbeatInterval=30s -> 60000ms (preserves prior behavior).
+        const threshold = (intervalMs && intervalMs > 0) ? intervalMs * 2 : 60000;
         // Only log once per disconnection to avoid spam
-        if (this.lastActivity && new Date().getTime() - this.lastActivity.getTime() > 60000) {
+        if (this.lastActivity && new Date().getTime() - this.lastActivity.getTime() > threshold) {
           console.warn(`[${MODULE_ID}] Heartbeat: Connection lost`);
 
           // Attempt auto-reconnection if enabled (with backoff)
           if (this.settings.getSetting('autoReconnectEnabled')) {
             console.log(`[${MODULE_ID}] Attempting auto-reconnection...`);
             await this.restart();
+          } else {
+            // R1.7 — autoReconnect off: there is no other code path to inform
+            // the GM. Fire lifecycle here so the disconnect is never silent.
+            notify.lifecycle(
+              'connection-down',
+              'MCP heartbeat timeout - connection may be lost',
+            );
           }
         }
         return;
@@ -496,7 +508,13 @@ Hooks.once('ready', async () => {
       if (delayMs > 0) {
         setTimeout(() => {
           try {
-            runHealthCheck(expected);
+            const result = runHealthCheck(expected);
+            // R1.9 — surface HC10 outcome to the GM via notify channel.
+            if (!result.ok) {
+              notify.warn(`Health check: ${result.issues.join('; ')}`, { sticky: true });
+            } else {
+              notify.info('MCP self-check OK');
+            }
           } catch (e) {
             console.error(`[${MODULE_ID}] health-check itself threw:`, e);
           }

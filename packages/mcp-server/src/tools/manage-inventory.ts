@@ -3,6 +3,17 @@ import { FoundryClient } from "../foundry-client.js";
 import { Logger } from "../logger.js";
 import { BaseTool, BaseToolOptions } from "../base-tool.js";
 
+// BUG-007 rewire: typed generics for new query call sites per the BUG-077
+// prevention stack (no `<any>` propagation on new writes).
+interface CharacterInfoResult {
+  id: string;
+  name: string;
+  system?: any;
+  items?: Array<{ id: string; name: string; type: string; system?: any; [key: string]: any }>;
+  [key: string]: any;
+}
+type WriteResult = unknown;
+
 const ManageInventorySchema = z.discriminatedUnion("action", [
     z.object({
         action: z.literal("get-status"),
@@ -229,14 +240,24 @@ Examples:
 
         const quantity = args.quantity || 1;
 
-        await this.query<any>(
-            "addItemToInventory",
+        // BUG-007 rewire: `addItemToInventory` was a dead query key. The live
+        // equivalent for this tool's "custom inventory item" shape is
+        // `createItem` with destination=actor, itemData carrying name/type +
+        // wfrp4e-canonical `system.encumbrance.value` + `system.quantity.value`.
+        // wfrp4e's "armor" subtype is spelled `armour`; remap before write.
+        const wfrp4eType = args.itemType === "armor" ? "armour" : args.itemType;
+        await this.query<WriteResult>(
+            "createItem",
             {
-                characterName: args.characterName,
-                itemName: args.itemName,
-                itemType: args.itemType,
-                encumbrance: args.encumbrance,
-                quantity: quantity
+                itemData: {
+                    name: args.itemName,
+                    type: wfrp4eType,
+                    system: {
+                        encumbrance: { value: args.encumbrance },
+                        quantity: { value: quantity }
+                    }
+                },
+                destination: { type: "actor", actorName: args.characterName }
             }
         );
 
@@ -249,33 +270,74 @@ Examples:
 
         const quantity = args.quantity || 1;
 
-        await this.query<any>(
-            "removeItemFromInventory",
+        // BUG-007 rewire: `removeItemFromInventory` was a dead query key. The
+        // live composition is getCharacterInfo (resolve actorId + itemId) →
+        // deleteItem (when quantity covers full stack) or updateItem (when
+        // decrementing). For this tool's contract — "remove an item" — we
+        // delete by name when the requested quantity meets/exceeds the stack;
+        // otherwise we decrement.
+        const character = await this.query<CharacterInfoResult>(
+            "getCharacterInfo",
+            { characterName: args.characterName }
+        );
+        const item = (character.items ?? []).find(
+            (i) => i.name === args.itemName
+        );
+        if (!item) {
+            return `⚠️ **${args.itemName}** not found in ${args.characterName}'s inventory.`;
+        }
+
+        const currentQty = Number(item.system?.quantity?.value ?? 1);
+        if (quantity >= currentQty) {
+            await this.query<WriteResult>(
+                "deleteItem",
+                { actorId: character.id, itemId: item.id }
+            );
+            return `✅ Removed ${currentQty}x **${args.itemName}** from ${args.characterName}'s inventory`;
+        }
+
+        await this.query<WriteResult>(
+            "updateItem",
             {
-                characterName: args.characterName,
-                itemName: args.itemName,
-                quantity: quantity
+                actorId: character.id,
+                itemId: item.id,
+                updateData: { "system.quantity.value": currentQty - quantity }
             }
         );
-
-        return `✅ Removed ${quantity}x **${args.itemName}** from ${args.characterName}'s inventory`;
+        return `✅ Removed ${quantity}x **${args.itemName}** from ${args.characterName}'s inventory (${currentQty - quantity} remaining)`;
     }
 
     private async handleTrackAmmunition(args: { characterName: string; ammunitionType: string; amount: number }): Promise<string> {
         this.logger.info("Tracking ammunition", args);
 
-        await this.query<any>(
-            "trackAmmunition",
+        // BUG-007 rewire: `trackAmmunition` was a dead query key. The live
+        // composition is getCharacterInfo (resolve actorId + ammo item) →
+        // updateItem with the delta-adjusted `system.quantity.value`.
+        const character = await this.query<CharacterInfoResult>(
+            "getCharacterInfo",
+            { characterName: args.characterName }
+        );
+        const ammo = (character.items ?? []).find(
+            (i) => i.type === "ammunition" && i.name === args.ammunitionType
+        );
+        if (!ammo) {
+            return `⚠️ **${args.ammunitionType}** not found in ${args.characterName}'s inventory.`;
+        }
+
+        const currentQty = Number(ammo.system?.quantity?.value ?? 0);
+        const newQty = Math.max(0, currentQty + args.amount);
+        await this.query<WriteResult>(
+            "updateItem",
             {
-                characterName: args.characterName,
-                ammunitionType: args.ammunitionType,
-                amount: args.amount
+                actorId: character.id,
+                itemId: ammo.id,
+                updateData: { "system.quantity.value": newQty }
             }
         );
 
         const action = args.amount > 0 ? "Added" : "Used";
         const absAmount = Math.abs(args.amount);
-        return `🎯 ${action} ${absAmount} **${args.ammunitionType}** for ${args.characterName}`;
+        return `🎯 ${action} ${absAmount} **${args.ammunitionType}** for ${args.characterName} (${newQty} remaining)`;
     }
 
     private async handleCheckEncumbrance(args: { characterName: string }): Promise<string> {

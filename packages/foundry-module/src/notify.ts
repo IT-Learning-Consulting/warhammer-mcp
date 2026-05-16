@@ -63,11 +63,18 @@ export type NotifyKind =
   | 'rolltable'
   | 'token'
   | 'combat'
+  | 'combatant'
   | 'condition'
   | 'template'
   | 'spell'
   | 'wall'
-  | 'mcp';
+  | 'mcp'
+  | 'light'
+  | 'sound'
+  | 'note'
+  | 'region'
+  | 'tile'
+  | 'drawing';
 
 export type NotifySeverity =
   | 'created'
