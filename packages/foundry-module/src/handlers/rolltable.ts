@@ -17,6 +17,7 @@
 
 import { z } from 'zod';
 import { wrappedWrite } from '../transaction-manager.js';
+import { notify } from '../notify.js';
 import type {
   CreateRollTableInputType,
   AddTableResultsInputType,
@@ -249,6 +250,8 @@ export async function createRollTable(data: unknown): Promise<Envelope<{ id: str
       }
     }
 
+    notify.created('rolltable', table.name as string, { uuid: (table as any).uuid });
+
     return { success: true as const, data: { id: table.id as string, name: table.name as string } };
   });
 }
@@ -283,6 +286,12 @@ export async function addTableResults(data: unknown): Promise<Envelope<{ tableId
         `after addTableResults but found ${sizeAfter}. Foundry may have silently dropped one or more ` +
         `results — check F12 console for validation errors.`,
       );
+    }
+
+    if (normalisedResults.length > 0) {
+      notify.created('rolltable', `${normalisedResults.length} result(s)`, {
+        summary: `added to ${table.name}`,
+      });
     }
 
     return {
@@ -337,6 +346,8 @@ export async function getRollTable(data: unknown): Promise<Envelope<any>> {
 }
 
 // ── 5. rollOnTable ────────────────────────────────────────────────────────────
+// Intentional notify silence: table.draw() posts a ChatMessage with the drawn
+// result, which is the user-facing signal. A notify toast would duplicate.
 
 export async function rollOnTable(data: unknown): Promise<Envelope<any>> {
   const gate = validateGMAccess();
@@ -377,7 +388,11 @@ export async function deleteRollTable(data: unknown): Promise<Envelope<{ tableId
   return wrappedWrite('deleteRollTable', async () => {
     const table = (game as any).tables?.get(input.tableId);
     if (!table) throw new Error(`ROLLTABLE_TABLE_NOT_FOUND: no table with id "${input.tableId}"`);
+    const tableName = table.name as string;
     await table.delete();
+
+    notify.deleted('rolltable', tableName);
+
     return { success: true as const, data: { tableId: input.tableId } };
   });
 }
@@ -412,6 +427,10 @@ export async function updateRollTable(data: unknown): Promise<Envelope<{ tableId
         );
       }
     }
+
+    notify.updated('rolltable', table.name as string, {
+      summary: Object.keys(input.changes).join(', '),
+    });
 
     return { success: true as const, data: { tableId: input.tableId, changes: input.changes } };
   });
@@ -464,6 +483,12 @@ export async function updateTableResults(
       }
     }
 
+    if (input.updates.length > 0) {
+      notify.updated('rolltable', `${input.updates.length} result(s)`, {
+        summary: `on ${table.name}`,
+      });
+    }
+
     return { success: true as const, data: { tableId: input.tableId, updatedCount: input.updates.length } };
   });
 }
@@ -511,6 +536,12 @@ export async function deleteTableResults(
       );
     }
 
+    if (input.resultIds.length > 0) {
+      notify.deleted('rolltable', `${input.resultIds.length} result(s)`, {
+        summary: `from ${table.name}`,
+      });
+    }
+
     return { success: true as const, data: { tableId: input.tableId, deletedCount: input.resultIds.length } };
   });
 }
@@ -553,6 +584,8 @@ export async function normalizeRollTable(
       );
     }
 
+    notify.updated('rolltable', table.name as string, { summary: 'normalized' });
+
     return {
       success: true as const,
       data: { tableId: input.tableId, resultCount: table.results.size as number },
@@ -592,6 +625,8 @@ export async function resetRollTableResults(
       );
     }
 
+    notify.updated('rolltable', table.name as string, { summary: 'reset draws' });
+
     return {
       success: true as const,
       data: { tableId: input.tableId, resultCount: table.results.size as number },
@@ -600,6 +635,8 @@ export async function resetRollTableResults(
 }
 
 // ── 12. drawManyFromTable (NEW) ───────────────────────────────────────────────
+// Intentional notify silence: table.drawMany() posts ChatMessages with the
+// drawn results, which is the user-facing signal. A notify toast would duplicate.
 
 export async function drawManyFromTable(
   data: unknown,
@@ -726,6 +763,10 @@ export async function importRollTableFromCompendium(
         );
       }
     }
+
+    notify.created('rolltable', newDoc.name as string, {
+      summary: `from compendium ${input.pack}`,
+    });
 
     return {
       success: true as const,

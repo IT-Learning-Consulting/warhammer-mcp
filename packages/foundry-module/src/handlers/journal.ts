@@ -55,6 +55,7 @@ import {
   type JournalAssignPageToCategoryResponse,
 } from '@foundry-mcp/shared';
 import { wrappedWrite } from '../transaction-manager.js';
+import { notify } from '../notify.js';
 
 // ── Local types ──────────────────────────────────────────────────────────────
 
@@ -317,6 +318,8 @@ export async function createEntry(
     const categoryIds =
       (entry.categories?.contents as any[] | undefined)?.map((c) => c.id as string) ?? [];
 
+    notify.created('journal', entry.name as string, { uuid: (entry as any).uuid });
+
     return {
       success: true as const,
       data: {
@@ -384,6 +387,11 @@ export async function updateEntry(
       }
     }
 
+    notify.updated('journal', entry.name as string, {
+      summary: Object.keys(requestedChanges).join(', '),
+      uuid: (entry as any).uuid,
+    });
+
     return {
       success: true as const,
       data: { entryId: input.entryId, changes: requestedChanges },
@@ -403,6 +411,7 @@ export async function deleteEntry(
 
   return wrappedWrite('journal.deleteEntry', async () => {
     const entry = getEntryOrThrow(input.entryId);
+    const entryName = entry.name as string;
     await entry.delete();
     // BUG-070 post-verify: confirm entry actually gone.
     if ((game as any).journal?.get(input.entryId)) {
@@ -410,6 +419,9 @@ export async function deleteEntry(
         `JOURNAL_WRITE_NOT_PERSISTED: entry "${input.entryId}" still present after delete()`,
       );
     }
+
+    notify.deleted('journal', entryName);
+
     return { success: true as const, data: { entryId: input.entryId } };
   });
 }
@@ -513,6 +525,11 @@ export async function addPage(data: unknown): Promise<Envelope<JournalAddPageRes
       );
     }
 
+    notify.created('journal', created[0].name as string, {
+      summary: `on ${entry.name}`,
+      uuid: (created[0] as any).uuid,
+    });
+
     return {
       success: true as const,
       data: {
@@ -593,6 +610,11 @@ export async function updatePage(
       }
     }
 
+    notify.updated('journal', updated.name as string, {
+      summary: `on ${entry.name}`,
+      uuid: (updated as any).uuid,
+    });
+
     return {
       success: true as const,
       data: {
@@ -614,7 +636,8 @@ export async function deletePage(
 
   const input: JournalDeletePageInputType = JournalDeletePageInput_strict_parse(data);
   const entry = getEntryOrThrow(input.entryId);
-  getPageOrThrow(entry, input.pageId); // throws if not found
+  const page = getPageOrThrow(entry, input.pageId); // throws if not found
+  const pageName = (page as any).name as string;
 
   const sizeBefore: number = entry.pages?.size ?? 0;
 
@@ -633,6 +656,8 @@ export async function deletePage(
         `JOURNAL_WRITE_NOT_PERSISTED: page "${input.pageId}" still present after deleteEmbeddedDocuments`,
       );
     }
+
+    notify.deleted('journal', pageName, { summary: `from ${entry.name}` });
 
     return { success: true as const, data: { entryId: input.entryId, pageId: input.pageId } };
   });
@@ -699,6 +724,10 @@ export async function reorderPages(
       }
     }
 
+    notify.updated('journal', entry.name as string, {
+      summary: `reordered ${input.pageIds.length} pages`,
+    });
+
     return {
       success: true as const,
       data: {
@@ -749,6 +778,11 @@ export async function addCategory(
         `${created?.length ?? 0} categories (expected 1)`,
       );
     }
+
+    notify.created('journal', created[0].name as string, {
+      summary: `category on ${entry.name}`,
+      uuid: (created[0] as any).uuid,
+    });
 
     return {
       success: true as const,
@@ -801,6 +835,10 @@ export async function updateCategory(
       );
     }
 
+    notify.updated('journal', updated.name as string, {
+      summary: `category on ${entry.name}`,
+    });
+
     return {
       success: true as const,
       data: {
@@ -823,7 +861,8 @@ export async function deleteCategory(
 
   const input: JournalDeleteCategoryInputType = JournalDeleteCategoryInput_strict_parse(data);
   const entry = getEntryOrThrow(input.entryId);
-  getCategoryOrThrow(entry, input.categoryId);
+  const cat = getCategoryOrThrow(entry, input.categoryId);
+  const catName = (cat as any).name as string;
 
   const sizeBefore: number = entry.categories?.size ?? 0;
 
@@ -878,6 +917,8 @@ export async function deleteCategory(
       );
     }
 
+    notify.deleted('journal', catName, { summary: `category from ${entry.name}` });
+
     return {
       success: true as const,
       data: {
@@ -926,6 +967,8 @@ export async function assignPageToCategory(
         `but post-update value is ${JSON.stringify(persistedCatId)}`,
       );
     }
+
+    notify.updated('journal', updated.name as string, { summary: 'reassigned' });
 
     return {
       success: true as const,

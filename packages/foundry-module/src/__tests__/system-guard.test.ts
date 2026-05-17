@@ -14,7 +14,11 @@ describe('system-id guard', () => {
     vi.resetModules();
   });
 
-  it('wfrp4e world registers warhammer-mcp handlers', async () => {
+  // BUG-092 (2026-05-16): cold `await import('../main.js')` pulls the full
+  // handler graph and exceeds the default 5000ms test timeout under parallel
+  // suite load (passes standalone in ~611ms). Bumped to 15000ms so the
+  // module-graph cold-import has headroom under contention.
+  it('wfrp4e world registers warhammer-mcp handlers', { timeout: 15000 }, async () => {
     (globalThis as any).game.system = { id: 'wfrp4e' };
     const { foundryMCPBridge } = await import('../main.js');
     await foundryMCPBridge.initialize();
@@ -25,7 +29,7 @@ describe('system-id guard', () => {
     expect(mcpKeys.length).toBeGreaterThan(0);
   });
 
-  it('dnd5e world registers zero handlers and logs one line', async () => {
+  it('dnd5e world registers zero handlers and logs one line', { timeout: 15000 }, async () => {
     (globalThis as any).game.system = { id: 'dnd5e' };
     const { foundryMCPBridge } = await import('../main.js');
     await foundryMCPBridge.initialize();

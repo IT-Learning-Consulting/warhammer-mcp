@@ -19,7 +19,8 @@ interface LegalityResult {
 }
 
 // Junction-safe absolute path (see build-npc-assets.test.ts for rationale)
-const ASSET = 'E:/warhammer_system/.claude/skills/wfrp-build-npc/assets';
+// 2026-05-16: assets migrated to _shared/wfrp-character-build/ (bi-skill share).
+const ASSET = 'E:/warhammer_system/.claude/skills/_shared/wfrp-character-build';
 const matrix = JSON.parse(fs.readFileSync(path.join(ASSET, 'species-career-matrix.json'), 'utf8'));
 
 function checkLegality(species: string, careergroup: string, mode: LegalityMode): LegalityResult {

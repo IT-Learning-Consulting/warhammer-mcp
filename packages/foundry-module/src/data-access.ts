@@ -1965,7 +1965,7 @@ export class FoundryDataAccess {
       return result;
 
     } catch (error) {
-      console.error(`[${MODULE_ID}] Failed to create actor from compendium entry`, error);
+      notify.error('Failed to create actor from compendium entry', error instanceof Error ? error : new Error(String(error)));
       this.auditLog('createActorFromCompendiumEntry', request, 'failure', error instanceof Error ? error.message : 'Unknown error');
       throw error;
     }
@@ -3439,13 +3439,15 @@ export class FoundryDataAccess {
 
   /**
    * Create a new actor
-   * Creates an actor with the provided data structure
+   * Creates an actor with the provided data structure.
+   * HC9: optional `options` bag plumbed to Actor.create(data, options) — supports
+   * `skipItems` to suppress wfrp4e _preCreate basic-skills dialog (mirror of BUG-089).
    */
-  async createActor(data: { actorData: Record<string, any> }): Promise<any> {
+  async createActor(data: { actorData: Record<string, any>; options?: { skipItems?: boolean } | undefined }): Promise<any> {
     this.validateFoundryState();
 
     try {
-      const actor = await (Actor as any).create(data.actorData as any);
+      const actor = await (Actor as any).create(data.actorData as any, (data.options ?? {}) as any);
 
       if (!actor) {
         throw new Error('Failed to create actor');
@@ -4130,7 +4132,7 @@ export class FoundryDataAccess {
    * Update actor data
    * Allows updating any actor properties using dot notation for nested fields
    */
-  async updateActor(data: { actorId: string; updateData: Record<string, any>; warnings?: string[] }): Promise<any> {
+  async updateActor(data: { actorId: string; updateData: Record<string, any>; warnings?: string[]; verifyPersistence?: boolean }): Promise<any> {
     this.validateFoundryState();
 
     try {
@@ -4165,6 +4167,36 @@ export class FoundryDataAccess {
       // The old `skipDialog: true` flag was a no-op — no code in wfrp4e or warhammer-lib
       // references it.
       await actor.update(data.updateData, { skipExperienceChecks: true } as any);
+
+      // BUG-086 fix (2026-05-17): actor.update() does NOT throw on DataModelValidationError;
+      // Foundry logs to console.warn but resolves the promise silently. Without post-write
+      // verification, our success envelope lies — caller gets {success:true} for a write
+      // that didn't persist any field. Mirrors manage-character.update-stats DP-16 pattern
+      // (CCR-Envelope-Consumer extension). Pass verifyPersistence:false to opt out when
+      // writing system-derived fields that auto-compute back via prepareDerivedData
+      // (e.g. CharacterModel.computeCareer overwriting system.details.status.* per BUG-085).
+      if (data.verifyPersistence !== false) {
+        const fresh = (game.actors as any)?.get(actor.id);
+        if (!fresh) {
+          throw new Error(`UPDATE_ACTOR_NOT_PERSISTED: actor ${actor.id} disappeared after update`);
+        }
+        const flat = (foundry as any).utils.flattenObject(data.updateData) as Record<string, unknown>;
+        const drift: string[] = [];
+        for (const [path, expected] of Object.entries(flat)) {
+          // Skip Foundry's deletion-marker syntax (e.g. "system.foo.-=key": null) — re-read
+          // can't validate "key absent" via getProperty/expected comparison.
+          if (path.includes('.-=')) continue;
+          const actual = (foundry as any).utils.getProperty(fresh, path);
+          if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+            drift.push(`${path}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
+          }
+        }
+        if (drift.length > 0) {
+          throw new Error(
+            `UPDATE_ACTOR_NOT_PERSISTED: ${drift.length} field(s) did not persist (DataModelValidationError? auto-derive overwrite?). Drift: ${drift.slice(0, 3).join('; ')}${drift.length > 3 ? `; +${drift.length - 3} more` : ''}`
+          );
+        }
+      }
 
       // Debug: Log the updateData structure to help diagnose issues
       console.log(`[Warhammer MCP] Update data structure:`, {
@@ -4541,12 +4573,13 @@ export class FoundryDataAccess {
       | { type: 'world'; folder?: string[] | undefined }
       | undefined;
     updateData: Record<string, any>;
+    options?: { skipExperienceChecks?: boolean | undefined } | undefined;
   }): Promise<any> {
     this.validateFoundryState();
 
     try {
       const { item, owner, scope } = this._resolveItem(data);
-      await item.update(data.updateData);
+      await item.update(data.updateData, (data.options ?? {}) as any);
 
       const ownerLabel = scope === 'world' ? '(world)' : owner?.name ?? '(unknown)';
       notify.updated('item', item.name, { summary: `on ${ownerLabel}`, uuid: (item as any).uuid });

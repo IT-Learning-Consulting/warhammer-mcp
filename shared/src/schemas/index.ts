@@ -33,3 +33,7 @@ export * from './tile.js';
 export * from './template.js';
 // Phase 1 mcp_diagnostic_tool — diagnostic umbrella (recent-errors / world-issues / support-snapshot).
 export * from './diagnostic.js';
+// Phase 6.1 mcp_crud_expansion — filepicker umbrella (upload / list / convert).
+export * from './filepicker.js';
+// Phase 4 mcp_notify_coverage — notify umbrella (GM-visible workflow events).
+export * from './notify.js';

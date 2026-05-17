@@ -16,8 +16,8 @@
 // CCR-Transactions: every write routes through wrappedWrite('<name>', ...).
 // CCR-Envelope: returns {success, data} or {success, error}.
 
-import { MODULE_ID } from '../constants.js';
 import { wrappedWrite } from '../transaction-manager.js';
+import { notify, type NotifyKind } from '../notify.js';
 import type {
   DocumentType,
   SetDocumentOwnershipInputType,
@@ -232,6 +232,11 @@ export async function setDocumentOwnership(input: SetDocumentOwnershipInputType)
     const updateResult = await doc.update({ ownership: merged });
     // BUG-070 prevention: doc.update() returns undefined on silent rejection.
     verifyOwnershipWrite(updateResult, doc, { userId: resolvedUserId, default: isDefault, level });
+
+    notify.updated(documentType as NotifyKind, (doc.name as string | null) ?? `${documentType} ${doc.id}`, {
+      summary: `ownership level ${level}`,
+    });
+
     return {
       success: true as const,
       data: {
@@ -382,10 +387,18 @@ export async function bulkSetDocumentOwnership(input: BulkSetDocumentOwnershipIn
             });
           }
         }
+        if (succeeded > 0) {
+          notify.updated(documentType as NotifyKind, `${succeeded}/${group.length} ${documentType}`, {
+            summary: `level ${level}`,
+          });
+        }
         perClass.push({ documentType, succeeded, failed });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        console.error(`[${MODULE_ID}] bulkSetDocumentOwnership ${documentType} batch failed:`, err);
+        notify.error(
+          `Ownership bulk failed: ${message}`,
+          err instanceof Error ? err : new Error(String(err)),
+        );
         for (const rd of resolvedDocs) {
           failed.push({
             target: { documentType, id: rd.resolvedId },
@@ -420,6 +433,11 @@ export async function resetDocumentOwnership(input: ResetDocumentOwnershipInputT
     const updateResult = await doc.update({ ownership: cleared });
     // BUG-070 prevention: verify the reset actually persisted.
     verifyOwnershipWrite(updateResult, doc, { default: true, level: 0 });
+
+    notify.updated(input.documentType as NotifyKind, (doc.name as string | null) ?? `${input.documentType} ${doc.id}`, {
+      summary: 'ownership reset',
+    });
+
     return {
       success: true as const,
       data: {

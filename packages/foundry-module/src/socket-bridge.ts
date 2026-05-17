@@ -44,6 +44,19 @@ export class SocketBridge {
       const connectTimeout = setTimeout(() => {
         this.log('Connection timeout');
         this.connectionState = CONNECTION_STATES.DISCONNECTED;
+        // BUG-094 — close the half-opened WS so a delayed TCP refusal can't
+        // re-fire onerror and schedule a duplicate reconnect.
+        try {
+          this.ws?.close();
+        } catch {
+          // ignore — WS may not have a close path yet
+        }
+        // BUG-094 — schedule reconnect on timeout, matching the onerror path.
+        // Without this, the bridge stays DISCONNECTED until canvasReady or
+        // manual reconnect fires another start(). With this + BUG-093 fix,
+        // reconnect-success emits notify.lifecycle('connection-up', ...)
+        // automatically so the GM sees the recovery toast + chat audit.
+        this.scheduleReconnect();
         reject(new Error('Connection timeout'));
       }, this.config.connectionTimeout * 1000);
 
@@ -52,11 +65,20 @@ export class SocketBridge {
 
         this.ws.onopen = () => {
           clearTimeout(connectTimeout);
+          const recoveredFromReconnect = this.reconnectHandle !== null;
           this.connectionState = CONNECTION_STATES.CONNECTED;
           this.reconnectAttempts = 0;
           if (this.reconnectHandle) {
             this.reconnectHandle.done('MCP reconnected');
             this.reconnectHandle = null;
+          }
+          // BUG-093 — fire connection-up lifecycle on auto-reconnect-success.
+          // main.ts:244 only emits connection-up on initial start(); if start()
+          // throws (timeout / ECONNREFUSED), reconnect later succeeds here but
+          // the lifecycle notify was never dispatched. Emit it now so the GM
+          // sees the sticky toast + chat audit on recovery.
+          if (recoveredFromReconnect) {
+            notify.lifecycle('connection-up', 'Warhammer MCP reconnected');
           }
           this.log('Connected to MCP server');
           this.setupEventHandlers();

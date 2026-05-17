@@ -20,7 +20,8 @@ import path from 'node:path';
 // NOTE: this file lives at warhammer-mcp/src/__tests__/, which is a junction
 // to D:\foundry-vtt-mcp\packages\foundry-module\. __dirname resolves to the
 // D:\ target, so relative paths escape the vault. Anchor to E:\ explicitly.
-const ASSET = 'E:/warhammer_system/.claude/skills/wfrp-build-npc/assets';
+// 2026-05-16: wfrp-build-npc/assets/ migrated to _shared/wfrp-character-build/ (bi-skill share with /wfrp-build-pc).
+const ASSET = 'E:/warhammer_system/.claude/skills/_shared/wfrp-character-build';
 
 function readJson(name: string): any {
   return JSON.parse(fs.readFileSync(path.join(ASSET, name), 'utf8'));
@@ -267,7 +268,9 @@ describe('build-npc assets — cost-tables.json', () => {
 });
 
 describe('build-npc assets — config.json', () => {
-  const config = readJson('config.json');
+  // config.json is npc-specific and stayed in wfrp-build-npc/assets/ post-2026-05-16 rename.
+  const NPC_CONFIG = 'E:/warhammer_system/.claude/skills/wfrp-build-npc/assets';
+  const config = JSON.parse(fs.readFileSync(path.join(NPC_CONFIG, 'config.json'), 'utf8'));
 
   it('has all 7 top-level keys', () => {
     expect(Object.keys(config).sort()).toEqual([

@@ -31,6 +31,7 @@
  *   notify.deleted('scene', 'Old Tavern');
  *   notify.error('Failed to load', err);
  *   notify.lifecycle('connection-up', 'MCP connected successfully');
+ *   notify.lifecycle('workflow-end', 'NPC built: Bandit Lieutenant');
  *   notify.warn('Permission denied');
  *   notify.info('Building index...');
  *
@@ -473,12 +474,15 @@ export const notify = {
   /**
    * Surface a connection-lifecycle event. Always sticky + chat (the GM needs
    * a durable signal for connect/disconnect/init events).
-   * @param event    Lifecycle event identifier.
+   * @param event    Lifecycle event identifier. `workflow-end` is fired by
+   *                 skill bookends (wfrp-build-npc, wfrp-encounter-builder,
+   *                 wfrp-combat) once a composite skill workflow completes.
    * @param message  GM-facing message.
    * @example notify.lifecycle('connection-up', 'MCP connected successfully');
+   * @example notify.lifecycle('workflow-end', 'NPC built: Bandit Lieutenant');
    */
   lifecycle(
-    event: 'connection-up' | 'connection-down' | 'init',
+    event: 'connection-up' | 'connection-down' | 'init' | 'workflow-end',
     message: string,
   ): void {
     dispatch('lifecycle', message, 'mcp', { sticky: true, chat: true, summary: event });

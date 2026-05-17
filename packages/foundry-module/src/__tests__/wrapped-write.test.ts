@@ -38,7 +38,8 @@ describe('wrappedWrite', () => {
     const result = await wrappedWrite('testOp', async () => 42);
 
     expect(result).toBe(42);
-    expect(startSpy).toHaveBeenCalledWith('testOp');
+    // Phase 6.3 BUG-081: startTransaction signature is (description, opts?).
+    expect(startSpy.mock.calls[0][0]).toBe('testOp');
     expect(commitSpy).toHaveBeenCalledWith('tx-1');
     expect(rollbackSpy).not.toHaveBeenCalled();
   });
@@ -105,7 +106,8 @@ describe('Phase 4b — wrappedWrite engagement per handler', () => {
       (qh.dataAccess as any)[daMethod] = async () => ({ ok: true });
       const startSpy = vi.spyOn(transactionManager, 'startTransaction').mockReturnValue('tx');
       await (qh as any)[method](input);
-      expect(startSpy).toHaveBeenCalledWith(expectedOp);
+      // Phase 6.3 BUG-081: startTransaction signature is (description, opts?). Check description only.
+      expect(startSpy.mock.calls[0][0]).toBe(expectedOp);
     });
   }
 });

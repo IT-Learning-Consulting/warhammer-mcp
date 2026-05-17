@@ -28,6 +28,12 @@ export const UpdateItemInput = z.object({
   itemName: z.string().optional(),
   destination: Destination.optional(),
   updateData: z.record(z.unknown()),
+  // BUG-089: passthrough to Foundry Item.update(data, options). Required by
+  // /wfrp-build-pc --auto to suppress wfrp4e SkillModel._preUpdate advancement-cost
+  // dialog on character skill-advance writes. See phase3_system_hooks_audit §E.
+  options: z.object({
+    skipExperienceChecks: z.boolean().optional(),
+  }).strict().optional(),
 }).strict();
 
 export const DeleteItemInput = z.object({

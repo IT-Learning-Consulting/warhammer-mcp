@@ -37,6 +37,16 @@ function walk(dir: string): string[] {
   return out;
 }
 
+// PRD: mcp_notify_coverage_v1 §5 Phase 3 R3.4 — ChatMessage allowlist.
+// Direct `ChatMessage.create` calls bypass the notify dispatcher's chat-audit
+// channel. The two legitimate sites are notify.ts (emitChat dispatch) and
+// data-access.ts (requestPlayerRolls roll-button, paired with notify.created('mcp', ...)).
+const CHAT_FORBIDDEN = /\bChatMessage\.create\s*\(/;
+const CHAT_ALLOWLIST = new Set<string>([
+  'notify.ts',        // emitChat() — legitimate dispatch
+  'data-access.ts',   // requestPlayerRolls roll-button (paired with notify.created('mcp',...))
+]);
+
 describe('migration guard — ui.notifications', () => {
   it('no source file outside notify.ts calls ui.notifications directly', () => {
     const tsFiles = walk(SRC_DIR);
@@ -67,6 +77,34 @@ describe('migration guard — ui.notifications', () => {
       throw new Error(
         `Direct ui.notifications call(s) found outside notify.ts. ` +
           `Route through notify.* instead:\n${detail}`,
+      );
+    }
+    expect(offenders).toHaveLength(0);
+  });
+
+  it('no source file outside the allowlist calls ChatMessage.create directly', () => {
+    const tsFiles = walk(SRC_DIR);
+    const offenders: { file: string; line: number; content: string }[] = [];
+
+    for (const file of tsFiles) {
+      const relative = path.relative(SRC_DIR, file).replace(/\\/g, '/');
+      if (CHAT_ALLOWLIST.has(path.basename(file))) continue;
+
+      const content = fs.readFileSync(file, 'utf-8');
+      const lines = content.split('\n');
+      for (let i = 0; i < lines.length; i++) {
+        const trimmed = lines[i].trim();
+        if (trimmed.startsWith('//') || trimmed.startsWith('*')) continue;
+        if (CHAT_FORBIDDEN.test(lines[i])) {
+          offenders.push({ file: relative, line: i + 1, content: trimmed });
+        }
+      }
+    }
+
+    if (offenders.length > 0) {
+      throw new Error(
+        `Direct ChatMessage.create call(s) found outside the notify allowlist:\n` +
+          offenders.map((o) => `  ${o.file}:${o.line} — ${o.content}`).join('\n'),
       );
     }
     expect(offenders).toHaveLength(0);

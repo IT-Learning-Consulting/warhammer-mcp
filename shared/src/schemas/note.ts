@@ -7,6 +7,9 @@
 
 import { z } from 'zod';
 import { TextureDataSchema, type TextureData } from './texture-data.js';
+// Phase 6.4 — auto-link branch reuses Phase 3's PageInput discriminated union.
+// B3: do NOT redefine the page shape; lift the canonical one from journal.ts.
+import { PageInput } from './journal.js';
 
 const FOUNDRY_ID = z.string().min(1);
 
@@ -28,6 +31,15 @@ const NoteWritableFields = {
   flags: z.record(z.unknown()).optional(),
 };
 
+// Phase 6.4 — auto-link branch: when present, handler creates a JournalEntry
+// first, captures the new entry's id (and first page's id), then creates the
+// note with those IDs. Mutually exclusive with explicit entryId — caller passes
+// either {entryId, pageId?} OR {journalContent: {name, pages: [...]}}, never both.
+export const NoteJournalContentInput = z.object({
+  name: z.string().min(1),
+  pages: z.array(PageInput).min(1),
+}).strict();
+
 export const NoteCreateInput = z
   .object({
     action: z.literal('create'),
@@ -35,6 +47,11 @@ export const NoteCreateInput = z
     ...NoteWritableFields,
     x: z.number(),
     y: z.number(),
+    // Auto-link convenience: create JournalEntry + link in one call.
+    // If provided, entryId in the FK fields is overwritten with the new entry's id.
+    // Branch-ambiguity check (entryId + journalContent both set) happens in the
+    // handler, not in the schema — discriminatedUnion can't accept ZodEffects.
+    journalContent: NoteJournalContentInput.optional(),
   })
   .strict();
 

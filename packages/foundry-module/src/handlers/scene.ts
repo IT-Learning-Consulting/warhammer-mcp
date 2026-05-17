@@ -50,7 +50,8 @@ import {
   type SceneGetResponse,
   type SceneListResponse,
 } from '@foundry-mcp/shared';
-import { wrappedWrite } from '../transaction-manager.js';
+import { wrappedWrite, transactionManager } from '../transaction-manager.js';
+import { notify } from '../notify.js';
 
 // ── Local types ──────────────────────────────────────────────────────────────
 
@@ -392,6 +393,8 @@ export async function createScene(data: unknown): Promise<Envelope<SceneCreateRe
       );
     }
 
+    notify.created('scene', persisted.name as string, { uuid: (persisted as any).uuid });
+
     return {
       success: true as const,
       data: {
@@ -447,7 +450,7 @@ export async function updateScene(data: unknown): Promise<Envelope<SceneUpdateRe
         field === 'ownership' ||
         field === 'flags'
       ) {
-        const persisted = (scene as any)[field];
+        const persisted = (scene._source as any)?.[field];
         if (persisted === undefined || persisted === null) {
           throw new Error(
             `SCENE_WRITE_NOT_PERSISTED: nested field "${field}" missing after update`,
@@ -455,14 +458,17 @@ export async function updateScene(data: unknown): Promise<Envelope<SceneUpdateRe
         }
         continue;
       }
-      const persistedValue = (scene as any)[field];
+      // F08 fix (Phase 6.2 scope-extension): compare against `_source` (raw stored data).
+      const persistedValue = (scene._source as any)?.[field];
       if (persistedValue !== requestedValue) {
         throw new Error(
           `SCENE_WRITE_NOT_PERSISTED: field "${field}" expected ${JSON.stringify(requestedValue)} ` +
-            `but post-update value is ${JSON.stringify(persistedValue)}`,
+            `but post-update _source value is ${JSON.stringify(persistedValue)}`,
         );
       }
     }
+
+    notify.updated('scene', scene.name as string, { summary: changedFields.join(', ') });
 
     return {
       success: true as const,
@@ -504,6 +510,8 @@ export async function deleteScene(data: unknown): Promise<Envelope<SceneDeleteRe
           `but found ${sizeAfter}`,
       );
     }
+
+    notify.deleted('scene', deletedName);
 
     return {
       success: true as const,
@@ -548,6 +556,10 @@ export async function cloneScene(data: unknown): Promise<Envelope<SceneCloneResp
       );
     }
 
+    notify.created('scene', persisted.name as string, {
+      summary: `cloned from ${source.name}`,
+    });
+
     return {
       success: true as const,
       data: {
@@ -572,22 +584,15 @@ export async function activateScene(data: unknown): Promise<Envelope<SceneActiva
   const previousActive = (game as any).scenes?.active;
   const previousActiveId = previousActive?.id ?? null;
 
-  // BUG-081 (2026-05-16) — race condition footgun. When `scene.activate` is
-  // fired in the same parallel batch as `<embedded>.create` calls on the same
-  // scene (light / tile / token / template / sound / note / region), Foundry's
-  // activation re-sync overwrites embedded writes that are still in flight at
-  // the moment activate() commits. Each create returns a SUCCESS envelope
-  // synchronously (DP-16 post-verify sees the doc in-memory), but `<embedded>.list`
-  // afterward finds only a subset persisted.
-  //
-  // TODO(BUG-081): the proper fix is to await any in-flight `wrappedWrite`
-  // transactions targeting this scene before triggering Scene.activate(). The
-  // current transaction-manager API (`startTransaction(operation: string)` +
-  // singleton instance) does not expose per-scene pending-op visibility — a
-  // pending-ops registry keyed by scene id would need to be added first.
-  // Until then, callers MUST sequence `scene.activate` AFTER any embedded
-  // creates on the same scene. The mcp-server tool description for the
-  // `activate` action surfaces this constraint.
+  // BUG-081 (Phase 6.3 full fix, 2026-05-16): before activating, wait for any
+  // in-flight embedded-doc writes on this scene to complete. Pre-fix, parallel
+  // `<embedded>.create` calls + `scene.activate` would race — Foundry's
+  // activation re-sync overwrote embedded writes still in flight, dropping docs
+  // silently while each create returned SUCCESS. The factory + 3 outliers thread
+  // {sceneId} through every wrappedWrite, so awaitPendingWritesForScene
+  // resolves to "no pending writes" once all embedded creates commit.
+  await transactionManager.awaitPendingWritesForScene(input.sceneId);
+
   return wrappedWrite('scene.activateScene', async () => {
     await scene.activate();
 
@@ -598,6 +603,8 @@ export async function activateScene(data: unknown): Promise<Envelope<SceneActiva
         `SCENE_WRITE_NOT_PERSISTED: scene "${input.sceneId}" is not active after activate()`,
       );
     }
+
+    notify.updated('scene', scene.name as string, { summary: 'activated' });
 
     return {
       success: true as const,

@@ -322,6 +322,12 @@ export class CharacterTools extends BaseTool {
     if (system.details?.status?.value) {
       basicInfo.status = system.details.status.value;
     }
+    if (system.details?.status?.tier !== undefined) {
+      basicInfo.statusTier = system.details.status.tier;
+    }
+    if (system.details?.status?.standing !== undefined) {
+      basicInfo.statusStanding = system.details.status.standing;
+    }
 
     // Experience
     if (system.details?.experience) {

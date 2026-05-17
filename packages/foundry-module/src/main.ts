@@ -68,6 +68,23 @@ class FoundryMCPBridge {
         captureInitError('healthcheck-settings-register', e);
       }
 
+      // Phase 6.1 mcp_crud_expansion — FilePicker default-converted-folder target.
+      // Tier 2 of caller-passed → world-setting → hard-default fallback chain
+      // (phase6_filepicker_design.md §e). When blank, foundry-module's uploadFile
+      // handler falls through to `worlds/${game.world.id}/assets/converted/`.
+      try {
+        game.settings.register(MODULE_ID, 'default-converted-folder', {
+          name: 'Default converted-asset folder',
+          hint: 'Where filepicker.upload writes converted media when no target is specified. Leave blank to use worlds/<activeWorld>/assets/converted/.',
+          scope: 'world',
+          config: true,
+          type: String,
+          default: '',
+        });
+      } catch (e) {
+        captureInitError('default-converted-folder-register', e);
+      }
+
       // HC1 / BUG-019: Hard system-id guard. Non-wfrp4e worlds register zero handlers.
       const systemId = (game as any).system?.id;
       if (systemId !== 'wfrp4e') {

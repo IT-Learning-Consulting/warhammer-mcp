@@ -17,17 +17,26 @@ export interface Transaction {
   actions: TransactionAction[];
   completed: boolean;
   rolledBack: boolean;
+  // Phase 6.3 BUG-081 — scene tracking for parallel-activate race guard.
+  sceneId?: string | undefined;
 }
 
 export class TransactionManager {
   private moduleId: string = MODULE_ID;
   private activeTransactions: Map<string, Transaction> = new Map();
   private transactionHistory: Transaction[] = [];
+  // Phase 6.3 BUG-081 — per-scene pending-write tracking.
+  // Map<sceneId, Set<transactionId>>. Populated by wrappedWrite when called
+  // with opts.sceneId; consumed by awaitPendingWritesForScene before
+  // scene.activate to prevent parallel-write / activate races.
+  private pendingSceneWrites: Map<string, Set<string>> = new Map();
 
   /**
-   * Start a new transaction
+   * Start a new transaction.
+   * Phase 6.3 BUG-081: opts.sceneId registers the transaction in
+   * pendingSceneWrites for that scene; commit/rollback/cancel deregister.
    */
-  startTransaction(description: string): string {
+  startTransaction(description: string, opts?: { sceneId?: string }): string {
     const transactionId = foundry.utils.randomID();
     const transaction: Transaction = {
       id: transactionId,
@@ -36,11 +45,34 @@ export class TransactionManager {
       actions: [],
       completed: false,
       rolledBack: false,
+      sceneId: opts?.sceneId,
     };
 
     this.activeTransactions.set(transactionId, transaction);
-    
+
+    if (opts?.sceneId) {
+      let set = this.pendingSceneWrites.get(opts.sceneId);
+      if (!set) {
+        set = new Set();
+        this.pendingSceneWrites.set(opts.sceneId, set);
+      }
+      set.add(transactionId);
+    }
+
     return transactionId;
+  }
+
+  /**
+   * Internal helper to deregister a transaction from pendingSceneWrites.
+   * Idempotent — safe to call multiple times.
+   */
+  private deregisterSceneTracking(transaction: Transaction): void {
+    if (!transaction.sceneId) return;
+    const set = this.pendingSceneWrites.get(transaction.sceneId);
+    if (set) {
+      set.delete(transaction.id);
+      if (set.size === 0) this.pendingSceneWrites.delete(transaction.sceneId);
+    }
   }
 
   /**
@@ -66,7 +98,8 @@ export class TransactionManager {
 
     transaction.completed = true;
     this.activeTransactions.delete(transactionId);
-    
+    this.deregisterSceneTracking(transaction);
+
     // Add to history (keep last 50 transactions)
     this.transactionHistory.push(transaction);
     if (this.transactionHistory.length > 50) {
@@ -111,9 +144,10 @@ export class TransactionManager {
     }
 
     transaction.rolledBack = true;
-    
+
     // Remove from active transactions if it was there
     this.activeTransactions.delete(transactionId);
+    this.deregisterSceneTracking(transaction);
 
     const success = errors.length === 0;
 
@@ -238,6 +272,34 @@ export class TransactionManager {
     const transaction = this.activeTransactions.get(transactionId);
     if (transaction) {
       this.activeTransactions.delete(transactionId);
+      this.deregisterSceneTracking(transaction);
+    }
+  }
+
+  /**
+   * Phase 6.3 BUG-081 — return active transaction IDs registered to a scene.
+   */
+  getPendingWritesForScene(sceneId: string): string[] {
+    const set = this.pendingSceneWrites.get(sceneId);
+    return set ? Array.from(set) : [];
+  }
+
+  /**
+   * Phase 6.3 BUG-081 — resolve when all pending scene writes complete.
+   * Polls every 10ms; defaults to 5s timeout. Throws on timeout.
+   * Use BEFORE scene.activate to prevent parallel-write / activate races.
+   */
+  async awaitPendingWritesForScene(sceneId: string, timeoutMs: number = 5000): Promise<void> {
+    const start = Date.now();
+    while (true) {
+      const pending = this.getPendingWritesForScene(sceneId);
+      if (pending.length === 0) return;
+      if (Date.now() - start >= timeoutMs) {
+        throw new Error(
+          `awaitPendingWritesForScene: timeout after ${timeoutMs}ms — ${pending.length} pending writes remain on scene "${sceneId}"`,
+        );
+      }
+      await new Promise((resolve) => setTimeout(resolve, 10));
     }
   }
 
@@ -273,12 +335,16 @@ export const transactionManager = new TransactionManager();
  * Handler throw rolls back the transaction and re-throws the original error.
  * Rollback-time errors are logged but do not mask the original throw.
  */
-export async function wrappedWrite<T>(operation: string, fn: () => Promise<T>): Promise<T> {
+export async function wrappedWrite<T>(
+  operation: string,
+  fn: () => Promise<T>,
+  opts?: { sceneId?: string },
+): Promise<T> {
   const permCheck = permissionManager.checkWritePermission(operation);
   if (!permCheck.allowed) {
     throw new Error(permCheck.reason ?? `Permission denied for ${operation}`);
   }
-  const txId = transactionManager.startTransaction(operation);
+  const txId = transactionManager.startTransaction(operation, opts);
   try {
     const result = await fn();
     transactionManager.commitTransaction(txId);

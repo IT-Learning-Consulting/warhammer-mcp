@@ -1,3 +1,10 @@
+// FACTORY-EXEMPT: legacy add/delete-token delegation
+//   token.ts owns 2 legacy actions (add + delete-token) that pass through
+//   TokenDataAccessFacade — not the embedded-CRUD pattern. Plus token-specific
+//   ring/turnMarker/bar1/bar2/occludable nested-field handling that doesn't
+//   share the factory's clean shape. F08 _source pattern retrofitted in-place
+//   (Phase 6.2.7 B1).
+//
 // Phase 5 mcp_crud_expansion — Token handlers (umbrella, 7 actions).
 //
 // Foundry-side write/read for the `token` MCP umbrella tool. 5 base embedded-CRUD
@@ -41,6 +48,7 @@ import {
 } from '@foundry-mcp/shared';
 import { wrappedWrite } from '../transaction-manager.js';
 import { getEmbeddedOrThrow } from '../utils/getEmbeddedOrThrow.js';
+import { notify } from '../notify.js';
 
 // ── Local types ──────────────────────────────────────────────────────────────
 
@@ -247,6 +255,10 @@ export async function createToken(data: unknown): Promise<Envelope<TokenCreateRe
     }
     const persisted = getEmbeddedOrThrow<any>(scene, 'tokens', created[0].id, 'Token');
 
+    notify.created('token', (persisted.name as string) ?? `Token ${persisted.id}`, {
+      summary: `on ${scene.name}`,
+    });
+
     return {
       success: true as const,
       data: {
@@ -255,7 +267,7 @@ export async function createToken(data: unknown): Promise<Envelope<TokenCreateRe
         requestedChanges,
       } satisfies TokenCreateResponse,
     };
-  });
+  }, { sceneId: input.sceneId });
 }
 
 // ── 2. updateToken ───────────────────────────────────────────────────────────
@@ -298,20 +310,25 @@ export async function updateToken(data: unknown): Promise<Envelope<TokenUpdateRe
         field === 'turnMarker' ||
         field === 'flags'
       ) {
-        const persisted = (token as any)[field];
+        const persisted = (token._source as any)?.[field];
         if (persisted === undefined || persisted === null) {
           throw new Error(`TOKEN_WRITE_NOT_PERSISTED: nested field "${field}" missing after update`);
         }
         continue;
       }
-      const persistedValue = (token as any)[field];
+      // F08 fix (Phase 6.2.7 B1): compare against `_source` (raw stored data).
+      const persistedValue = (token._source as any)?.[field];
       if (persistedValue !== requestedValue) {
         throw new Error(
           `TOKEN_WRITE_NOT_PERSISTED: field "${field}" expected ${JSON.stringify(requestedValue)} ` +
-            `but post-update is ${JSON.stringify(persistedValue)}`,
+            `but post-update _source value is ${JSON.stringify(persistedValue)}`,
         );
       }
     }
+
+    notify.updated('token', (token.name as string) ?? `Token ${input.tokenId}`, {
+      summary: changedFields.join(', '),
+    });
 
     return {
       success: true as const,
@@ -322,7 +339,7 @@ export async function updateToken(data: unknown): Promise<Envelope<TokenUpdateRe
         changedFields,
       } satisfies TokenUpdateResponse,
     };
-  });
+  }, { sceneId: input.sceneId });
 }
 
 // ── 3. deleteToken (embedded-CRUD style) ─────────────────────────────────────
@@ -353,6 +370,10 @@ export async function deleteToken(data: unknown): Promise<Envelope<TokenDeleteRe
       );
     }
 
+    notify.deleted('token', deletedName || `Token ${input.tokenId}`, {
+      summary: `from ${scene.name}`,
+    });
+
     return {
       success: true as const,
       data: {
@@ -363,7 +384,7 @@ export async function deleteToken(data: unknown): Promise<Envelope<TokenDeleteRe
         remainingTokens: sizeAfter,
       } satisfies TokenDeleteResponse,
     };
-  });
+  }, { sceneId: input.sceneId });
 }
 
 // ── 4. getToken ──────────────────────────────────────────────────────────────
@@ -468,7 +489,7 @@ export async function addTokens(
         placement: (result?.placement as string) ?? input.placement ?? 'random',
       } satisfies TokenAddResponse,
     };
-  });
+  }, input.sceneId ? { sceneId: input.sceneId } : undefined);
 }
 
 // ── 7. deleteTokenAction (migrated from scene.delete-token) ──────────────────
@@ -494,6 +515,10 @@ export async function deleteTokenAction(
     const sizeAfter = scene.tokens?.size ?? 0;
     const remainingTokens = (result?.remainingTokens as number) ?? sizeAfter;
 
+    notify.deleted('token', deletedName || `Token ${input.tokenId}`, {
+      summary: `from ${scene.name}`,
+    });
+
     return {
       success: true as const,
       data: {
@@ -504,7 +529,7 @@ export async function deleteTokenAction(
         remainingTokens,
       } satisfies TokenDeleteResponse,
     };
-  });
+  }, { sceneId: input.sceneId });
 }
 
 // ── Dispatcher ──────────────────────────────────────────────────────────────

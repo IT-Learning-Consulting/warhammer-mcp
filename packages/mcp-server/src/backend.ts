@@ -77,6 +77,9 @@ import { SoundTool } from './tools/sound.js';
 import { RegionTool } from './tools/region.js';
 import { TileTool } from './tools/tile.js';
 import { TemplateTool } from './tools/template.js';
+// Phase 6.1 mcp_crud_expansion — FilePicker umbrella tool with Node-side auto-conversion.
+import { FilePickerTool } from './tools/filepicker.js';
+import { NotifyTool } from './tools/notify.js';
 
 const CONTROL_HOST = '127.0.0.1';
 
@@ -309,8 +312,12 @@ async function startBackend(): Promise<void> {
   const regionTool = new RegionTool({ foundryClient, logger });
   const tileTool = new TileTool({ foundryClient, logger });
   const templateTool = new TemplateTool({ foundryClient, logger });
+  // Phase 6.1 mcp_crud_expansion — FilePicker tool with Node-side auto-conversion.
+  const filePickerTool = new FilePickerTool({ foundryClient, logger });
   // Phase 1 mcp_diagnostic_tool — read-only diagnostic umbrella (Tier 1).
   const diagnosticTool = new DiagnosticTool({ foundryClient, logger });
+  // Phase 4 mcp_notify_coverage — notify umbrella (skill bookends + ad-hoc GM events).
+  const notifyTool = new NotifyTool({ foundryClient, logger });
 
   const registry = new ToolRegistry();
   registry.register('get-character', (args) => characterTools.handleGetCharacter(args));
@@ -374,9 +381,13 @@ async function startBackend(): Promise<void> {
   registry.register('region', (args) => regionTool.execute(args));
   registry.register('tile', (args) => tileTool.execute(args));
   registry.register('template', (args) => templateTool.execute(args));
+  // Phase 6.1 mcp_crud_expansion — FilePicker umbrella (upload / list / convert).
+  registry.register('filepicker', (args) => filePickerTool.execute(args));
   // Phase 1 mcp_diagnostic_tool — read-only diagnostic umbrella. Foundry-side
   // dispatcher gates on validateGMAccess + enableDiagnosticTools setting.
   registry.register('diagnostic', (args) => diagnosticTool.execute(args));
+  // Phase 4 mcp_notify_coverage — single `notify` umbrella for skill bookends + GM-visible events.
+  registry.register('notify', (args) => notifyTool.execute(args));
   // Phase 4 mcp_crud_expansion — add-actors-to-scene + delete-token folded into scene umbrella.
   registry.register('delete-actor', (args) => worldDeleteTools.handleDeleteActor(args));
 
@@ -450,8 +461,12 @@ async function startBackend(): Promise<void> {
     ...regionTool.getToolDefinitions(),
     ...tileTool.getToolDefinitions(),
     ...templateTool.getToolDefinitions(),
+    // Phase 6.1 mcp_crud_expansion — FilePicker umbrella (upload / list / convert).
+    ...filePickerTool.getToolDefinitions(),
     // Phase 1 mcp_diagnostic_tool — diagnostic umbrella (3 actions in v1).
     ...diagnosticTool.getToolDefinitions(),
+
+    ...notifyTool.getToolDefinitions(),
 
   ];
 

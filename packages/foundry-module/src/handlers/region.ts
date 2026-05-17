@@ -1,3 +1,11 @@
+// FACTORY-EXEMPT: behavior sub-CRUD two-level parent chain
+//   region.ts owns RegionBehavior CRUD (createBehavior / updateBehavior /
+//   deleteBehavior) — a two-level parent chain (region.createEmbeddedDocuments
+//   on RegionBehavior, not on Scene). Plus 7-variant discriminated-union
+//   system payload + CCR-Type-Locked guard not present elsewhere. Outside
+//   the factory's single-level embedded-CRUD contract. F08 _source pattern
+//   retrofitted in-place (Phase 6.2.7 B1).
+//
 // Phase 5 mcp_crud_expansion — Region handlers (umbrella, 8 actions).
 //
 // 5 base Region embedded-CRUD actions + 3 RegionBehavior CRUD actions
@@ -48,6 +56,7 @@ import {
 } from '@foundry-mcp/shared';
 import { wrappedWrite } from '../transaction-manager.js';
 import { getEmbeddedOrThrow } from '../utils/getEmbeddedOrThrow.js';
+import { notify } from '../notify.js';
 
 type AccessGate = { allowed: boolean };
 type EnvelopeOK<T> = { success: true; data: T };
@@ -219,6 +228,11 @@ export async function createRegion(data: unknown): Promise<Envelope<RegionCreate
       throw new Error('REGION_WRITE_NOT_PERSISTED: createEmbeddedDocuments returned no doc');
     }
     const persisted = getEmbeddedOrThrow<any>(scene, 'regions', created[0].id, 'Region');
+
+    notify.created('region', (persisted.name as string) ?? `Region ${persisted.id}`, {
+      summary: `on scene ${input.sceneId}`,
+    });
+
     return {
       success: true as const,
       data: {
@@ -227,7 +241,7 @@ export async function createRegion(data: unknown): Promise<Envelope<RegionCreate
         requestedChanges,
       } satisfies RegionCreateResponse,
     };
-  });
+  }, { sceneId: input.sceneId });
 }
 
 // ── 2. updateRegion ──────────────────────────────────────────────────────────
@@ -250,20 +264,25 @@ export async function updateRegion(data: unknown): Promise<Envelope<RegionUpdate
     // DP-16 — scalar/string fields verified; nested (elevation, shapes, flags) trust Foundry merge.
     for (const [field, requestedValue] of Object.entries(requestedChanges)) {
       if (field === 'elevation' || field === 'shapes' || field === 'flags') {
-        const persisted = (region as any)[field];
+        const persisted = (region._source as any)?.[field];
         if (persisted === undefined || persisted === null) {
           throw new Error(`REGION_WRITE_NOT_PERSISTED: nested "${field}" missing after update`);
         }
         continue;
       }
-      const persistedValue = (region as any)[field];
+      // F08 fix (Phase 6.2.7 B1): compare against `_source` (raw stored data).
+      const persistedValue = (region._source as any)?.[field];
       if (persistedValue !== requestedValue) {
         throw new Error(
           `REGION_WRITE_NOT_PERSISTED: field "${field}" expected ${JSON.stringify(requestedValue)} ` +
-            `but post-update is ${JSON.stringify(persistedValue)}`,
+            `but post-update _source value is ${JSON.stringify(persistedValue)}`,
         );
       }
     }
+
+    notify.updated('region', (region.name as string) ?? `Region ${input.regionId}`, {
+      summary: changedFields.join(', '),
+    });
 
     return {
       success: true as const,
@@ -274,7 +293,7 @@ export async function updateRegion(data: unknown): Promise<Envelope<RegionUpdate
         changedFields,
       } satisfies RegionUpdateResponse,
     };
-  });
+  }, { sceneId: input.sceneId });
 }
 
 // ── 3. deleteRegion ──────────────────────────────────────────────────────────
@@ -287,6 +306,7 @@ export async function deleteRegion(data: unknown): Promise<Envelope<RegionDelete
   const scene = getSceneOrThrow(input.sceneId);
   const region = getEmbeddedOrThrow<any>(scene, 'regions', input.regionId, 'Region');
   const sizeBefore = scene.regions?.size ?? 0;
+  const regionName = (region.name as string) ?? `Region ${input.regionId}`;
 
   return wrappedWrite('region.delete', async () => {
     await region.delete();
@@ -302,6 +322,9 @@ export async function deleteRegion(data: unknown): Promise<Envelope<RegionDelete
           `but found ${sizeAfter}`,
       );
     }
+
+    notify.deleted('region', regionName);
+
     return {
       success: true as const,
       data: {
@@ -311,7 +334,7 @@ export async function deleteRegion(data: unknown): Promise<Envelope<RegionDelete
         remainingRegions: sizeAfter,
       } satisfies RegionDeleteResponse,
     };
-  });
+  }, { sceneId: input.sceneId });
 }
 
 // ── 4. getRegion ─────────────────────────────────────────────────────────────
@@ -401,6 +424,11 @@ export async function createBehavior(
       throw new Error('BEHAVIOR_WRITE_NOT_PERSISTED: createEmbeddedDocuments returned no doc');
     }
     const persisted = getEmbeddedOrThrow<any>(region, 'behaviors', created[0].id, 'RegionBehavior');
+
+    notify.created('region', persisted.type as string, {
+      summary: `on region ${region.name}`,
+    });
+
     return {
       success: true as const,
       data: {
@@ -409,7 +437,7 @@ export async function createBehavior(
         behavior: serializeBehaviorSummary(persisted),
       } satisfies RegionBehaviorCreateResponse,
     };
-  });
+  }, { sceneId: input.sceneId });
 }
 
 // ── 7. updateBehavior ───────────────────────────────────────────────────────
@@ -455,6 +483,11 @@ export async function updateBehavior(
   return wrappedWrite('region.updateBehavior', async () => {
     const payload = deepStripUndefined(changes);
     await behavior.update(payload);
+
+    notify.updated('region', behavior.type as string, {
+      summary: `on region ${region.name}`,
+    });
+
     return {
       success: true as const,
       data: {
@@ -464,7 +497,7 @@ export async function updateBehavior(
         changedFields,
       } satisfies RegionBehaviorUpdateResponse,
     };
-  });
+  }, { sceneId: input.sceneId });
 }
 
 // ── 8. deleteBehavior ───────────────────────────────────────────────────────
@@ -486,6 +519,7 @@ export async function deleteBehavior(
     'RegionBehavior',
   );
   const sizeBefore = region.behaviors?.size ?? 0;
+  const behaviorType = behavior.type as string;
 
   return wrappedWrite('region.deleteBehavior', async () => {
     await behavior.delete();
@@ -502,6 +536,9 @@ export async function deleteBehavior(
           `but found ${sizeAfter}`,
       );
     }
+
+    notify.deleted('region', behaviorType, { summary: `from region ${region.name}` });
+
     return {
       success: true as const,
       data: {
@@ -511,7 +548,7 @@ export async function deleteBehavior(
         remainingBehaviors: sizeAfter,
       } satisfies RegionBehaviorDeleteResponse,
     };
-  });
+  }, { sceneId: input.sceneId });
 }
 
 // ── Dispatcher ──────────────────────────────────────────────────────────────

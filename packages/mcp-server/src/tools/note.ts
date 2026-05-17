@@ -31,6 +31,7 @@ interface NoteCreateResponse {
   success: true;
   note: NoteViewModel;
   requestedChanges: Record<string, unknown>;
+  journalEntry?: { id: string; firstPageId: string | null };
 }
 interface NoteUpdateResponse {
   success: true;
@@ -133,7 +134,7 @@ export class NoteTool extends BaseTool {
           `Manage Foundry VTT NoteDocument (map pin) objects via 5 actions (embedded-doc CRUD + list). Notes live on scenes (scene.notes collection) and optionally link to JournalEntry pages.
 
 **Actions:**
-- **create**: Place a new map note on a scene. Required: sceneId, x, y. Optional: entryId, pageId, text, iconSize, fontFamily, fontSize, textAnchor, textColor, texture, elevation, sort, global, flags. Returns full NoteViewModel with entryLinked + pageLinked booleans.
+- **create**: Place a new map note on a scene. Required: sceneId, x, y. Optional: entryId, pageId, text, iconSize, fontFamily, fontSize, textAnchor, textColor, texture, elevation, sort, global, flags. Phase 6.4 auto-link branch: pass \`journalContent: {name, pages: [...]}\` instead of entryId — handler creates a JournalEntry first, then links the note to it; response includes both note.id and journalEntry.id. Mutually exclusive with entryId. Returns full NoteViewModel with entryLinked + pageLinked booleans.
 - **update**: Partial-diff update. sceneId + noteId + changes (≥1 field). Same writable surface as create. Returns full NoteViewModel.
 - **delete**: Permanently remove a single note from the scene. ⚠️ Irreversible.
 - **get**: Fetch a single note by sceneId + noteId. Returns full NoteViewModel including B5-aware entryLinked + pageLinked FK resolution.
@@ -145,6 +146,7 @@ export class NoteTool extends BaseTool {
 
 **Examples:**
 - create: {action:"create", sceneId:"abc", x:500, y:300, entryId:"jid", pageId:"pid", text:"Tavern"}
+- create (auto-link): {action:"create", sceneId:"abc", x:300, y:400, journalContent:{name:"Tavern Lore", pages:[{type:"text", name:"Intro", text:{content:"..."}}]}} → response includes journalEntry: {id, firstPageId}
 - update: {action:"update", sceneId:"abc", noteId:"xyz", changes:{text:"Updated Label", global:true}}
 - delete: {action:"delete", sceneId:"abc", noteId:"xyz"}
 - get:    {action:"get", sceneId:"abc", noteId:"xyz"}
@@ -177,6 +179,11 @@ export class NoteTool extends BaseTool {
             },
             x: { type: 'number', description: '[create] Required x-coordinate.' },
             y: { type: 'number', description: '[create] Required y-coordinate.' },
+            journalContent: {
+              type: 'object',
+              description:
+                '[create] Phase 6.4 auto-link branch — pass {name: string, pages: [{type, name, ...page-specific-fields}, ...]} to create a JournalEntry first and link this note to it. Page types: "text" {text: {content}}, "image" {src, image: {caption?}}, "video" {video: {src, controls?}}, "pdf" {src}. Response gains journalEntry: {id, firstPageId}. Mutually exclusive with entryId — passing both throws NOTE_BRANCH_AMBIGUOUS.',
+            },
             elevation: { type: 'number', description: '[create/update.changes] Elevation value.' },
             sort: { type: 'integer', description: '[create/update.changes] Sort order integer.' },
             texture: {
@@ -245,7 +252,10 @@ export class NoteTool extends BaseTool {
         .join(', ') || '(x/y only)';
       const text =
         `📌 **Note Created**\n\n${formatNoteView(data.note)}\n\n` +
-        `_Requested fields: ${changedKeys}_`;
+        `_Requested fields: ${changedKeys}_` +
+        (data.journalEntry
+          ? `\n\n🔗 **Auto-linked Journal Entry:** \`${data.journalEntry.id}\` (first page: \`${data.journalEntry.firstPageId ?? 'none'}\`)`
+          : '');
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
       return errorContent('create', e instanceof Error ? e.message : String(e));

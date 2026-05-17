@@ -1,14 +1,13 @@
 // Phase 5 mcp_crud_expansion — AmbientLight CRUD handler (5 actions).
+// Phase 6.2 retrofit — factored through createEmbeddedCRUDHandlers (~51% LOC reduction).
 //
-// Foundry-side write/read surface for the `light` MCP umbrella tool.
-// Actions: create / update / delete / get / list.
-// All operate on scene.lights (EmbeddedCollectionField of AmbientLightDocument).
+// External API preserved: createLight / updateLight / deleteLight / getLight /
+// listLights / dispatchLight. Behavior identical to pre-factory hand-rolled
+// version. Serializers kept in-file (per-type 50-90 LOC stays uniquely shaped).
 //
-// CCR-Trust: every write starts with validateGMAccess().
-// CCR-Transactions: every write routes through wrappedWrite('light.<name>', ...).
-// CCR-Envelope: returns {success, data} or {success, error}.
-// BUG-075: snapshot input shape BEFORE every mutating call.
-// DP-16: post-verify each write by re-reading via getEmbeddedOrThrow.
+// FACTORY: light AmbientLight
+// F08 _source pattern emitted by factory's DP-16 loop. BUG-069 typed-generic
+// discipline preserved via the per-action Response interfaces below.
 
 import {
   LightToolInput,
@@ -17,103 +16,12 @@ import {
   LightDeleteInput,
   LightGetInput,
   LightListInput,
-  type LightToolInputType,
-  type LightCreateInputType,
-  type LightUpdateInputType,
-  type LightDeleteInputType,
-  type LightGetInputType,
-  type LightListInputType,
   type LightViewModel,
   type LightListItem,
 } from '@foundry-mcp/shared';
-import { wrappedWrite } from '../transaction-manager.js';
-import { getEmbeddedOrThrow } from '../utils/getEmbeddedOrThrow.js';
-
-// ── Local types ──────────────────────────────────────────────────────────────
-
-type EnvelopeOK<T> = { success: true; data: T };
-type EnvelopeErr = { success: false; error: string };
-type Envelope<T> = EnvelopeOK<T> | EnvelopeErr;
-
-interface LightCreateResponse {
-  success: true;
-  light: LightViewModel;
-  requestedChanges: Record<string, unknown>;
-}
-interface LightUpdateResponse {
-  success: true;
-  light: LightViewModel;
-  requestedChanges: Record<string, unknown>;
-  changedFields: string[];
-}
-interface LightDeleteResponse {
-  success: true;
-  deletedId: string;
-  remainingLights: number;
-}
-interface LightGetResponse {
-  success: true;
-  light: LightViewModel;
-}
-interface LightListBareResponse {
-  success: true;
-  lights: LightListItem[];
-}
-interface LightListPaginatedResponse {
-  success: true;
-  total: number;
-  page: number;
-  pageSize: number;
-  pageCount: number;
-  lights: LightListItem[];
-}
-interface LightListCountResponse {
-  success: true;
-  total: number;
-  filterApplied: boolean;
-}
-
-type LightListResponse = LightListBareResponse | LightListPaginatedResponse | LightListCountResponse;
-
-type LightResponse =
-  | LightCreateResponse
-  | LightUpdateResponse
-  | LightDeleteResponse
-  | LightGetResponse
-  | LightListResponse;
-
-// ── Access gate ──────────────────────────────────────────────────────────────
-
-function validateGMAccess(): { allowed: boolean } {
-  if (!game.user?.isGM) return { allowed: false };
-  return { allowed: true };
-}
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-function deepStripUndefined<T>(value: T): T {
-  if (Array.isArray(value)) {
-    return value.map(deepStripUndefined) as any;
-  }
-  if (value && typeof value === 'object') {
-    const out: Record<string, any> = {};
-    for (const [k, v] of Object.entries(value as Record<string, any>)) {
-      if (v === undefined) continue;
-      out[k] = deepStripUndefined(v);
-    }
-    return out as any;
-  }
-  return value;
-}
-
-function getSceneOrThrow(sceneId: string): any {
-  const scene = (game as any).scenes?.get(sceneId);
-  if (!scene) throw new Error(`SCENE_NOT_FOUND: no Scene with id "${sceneId}"`);
-  return scene;
-}
+import { createEmbeddedCRUDHandlers } from '../utils/embeddedCRUDFactory.js';
 
 // ── Serializers ──────────────────────────────────────────────────────────────
-
 function serializeLightViewModel(scene: any, light: any): LightViewModel {
   const cfg = light.config ?? {};
   const anim = cfg.animation ?? {};
@@ -169,161 +77,9 @@ function serializeLightListItem(scene: any, light: any): LightListItem {
   };
 }
 
-// ── 1. createLight ───────────────────────────────────────────────────────────
-
-export async function createLight(data: unknown): Promise<Envelope<LightCreateResponse>> {
-  const gate = validateGMAccess();
-  if (!gate.allowed) return { success: false, error: 'Access denied: createLight requires GM' };
-
-  const input: LightCreateInputType = LightCreateInput_strict_parse(data);
-  const scene = getSceneOrThrow(input.sceneId);
-
-  // BUG-075: snapshot BEFORE Foundry mutates the input.
-  const { action: _action, sceneId: _sceneId, ...rest } = input;
-  const requestedChanges: Record<string, unknown> = { ...rest };
-
-  return wrappedWrite('light.createLight', async () => {
-    const payload = deepStripUndefined({ ...rest });
-    const created = await scene.createEmbeddedDocuments('AmbientLight', [payload]);
-    const doc = Array.isArray(created) ? created[0] : created;
-    if (!doc) {
-      throw new Error('LIGHT_WRITE_NOT_PERSISTED: createEmbeddedDocuments returned nothing');
-    }
-
-    // DP-16 post-verify: re-read from the scene collection.
-    const persisted = getEmbeddedOrThrow(scene, 'lights', doc.id, 'AmbientLight');
-
-    return {
-      success: true as const,
-      data: {
-        success: true,
-        light: serializeLightViewModel(scene, persisted),
-        requestedChanges,
-      } satisfies LightCreateResponse,
-    };
-  });
-}
-
-// ── 2. updateLight ───────────────────────────────────────────────────────────
-
-export async function updateLight(data: unknown): Promise<Envelope<LightUpdateResponse>> {
-  const gate = validateGMAccess();
-  if (!gate.allowed) return { success: false, error: 'Access denied: updateLight requires GM' };
-
-  const input: LightUpdateInputType = LightUpdateInput_strict_parse(data);
-  const scene = getSceneOrThrow(input.sceneId);
-  const light = getEmbeddedOrThrow<any>(scene, 'lights', input.lightId, 'AmbientLight');
-
-  // BUG-075: snapshot BEFORE the mutating call.
-  const requestedChanges: Record<string, unknown> = { ...input.changes };
-  const changedFields = Object.keys(requestedChanges);
-
-  return wrappedWrite('light.updateLight', async () => {
-    await light.update(input.changes);
-
-    // DP-16 post-verify: re-read and confirm top-level scalar fields.
-    const persisted = getEmbeddedOrThrow<any>(scene, 'lights', input.lightId, 'AmbientLight');
-    for (const [field, requestedValue] of Object.entries(requestedChanges)) {
-      if (field === 'config' || field === 'flags') {
-        // Nested SchemaFields — skip deep verify; just confirm the field exists.
-        if ((persisted as any)[field] === undefined) {
-          throw new Error(`LIGHT_WRITE_NOT_PERSISTED: nested field "${field}" missing after update`);
-        }
-        continue;
-      }
-      const persistedValue = (persisted as any)[field];
-      if (persistedValue !== requestedValue) {
-        throw new Error(
-          `LIGHT_WRITE_NOT_PERSISTED: field "${field}" expected ${JSON.stringify(requestedValue)} ` +
-            `but post-update value is ${JSON.stringify(persistedValue)}`,
-        );
-      }
-    }
-
-    return {
-      success: true as const,
-      data: {
-        success: true,
-        light: serializeLightViewModel(scene, persisted),
-        requestedChanges,
-        changedFields,
-      } satisfies LightUpdateResponse,
-    };
-  });
-}
-
-// ── 3. deleteLight ───────────────────────────────────────────────────────────
-
-export async function deleteLight(data: unknown): Promise<Envelope<LightDeleteResponse>> {
-  const gate = validateGMAccess();
-  if (!gate.allowed) return { success: false, error: 'Access denied: deleteLight requires GM' };
-
-  const input: LightDeleteInputType = LightDeleteInput_strict_parse(data);
-  const scene = getSceneOrThrow(input.sceneId);
-  // Confirm doc exists before delete.
-  getEmbeddedOrThrow(scene, 'lights', input.lightId, 'AmbientLight');
-
-  return wrappedWrite('light.deleteLight', async () => {
-    await scene.deleteEmbeddedDocuments('AmbientLight', [input.lightId]);
-
-    // DP-16 post-verify: ensure the doc is gone.
-    const stillPresent = scene.lights?.get?.(input.lightId);
-    if (stillPresent) {
-      throw new Error(
-        `LIGHT_WRITE_NOT_PERSISTED: AmbientLight "${input.lightId}" still present on scene ` +
-          `"${input.sceneId}" after delete`,
-      );
-    }
-
-    return {
-      success: true as const,
-      data: {
-        success: true,
-        deletedId: input.lightId,
-        remainingLights: scene.lights?.size ?? 0,
-      } satisfies LightDeleteResponse,
-    };
-  });
-}
-
-// ── 4. getLight ──────────────────────────────────────────────────────────────
-
-export async function getLight(data: unknown): Promise<Envelope<LightGetResponse>> {
-  const gate = validateGMAccess();
-  if (!gate.allowed) return { success: false, error: 'Access denied: getLight requires GM' };
-
-  const input: LightGetInputType = LightGetInput_strict_parse(data);
-  const scene = getSceneOrThrow(input.sceneId);
-  const light = getEmbeddedOrThrow<any>(scene, 'lights', input.lightId, 'AmbientLight');
-
-  return {
-    success: true,
-    data: {
-      success: true,
-      light: serializeLightViewModel(scene, light),
-    } satisfies LightGetResponse,
-  };
-}
-
-// ── 5. listLights ────────────────────────────────────────────────────────────
-
-export async function listLights(data: unknown): Promise<Envelope<LightListResponse>> {
-  const gate = validateGMAccess();
-  if (!gate.allowed) return { success: false, error: 'Access denied: listLights requires GM' };
-
-  const input: LightListInputType = LightListInput_strict_parse(data);
-
-  // Resolve scene: explicit sceneId or fall back to active scene.
-  const sceneId = input.sceneId ?? (game as any).scenes?.active?.id;
-  if (!sceneId) {
-    throw new Error('NO_ACTIVE_SCENE: no sceneId provided and no active scene found');
-  }
-  const scene = getSceneOrThrow(sceneId);
-
-  const allLights: any[] = (scene.lights?.contents as any[] | undefined) ?? [];
-
-  // Apply optional filters.
-  let filtered = allLights;
+// ── List filters ─────────────────────────────────────────────────────────────
+function applyLightListFilters(input: any, items: any[]): any[] {
+  let filtered = items;
   if (input.hidden !== undefined) {
     filtered = filtered.filter((l) => !!l.hidden === input.hidden);
   }
@@ -331,98 +87,50 @@ export async function listLights(data: unknown): Promise<Envelope<LightListRespo
     filtered = filtered.filter((l) => (l.isGlobal === true) === input.isGlobal);
   }
   if (input.filter) {
-    // AmbientLight has no name field — filter against stringified x/y position as a fallback.
-    const lc = input.filter.toLowerCase();
+    const lc = String(input.filter).toLowerCase();
     filtered = filtered.filter((l) => {
       const haystack = `${l.x ?? 0},${l.y ?? 0} ${l.id}`.toLowerCase();
       return haystack.includes(lc);
     });
   }
-
-  const total = filtered.length;
-
-  // countOnly: skip serialization.
-  if (input.countOnly) {
-    const filterApplied = !!(input.hidden !== undefined || input.isGlobal !== undefined || input.filter);
-    return {
-      success: true,
-      data: { success: true, total, filterApplied } satisfies LightListCountResponse,
-    };
-  }
-
-  // Pagination.
-  if (input.page !== undefined || input.pageSize !== undefined) {
-    const pageSize = input.pageSize ?? 20;
-    const page = input.page ?? 1;
-    const pageCount = Math.max(1, Math.ceil(total / pageSize));
-    const offset = (page - 1) * pageSize;
-    const paginated = filtered.slice(offset, offset + pageSize);
-    return {
-      success: true,
-      data: {
-        success: true,
-        total,
-        page,
-        pageSize,
-        pageCount,
-        lights: paginated.map((l) => serializeLightListItem(scene, l)),
-      } satisfies LightListPaginatedResponse,
-    };
-  }
-
-  // Bare list.
-  return {
-    success: true,
-    data: {
-      success: true,
-      lights: filtered.map((l) => serializeLightListItem(scene, l)),
-    } satisfies LightListBareResponse,
-  };
+  return filtered;
 }
 
-// ── Dispatcher ───────────────────────────────────────────────────────────────
-
-export async function dispatchLight(data: unknown): Promise<Envelope<LightResponse>> {
-  let input: LightToolInputType;
-  try {
-    input = LightToolInput.parse(data ?? {});
-  } catch (e) {
-    const message = e instanceof Error ? e.message : 'Invalid input';
-    throw new Error(`Invalid input: ${message}`);
-  }
-
-  switch (input.action) {
-    case 'create':
-      return createLight(input);
-    case 'update':
-      return updateLight(input);
-    case 'delete':
-      return deleteLight(input);
-    case 'get':
-      return getLight(input);
-    case 'list':
-      return listLights(input);
-    default: {
-      const exhaustive: never = input;
-      throw new Error(`Unknown light action: ${(exhaustive as any).action}`);
-    }
-  }
+function isLightFilterApplied(input: any): boolean {
+  return !!(input.hidden !== undefined || input.isGlobal !== undefined || input.filter);
 }
 
-// ── Per-handler strict-parse wrappers ────────────────────────────────────────
+// ── Factory wiring ───────────────────────────────────────────────────────────
+const handlers = createEmbeddedCRUDHandlers<any, any, LightViewModel, LightListItem>({
+  documentName: 'AmbientLight',
+  documentLabel: 'light',
+  collection: 'lights',
+  idField: 'lightId',
+  gmGateReads: true,
+  deleteApi: 'scene.deleteEmbeddedDocuments',
+  schemas: {
+    create: LightCreateInput,
+    update: LightUpdateInput,
+    delete: LightDeleteInput,
+    get: LightGetInput,
+    list: LightListInput,
+    toolInput: LightToolInput,
+  },
+  dp16SkipFields: ['config'],
+  formatter: serializeLightViewModel,
+  listItemFormatter: serializeLightListItem,
+  applyListFilters: applyLightListFilters,
+  isFilterApplied: isLightFilterApplied,
+  responseKeys: {
+    viewModel: 'light',
+    listArray: 'lights',
+    remainingCount: 'remainingLights',
+  },
+});
 
-function LightCreateInput_strict_parse(data: unknown): LightCreateInputType {
-  return LightCreateInput.strict().parse(data ?? {});
-}
-function LightUpdateInput_strict_parse(data: unknown): LightUpdateInputType {
-  return LightUpdateInput.strict().parse(data ?? {});
-}
-function LightDeleteInput_strict_parse(data: unknown): LightDeleteInputType {
-  return LightDeleteInput.strict().parse(data ?? {});
-}
-function LightGetInput_strict_parse(data: unknown): LightGetInputType {
-  return LightGetInput.strict().parse(data ?? {});
-}
-function LightListInput_strict_parse(data: unknown): LightListInputType {
-  return LightListInput.strict().parse(data ?? {});
-}
+export const createLight = handlers.create;
+export const updateLight = handlers.update;
+export const deleteLight = handlers.delete;
+export const getLight = handlers.get;
+export const listLights = handlers.list;
+export const dispatchLight = handlers.dispatch;

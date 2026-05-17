@@ -53,6 +53,19 @@ export class UpdateItemTool extends BaseTool {
               description:
                 'Foundry update payload. Keys can be dot-paths (e.g. "system.advances.value"); values are the new values.',
             },
+            options: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                skipExperienceChecks: {
+                  type: 'boolean',
+                  description:
+                    'Pass-through to Foundry Item.update(data, options). When true, suppresses wfrp4e SkillModel._preUpdate advancement-cost dialog on character skill-advance writes. Required for /wfrp-build-pc --auto autonomous flow (BUG-089).',
+                },
+              },
+              description:
+                'Optional Foundry update-options bag passed through to Item.update(data, options). Currently supports skipExperienceChecks.',
+            },
           },
           required: ['updateData'],
         },

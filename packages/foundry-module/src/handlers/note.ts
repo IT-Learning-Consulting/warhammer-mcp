@@ -1,3 +1,8 @@
+// FACTORY-EXEMPT: B5 FK resolver
+//   note.ts owns resolveNoteLinks (cross-collection scan for stale FKs that
+//   might be page UUIDs). Outside the factory's clean CRUD contract.
+//   F08 _source pattern retrofitted in-place (Phase 6.2.7 B1).
+//
 // Phase 5 mcp_crud_expansion — Note (map-pin) handlers (umbrella, 5 actions).
 //
 // CCR-Trust: validateGMAccess() on every write.
@@ -33,6 +38,7 @@ import {
 } from '@foundry-mcp/shared';
 import { wrappedWrite } from '../transaction-manager.js';
 import { getEmbeddedOrThrow } from '../utils/getEmbeddedOrThrow.js';
+import { notify } from '../notify.js';
 
 type AccessGate = { allowed: boolean };
 type EnvelopeOK<T> = { success: true; data: T };
@@ -43,6 +49,8 @@ export interface NoteCreateResponse {
   success: true;
   note: NoteViewModel;
   requestedChanges: Record<string, unknown>;
+  // Phase 6.4 — populated when the auto-link branch ({journalContent}) is used.
+  journalEntry?: { id: string; firstPageId: string | null };
 }
 
 export interface NoteUpdateResponse {
@@ -223,27 +231,77 @@ export async function createNote(data: unknown): Promise<Envelope<NoteCreateResp
   if (!gate.allowed) return { success: false, error: 'Access denied: createNote requires GM' };
 
   const input: NoteCreateInputType = NoteCreateInput_strict_parse(data);
+
+  // Phase 6.4 branch-ambiguity check: schema can't refine because the union is
+  // discriminated; runtime guard here.
+  if (input.entryId && input.journalContent) {
+    return {
+      success: false,
+      error: 'NOTE_BRANCH_AMBIGUOUS: pass either {entryId, pageId?} OR {journalContent}, never both',
+    };
+  }
+
   const scene = getSceneOrThrow(input.sceneId);
 
-  const { action: _action, sceneId: _sceneId, ...rest } = input;
-  const requestedChanges: Record<string, unknown> = { ...rest };
+  const { action: _action, sceneId: _sceneId, journalContent, ...rest } = input;
+  const requestedChanges: Record<string, unknown> = { ...rest, ...(journalContent ? { journalContent } : {}) };
 
   return wrappedWrite('note.create', async () => {
-    const payload = deepStripUndefined({ ...rest });
+    // Phase 6.4 auto-link branch: create JournalEntry first, then note with new IDs.
+    let autoCreatedEntry: { id: string; firstPageId: string | null } | undefined;
+    let resolvedEntryId = rest.entryId;
+    let resolvedPageId = rest.pageId;
+
+    if (journalContent) {
+      const JournalEntry: any = (globalThis as any).JournalEntry;
+      if (!JournalEntry?.create) {
+        throw new Error('JOURNAL_API_UNAVAILABLE: globalThis.JournalEntry.create missing');
+      }
+      const newEntry = await JournalEntry.create({
+        name: journalContent.name,
+        pages: journalContent.pages,
+      });
+      if (!newEntry?.id) {
+        throw new Error('JOURNAL_CREATE_FAILED: JournalEntry.create returned no document');
+      }
+      const firstPageId =
+        (newEntry.pages?.contents?.[0]?.id as string | undefined) ??
+        (newEntry.pages?.values?.()?.next?.()?.value?.id as string | undefined) ??
+        null;
+      resolvedEntryId = newEntry.id as string;
+      resolvedPageId = firstPageId ?? null;
+      autoCreatedEntry = { id: newEntry.id as string, firstPageId };
+    }
+
+    // Build the note payload using resolved (or caller-supplied) IDs.
+    const notePayload = {
+      ...rest,
+      entryId: resolvedEntryId,
+      pageId: resolvedPageId,
+    };
+    const payload = deepStripUndefined(notePayload);
     const created = await scene.createEmbeddedDocuments('Note', [payload]);
     if (!created || created.length === 0) {
       throw new Error('NOTE_WRITE_NOT_PERSISTED: createEmbeddedDocuments returned no doc');
     }
     const persisted = getEmbeddedOrThrow<any>(scene, 'notes', created[0].id, 'Note');
+
+    notify.created(
+      'note',
+      persisted.text ?? `Note @(${persisted.x},${persisted.y})`,
+      { summary: `on scene ${input.sceneId}` },
+    );
+
     return {
       success: true as const,
       data: {
         success: true,
         note: serializeNoteViewModel(scene, persisted),
         requestedChanges,
+        ...(autoCreatedEntry ? { journalEntry: autoCreatedEntry } : {}),
       } satisfies NoteCreateResponse,
     };
-  });
+  }, { sceneId: input.sceneId });
 }
 
 // ── 2. updateNote ────────────────────────────────────────────────────────────
@@ -275,20 +333,28 @@ export async function updateNote(data: unknown): Promise<Envelope<NoteUpdateResp
         continue;
       }
       if (field === 'texture' || field === 'flags') {
-        const persisted = (note as any)[field];
+        const persisted = (note._source as any)?.[field];
         if (persisted === undefined || persisted === null) {
           throw new Error(`NOTE_WRITE_NOT_PERSISTED: nested field "${field}" missing after update`);
         }
         continue;
       }
-      const persistedValue = (note as any)[field];
+      // F08 fix (Phase 6.2.7 B1): compare against `_source` (raw stored data) — `note[field]`
+      // returns Foundry-derived getter values that `!== requestedString` on multi-field updates.
+      const persistedValue = (note._source as any)?.[field];
       if (persistedValue !== requestedValue) {
         throw new Error(
           `NOTE_WRITE_NOT_PERSISTED: field "${field}" expected ${JSON.stringify(requestedValue)} ` +
-            `but post-update is ${JSON.stringify(persistedValue)}`,
+            `but post-update _source value is ${JSON.stringify(persistedValue)}`,
         );
       }
     }
+
+    notify.updated(
+      'note',
+      (note.text as string | null) ?? `Note ${input.noteId}`,
+      { summary: changedFields.join(', ') },
+    );
 
     return {
       success: true as const,
@@ -299,7 +365,7 @@ export async function updateNote(data: unknown): Promise<Envelope<NoteUpdateResp
         changedFields,
       } satisfies NoteUpdateResponse,
     };
-  });
+  }, { sceneId: input.sceneId });
 }
 
 // ── 3. deleteNote ────────────────────────────────────────────────────────────
@@ -312,6 +378,7 @@ export async function deleteNote(data: unknown): Promise<Envelope<NoteDeleteResp
   const scene = getSceneOrThrow(input.sceneId);
   const note = getEmbeddedOrThrow<any>(scene, 'notes', input.noteId, 'Note');
   const sizeBefore = scene.notes?.size ?? 0;
+  const noteText = (note.text as string | null) ?? null;
 
   return wrappedWrite('note.delete', async () => {
     await note.delete();
@@ -328,6 +395,8 @@ export async function deleteNote(data: unknown): Promise<Envelope<NoteDeleteResp
       );
     }
 
+    notify.deleted('note', noteText ?? `Note ${input.noteId}`);
+
     return {
       success: true as const,
       data: {
@@ -337,7 +406,7 @@ export async function deleteNote(data: unknown): Promise<Envelope<NoteDeleteResp
         remainingNotes: sizeAfter,
       } satisfies NoteDeleteResponse,
     };
-  });
+  }, { sceneId: input.sceneId });
 }
 
 // ── 4. getNote ───────────────────────────────────────────────────────────────
@@ -421,6 +490,10 @@ export async function dispatchNote(data: unknown): Promise<Envelope<NoteResponse
       return getNote(input);
     case 'list':
       return listNotes(input);
+    default: {
+      const _exhaustive: never = input;
+      throw new Error(`Unknown note action: ${(_exhaustive as any)?.action}`);
+    }
   }
 }
 
