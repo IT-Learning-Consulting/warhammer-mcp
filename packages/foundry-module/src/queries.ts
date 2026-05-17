@@ -50,6 +50,12 @@ import { dispatchSound as dispatchSoundHandler } from './handlers/sound.js';
 import { dispatchRegion as dispatchRegionHandler } from './handlers/region.js';
 import { dispatchTile as dispatchTileHandler } from './handlers/tile.js';
 import { dispatchTemplate as dispatchTemplateHandler } from './handlers/template.js';
+// Phase 6.1 mcp_crud_expansion — FilePicker handlers (upload/list + notify.warn round-trip).
+import {
+  uploadFile as uploadFileHandler,
+  listFiles as listFilesHandler,
+  notifyWarn as notifyWarnHandler,
+} from './handlers/filepicker.js';
 import {
   // actor domain
   GetCharacterInfoInput,
@@ -113,6 +119,8 @@ import {
   DeleteActiveEffectInput,
   // TOOL-IDEA-003 (2026-05-14): get-active-effect-by-name
   GetActiveEffectByNameInput,
+  // Phase 4 mcp_notify_coverage — notify umbrella (skill bookends + ad-hoc GM events).
+  NotifyToolInput,
 } from '@foundry-mcp/shared';
 
 /**
@@ -239,6 +247,14 @@ export class QueryHandlers {
 
     // TOOL-IDEA-003 (2026-05-14): read-only AE-by-name resolver.
     CONFIG.queries[`${modulePrefix}.getActiveEffectByName`] = this.handleGetActiveEffectByName.bind(this);
+
+    // Phase 6.1 mcp_crud_expansion — FilePicker surface (upload/list + notify.warn round-trip).
+    CONFIG.queries[`${modulePrefix}.uploadFile`] = (data: unknown) => uploadFileHandler(data);
+    CONFIG.queries[`${modulePrefix}.listFiles`] = (data: unknown) => listFilesHandler(data);
+    CONFIG.queries[`${modulePrefix}.notify.warn`] = (data: unknown) => notifyWarnHandler(data);
+    // Phase 4 mcp_notify_coverage — `notify` umbrella surfaces notify.* to MCP
+    // skills as workflow bookends + ad-hoc GM-visible events. GM-gated.
+    CONFIG.queries[`${modulePrefix}.notify`] = this.handleNotify.bind(this);
   }
 
   unregisterHandlers(): void {
@@ -704,7 +720,16 @@ export class QueryHandlers {
       const actorData = parsed.folderId
         ? { ...parsed.actorData, folder: parsed.folderId }
         : parsed.actorData;
-      return await wrappedWrite('createActor', async () => ({ success: true, data: await this.dataAccess.createActor({ actorData }) }));
+      // HC9: forward options.skipItems through to Actor.create(data, options)
+      // so wfrp4e ActorWFRP4e._preCreate (wfrp4e.js:12384) gate suppresses the
+      // basic-skills DialogV2.confirm on npc/creature autonomous creation.
+      return await wrappedWrite('createActor', async () => ({
+        success: true,
+        data: await this.dataAccess.createActor({
+          actorData,
+          ...(parsed.options ? { options: parsed.options } : {}),
+        }),
+      }));
     } catch (error) {
       rethrowAsInvalidInput(error);
       throw new Error(`Failed to create actor: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -1328,6 +1353,58 @@ export class QueryHandlers {
     } catch (error) {
       rethrowAsInvalidInput(error);
       throw new Error(`Failed to get active effect: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  // Phase 4 mcp_notify_coverage — `notify` umbrella handler.
+  //
+  // Strict-parses NotifyToolInput (discriminated union on `severity`), routes to
+  // the corresponding notify.* method. Returns `{success: true, data: {acknowledged}}`.
+  // `acknowledged` is true iff the dispatcher invoked notify.* without throwing —
+  // false ONLY when the internal notify.* call itself crashed. Channel suppression
+  // by world settings does NOT flip acknowledged to false (intentional suppression
+  // is not failure; see Design Decision 2 in mcp-notify-coverage-phase4.md).
+  private async handleNotify(data: unknown): Promise<any> {
+    try {
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) {
+        return { success: false, error: 'Access denied: notify requires GM' };
+      }
+      const parsed = NotifyToolInput.parse(data);
+      try {
+        switch (parsed.severity) {
+          case 'created':
+            notify.created('mcp', parsed.message, { summary: parsed.summary, sticky: parsed.sticky, chat: parsed.chat });
+            break;
+          case 'updated':
+            notify.updated('mcp', parsed.message, { summary: parsed.summary, sticky: parsed.sticky, chat: parsed.chat });
+            break;
+          case 'deleted':
+            notify.deleted('mcp', parsed.message, { summary: parsed.summary, sticky: parsed.sticky, chat: parsed.chat });
+            break;
+          case 'warn':
+            notify.warn(parsed.message, { summary: parsed.summary, sticky: parsed.sticky, chat: parsed.chat });
+            break;
+          case 'info':
+            notify.info(parsed.message, { summary: parsed.summary, sticky: parsed.sticky, chat: parsed.chat });
+            break;
+          case 'error':
+            notify.error(parsed.message, undefined, { summary: parsed.summary, sticky: parsed.sticky, chat: parsed.chat });
+            break;
+          case 'lifecycle':
+            notify.lifecycle(parsed.lifecycleEvent, parsed.message);
+            break;
+        }
+        return { success: true, data: { acknowledged: true } };
+      } catch (dispatchErr) {
+        console.error(`[${MODULE_ID}] [notify-handler] dispatch threw:`, dispatchErr);
+        return { success: true, data: { acknowledged: false } };
+      }
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return { success: false, error: `NOTIFY_INVALID_INPUT: ${error.message}` };
+      }
+      throw new Error(`Failed to dispatch notify: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 }

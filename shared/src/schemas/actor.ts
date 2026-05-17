@@ -47,6 +47,13 @@ export const ListActorsInput = z.object({
 export const CreateActorInput = z.object({
   actorData: z.record(z.unknown()),
   folderId: z.string().optional(),
+  // HC9: passthrough to Foundry Actor.create(data, options). Required by
+  // /wfrp-build-npc --with-details to suppress wfrp4e ActorWFRP4e._preCreate
+  // basic-skills DialogV2.confirm on npc/creature creation. See
+  // phase3_system_hooks_audit §1 + §8. Mirror of BUG-089 (Item.update options).
+  options: z.object({
+    skipItems: z.boolean().optional(),
+  }).strict().optional(),
 }).strict();
 
 export const UpdateActorInput = z.object({

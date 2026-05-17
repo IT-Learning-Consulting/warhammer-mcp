@@ -13,6 +13,9 @@ const CreateActorSchema = z.object({
   type: z.enum(['character', 'npc', 'creature']),
   systemData: z.record(z.unknown()).optional(),
   folderId: z.string().optional(),
+  options: z.object({
+    skipItems: z.boolean().optional(),
+  }).strict().optional(),
 });
 
 interface CreateActorResult {
@@ -119,7 +122,9 @@ export class ActorCreationTools extends BaseTool {
 - **type='npc'**: TRIGGERS A BLOCKING DialogV2.confirm asking whether to add basic skills + money. Since MCP calls are headless, the dialog will block the response — typical resolution is to dismiss it via the Foundry UI, or pre-populate \`systemData\` to satisfy the system check. Avoid calling for 'npc' from autonomous flows unless you have a strategy for the dialog.
 - **type='creature'**: same blocking dialog as 'npc'. Same caveat applies.
 
-**Post-write verification (CCR-5 / DP-16):** the handler asserts the returned actor has a non-empty id and the name matches the request, throwing CREATE_ACTOR_NOT_PERSISTED on mismatch.`,
+**Post-write verification (CCR-5 / DP-16):** the handler asserts the returned actor has a non-empty id and the name matches the request, throwing CREATE_ACTOR_NOT_PERSISTED on mismatch.
+
+**Suppress \`_preCreate\` dialog (HC9):** pass \`options.skipItems: true\` to bypass the wfrp4e basic-skills DialogV2.confirm on npc/creature creation. Use this for autonomous flows like /wfrp-build-npc --with-details; the skill body then composes skills/coins explicitly via add-item-from-compendium.`,
         inputSchema: {
           type: 'object',
           properties: {
@@ -139,6 +144,19 @@ export class ActorCreationTools extends BaseTool {
             folderId: {
               type: 'string',
               description: 'Optional Folder ID for placement in the world actor sidebar.',
+            },
+            options: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                skipItems: {
+                  type: 'boolean',
+                  description:
+                    'Pass-through to Foundry Actor.create(data, options). When true, suppresses the wfrp4e ActorWFRP4e._preCreate basic-skills DialogV2.confirm on npc/creature creation. Required for /wfrp-build-npc --with-details autonomous flow (HC9). Mirror of BUG-089 skipExperienceChecks on update-item.',
+                },
+              },
+              description:
+                'Optional Foundry creation-options bag passed through to Actor.create(data, options). Currently supports skipItems.',
             },
           },
           required: ['name', 'type'],
@@ -250,9 +268,9 @@ export class ActorCreationTools extends BaseTool {
    * actor matches the request before returning.
    */
   async handleCreateActor(args: any): Promise<any> {
-    const { name, type, systemData, folderId } = CreateActorSchema.parse(args);
+    const { name, type, systemData, folderId, options } = CreateActorSchema.parse(args);
 
-    this.logger.info('Creating actor', { name, type, hasSystemData: !!systemData, hasFolderId: !!folderId });
+    this.logger.info('Creating actor', { name, type, hasSystemData: !!systemData, hasFolderId: !!folderId, skipItems: !!options?.skipItems });
 
     try {
       const result = await this.query<CreateActorResult>('createActor', {
@@ -262,6 +280,7 @@ export class ActorCreationTools extends BaseTool {
           ...(systemData ? { system: systemData } : {}),
         },
         ...(folderId ? { folderId } : {}),
+        ...(options ? { options } : {}),
       });
 
       // DP-16 post-write verification (CCR-5 / BUG-070).
