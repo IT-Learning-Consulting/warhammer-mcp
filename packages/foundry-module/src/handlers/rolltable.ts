@@ -389,11 +389,44 @@ export async function deleteRollTable(data: unknown): Promise<Envelope<{ tableId
     const table = (game as any).tables?.get(input.tableId);
     if (!table) throw new Error(`ROLLTABLE_TABLE_NOT_FOUND: no table with id "${input.tableId}"`);
     const tableName = table.name as string;
+
+    // Phase 10 cross-doc-fk cascade: catalog has no inbound FKs to RollTable
+    // currently — `cascade:true` returns affectedDocs: [] (API-uniform no-op
+    // per Phase 4.3 design decision). RollTable.folder is OUTBOUND not inbound;
+    // TableResult.documentUuid lives on individual results, not the table itself.
+    let affectedDocs: import('@foundry-mcp/shared').FkAffectedDocEntry[] | undefined;
+    if ((input as any).cascade === true) {
+      const { walkInboundFor, clearOrphanRef } = await import('./cross-doc-fk.js');
+      const inbound = await walkInboundFor('RollTable', input.tableId);
+      affectedDocs = [];
+      for (const ref of inbound) {
+        await clearOrphanRef({
+          sourceDocType: ref.sourceDocType,
+          sourceDocId: ref.sourceDocId,
+          sourceField: ref.sourceField,
+          refDocType: ref.refDocType,
+          refId: ref.refId,
+        });
+        affectedDocs.push({
+          type: ref.sourceDocType,
+          id: ref.sourceDocId,
+          name: ref.sourceDocName,
+          fkField: ref.sourceField,
+        });
+      }
+    }
+
     await table.delete();
 
     notify.deleted('rolltable', tableName);
 
-    return { success: true as const, data: { tableId: input.tableId } };
+    return {
+      success: true as const,
+      data: {
+        tableId: input.tableId,
+        ...(affectedDocs !== undefined ? { affectedDocs } : {}),
+      } as { tableId: string; affectedDocs?: import('@foundry-mcp/shared').FkAffectedDocEntry[] },
+    };
   });
 }
 
@@ -417,9 +450,11 @@ export async function updateRollTable(data: unknown): Promise<Envelope<{ tableId
     await table.update(input.changes);
 
     // BUG-070 post-verify: re-read each requested field and compare.
+    // Deep-equality via JSON.stringify so array/object fields (e.g. `results`)
+    // don't false-positive on reference identity (BUG-101 parallel pattern).
     for (const [field, requestedValue] of Object.entries(input.changes)) {
       const persistedValue = (table as any)[field];
-      if (persistedValue !== requestedValue) {
+      if (JSON.stringify(persistedValue) !== JSON.stringify(requestedValue)) {
         throw new Error(
           `ROLLTABLE_WRITE_NOT_PERSISTED: field "${field}" expected ${JSON.stringify(requestedValue)} ` +
           `but post-update value is ${JSON.stringify(persistedValue)}. Foundry may have dropped ` +
@@ -474,7 +509,7 @@ export async function updateTableResults(
       void _id; // used only for lookup
       for (const [field, requestedValue] of Object.entries(fields)) {
         const persistedValue = (result as any)[field];
-        if (persistedValue !== requestedValue) {
+        if (JSON.stringify(persistedValue) !== JSON.stringify(requestedValue)) {
           throw new Error(
             `ROLLTABLE_WRITE_NOT_PERSISTED: result "${update._id}" field "${field}" expected ` +
             `${JSON.stringify(requestedValue)} but post-update value is ${JSON.stringify(persistedValue)}.`,

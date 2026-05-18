@@ -494,6 +494,30 @@ export async function deleteScene(data: unknown): Promise<Envelope<SceneDeleteRe
   const sizeBefore = (game as any).scenes?.size ?? 0;
 
   return wrappedWrite('scene.deleteScene', async () => {
+    // Phase 10 cross-doc-fk cascade: clear inbound FK refs BEFORE delete.
+    // Stale FK is less corrupt than orphan FK if delete throws after clears.
+    let affectedDocs: import('@foundry-mcp/shared').FkAffectedDocEntry[] | undefined;
+    if (input.cascade === true) {
+      const { walkInboundFor, clearOrphanRef } = await import('./cross-doc-fk.js');
+      const inbound = await walkInboundFor('Scene', input.sceneId);
+      affectedDocs = [];
+      for (const ref of inbound) {
+        await clearOrphanRef({
+          sourceDocType: ref.sourceDocType,
+          sourceDocId: ref.sourceDocId,
+          sourceField: ref.sourceField,
+          refDocType: ref.refDocType,
+          refId: ref.refId,
+        });
+        affectedDocs.push({
+          type: ref.sourceDocType,
+          id: ref.sourceDocId,
+          name: ref.sourceDocName,
+          fkField: ref.sourceField,
+        });
+      }
+    }
+
     await scene.delete();
 
     // DP-18: cascade-aware verify.
@@ -520,6 +544,7 @@ export async function deleteScene(data: unknown): Promise<Envelope<SceneDeleteRe
         deletedId: input.sceneId,
         deletedName,
         remainingScenes: sizeAfter,
+        ...(affectedDocs !== undefined ? { affectedDocs } : {}),
       } satisfies SceneDeleteResponse,
     };
   });

@@ -12,6 +12,88 @@ export interface CreateCustomItemToolOptions {
   logger: Logger;
 }
 
+// BUG-100 fix (2026-05-18): qualities/flaws normalization for systemOverrides path.
+// wfrp4e weapon/armour data models expect qualities.value / flaws.value as
+// Array<{ name: string, value: number | null }>. Callers passing the convenience
+// shape `qualities: { value: "impale, precise, fine 2" }` previously had their
+// string silently overwrite the typed default via the shallow spread merge —
+// Foundry stored `qualities: { value: [{}] }` (one empty object per entry) with
+// `success: true` returned. Normalize here BEFORE the merge so both shapes work
+// and the canonical array-of-objects shape always lands in storage.
+const QUALITY_FIELDS = ['qualities', 'flaws'] as const;
+
+function toCanonicalKey(raw: string): string {
+  // "Hack" → "hack"; "Barbed Bolt" → "barbedBolt"; "fine" → "fine"
+  const trimmed = raw.trim();
+  if (!trimmed) return '';
+  const words = trimmed.toLowerCase().split(/\s+/);
+  return words[0] + words.slice(1).map(w => (w ? w[0].toUpperCase() + w.slice(1) : '')).join('');
+}
+
+function parseQualityEntry(raw: string): { name: string; value: number | null } | null {
+  const s = raw.trim();
+  if (!s) return null;
+  // Trailing integer → numeric quality (Fine 2, Repeater 3, Reload 9)
+  const m = s.match(/^(.+?)\s+(\d+)$/);
+  if (m) return { name: toCanonicalKey(m[1]), value: parseInt(m[2], 10) };
+  return { name: toCanonicalKey(s), value: null };
+}
+
+function normalizeQualitiesValue(raw: unknown): Array<{ name: string; value: number | null }> {
+  // Already canonical: array of {name, value}
+  if (Array.isArray(raw)) {
+    const out: Array<{ name: string; value: number | null }> = [];
+    for (const item of raw) {
+      if (typeof item === 'string') {
+        const parsed = parseQualityEntry(item);
+        if (parsed) out.push(parsed);
+      } else if (item && typeof item === 'object' && typeof (item as any).name === 'string') {
+        const obj = item as { name: string; value?: number | null };
+        out.push({ name: toCanonicalKey(obj.name), value: obj.value ?? null });
+      }
+      // else: skip silently (drop garbage entries instead of producing [{}])
+    }
+    return out;
+  }
+  // Comma-separated string convenience: "impale, precise, fine 2"
+  if (typeof raw === 'string') {
+    return raw
+      .split(',')
+      .map(s => parseQualityEntry(s))
+      .filter((x): x is { name: string; value: number | null } => x !== null);
+  }
+  // null/undefined/other → empty array (never produce [{}])
+  return [];
+}
+
+/**
+ * Normalize qualities/flaws inside systemOverrides into the canonical wfrp4e
+ * shape. Returns a NEW object — does not mutate the caller's input.
+ *
+ * Accepts (per field):
+ *   - `{ value: "impale, precise, fine 2" }`           (string)
+ *   - `{ value: ["impale", "precise", "fine 2"] }`     (array of strings)
+ *   - `{ value: [{ name: "impale", value: null }] }`   (canonical — passes through)
+ *
+ * Always emits `{ value: Array<{ name, value }> }`. Empty input → `{ value: [] }`
+ * (never `[{}]`).
+ */
+function normalizeSystemOverrides(overrides: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...overrides };
+  for (const field of QUALITY_FIELDS) {
+    const fieldValue = out[field];
+    if (fieldValue && typeof fieldValue === 'object') {
+      const inner = (fieldValue as { value?: unknown }).value;
+      out[field] = { value: normalizeQualitiesValue(inner) };
+    } else if (typeof fieldValue === 'string' || Array.isArray(fieldValue)) {
+      // Callers who skip the `{value: ...}` wrapper and put the list directly under
+      // `qualities`/`flaws` — coerce to the canonical wrapper shape.
+      out[field] = { value: normalizeQualitiesValue(fieldValue) };
+    }
+  }
+  return out;
+}
+
 export class CreateCustomItemTool extends BaseTool {
   constructor(options: BaseToolOptions) {
     super(options);
@@ -93,7 +175,7 @@ Security: script / preApplyScript / enableScript fields are executed by Foundry 
             systemOverrides: {
               type: 'object',
               description:
-                'Raw system field overrides merged on top of the generated system payload. Advanced use.',
+                'Raw system field overrides merged on top of the generated system payload. Advanced use. **For known typed fields, prefer the top-level shorthand fields** (`damage`, `weaponGroup`, `qualities`, `flaws`, etc.) — those are Zod-validated. `systemOverrides` is an unvalidated escape hatch. **qualities/flaws auto-normalize**: if you pass `{ value: "impale, precise, fine 2" }` (string) or `{ value: ["impale", "fine 2"] }` (array of strings) or `{ value: [{ name: "impale", value: null }, { name: "fine", value: 2 }] }` (canonical), all three coerce to the canonical `Array<{ name, value }>` shape before write. Numeric-trailing qualities like "Fine 2" / "Repeater 3" parse to `{ name: "fine", value: 2 }`. Multi-word like "Barbed Bolt" lowercases the first word and camelCases the rest → `"barbedBolt"`.',
               additionalProperties: true,
             },
           },
@@ -107,8 +189,11 @@ Security: script / preApplyScript / enableScript fields are executed by Foundry 
     const parsed = CreateCustomItemInputSchema.parse(args);
 
     const system = buildSystemForSubtype(parsed);
-    const mergedSystem = parsed.systemOverrides
-      ? { ...system, ...parsed.systemOverrides }
+    const normalizedOverrides = parsed.systemOverrides
+      ? normalizeSystemOverrides(parsed.systemOverrides)
+      : null;
+    const mergedSystem = normalizedOverrides
+      ? { ...system, ...normalizedOverrides }
       : system;
 
     const itemData: Record<string, unknown> = {

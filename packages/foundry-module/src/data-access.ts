@@ -5621,6 +5621,17 @@ export class FoundryDataAccess {
       'mutationTypes',
       'corruptionTables',
       'hitLocationTables',
+      // BUG-102 (2026-05-18): weapon/armour enumeration tables surfaced for
+      // skill-side qualities/flaws inspection (verifying registered quality
+      // labels, looking up quality descriptions, validating weaponGroup +
+      // armorType keys against the live runtime).
+      'weaponQualities',
+      'weaponFlaws',
+      'qualityDescriptions',
+      'flawDescriptions',
+      'weaponGroups',
+      'ammunitionGroups',
+      'armorTypes',
     ]);
     const config: any = (game as any).wfrp4e?.config ?? (globalThis as any).WFRP4E ?? {};
     const values: Record<string, unknown> = {};

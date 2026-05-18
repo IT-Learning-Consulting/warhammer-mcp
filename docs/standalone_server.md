@@ -351,7 +351,7 @@ Your existing MCP client configs **continue to work unchanged**. The backend run
                 "LOG_LEVEL": "info",
                 "FOUNDRY_HOST": "localhost",
                 "FOUNDRY_PORT": "31415",
-                "FOUNDRY_NAMESPACE": "/foundry-mcp"
+                "FOUNDRY_NAMESPACE": "/warhammer-mcp"
             }
         }
     }

@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "foundry-mcp": {
+      "command": "node",
+      "args": [
+        "D:/foundry-vtt-mcp/packages/mcp-server/dist/index.js"
+      ],
+      "env": {
+        "LOG_LEVEL": "info",
+        "FOUNDRY_HOST": "localhost",
+        "FOUNDRY_PORT": "31415",
+        "FOUNDRY_NAMESPACE": "/warhammer-mcp"
+      }
+    }
+  }
+}

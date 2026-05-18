@@ -44,8 +44,6 @@ const methodCases: Array<[string, string]> = [
   ['handleGetCompendiumDocumentFull', 'getCompendiumDocumentFull'],
   // handleAddActorsToScene folded into handleScene umbrella (action: 'add-tokens')
   // BUG-009 (2026-05-16): handleValidateWritePermissions removed (no MCP-tool consumer).
-  // Phase 3 mcp_crud_expansion — 4 legacy journal handlers folded into handleJournal umbrella
-  // (handleCreateJournalEntry, handleListJournals, handleGetJournalContent, handleUpdateJournalContent).
   ['handleRequestPlayerRolls', 'request-player-rolls'],
   // BUG-009 (2026-05-16): handleGetEnhancedCreatureIndex removed (no MCP-tool consumer).
   ['handleSetActorOwnership', 'setActorOwnership'],

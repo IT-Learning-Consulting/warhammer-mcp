@@ -31,6 +31,7 @@ import {
 } from '@foundry-mcp/shared';
 import { sanitizeHtml } from '../utils/sanitize-html.js';
 import { BaseTool, BaseToolOptions } from '../base-tool.js';
+import { formatAffectedDocs } from './format-affected-docs.js';
 
 type JournalArgs = z.infer<typeof JournalToolInput>;
 
@@ -193,6 +194,11 @@ export class JournalTool extends BaseTool {
               description:
                 '[get-entry] If true, return {id, name, pageIds, pageCount, categoryCount} instead of deep entry shape. Cheaper for large lore journals.',
             },
+            // Phase 10 cross-doc-fk cascade flag (delete-entry / delete-page only).
+            cascade: {
+              type: 'boolean',
+              description: '[delete-entry/delete-page] When true, clears cross-doc FK references (Scene.journal, Note.entryId, etc.) targeting this entry/page before deletion. Default false.',
+            },
           },
           required: ['action'],
         },
@@ -274,7 +280,7 @@ export class JournalTool extends BaseTool {
         content: [
           {
             type: 'text' as const,
-            text: `🗑️ **Journal Entry Deleted**\n\n**ID:** ${data.entryId}\n\n⚠️ Permanent. All pages and categories removed.`,
+            text: `🗑️ **Journal Entry Deleted**\n\n**ID:** ${data.entryId}\n\n⚠️ Permanent. All pages and categories removed.${formatAffectedDocs(data.affectedDocs)}`,
           },
         ],
       };
@@ -424,7 +430,7 @@ export class JournalTool extends BaseTool {
         content: [
           {
             type: 'text' as const,
-            text: `🗑️ **Page Deleted**\n\n**Entry:** ${data.entryId}\n**Page:** ${data.pageId}`,
+            text: `🗑️ **Page Deleted**\n\n**Entry:** ${data.entryId}\n**Page:** ${data.pageId}${formatAffectedDocs(data.affectedDocs)}`,
           },
         ],
       };

@@ -50,6 +50,19 @@ import { dispatchSound as dispatchSoundHandler } from './handlers/sound.js';
 import { dispatchRegion as dispatchRegionHandler } from './handlers/region.js';
 import { dispatchTile as dispatchTileHandler } from './handlers/tile.js';
 import { dispatchTemplate as dispatchTemplateHandler } from './handlers/template.js';
+// Phase 7 mcp_crud_expansion — Playlist + PlaylistSound umbrella (10 actions:
+// create/update/delete/get/list-playlist, add/update/delete-sound, play/stop).
+// First world-level CRUD umbrella in the system (sibling of Phase 5 embedded
+// dispatchers); routes through utils/worldCRUDFactory for PlaylistSound CRUD.
+import { dispatchPlaylist as dispatchPlaylistHandler } from './handlers/playlist.js';
+import { dispatchMacro as dispatchMacroHandler } from './handlers/macro.js';
+import { dispatchUser as dispatchUserHandler } from './handlers/user.js';
+// Phase 9 mcp_crud_expansion — Compendium pack + document CRU (NO DELETE per HC3).
+// 6 actions: create-pack / update-pack / read-pack / add-document-to-pack /
+// update-document-in-pack / read-document-from-pack.
+import { dispatchCompendium as dispatchCompendiumHandler } from './handlers/compendium.js';
+// Phase 10 mcp_crud_expansion — Cross-doc FK audit + repair (3 actions; closes PRD).
+import { dispatchCrossDocFk as dispatchCrossDocFkHandler } from './handlers/cross-doc-fk.js';
 // Phase 6.1 mcp_crud_expansion — FilePicker handlers (upload/list + notify.warn round-trip).
 import {
   uploadFile as uploadFileHandler,
@@ -178,6 +191,14 @@ export class QueryHandlers {
     CONFIG.queries[`${modulePrefix}.light`] = this.handleLight.bind(this);
     CONFIG.queries[`${modulePrefix}.note`] = this.handleNote.bind(this);
     CONFIG.queries[`${modulePrefix}.sound`] = this.handleSound.bind(this);
+    // Phase 7 — playlist umbrella (10 actions; world-level + embedded sounds).
+    CONFIG.queries[`${modulePrefix}.playlist`] = this.handlePlaylist.bind(this);
+    CONFIG.queries[`${modulePrefix}.macro`] = this.handleMacro.bind(this);
+    CONFIG.queries[`${modulePrefix}.user`] = this.handleUser.bind(this);
+    // Phase 9 mcp_crud_expansion — Compendium umbrella (6 actions; NO DELETE per HC3).
+    CONFIG.queries[`${modulePrefix}.compendium`] = this.handleCompendium.bind(this);
+    // Phase 10 mcp_crud_expansion — Cross-doc FK umbrella (3 actions; closes PRD).
+    CONFIG.queries[`${modulePrefix}.cross-doc-fk`] = this.handleCrossDocFk.bind(this);
     CONFIG.queries[`${modulePrefix}.region`] = this.handleRegion.bind(this);
     CONFIG.queries[`${modulePrefix}.tile`] = this.handleTile.bind(this);
     CONFIG.queries[`${modulePrefix}.template`] = this.handleTemplate.bind(this);
@@ -571,6 +592,56 @@ export class QueryHandlers {
     }
   }
 
+  async handlePlaylist(data: unknown): Promise<any> {
+    try {
+      this.dataAccess.validateFoundryState();
+      return await dispatchPlaylistHandler(data);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to dispatch playlist action: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  async handleMacro(data: unknown): Promise<any> {
+    try {
+      this.dataAccess.validateFoundryState();
+      return await dispatchMacroHandler(data);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to dispatch macro action: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  async handleUser(data: unknown): Promise<any> {
+    try {
+      this.dataAccess.validateFoundryState();
+      return await dispatchUserHandler(data);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to dispatch user action: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  async handleCompendium(data: unknown): Promise<any> {
+    try {
+      this.dataAccess.validateFoundryState();
+      return await dispatchCompendiumHandler(data);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to dispatch compendium action: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  async handleCrossDocFk(data: unknown): Promise<any> {
+    try {
+      this.dataAccess.validateFoundryState();
+      return await dispatchCrossDocFkHandler(data);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to dispatch cross-doc-fk action: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
   async handleRegion(data: unknown): Promise<any> {
     try {
       this.dataAccess.validateFoundryState();
@@ -727,7 +798,9 @@ export class QueryHandlers {
         success: true,
         data: await this.dataAccess.createActor({
           actorData,
-          ...(parsed.options ? { options: parsed.options } : {}),
+          ...(parsed.options && parsed.options.skipItems !== undefined
+            ? { options: { skipItems: parsed.options.skipItems } }
+            : {}),
         }),
       }));
     } catch (error) {
@@ -906,11 +979,10 @@ export class QueryHandlers {
           }
           if (!actor) {
             throw new Error(
-              `Actor not found: ${
-                parsed.characterName ??
-                (parsed.destination?.type === 'actor'
-                  ? parsed.destination.actorId ?? parsed.destination.actorName
-                  : '(no identifier)')
+              `Actor not found: ${parsed.characterName ??
+              (parsed.destination?.type === 'actor'
+                ? parsed.destination.actorId ?? parsed.destination.actorName
+                : '(no identifier)')
               }`
             );
           }

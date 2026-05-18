@@ -192,6 +192,10 @@ export const JournalUpdateEntryInput = z.object({
 export const JournalDeleteEntryInput = z.object({
   action: z.literal('delete-entry'),
   entryId: FOUNDRY_ID,
+  // Phase 10 cross-doc-fk: when true, clears Scene.journal/journalEntryPage
+  // + Note.entryId/pageId FKs pointing at this entry (and its pages) before
+  // delete. Default false preserves Phase 3 behavior (R10.6).
+  cascade: z.boolean().default(false).optional(),
 }).strict();
 
 export const JournalListEntriesInput = z.object({
@@ -233,6 +237,9 @@ export const JournalDeletePageInput = z.object({
   action: z.literal('delete-page'),
   entryId: FOUNDRY_ID,
   pageId: FOUNDRY_ID,
+  // Phase 10 cross-doc-fk: when true, clears Scene.journalEntryPage +
+  // Note.pageId FKs targeting this specific page. Default false (R10.6).
+  cascade: z.boolean().default(false).optional(),
 }).strict();
 
 export const JournalReorderPagesInput = z.object({
@@ -384,6 +391,8 @@ export interface JournalUpdateEntryResponse {
 
 export interface JournalDeleteEntryResponse {
   entryId: string;
+  // Phase 10: populated only when input cascade:true was set.
+  affectedDocs?: import('./cross-doc-fk.js').FkAffectedDocEntry[];
 }
 
 export type JournalListEntriesResponse = JournalListEntryPayload[];
@@ -405,6 +414,8 @@ export interface JournalUpdatePageResponse {
 export interface JournalDeletePageResponse {
   entryId: string;
   pageId: string;
+  // Phase 10: populated only when input cascade:true was set.
+  affectedDocs?: import('./cross-doc-fk.js').FkAffectedDocEntry[];
 }
 
 export interface JournalReorderPagesResponse {

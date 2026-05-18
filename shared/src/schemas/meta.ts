@@ -188,6 +188,11 @@ export const RollOnTableInput = z.object({
 
 export const DeleteRollTableInput = z.object({
   tableId: z.string().min(1),
+  // Phase 10 cross-doc-fk: when true, walks the catalog for inbound FK refs
+  // to this RollTable and clears them before delete. Default false (R10.6).
+  // NOTE: catalog has no inbound FKs to RollTable currently — `cascade:true`
+  // returns affectedDocs: [] (API-uniform no-op per Task 4.3 design).
+  cascade: z.boolean().default(false).optional(),
 }).strict();
 
 export const UpdateRollTableInput = z.object({

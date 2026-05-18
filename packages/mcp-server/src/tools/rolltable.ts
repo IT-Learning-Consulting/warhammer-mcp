@@ -394,6 +394,11 @@ export class RollTableTool extends BaseTool {
                     normalize: {
                         type: "boolean",
                         description: "[import-from-compendium] Normalize ranges after import (overwrites manual ranges)"
+                    },
+                    // Phase 10 cross-doc-fk cascade flag (delete action only; current catalog has no inbound FKs to RollTable so this is API-uniform no-op).
+                    cascade: {
+                        type: "boolean",
+                        description: "[delete] When true, clears cross-doc FK references pointing AT this rolltable before deletion. Default false. Note: current FK catalog has no inbound refs to RollTable; this returns affectedDocs: [] (uniform API per Phase 10 PC1)."
                     }
                 },
                 required: ["action"]

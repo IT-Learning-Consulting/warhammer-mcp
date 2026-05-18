@@ -89,11 +89,6 @@ describe('handler envelope — item-write (handleCreateItem)', () => {
   });
 });
 
-// Phase 3 mcp_crud_expansion — journal-write test removed (handleCreateJournalEntry retired;
-// covered by handleJournal umbrella tests).
-// Phase 2 mcp_crud_expansion — rolltable-write test removed (input shape changed; shim still
-// works but the umbrella tests in dispatchRollTable cover the action surface).
-
 // Phase 4b — envelope tests for 11 new handlers.
 
 describe('handler envelope — combat-read (handleGetCombat)', () => {

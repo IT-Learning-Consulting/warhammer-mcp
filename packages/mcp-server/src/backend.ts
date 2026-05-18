@@ -74,6 +74,15 @@ import { TokenTool } from './tools/token.js';
 import { LightTool } from './tools/light.js';
 import { NoteTool } from './tools/note.js';
 import { SoundTool } from './tools/sound.js';
+// Phase 7 mcp_crud_expansion — Playlist + PlaylistSound umbrella (10 actions).
+import { PlaylistTool } from './tools/playlist.js';
+import { MacroTool } from './tools/macro.js';
+import { UserTool } from './tools/user.js';
+// Phase 9 mcp_crud_expansion — Compendium umbrella (6 actions; NO DELETE per HC3).
+// Coexists with the existing flat read-only CompendiumTools (D10 — back-compat).
+import { CompendiumUmbrellaTools } from './tools/compendium-umbrella.js';
+// Phase 10 mcp_crud_expansion — Cross-doc FK audit + repair umbrella (3 actions; closes PRD).
+import { CrossDocFkTool } from './tools/cross-doc-fk.js';
 import { RegionTool } from './tools/region.js';
 import { TileTool } from './tools/tile.js';
 import { TemplateTool } from './tools/template.js';
@@ -309,6 +318,16 @@ async function startBackend(): Promise<void> {
   const lightTool = new LightTool({ foundryClient, logger });
   const noteTool = new NoteTool({ foundryClient, logger });
   const soundTool = new SoundTool({ foundryClient, logger });
+  // Phase 7 mcp_crud_expansion — first world-level CRUD umbrella (Playlist + PlaylistSound).
+  const playlistTool = new PlaylistTool({ foundryClient, logger });
+  // Phase 8 mcp_crud_expansion — Macro CRUD + execute with confirmedExecution gate.
+  const macroTool = new MacroTool({ foundryClient, logger });
+  // Phase 11 mcp_crud_expansion — User umbrella (9 actions: document, hotbar, role, flags).
+  const userTool = new UserTool({ foundryClient, logger });
+  // Phase 9 mcp_crud_expansion — Compendium pack + document CRU (no delete per HC3).
+  const compendiumUmbrellaTools = new CompendiumUmbrellaTools({ foundryClient, logger });
+  // Phase 10 mcp_crud_expansion — Cross-doc FK audit + repair (3 actions; closes PRD).
+  const crossDocFkTool = new CrossDocFkTool({ foundryClient, logger });
   const regionTool = new RegionTool({ foundryClient, logger });
   const tileTool = new TileTool({ foundryClient, logger });
   const templateTool = new TemplateTool({ foundryClient, logger });
@@ -378,6 +397,14 @@ async function startBackend(): Promise<void> {
   registry.register('light', (args) => lightTool.execute(args));
   registry.register('note', (args) => noteTool.execute(args));
   registry.register('sound', (args) => soundTool.execute(args));
+  // Phase 7 mcp_crud_expansion — Playlist + PlaylistSound umbrella (10 actions).
+  registry.register('playlist', (args) => playlistTool.execute(args));
+  registry.register('macro', (args) => macroTool.execute(args));
+  registry.register('user', (args) => userTool.execute(args));
+  // Phase 9 mcp_crud_expansion — Compendium umbrella (6 actions; NO DELETE per HC3).
+  registry.register('compendium', (args) => compendiumUmbrellaTools.execute(args));
+  // Phase 10 mcp_crud_expansion — Cross-doc FK umbrella (3 actions; closes PRD).
+  registry.register('cross-doc-fk', (args) => crossDocFkTool.execute(args));
   registry.register('region', (args) => regionTool.execute(args));
   registry.register('tile', (args) => tileTool.execute(args));
   registry.register('template', (args) => templateTool.execute(args));
@@ -458,6 +485,14 @@ async function startBackend(): Promise<void> {
     ...lightTool.getToolDefinitions(),
     ...noteTool.getToolDefinitions(),
     ...soundTool.getToolDefinitions(),
+    // Phase 7 mcp_crud_expansion — Playlist + PlaylistSound umbrella.
+    ...playlistTool.getToolDefinitions(),
+    ...macroTool.getToolDefinitions(),
+    ...userTool.getToolDefinitions(),
+    // Phase 9 mcp_crud_expansion — Compendium umbrella (CRU only, NO DELETE).
+    ...compendiumUmbrellaTools.getToolDefinitions(),
+    // Phase 10 mcp_crud_expansion — Cross-doc FK umbrella (3 actions; closes PRD).
+    ...crossDocFkTool.getToolDefinitions(),
     ...regionTool.getToolDefinitions(),
     ...tileTool.getToolDefinitions(),
     ...templateTool.getToolDefinitions(),
@@ -486,6 +521,36 @@ async function startBackend(): Promise<void> {
 
     let buffer = '';
 
+    const writeResponse = (payload: unknown): boolean => {
+      if (socket.destroyed || !socket.writable) {
+        return false;
+      }
+
+      try {
+        socket.write(JSON.stringify(payload) + '\n');
+        return true;
+      } catch (e: any) {
+        logger.debug('Backend control socket write failed', {
+          code: e?.code,
+          error: e?.message || String(e),
+        });
+        return false;
+      }
+    };
+
+    socket.on('error', (e: NodeJS.ErrnoException) => {
+      const meta = { code: e.code, error: e.message };
+      if (e.code === 'ECONNRESET' || e.code === 'EPIPE') {
+        logger.debug('Backend control socket closed unexpectedly', meta);
+      } else {
+        logger.warn('Backend control socket error', meta);
+      }
+    });
+
+    socket.on('close', () => {
+      buffer = '';
+    });
+
     socket.on('data', async (chunk: string) => {
 
       buffer += chunk;
@@ -506,7 +571,7 @@ async function startBackend(): Promise<void> {
 
           if (msg.method === 'ping') {
 
-            socket.write(JSON.stringify({ id: msg.id, result: { ok: true } }) + '\n');
+            writeResponse({ id: msg.id, result: { ok: true } });
 
             continue;
 
@@ -514,7 +579,7 @@ async function startBackend(): Promise<void> {
 
           if (msg.method === 'list_tools') {
 
-            socket.write(JSON.stringify({ id: msg.id, result: { tools: allTools } }) + '\n');
+            writeResponse({ id: msg.id, result: { tools: allTools } });
 
             continue;
 
@@ -531,7 +596,7 @@ async function startBackend(): Promise<void> {
 
               const dispatchP = registry.dispatch(name, args);
               if (!dispatchP) {
-                socket.write(JSON.stringify({ id: msg.id, error: { code: -32602, message: `Unknown tool: ${name}` } }) + '\n');
+                writeResponse({ id: msg.id, error: { code: -32602, message: `Unknown tool: ${name}` } });
                 continue;
               }
               const result = await dispatchP;
@@ -541,13 +606,11 @@ async function startBackend(): Promise<void> {
               } else {
                 payload = { content: [{ type: 'text', text: typeof result === 'string' ? result : JSON.stringify(result) }] };
               }
-              socket.write(JSON.stringify({ id: msg.id, result: payload }) + '\n');
+              writeResponse({ id: msg.id, result: payload });
 
             } catch (e: any) {
 
-              socket.write(
-                JSON.stringify({ id: msg.id, result: { content: [{ type: 'text', text: `Error: ${scrubError(e)}` }], isError: true } }) + '\n'
-              );
+              writeResponse({ id: msg.id, result: { content: [{ type: 'text', text: `Error: ${scrubError(e)}` }], isError: true } });
 
             }
 
@@ -557,11 +620,11 @@ async function startBackend(): Promise<void> {
 
           // Unknown method
 
-          socket.write(JSON.stringify({ id: msg.id, error: { message: 'Unknown method' } }) + '\n');
+          writeResponse({ id: msg.id, error: { message: 'Unknown method' } });
 
         } catch (e: any) {
 
-          try { socket.write(JSON.stringify({ error: { message: e?.message || 'Bad request' } }) + '\n'); } catch { }
+          writeResponse({ error: { message: e?.message || 'Bad request' } });
 
         }
 

@@ -1,0 +1,16 @@
+{
+  "fault": "validate-wfrp-config",
+  "target_uuid": "Setting.CONFIG.WFRP4E",
+  "field": "(none — clean-world expected-ok case)",
+  "original_value": "clean CONFIG.WFRP4E shape",
+  "seeded_value": "(no mutation — this fault tests the clean-world baseline)",
+  "injection": {
+    "via": "(no MCP call — clean snapshot is the fixture)",
+    "notes": "Run validate-wfrp-config on the restored snapshot; expect {ok:true, failures:[]}. To exercise the fail path manually, GM may delete game.wfrp4e.config.species in F12 and re-run; restore via reload."
+  },
+  "expected_detection": {
+    "action": "validate-wfrp-config",
+    "scope": null,
+    "response_contains": "OK: all CONFIG.WFRP4E keys conform to expected shape"
+  }
+}

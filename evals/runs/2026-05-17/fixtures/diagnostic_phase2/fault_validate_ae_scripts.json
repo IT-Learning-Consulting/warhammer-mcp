@@ -1,0 +1,16 @@
+{
+  "fault": "validate-ae-scripts",
+  "target_uuid": "Item.<TBD-item-with-at-least-one-AE>",
+  "field": "effects.<ae-id>.system.scriptData[0].script",
+  "original_value": "<original script body — capture before injection>",
+  "seeded_value": "if (actor return 1 }",
+  "injection": {
+    "via": "mcp__foundry-mcp__update-active-effect",
+    "notes": "Set scriptData[0].script to a deliberate SyntaxError. validate-ae-scripts invokes `new Function(script)` (parse-only; HC4 carve-out) and catches the SyntaxError. Run with scope={type:'item', id:'<item-id>'} and expect the AE in the 'Syntax errors' section. Also covers issue='unknown-trigger' (set scriptData[0].trigger to a key not in CONFIG.WFRP4E.scriptTriggers) and issue='schema-drift' (set system.scriptData to an object instead of array — pre-v11 shape)."
+  },
+  "expected_detection": {
+    "action": "validate-ae-scripts",
+    "scope": { "type": "item", "id": "<bare-item-id-matching-target_uuid>" },
+    "response_contains": "Syntax errors"
+  }
+}

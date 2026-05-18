@@ -34,6 +34,7 @@ import {
   type SceneTokenView,
 } from '@foundry-mcp/shared';
 import { BaseTool, BaseToolOptions } from '../base-tool.js';
+import { formatAffectedDocs } from './format-affected-docs.js';
 
 type SceneArgs = z.infer<typeof SceneToolInput>;
 type ArgsFor<A extends SceneArgs['action']> = Extract<SceneArgs, { action: A }>;
@@ -243,6 +244,8 @@ export class SceneTool extends BaseTool {
             // thumbnail
             quality: { type: 'number', minimum: 0, maximum: 1, description: '[thumbnail] JPEG/WebP quality 0-1 (default 0.8).' },
             format: { type: 'string', description: '[thumbnail] Image format (default "webp").' },
+            // Phase 10 cross-doc-fk cascade flag (delete action only).
+            cascade: { type: 'boolean', description: '[delete] When true, clears cross-doc FK references (Note.entryId, etc.) pointing AT this scene before deletion. Default false.' },
           },
           required: ['action'],
         },
@@ -301,7 +304,7 @@ export class SceneTool extends BaseTool {
   private async handleDelete(args: ArgsFor<'delete'>) {
     try {
       const data = await this.query<SceneDeleteResponse>('scene', args);
-      const text = `🗑️ **Scene Deleted**\n\n**Name:** ${data.deletedName}\n**ID:** \`${data.deletedId}\`\n**Remaining scenes:** ${data.remainingScenes}\n\n⚠️ Permanent. All embedded tokens/walls/lights/notes/regions/sounds/drawings/templates/tiles removed.`;
+      const text = `🗑️ **Scene Deleted**\n\n**Name:** ${data.deletedName}\n**ID:** \`${data.deletedId}\`\n**Remaining scenes:** ${data.remainingScenes}\n\n⚠️ Permanent. All embedded tokens/walls/lights/notes/regions/sounds/drawings/templates/tiles removed.${formatAffectedDocs(data.affectedDocs)}`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
       return errorContent('delete', e instanceof Error ? e.message : String(e));

@@ -33,6 +33,8 @@ const SearchFilters = z.object({
 
 // itemType field added here (optional, unused until 3d per plan task 1.3) so
 // schema does not need to change twice between 3a and 3d.
+// PARITY-COVERAGE-EXEMPT:itemType  — staged future API field; tool inputSchema
+// won't expose until 3d ships.
 export const SearchCompendiumInput = z.object({
   query: z.string(),
   packType: z.string().optional(),
@@ -66,3 +68,84 @@ export const GetCompendiumDocumentFullInput = z.object({
 }).strict();
 
 export const GetEnhancedCreatureIndexInput = z.object({}).strict();
+
+// ────────────────────────────────────────────────────────────────────────────
+// Phase 9 — Compendium umbrella tool (CRU only; HC3 forbids any delete action)
+// ────────────────────────────────────────────────────────────────────────────
+//
+// 6 actions on a single discriminated union. NO delete-pack and NO
+// delete-document-from-pack — those literals are grep-enforced absent
+// (mcp_crud_expansion PRD §7 HC3). Validate Step 4 + executor smoke gates
+// scan this file and the umbrella tool file for any introduction.
+//
+// Pack-creation handler uses `foundry.documents.collections.CompendiumCollection`
+// (v13-canonical; bare global deprecated since v13, removed v15 — see
+// phase9_probes.md Probe D capture).
+
+export const CreatePackInput = z.object({
+  action: z.literal('create-pack'),
+  name: z.string().min(1),
+  label: z.string(),
+  type: z.enum(['Actor', 'Item', 'JournalEntry', 'RollTable', 'Macro', 'Scene', 'Playlist']),
+  system: z.string().optional(),
+  scope: z.enum(['world', 'module']).default('world'),
+  moduleId: z.string().optional(),
+}).strict();
+
+// BUG-099 (2026-05-18): `label` removed from update-pack changes.
+// Foundry v13.351 `pack.configure({label})` silently drops the change for
+// world-scope packs — `metadata.label` is loaded at pack-creation/manifest
+// time and is not configurable post-create. Removing the field from the
+// schema turns the silent drop into a Zod parse error at the input layer.
+// To rename a world-scope pack: delete + re-create via Foundry UI, OR wait
+// for v2's pack-rename surface. `folder`/`sort`/`locked` persist correctly
+// via `pack.configure()`.
+export const UpdatePackInput = z.object({
+  action: z.literal('update-pack'),
+  packId: z.string(),
+  changes: z.object({
+    folder: z.string().nullable().optional(),
+    sort: z.number().int().optional(),
+    locked: z.boolean().optional(),
+  }).strict(),
+}).strict();
+
+export const ReadPackInput = z.object({
+  action: z.literal('read-pack'),
+  packId: z.string(),
+  page: z.number().int().min(1).optional(),
+  pageSize: z.number().int().min(1).max(500).optional(),
+}).strict();
+
+export const AddDocumentToPackInput = z.object({
+  action: z.literal('add-document-to-pack'),
+  packId: z.string(),
+  source: z.union([
+    z.object({ kind: z.literal('uuid'), uuid: z.string() }).strict(),
+    z.object({ kind: z.literal('inline'), data: z.record(z.string(), z.unknown()) }).strict(),
+  ]),
+}).strict();
+
+export const UpdateDocumentInPackInput = z.object({
+  action: z.literal('update-document-in-pack'),
+  packId: z.string(),
+  documentId: z.string(),
+  changes: z.record(z.string(), z.unknown()),
+}).strict();
+
+export const ReadDocumentFromPackInput = z.object({
+  action: z.literal('read-document-from-pack'),
+  packId: z.string(),
+  documentId: z.string(),
+}).strict();
+
+export const CompendiumToolInput = z.discriminatedUnion('action', [
+  CreatePackInput,
+  UpdatePackInput,
+  ReadPackInput,
+  AddDocumentToPackInput,
+  UpdateDocumentInPackInput,
+  ReadDocumentFromPackInput,
+]);
+
+export type CompendiumToolInputType = z.infer<typeof CompendiumToolInput>;

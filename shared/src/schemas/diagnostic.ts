@@ -33,6 +33,16 @@ export const RECENT_ERROR_SOURCES = [
 export type RuntimeEventSeverity = (typeof RECENT_ERROR_SEVERITIES)[number];
 export type RuntimeEventSource = (typeof RECENT_ERROR_SOURCES)[number];
 
+// ── Scope discriminator (Phase 2 Tier 2 scans) ─────────────────────────────
+// Flat shape (NOT a nested discriminatedUnion) — handler-layer enforces
+// id-required when type !== 'world'. See plan §Design Decisions + subagent D.
+export const ScopeInput = z.object({
+  type: z.enum(['actor', 'item', 'compendium', 'world']),
+  id: z.string().optional(),
+  confirmExpensive: z.boolean().optional(),
+});
+export type ScopeInputType = z.infer<typeof ScopeInput>;
+
 // ── Per-action input schemas ────────────────────────────────────────────────
 
 export const DiagnosticRecentErrorsInput = z.object({
@@ -62,18 +72,88 @@ export const DiagnosticSupportSnapshotInput = z.object({
   includeModules: z.boolean().optional(),
 }).strict();
 
-// ── Discriminated union (open shape per CCR-7) ─────────────────────────────
+// ── Phase 2 Tier 2 inputs (content-health scans) ───────────────────────────
+
+export const DiagnosticValidateWfrpConfigInput = z.object({
+  action: z.literal('validate-wfrp-config'),
+}).strict();
+
+export const DiagnosticScanBrokenUuidsInput = z.object({
+  action: z.literal('scan-broken-uuids'),
+  scope: ScopeInput,
+}).strict();
+
+export const DiagnosticScanCareerRefsInput = z.object({
+  action: z.literal('scan-career-refs'),
+  scope: ScopeInput,
+}).strict();
+
+export const DiagnosticValidateAeScriptsInput = z.object({
+  action: z.literal('validate-ae-scripts'),
+  scope: ScopeInput,
+}).strict();
+
+// ── Phase 3 Tier 3 inputs (developer introspection) ────────────────────────
+// HC4: action enum closes at exactly 11 literals with Phase 3. The
+// `_exhaustive: never` sentinel in handlers/diagnostic.ts dispatchDiagnostic
+// switch enforces match-up at compile time.
+
+export const DiagnosticInspectDocumentInput = z.object({
+  action: z.literal('inspect-document'),
+  uuid: z.string().min(1),
+  // Default: counts + first-10 preview of items/effects. true returns full arrays.
+  includeFull: z.boolean().optional(),
+}).strict();
+
+export const DiagnosticHookInventoryInput = z.object({
+  action: z.literal('hook-inventory'),
+  // Substring filter on hook name. Case-sensitive.
+  hookFilter: z.string().optional(),
+  // Opt-in best-effort namespace breakdown via fn.name parse (Q&A 2026-05-18 Q2).
+  // Anonymous arrows bucket under '<unknown>'. Default false (tight envelope).
+  byNamespace: z.boolean().optional(),
+}).strict();
+
+export const DiagnosticModuleInventoryInput = z.object({
+  action: z.literal('module-inventory'),
+  // Omit inactive modules. Default false (full inventory).
+  onlyActive: z.boolean().optional(),
+}).strict();
+
+export const DiagnosticSettingsInventoryInput = z.object({
+  action: z.literal('settings-inventory'),
+  // Exact-match namespace filter (e.g. 'warhammer-mcp' returns only that namespace).
+  namespaceFilter: z.string().optional(),
+}).strict();
+
+// ── Discriminated union (open shape per CCR-7; HC4 enum-bounded at 11) ─────
 
 export const DiagnosticToolInput = z.discriminatedUnion('action', [
   DiagnosticRecentErrorsInput,
   DiagnosticWorldIssuesInput,
   DiagnosticSupportSnapshotInput,
+  DiagnosticValidateWfrpConfigInput,
+  DiagnosticScanBrokenUuidsInput,
+  DiagnosticScanCareerRefsInput,
+  DiagnosticValidateAeScriptsInput,
+  DiagnosticInspectDocumentInput,
+  DiagnosticHookInventoryInput,
+  DiagnosticModuleInventoryInput,
+  DiagnosticSettingsInventoryInput,
 ]);
 
 export type DiagnosticToolInputType = z.infer<typeof DiagnosticToolInput>;
 export type DiagnosticRecentErrorsInputType = z.infer<typeof DiagnosticRecentErrorsInput>;
 export type DiagnosticWorldIssuesInputType = z.infer<typeof DiagnosticWorldIssuesInput>;
 export type DiagnosticSupportSnapshotInputType = z.infer<typeof DiagnosticSupportSnapshotInput>;
+export type DiagnosticValidateWfrpConfigInputType = z.infer<typeof DiagnosticValidateWfrpConfigInput>;
+export type DiagnosticScanBrokenUuidsInputType = z.infer<typeof DiagnosticScanBrokenUuidsInput>;
+export type DiagnosticScanCareerRefsInputType = z.infer<typeof DiagnosticScanCareerRefsInput>;
+export type DiagnosticValidateAeScriptsInputType = z.infer<typeof DiagnosticValidateAeScriptsInput>;
+export type DiagnosticInspectDocumentInputType = z.infer<typeof DiagnosticInspectDocumentInput>;
+export type DiagnosticHookInventoryInputType = z.infer<typeof DiagnosticHookInventoryInput>;
+export type DiagnosticModuleInventoryInputType = z.infer<typeof DiagnosticModuleInventoryInput>;
+export type DiagnosticSettingsInventoryInputType = z.infer<typeof DiagnosticSettingsInventoryInput>;
 
 // ── Response shapes (concrete typed; CCR-3 / BUG-069 anti-`any`) ───────────
 
@@ -145,4 +225,154 @@ export interface RuntimeEventFilter {
   source?: RuntimeEventSource;
   limit?: number;
   since?: number;
+}
+
+// ── Phase 2 Tier 2 response shapes ─────────────────────────────────────────
+
+export interface ConfigKeyFailure {
+  key: string;
+  expected: string;
+  actual: string;
+}
+export interface ValidateWfrpConfigResponse {
+  ok: boolean;
+  failures: ConfigKeyFailure[];
+}
+
+export interface BrokenUuid {
+  docId: string;
+  docName: string;
+  field: 'description' | 'gmdescription';
+  uuid: string;
+  // Present when the broken UUID lives on actor.items[i] rather than the
+  // top-level doc itself.
+  embeddedItemId?: string;
+}
+export interface ScanBrokenUuidsResponse {
+  checked: number;
+  broken: number;
+  uuidsBroken: number;
+  // Wall-time for the walk (ms). Surfaced for HC3 / NF2 soft-threshold reporting.
+  elapsedMs?: number;
+  // Counts-only mode (world scope without confirmExpensive) omits `details`.
+  details?: BrokenUuid[];
+}
+
+export interface UnresolvedCareerRef {
+  actorName: string;
+  careerName: string;
+  refType: 'skill' | 'talent';
+  name: string;
+}
+export interface ScanCareerRefsResponse {
+  checked: number;
+  unresolved: number;
+  elapsedMs?: number;
+  details?: UnresolvedCareerRef[];
+}
+
+export interface InvalidAeScript {
+  docId: string;
+  docName: string;
+  aeId: string;
+  aeName: string;
+  issue: 'syntax-error' | 'unknown-trigger' | 'schema-drift';
+  trigger?: string;
+  error?: string;     // syntax-error message body
+  expected?: string;  // shape note (schema-drift)
+}
+export interface ValidateAeScriptsResponse {
+  checked: number;
+  invalid: number;
+  // Pre-v11 non-array scriptData docs — separate finding per Q&A.
+  schemaDrift: number;
+  elapsedMs?: number;
+  details?: InvalidAeScript[];
+}
+
+// ── Phase 3 Tier 3 response shapes (developer introspection) ───────────────
+
+export interface InspectDocumentEffectPreview {
+  id: string;
+  name: string;
+  disabled?: boolean;
+  transfer?: boolean;
+}
+export interface InspectDocumentItemPreview {
+  id: string;
+  name: string;
+  type?: string;
+  img?: string;
+}
+export interface InspectDocumentResponse {
+  uuid: string;
+  documentName: string;
+  type: string;
+  name: string;
+  sheetClassName?: string;
+  system: Record<string, unknown>;
+  flags: Record<string, unknown>;
+  ownership: Record<string, number>;
+  effects: { count: number; preview: InspectDocumentEffectPreview[] };
+  items: { count: number; preview: InspectDocumentItemPreview[] };
+  // Present on Actor docs; absent on Item / JournalEntry / etc.
+  prototypeToken?: Record<string, unknown>;
+}
+
+export interface HookDriftEntry {
+  threshold: number;
+  actual: number;
+}
+export interface HookInventoryEntry {
+  name: string;
+  count: number;
+  // Present only when input.byNamespace === true (opt-in, Q&A 2026-05-18 Q2).
+  byNamespace?: Record<string, number>;
+  drift?: HookDriftEntry;
+}
+export interface HookInventoryDriftSummary {
+  hook: string;
+  count: number;
+  threshold: number;
+}
+export interface HookInventoryResponse {
+  totalHooks: number;
+  totalListeners: number;
+  hooks: HookInventoryEntry[];
+  // Always present (may be empty). Separate from per-entry .drift so the
+  // consumer can fast-scan flagged hooks without walking the full list.
+  drift: HookInventoryDriftSummary[];
+}
+
+export interface ModuleInventoryEntry {
+  id: string;
+  title: string;
+  version: string;
+  active: boolean;
+  // Raw numeric code from CONST.PACKAGE_AVAILABILITY_CODES.
+  availability: number;
+  // Resolved label (e.g. 'VERIFIED', 'REQUIRES_UPDATE') or 'UNKNOWN' on miss.
+  availabilityLabel: string;
+  incompatibleWithCoreVersion: boolean;
+  unavailable: boolean;
+}
+export interface ModuleInventoryResponse {
+  total: number;
+  active: number;
+  modules: ModuleInventoryEntry[];
+}
+
+export interface SettingsInventoryEntry {
+  namespace: string;
+  key: string;
+  scope: string;
+  // Best-effort label: 'Boolean' | 'String' | 'Number' | 'Object' |
+  // 'DataModel:<name>' | fallback string.
+  typeLabel: string;
+  default: unknown;
+  current: unknown;
+}
+export interface SettingsInventoryResponse {
+  total: number;
+  settings: SettingsInventoryEntry[];
 }

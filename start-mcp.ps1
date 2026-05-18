@@ -1,26 +1,29 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Starts the Foundry MCP Backend server from the project root.
+    Starts the Foundry MCP Backend server in background (hidden) mode by default.
 
 .DESCRIPTION
-    This script starts the backend server independently of Claude Desktop,
-    allowing it to run 24/7 and accept connections from multiple MCP clients.
+    Starts the backend server independently of Claude Code, writing stdout/stderr to a
+    dated log file at %TEMP%\foundry-mcp\backend-YYYYMMDD.log. The process survives
+    Claude Code restarts and window closes.
 
-.PARAMETER Hidden
-    Run in background without a visible window (uses Start-Process).
+    Use -Foreground to run interactively in the current terminal (useful for debugging).
+
+.PARAMETER Foreground
+    Run in the current terminal instead of hidden background mode.
 
 .EXAMPLE
     .\start-mcp.ps1
-    Starts the backend in the current terminal.
+    Starts the backend hidden with logging to %TEMP%\foundry-mcp\backend-YYYYMMDD.log.
 
 .EXAMPLE
-    .\start-mcp.ps1 -Hidden
-    Starts the backend in the background.
+    .\start-mcp.ps1 -Foreground
+    Starts the backend in the current terminal (Ctrl+C to stop).
 #>
 
 param(
-    [switch]$Hidden
+    [switch]$Foreground
 )
 
 $ErrorActionPreference = "Stop"
@@ -42,11 +45,12 @@ if (Test-Path $LockFile) {
         if ($ExistingProcess) {
             Write-Host "Backend already running with PID $PID_Content" -ForegroundColor Yellow
             Write-Host ""
-            Write-Host "To stop it: Stop-Process -Id $PID_Content" -ForegroundColor Gray
+            Write-Host "To stop: Stop-Process -Id $PID_Content -Force" -ForegroundColor Gray
+            Write-Host "Or double-click: stop-mcp.bat" -ForegroundColor Gray
             exit 0
         }
         else {
-            Write-Host "Removing stale lock file..." -ForegroundColor Yellow
+            Write-Host "Removing stale lock file (dead PID $PID_Content)..." -ForegroundColor Yellow
             Remove-Item $LockFile -Force
         }
     }
@@ -56,35 +60,50 @@ if (Test-Path $LockFile) {
 $BackendPath = Join-Path $McpServerDir "dist\backend.js"
 if (-not (Test-Path $BackendPath)) {
     Write-Host "ERROR: dist\backend.js not found!" -ForegroundColor Red
-    Write-Host "Please run 'npm run build' first." -ForegroundColor Yellow
+    Write-Host "Please run 'npm run build' in packages\mcp-server first." -ForegroundColor Yellow
     exit 1
 }
 
-# Change to mcp-server directory for PM2 config to work correctly
+# Change to mcp-server directory so relative paths in backend work correctly
 Set-Location $McpServerDir
 
-Write-Host "Starting backend server..." -ForegroundColor Green
-Write-Host ""
-Write-Host "Ports:" -ForegroundColor White
-Write-Host "  - 31414: Control channel (MCP clients)" -ForegroundColor Gray
-Write-Host "  - 31415: WebSocket (Foundry VTT)" -ForegroundColor Gray
-Write-Host ""
-
-if ($Hidden) {
-    Write-Host "Starting in background mode..." -ForegroundColor Yellow
-    $Process = Start-Process -FilePath "node" -ArgumentList $BackendPath -WindowStyle Hidden -PassThru
-    Write-Host "Backend started with PID: $($Process.Id)" -ForegroundColor Green
-    Write-Host ""
-    Write-Host "To stop: Stop-Process -Id $($Process.Id)" -ForegroundColor Gray
-}
-else {
-    Write-Host "Press Ctrl+C to stop the server." -ForegroundColor Yellow
+if ($Foreground) {
+    Write-Host "Starting in foreground mode (Ctrl+C to stop)..." -ForegroundColor Yellow
     Write-Host "============================================" -ForegroundColor Cyan
     Write-Host ""
-
-    # Start the backend
     & node $BackendPath
-
     Write-Host ""
     Write-Host "Backend stopped." -ForegroundColor Yellow
+}
+else {
+    # Ensure log directory exists
+    $LogDir = Join-Path $env:TEMP "foundry-mcp"
+    if (-not (Test-Path $LogDir)) {
+        New-Item -ItemType Directory -Path $LogDir | Out-Null
+    }
+    $LogPath = Join-Path $LogDir "backend-$(Get-Date -Format 'yyyyMMdd').log"
+    $ErrPath = Join-Path $LogDir "backend-$(Get-Date -Format 'yyyyMMdd').err.log"
+
+    Write-Host "Starting in background mode..." -ForegroundColor Green
+    # Start-Process rejects -RedirectStandardOutput and -RedirectStandardError pointing at
+    # the same file. Use two separate paths; stderr is typically empty for a clean run.
+    $Process = Start-Process `
+        -FilePath "node" `
+        -ArgumentList $BackendPath `
+        -WindowStyle Hidden `
+        -RedirectStandardOutput $LogPath `
+        -RedirectStandardError $ErrPath `
+        -PassThru
+
+    Write-Host ""
+    Write-Host "Backend started." -ForegroundColor Green
+    Write-Host "  PID:    $($Process.Id)" -ForegroundColor White
+    Write-Host "  stdout: $LogPath" -ForegroundColor Gray
+    Write-Host "  stderr: $ErrPath" -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "To stop:    Stop-Process -Id $($Process.Id) -Force" -ForegroundColor Gray
+    Write-Host "Or:         double-click stop-mcp.bat" -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "Tail log:   Get-Content -Tail 50 -Wait `"$LogPath`"" -ForegroundColor Gray
+    Write-Host "Tail err:   Get-Content -Tail 50 -Wait `"$ErrPath`"" -ForegroundColor Gray
 }

@@ -1,0 +1,16 @@
+{
+  "fault": "scan-career-refs",
+  "target_uuid": "Actor.<TBD-actor-with-at-least-one-career-item>",
+  "field": "items.<career-item-id>.system.skills",
+  "original_value": "<original system.skills array — capture before injection>",
+  "seeded_value": "[...originalSkills, 'Nonexistent Skill XYZ']",
+  "injection": {
+    "via": "mcp__foundry-mcp__update-item",
+    "notes": "Append a synthetic name to the career item's system.skills array. The name must not match any item in game.items (skill type). scan-career-refs uses game.items.contents.find(i=>i.name===name && i.type==='skill') — exact-name read-only fallback per Risk 2.A. Run scan-career-refs with scope={type:'actor', id:'<actor-id>'} and expect the synthetic name in details with refType='skill'."
+  },
+  "expected_detection": {
+    "action": "scan-career-refs",
+    "scope": { "type": "actor", "id": "<bare-actor-id-matching-target_uuid>" },
+    "response_contains": "Nonexistent Skill XYZ"
+  }
+}

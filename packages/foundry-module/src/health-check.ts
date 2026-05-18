@@ -9,7 +9,10 @@
 // main.ts wires `runHealthCheck` via setTimeout inside the `ready` hook; by 2m post-ready
 // the rest of Foundry's load noise has settled, so this banner is easy to spot in F12.
 
-const MODULE_PREFIX = '[warhammer-mcp]';
+import { MODULE_ID } from './constants.js';
+import { MODULE_BADGE_STYLE, badgeStyle, type NotifySeverity } from './notify.js';
+
+const MODULE_PREFIX = `[${MODULE_ID}]`;
 
 interface CapturedError {
   phase: string;
@@ -354,32 +357,73 @@ export function runHealthCheck(expectedQueryCount?: number): HealthCheckResult {
     issues.push(`${capturedErrors.length} init exception(s) captured during load`);
   }
 
-  const banner = '='.repeat(69);
   const ok = issues.length === 0;
-  const status = ok ? '[OK] ALL OK' : `[WARN] ${issues.length} ISSUE${issues.length === 1 ? '' : 'S'} DETECTED`;
 
-  console.log(banner);
-  console.log(`${MODULE_PREFIX} Health check — 2 minutes post-ready`);
-  console.log(banner);
-  console.log(`  Module active:       ${moduleActive ? '[OK]' : '[FAIL]'} ${moduleActive}`);
-  console.log(`  Queries registered:  ${queryCount > 0 ? '[OK]' : '[FAIL]'} ${queryCount}${expectedQueryCount ? ` (expected >= ${expectedQueryCount})` : ''}`);
-  console.log(`  Socket connected:    ${socketConnected ? '[OK]' : '[FAIL]'} ${socketConnected}`);
-  console.log(`  Init exceptions:     ${capturedErrors.length === 0 ? '[OK] none' : `[FAIL] ${capturedErrors.length}`}`);
-  console.log('');
-  console.log(`  STATUS: ${status}`);
+  // Severity drives the badge color via the shared notify.ts palette so the
+  // health banner reads as a sibling of every other GM notification.
+  const severity: NotifySeverity = ok
+    ? 'lifecycle'
+    : capturedErrors.length > 0
+    ? 'error'
+    : 'warn';
+  const tag = ok ? 'HEALTH OK' : 'HEALTH ISSUES';
+
+  const dimStyle = 'color: light-dark(oklch(45% 0 0), oklch(70% 0 0));';
+  const labelStyle = 'color: light-dark(oklch(35% 0 0), oklch(80% 0 0)); font-weight: bold;';
+  const okStyle = 'color: light-dark(oklch(45% 0.20 145), oklch(72% 0.20 145)); font-weight: bold;';
+  const failStyle = 'color: light-dark(oklch(45% 0.22 25), oklch(72% 0.22 25)); font-weight: bold;';
+
+  const moduleStatus = moduleActive ? '[OK]' : '[FAIL]';
+  const queryStatus = queryCount > 0 ? '[OK]' : '[FAIL]';
+  const queryDetail = `${queryCount}`;
+  const socketStatus = socketConnected ? '[OK]' : '[FAIL]';
+  const errorStatus = capturedErrors.length === 0 ? '[OK]' : '[FAIL]';
+  const errorDetail = capturedErrors.length === 0 ? 'none' : String(capturedErrors.length);
+
+  // Build one styled console.log: module badge → severity badge → header,
+  // then four checks on indented lines, then a STATUS line, then optional
+  // issue / captured-error detail. Every %c consumes one trailing style arg.
+  let format =
+    `%c${MODULE_ID}%c ${tag} %c · 2 min post-ready\n` +
+    `%c  Module active:       %c${moduleStatus}%c ${moduleActive}\n` +
+    `%c  Queries registered:  %c${queryStatus}%c ${queryDetail}\n` +
+    `%c  Socket connected:    %c${socketStatus}%c ${socketConnected}\n` +
+    `%c  Init exceptions:     %c${errorStatus}%c ${errorDetail}\n` +
+    `%c  STATUS: %c${ok ? 'ALL OK' : `${issues.length} ISSUE${issues.length === 1 ? '' : 'S'} DETECTED`}`;
+  const styles: string[] = [
+    MODULE_BADGE_STYLE,
+    badgeStyle(severity),
+    dimStyle,
+    labelStyle, moduleActive ? okStyle : failStyle, dimStyle,
+    labelStyle, queryCount > 0 ? okStyle : failStyle, dimStyle,
+    labelStyle, socketConnected ? okStyle : failStyle, dimStyle,
+    labelStyle, capturedErrors.length === 0 ? okStyle : failStyle, dimStyle,
+    labelStyle, ok ? okStyle : failStyle,
+  ];
+
   if (!ok) {
-    console.log('  Action items:');
-    for (const i of issues) console.log(`    - ${i}`);
+    format += `\n%c  Action items:`;
+    styles.push(labelStyle);
+    for (const i of issues) {
+      format += `\n%c    · ${i}`;
+      styles.push(dimStyle);
+    }
     if (capturedErrors.length > 0) {
-      console.log('  Captured init errors:');
+      format += `\n%c  Captured init errors:`;
+      styles.push(labelStyle);
       capturedErrors.forEach(({ phase, error }, idx) => {
-        console.log(`    [${idx + 1}] phase="${phase}" message="${error.message}"`);
+        format += `\n%c    [${idx + 1}] phase="${phase}" message="${error.message}"`;
+        styles.push(dimStyle);
         const stackLine = error.stack?.split('\n')[1]?.trim();
-        if (stackLine) console.log(`        ${stackLine}`);
+        if (stackLine) {
+          format += `\n%c        ${stackLine}`;
+          styles.push(dimStyle);
+        }
       });
     }
   }
-  console.log(banner);
+
+  console.log(format, ...styles);
 
   return {
     ok,

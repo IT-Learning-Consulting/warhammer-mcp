@@ -75,7 +75,14 @@ export type NotifyKind =
   | 'note'
   | 'region'
   | 'tile'
-  | 'drawing';
+  | 'drawing'
+  | 'playlist'
+  | 'playlist-sound'
+  | 'macro'
+  | 'user'
+  | 'compendium-pack'
+  | 'compendium-document'
+  | 'cross-doc-fk';
 
 export type NotifySeverity =
   | 'created'
@@ -132,23 +139,23 @@ interface SeverityStyle {
 }
 
 const COLORS: Record<NotifySeverity, SeverityStyle> = {
-  created:   { bg: 'light-dark(oklch(45% 0.20 145), oklch(68% 0.20 145))', fg: 'light-dark(oklch(98% 0 0), oklch(15% 0 0))', tag: 'CREATE' },
-  updated:   { bg: 'light-dark(oklch(45% 0.18 250), oklch(68% 0.18 250))', fg: 'light-dark(oklch(98% 0 0), oklch(15% 0 0))', tag: 'UPDATE' },
-  deleted:   { bg: 'light-dark(oklch(45% 0.22 25), oklch(70% 0.22 25))',   fg: 'light-dark(oklch(98% 0 0), oklch(15% 0 0))', tag: 'DELETE' },
-  warn:      { bg: 'light-dark(oklch(48% 0.18 70), oklch(72% 0.16 70))',   fg: 'light-dark(oklch(98% 0 0), oklch(15% 0 0))', tag: 'WARN'   },
-  error:     { bg: 'light-dark(oklch(40% 0.25 25), oklch(72% 0.22 25))',   fg: 'light-dark(oklch(98% 0 0), oklch(15% 0 0))', tag: 'ERROR'  },
-  info:      { bg: 'light-dark(oklch(42% 0.10 250), oklch(70% 0.10 250))', fg: 'light-dark(oklch(98% 0 0), oklch(15% 0 0))', tag: 'INFO'   },
-  lifecycle: { bg: 'light-dark(oklch(40% 0.16 280), oklch(68% 0.16 280))', fg: 'light-dark(oklch(98% 0 0), oklch(15% 0 0))', tag: 'EVENT'  },
+  created: { bg: 'light-dark(oklch(45% 0.20 145), oklch(68% 0.20 145))', fg: 'light-dark(oklch(98% 0 0), oklch(15% 0 0))', tag: 'CREATE' },
+  updated: { bg: 'light-dark(oklch(45% 0.18 250), oklch(68% 0.18 250))', fg: 'light-dark(oklch(98% 0 0), oklch(15% 0 0))', tag: 'UPDATE' },
+  deleted: { bg: 'light-dark(oklch(45% 0.22 25), oklch(70% 0.22 25))', fg: 'light-dark(oklch(98% 0 0), oklch(15% 0 0))', tag: 'DELETE' },
+  warn: { bg: 'light-dark(oklch(48% 0.18 70), oklch(72% 0.16 70))', fg: 'light-dark(oklch(98% 0 0), oklch(15% 0 0))', tag: 'WARN' },
+  error: { bg: 'light-dark(oklch(40% 0.25 25), oklch(72% 0.22 25))', fg: 'light-dark(oklch(98% 0 0), oklch(15% 0 0))', tag: 'ERROR' },
+  info: { bg: 'light-dark(oklch(42% 0.10 250), oklch(70% 0.10 250))', fg: 'light-dark(oklch(98% 0 0), oklch(15% 0 0))', tag: 'INFO' },
+  lifecycle: { bg: 'light-dark(oklch(40% 0.16 280), oklch(68% 0.16 280))', fg: 'light-dark(oklch(98% 0 0), oklch(15% 0 0))', tag: 'EVENT' },
 };
 
-const MODULE_BADGE_STYLE =
+export const MODULE_BADGE_STYLE =
   'background: light-dark(oklch(25% 0.02 280), oklch(85% 0.02 280)); ' +
   'color: light-dark(oklch(95% 0 0), oklch(15% 0 0)); ' +
   'padding: 1px 6px; border-radius: 3px; font-weight: bold;';
 
 const RESET_STYLE = '';
 
-function badgeStyle(severity: NotifySeverity): string {
+export function badgeStyle(severity: NotifySeverity): string {
   const c = COLORS[severity];
   return `background: ${c.bg}; color: ${c.fg}; padding: 1px 6px; border-radius: 3px; font-weight: bold;`;
 }
@@ -158,12 +165,12 @@ function badgeStyle(severity: NotifySeverity): string {
 // ============================================================================
 
 const SEVERITY_TO_NOTIFICATION_LEVEL: Record<NotifySeverity, 'info' | 'warn' | 'error' | 'success'> = {
-  created:   'success',
-  updated:   'info',
-  deleted:   'warn',
-  warn:      'warn',
-  error:     'error',
-  info:      'info',
+  created: 'success',
+  updated: 'info',
+  deleted: 'warn',
+  warn: 'warn',
+  error: 'error',
+  info: 'info',
   lifecycle: 'info',
 };
 

@@ -412,6 +412,38 @@ export async function deleteEntry(
   return wrappedWrite('journal.deleteEntry', async () => {
     const entry = getEntryOrThrow(input.entryId);
     const entryName = entry.name as string;
+
+    // Phase 10 cross-doc-fk cascade: clear inbound JournalEntry FKs (Scene.journal,
+    // Note.entryId) BEFORE delete. Note: pages inside this entry are deleted by
+    // Foundry cascade automatically; their inbound FKs (Note.pageId, Scene.journalEntryPage)
+    // need explicit cascade only if cascade:true.
+    let affectedDocs: import('@foundry-mcp/shared').FkAffectedDocEntry[] | undefined;
+    if (input.cascade === true) {
+      const { walkInboundFor, clearOrphanRef } = await import('./cross-doc-fk.js');
+      const inbound = await walkInboundFor('JournalEntry', input.entryId);
+      // Also clear inbound refs to each contained page.
+      const pageInbounds = await Promise.all(
+        (entry.pages?.contents ?? []).map((p: any) => walkInboundFor('JournalEntryPage', p.id)),
+      );
+      const all = [...inbound, ...pageInbounds.flat()];
+      affectedDocs = [];
+      for (const ref of all) {
+        await clearOrphanRef({
+          sourceDocType: ref.sourceDocType,
+          sourceDocId: ref.sourceDocId,
+          sourceField: ref.sourceField,
+          refDocType: ref.refDocType,
+          refId: ref.refId,
+        });
+        affectedDocs.push({
+          type: ref.sourceDocType,
+          id: ref.sourceDocId,
+          name: ref.sourceDocName,
+          fkField: ref.sourceField,
+        });
+      }
+    }
+
     await entry.delete();
     // BUG-070 post-verify: confirm entry actually gone.
     if ((game as any).journal?.get(input.entryId)) {
@@ -422,7 +454,13 @@ export async function deleteEntry(
 
     notify.deleted('journal', entryName);
 
-    return { success: true as const, data: { entryId: input.entryId } };
+    return {
+      success: true as const,
+      data: {
+        entryId: input.entryId,
+        ...(affectedDocs !== undefined ? { affectedDocs } : {}),
+      },
+    };
   });
 }
 
@@ -642,6 +680,29 @@ export async function deletePage(
   const sizeBefore: number = entry.pages?.size ?? 0;
 
   return wrappedWrite('journal.deletePage', async () => {
+    // Phase 10 cross-doc-fk cascade: clear inbound JournalEntryPage FKs before delete.
+    let affectedDocs: import('@foundry-mcp/shared').FkAffectedDocEntry[] | undefined;
+    if (input.cascade === true) {
+      const { walkInboundFor, clearOrphanRef } = await import('./cross-doc-fk.js');
+      const inbound = await walkInboundFor('JournalEntryPage', input.pageId);
+      affectedDocs = [];
+      for (const ref of inbound) {
+        await clearOrphanRef({
+          sourceDocType: ref.sourceDocType,
+          sourceDocId: ref.sourceDocId,
+          sourceField: ref.sourceField,
+          refDocType: ref.refDocType,
+          refId: ref.refId,
+        });
+        affectedDocs.push({
+          type: ref.sourceDocType,
+          id: ref.sourceDocId,
+          name: ref.sourceDocName,
+          fkField: ref.sourceField,
+        });
+      }
+    }
+
     await entry.deleteEmbeddedDocuments('JournalEntryPage', [input.pageId]);
 
     const sizeAfter: number = entry.pages?.size ?? 0;
@@ -659,7 +720,14 @@ export async function deletePage(
 
     notify.deleted('journal', pageName, { summary: `from ${entry.name}` });
 
-    return { success: true as const, data: { entryId: input.entryId, pageId: input.pageId } };
+    return {
+      success: true as const,
+      data: {
+        entryId: input.entryId,
+        pageId: input.pageId,
+        ...(affectedDocs !== undefined ? { affectedDocs } : {}),
+      },
+    };
   });
 }
 

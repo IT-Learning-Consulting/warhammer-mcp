@@ -146,8 +146,8 @@ describe('build-npc assets — career-lookup.ndjson (per-career index; core-filt
 describe('build-npc assets — species-bases.json', () => {
   const species = readJson('species-bases.json');
 
-  it('has exactly 6 species (5 core + Norse from Tribes expansion)', () => {
-    expect(Object.keys(species).sort()).toEqual(['Dwarf', 'Halfling', 'High Elf', 'Human', 'Norse', 'Wood Elf']);
+  it('has exactly 8 species (5 core + Norse/Gnome/Ogre via wfrp4e-core fallbacks)', () => {
+    expect(Object.keys(species).sort()).toEqual(['Dwarf', 'Gnome', 'Halfling', 'High Elf', 'Human', 'Norse', 'Ogre', 'Wood Elf']);
   });
 
   it('every species has world_template_id + compendium_fallback + aliases', () => {
@@ -180,9 +180,9 @@ describe('build-npc assets — species-career-matrix.json', () => {
     for (const k of cKeys) expect(mKeys.has(k)).toBe(true);
   });
 
-  it('each entry has exactly the 6 species keys', () => {
+  it('each entry has exactly the 8 species keys', () => {
     for (const cg of Object.keys(matrix)) {
-      expect(Object.keys(matrix[cg]).sort()).toEqual(['Dwarf', 'Halfling', 'High Elf', 'Human', 'Norse', 'Wood Elf']);
+      expect(Object.keys(matrix[cg]).sort()).toEqual(['Dwarf', 'Gnome', 'Halfling', 'High Elf', 'Human', 'Norse', 'Ogre', 'Wood Elf']);
     }
   });
 
@@ -272,10 +272,10 @@ describe('build-npc assets — config.json', () => {
   const NPC_CONFIG = 'E:/warhammer_system/.claude/skills/wfrp-build-npc/assets';
   const config = JSON.parse(fs.readFileSync(path.join(NPC_CONFIG, 'config.json'), 'utf8'));
 
-  it('has all 7 top-level keys', () => {
+  it('has all 8 top-level keys', () => {
     expect(Object.keys(config).sort()).toEqual([
       'career_overrides', 'coin_items', 'default_actor_type', 'legality_mode',
-      'money_roll', 'species_overrides', 'talent_policy',
+      'money_roll', 'species_overrides', 'talent_policy', 'with_details_default',
     ]);
   });
 

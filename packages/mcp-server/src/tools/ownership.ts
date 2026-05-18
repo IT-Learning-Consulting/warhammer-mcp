@@ -207,6 +207,7 @@ export class OwnershipTool extends BaseTool {
           },
           targets: {
             type: "array",
+            items: { type: "object" },
             description: "[bulk-set] Array of {documentType, uuid|id|name} entries",
           },
         },

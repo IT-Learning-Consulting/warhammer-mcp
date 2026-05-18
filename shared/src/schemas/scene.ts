@@ -229,6 +229,10 @@ export const SceneDeleteInput = z
   .object({
     action: z.literal('delete'),
     sceneId: FOUNDRY_ID,
+    // Phase 10 cross-doc-fk: when true, clears inbound FK references (e.g.
+    // tokens referencing this scene via Note.entryId targets) before delete.
+    // Default false preserves Phase 4 behavior (R10.6 backward-compat).
+    cascade: z.boolean().default(false).optional(),
   })
   .strict();
 
@@ -458,6 +462,9 @@ export interface SceneDeleteResponse {
   deletedId: string;
   deletedName: string;
   remainingScenes: number;
+  // Phase 10 cross-doc-fk: present only when `cascade: true` was set on input.
+  // Lists docs whose FK pointing AT this scene was cleared mid-delete.
+  affectedDocs?: import('./cross-doc-fk.js').FkAffectedDocEntry[];
 }
 
 export interface SceneCloneResponse {

@@ -386,7 +386,7 @@ class FoundryMCPBridge {
         const threshold = (intervalMs && intervalMs > 0) ? intervalMs * 2 : 60000;
         // Only log once per disconnection to avoid spam
         if (this.lastActivity && new Date().getTime() - this.lastActivity.getTime() > threshold) {
-          console.warn(`[${MODULE_ID}] Heartbeat: Connection lost`);
+          console.warn(`[${MODULE_ID}] Heartbeat: Connection lost — MCP heartbeat timeout, connection may be lost`);
 
           // Attempt auto-reconnection if enabled (with backoff)
           if (this.settings.getSetting('autoReconnectEnabled')) {

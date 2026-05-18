@@ -1,0 +1,16 @@
+{
+  "fault": "scan-broken-uuids",
+  "target_uuid": "Actor.<TBD-pick-a-stable-non-essential-actor-from-snapshot>",
+  "field": "system.description.value",
+  "original_value": "<original description prose — capture before injection>",
+  "seeded_value": "<original description prose> @UUID[Compendium.wfrp4e-core.Item.DEADBEEFDEADBEEF]{Bogus}",
+  "injection": {
+    "via": "mcp__foundry-mcp__update-actor",
+    "notes": "Set the description field to the seeded value; fromUuid('Compendium.wfrp4e-core.Item.DEADBEEFDEADBEEF') returns null (no doc with that id). Run scan-broken-uuids with scope={type:'actor', id:'<actor-id>'} and expect the seeded id in details."
+  },
+  "expected_detection": {
+    "action": "scan-broken-uuids",
+    "scope": { "type": "actor", "id": "<bare-actor-id-matching-target_uuid>" },
+    "response_contains": "DEADBEEFDEADBEEF"
+  }
+}

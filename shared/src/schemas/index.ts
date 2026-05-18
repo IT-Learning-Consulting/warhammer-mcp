@@ -37,3 +37,11 @@ export * from './diagnostic.js';
 export * from './filepicker.js';
 // Phase 4 mcp_notify_coverage — notify umbrella (GM-visible workflow events).
 export * from './notify.js';
+// Phase 7 mcp_crud_expansion — playlist umbrella (Playlist + PlaylistSound; 10 actions).
+export * from './playlist.js';
+// Phase 8 mcp_crud_expansion — macro umbrella (6 actions; execute carries confirmedExecution gate).
+export * from './macro.js';
+// Phase 11 mcp_crud_expansion — user umbrella (9 actions; hotbar + flags + role).
+export * from './user.js';
+// Phase 10 mcp_crud_expansion — cross-doc FK audit + repair umbrella (3 actions).
+export * from './cross-doc-fk.js';
