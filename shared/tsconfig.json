@@ -4,9 +4,16 @@
     "outDir": "./dist",
     "rootDir": "./src",
     "composite": true,
+    "noEmit": false,
     "declaration": true,
     "declarationMap": true
   },
-  "include": ["src/**/*"],
-  "exclude": ["dist", "**/*.test.*", "**/*.spec.*"]
+  "include": [
+    "src/**/*"
+  ],
+  "exclude": [
+    "dist",
+    "**/*.test.*",
+    "**/*.spec.*"
+  ]
 }

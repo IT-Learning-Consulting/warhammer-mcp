@@ -179,10 +179,7 @@ foundry-vtt-mcp/
 │       │   └── constants.ts
 │       └── package.json
 │
-├── installer/                   # Windows installer (NSIS)
-│   ├── nsis/
-│   │   └── foundry-mcp-server.nsi
-│   └── build-nsis.js
+├── installer/                   # (removed) legacy Windows installer toolchain
 │
 ├── README.md                    # Main documentation
 ├── CHANGELOG.md                 # Version history

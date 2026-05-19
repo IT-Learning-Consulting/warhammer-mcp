@@ -17,7 +17,6 @@
     "build:release": "npm run build:shared && npm run build:server && npm run bundle:server && npm run build:foundry",
     "deploy:foundry": "node scripts/deploy-foundry.js",
     "build:deploy": "npm run build && npm run deploy:foundry",
-    "installer:stage": "node installer/build-nsis.js --skip-download --skip-nsis",
     "test": "npm run test --workspaces --if-present",
     "test:skills": "vitest --config vitest.skills.config.ts run",
     "lint:skills": "node scripts/lint-skills.mjs",

@@ -1,6 +1,8 @@
 {
   "extends": "../../tsconfig.json",
   "compilerOptions": {
+    "composite": true,
+    "noEmit": false,
     "outDir": "./dist",
     "rootDir": "./src",
     "target": "ES2022",
@@ -9,12 +11,27 @@
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "lib": ["ES2022", "DOM"],
-    "types": ["@league-of-foundry-developers/foundry-vtt-types", "vitest/globals"],
+    "lib": [
+      "ES2022",
+      "DOM"
+    ],
+    "types": [
+      "@league-of-foundry-developers/foundry-vtt-types",
+      "vitest/globals"
+    ],
     "paths": {
-      "@foundry-mcp/shared": ["../../shared/src"]
+      "@foundry-mcp/shared": [
+        "../../shared/src"
+      ]
     }
   },
-  "include": ["src/**/*", "types/**/*"],
-  "exclude": ["dist", "**/*.test.*", "**/*.spec.*"]
+  "include": [
+    "src/**/*",
+    "types/**/*"
+  ],
+  "exclude": [
+    "dist",
+    "**/*.test.*",
+    "**/*.spec.*"
+  ]
 }

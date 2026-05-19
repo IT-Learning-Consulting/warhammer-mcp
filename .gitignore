@@ -9,10 +9,8 @@ node_modules/
 
 # Environment Files
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+.env.*
+!.env.example
 
 # Build Output
 dist/
@@ -78,7 +76,6 @@ config.local.json
 foundry-vtt-mcp.zip
 
 # Additional ignores (auto-added)
-.env.example
 *.local.json
 *.md.fullproject
 *.test (1).md
@@ -102,6 +99,31 @@ test-results/
 !installer/nsis/*.exe
 *.log
 *.log*
+.claude/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+CLAUDE.md
+
+# Secrets / private keys
+*.pem
+*.key
+*.p12
+*.pfx
+*.keystore
+
+# Foundry user data / worlds (never commit)
+Data/
+worlds/
+modules/
+userdata/
+foundrydata/
+foundry-data/
+foundry_vtt_data/
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
 
 # Eval rig LevelDB snapshots (96 MB binaries) — restore via *.ps1 scripts
 packages/mcp-server/test-fixtures/eval-world-snapshot/

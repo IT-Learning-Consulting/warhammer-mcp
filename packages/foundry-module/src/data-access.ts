@@ -3932,7 +3932,19 @@ export class FoundryDataAccess {
       await actor.update(updateData, { skipExperienceChecks: true } as any);
 
       const allItems = [...skillItems, ...talentItems, ...spellItems, ...traitItems, ...trappingItems];
-      const created: any[] = (await (actor as any).createEmbeddedDocuments('Item', allItems, { fromTemplate: templateId })) ?? [];
+      // skipSpecialisationChoice (2026-05-19): the wfrp4e SkillModel._handleSpecialisationChoice
+      // hook (wfrp4e.js:28490-28518) opens a UI dialog whenever an isSpec skill (e.g. bare
+      // "Channelling") is embedded with an empty specifier, blocking server-side execution
+      // until the user picks a wind. wfrp4e itself uses this flag for bulk operations
+      // (wfrp4e.js:12653, 18806, 18821). The template walker has no UI; surface this flag here
+      // so apply-template runs to completion. Skills with concrete specifiers (e.g.
+      // "Channelling (Aqshy)") are unaffected — the flag only short-circuits the dialog when
+      // the specifier is empty AND isSpec, which is exactly the unwanted case.
+      const created: any[] = (await (actor as any).createEmbeddedDocuments(
+        'Item',
+        allItems,
+        { fromTemplate: templateId, skipSpecialisationChoice: true }
+      )) ?? [];
 
       notify.updated('actor', actor.name, { summary: `applied template ${(template as any).name}`, uuid: (actor as any).uuid });
 
