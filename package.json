@@ -1,7 +1,7 @@
 {
   "name": "foundry-mcp-integration",
-  "version": "0.2.4",
-  "description": "MCP server that bridges Foundry VTT game data with Claude Desktop",
+  "version": "0.8.0",
+  "description": "Warhammer MCP — WFRP4e-specialized MCP server + Foundry VTT v13 module bridging Foundry game data to Claude Desktop, Claude Code, Codex, Gemini-CLI, and VS Code Copilot.",
   "private": true,
   "workspaces": [
     "packages/*",
@@ -58,16 +58,30 @@
     "node": ">=18.0.0",
     "npm": ">=9.0.0"
   },
-  "author": "Adam Dooley",
+  "author": "Danny Castillo <danny.c@itlearningkonsult.com> (https://github.com/IT-Learning-Consulting)",
+  "contributors": [
+    "Adam Dooley (https://github.com/adambdooley) — original author of foundry-vtt-mcp, the upstream project this repo was derived from"
+  ],
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/adambdooley/foundry-vtt-mcp.git"
+    "url": "https://github.com/IT-Learning-Consulting/warhammer-mcp.git"
+  },
+  "homepage": "https://github.com/IT-Learning-Consulting/warhammer-mcp",
+  "bugs": {
+    "url": "https://github.com/IT-Learning-Consulting/warhammer-mcp/issues"
   },
   "keywords": [
     "foundry-vtt",
+    "foundry-vtt-v13",
     "mcp",
+    "model-context-protocol",
     "claude",
+    "claude-code",
+    "wfrp",
+    "wfrp4e",
+    "warhammer",
+    "warhammer-fantasy-roleplay",
     "ai",
     "tabletop",
     "rpg"

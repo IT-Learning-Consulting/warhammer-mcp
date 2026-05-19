@@ -1,20 +1,27 @@
 # Development Instructions & Context
 
-**Last Updated**: January 31, 2025  
-**Current Version**: 0.2.4  
+**Last Updated**: May 19, 2026  
+**Current Version**: 0.8.0  
 **Project**: Warhammer Fantasy Roleplay MCP Bridge for Foundry VTT
 
 ---
 
 ## 🎯 Project Overview
 
-This is a **fork** of the Foundry VTT MCP Bridge, adapted specifically for **Warhammer Fantasy Roleplay 4th Edition (WFRP4e)**. It connects Claude Desktop to Foundry VTT through the Model Context Protocol (MCP), enabling AI-powered game mastering.
+**Warhammer MCP** is a **WFRP4e-specialized rewrite** derived from `adambdooley/foundry-vtt-mcp` (MIT, kept upstream credit in `README.md` and `package.json` `contributors`). The two histories share a merge base (`45b8af2`) but have run in parallel since the split — there are zero merged upstream commits in this codebase. Treat it as a sibling project, not an active fork:
+
+- **Domain**: WFRP 4e only (D&D5e / PF2e / DSA5 / Cosmere support, present upstream, has been removed)
+- **Foundry module id**: `warhammer-mcp` (upstream is `foundry-mcp-bridge`)
+- **Architectural changes**: dedicated `packages/foundry-module/src/handlers/` layer; umbrella/action tool pattern; unified GM-feedback channel (`notify.ts`); cross-doc FK audit/repair; persistence runbook; multi-client configs (`configs/clients/`); skills harness (`test:skills`, `lint:skills`)
+- **Removed from upstream**: ComfyUI map-generation pipeline, WebRTC transport
+
+It connects **Claude Desktop / Claude Code / Codex / Gemini-CLI / VS Code Copilot** to Foundry VTT through the Model Context Protocol (MCP), enabling AI-powered game mastering.
 
 **Key Components:**
-- **MCP Server** (`packages/mcp-server/`) - Node.js server handling Claude Desktop communication
-- **Foundry Module** (`packages/foundry-module/`) - Runs inside Foundry VTT, provides data access
-- **Shared Library** (`shared/`) - Common types and schemas
-- **36 Tools** - Character management, career advancement, corruption, magic, NPCs, etc.
+- **MCP Server** (`packages/mcp-server/`) — Node.js server handling MCP client communication (port 31414)
+- **Foundry Module** (`packages/foundry-module/`) — Runs inside Foundry VTT, provides data access (port 31415)
+- **Shared Library** (`shared/`) — Common types and Zod schemas
+- **~48 tool files / ~18 handler files** — see `docs/WFRP4E_SYSTEM_GUIDE.md` for the full surface (umbrella tools expose multiple actions each, so the action count is significantly larger)
 
 ---
 

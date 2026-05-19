@@ -1,11 +1,13 @@
-# Foundry VTT MCP (Warhammer MCP)
+# Warhammer MCP
 
 MCP server + Foundry VTT module that lets MCP-capable AI clients interact with a Foundry world.
 
 This repo is **WFRP4e-focused** (Warhammer Fantasy Roleplay 4e) and ships a Foundry module named **Warhammer MCP** (`id: warhammer-mcp`).
 
+> **Lineage.** Originally derived from [`adambdooley/foundry-vtt-mcp`](https://github.com/adambdooley/foundry-vtt-mcp) (MIT). The two histories share a merge base (`45b8af2`) but have run in parallel since the split — there are zero merged upstream commits in this codebase. Treat it as a sibling project, not an active fork. Differences from upstream: WFRP4e-only (D&D5e / PF2e / DSA5 / Cosmere removed), dedicated `handlers/` layer in the Foundry module, umbrella/action tool pattern, unified `notify.ts` GM-feedback channel, `cross-doc-fk` audit + repair, persistence runbook, multi-client configs, skills harness. ComfyUI map-generation and WebRTC transport are not present.
+
 - Version: see `package.json` / `docs/CHANGELOG.md`
-- Foundry compatibility: v13 (see `packages/foundry-module/module.json`)
+- Foundry compatibility: v13 only (pinned)
 
 ---
 
@@ -147,6 +149,8 @@ More details:
 
 ---
 
-## License
+## License & Credits
 
 MIT — see `LICENSE`.
+
+Originally derived from [`adambdooley/foundry-vtt-mcp`](https://github.com/adambdooley/foundry-vtt-mcp) (Adam Dooley, MIT). Upstream credit retained in `package.json` `contributors`.

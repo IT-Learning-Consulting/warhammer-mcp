@@ -1,5 +1,96 @@
 # Changelog
 
+## v0.8.0 (2026-05-19)
+
+Sixteen months of work folded into a single version bump. The previous numbering (0.2.x) stopped reflecting actual scope around late 2025; this release re-baselines to 0.8.0 to acknowledge the substrate, CRUD-expansion, and tooling work that landed since.
+
+> **Compatibility / restart policy**
+> - **Foundry VTT v13** — pinned. v12 and v14 are not supported.
+> - **Module manifest** version label refreshes on next Setup-screen open; no in-game reload required.
+> - **MCP server** reads its advertised version from `SERVER_VERSION` env (default `1.0.0`), not `package.json` — so a metadata bump alone does not change runtime behavior. Restart the MCP server when you next pick up code changes from `dist/`, not for this changelog.
+> - **No breaking changes to existing tool surfaces** from v0.2.4; only additions, internal refactors, and bug fixes. Existing macros, skills, and client configs keep working.
+
+### 🧱 Phase 3 — Substrate (envelope · transactions · creature-index)
+
+- **Envelope contract** rolled out across handler responses; producer-side `verifyPersistence` post-write checks added to `data-access.ts` to catch silent drops in `Document.update()` no-ops (BUG-086).
+- **Transaction manager** for embedded-doc batches (token / journal / scene / rolltable handlers).
+- **Creature-index** substrate for cross-compendium creature lookup.
+- **Strict-schema leak fixes** — BUG-035 / BUG-036 (tool-side forwarding into Foundry strict schemas).
+- **Listing tools** — `listActors` gains type-filter; vitest scaffolding for handler-level coverage.
+
+### 🛠️ Phase 4 — Tool Bundles (session-prep · combat · progression · magic · world-content)
+
+- **Phase 4 bundles** — session-prep + combat + progression umbrellas land.
+- **Phase 4d / 4e** — world content creation + delete primitives; BUG-047, BUG-049 fixed.
+- **Phase 4f** — magic wrappers (arcane + divine cast/channel/blessing surface); BUG-057 live-smoke fix.
+
+### 🔌 Phase 5 — Custom-content + GM Feedback
+
+- **Phase 5 custom-content** — full embedded item + active-effect CRUD surface (Phase B).
+- **Phase 5 MCP surface in-validate fix pass** — BUG-080 / BUG-082 fixed; BUG-081 partial guard in place.
+- **GM Feedback Channel** (PIV `gm-feedback-channel-notify`, 15/15 acceptance, 14 unit tests + 1 grep guard):
+  - New `notify.ts` four-channel helper (console + toast + chat + tooltip + Hooks event).
+  - Migrated **46 `ui.notifications.*` call sites** across foundry-module.
+  - Two new world settings: `auditWritesToChat` (default off), `mcpVerboseConsole` (default off).
+  - Canvas-anchored tooltips on `apply-damage`, `apply-condition`, `add-active-effect`, `apply-template-to-token`.
+  - B1 latent bug: `enableNotifications` setting now respected by every toast site.
+
+### 🧩 mcp-crud-expansion (Phases 1–6)
+
+- **Phase 1 — Ownership polymorphism** (PASS_WITH_NOTES). Refactor of ownership tool to handle actors / items / journals uniformly.
+- **Phase 2 — RollTable umbrella** — 8 new actions + schema tightening.
+- **Phase 3 — Journal + world tools** catch-up; parity script; eval-rig fixtures.
+- **Phase 4 — Scene entity CRUD** (PASS_WITH_NOTES).
+- **Phase 6.1 — FilePicker umbrella** with Node-side auto-conversion (audio/image/video/router converters in `mcp-server`).
+- **embeddedCRUDFactory refactor** — 11 handlers rewired to a shared factory: `journal / light / note / ownership / region / rolltable / scene / sound / template / tile / token`. Policy enforcement via `scripts/check-factory-coverage.mjs` + `check-source-pattern.mjs`.
+
+### 🆕 New tools / handlers
+
+- **Compendium handler** (`packages/foundry-module/src/handlers/compendium.ts`, NEW) — 631 lines.
+- **Cross-doc FK handler** (`handlers/cross-doc-fk.ts`, NEW) — 645 lines.
+- **Macro handler** (`handlers/macro.ts`, NEW) — 424 lines.
+- **Diagnostic** — large expansion (`handlers/diagnostic.ts` +645 lines) + Phase 2 fault-scan/validation fixtures.
+- **MCP persistence + status helpers** — `install-shortcuts.ps1`, `README-PERSISTENCE.md`.
+- **Multi-client configs** — `configs/clients/{claude-code, codex, gemini-cli, vscode-copilot}.{json,toml}`.
+- **`create-actor.skipItems`** (HC9) — bypass auto-population for build pipelines that hydrate items themselves; `queries.ts handleCreateActor` 6th-site fix.
+- **Apply-template walker** — `skipSpecialisationChoice:true` flag so bulk template application bypasses bare-Channelling spec dialogs.
+
+### 🐛 Bug fixes (selection)
+
+- **BUG-010** — replace hardcoded tool count with dynamic registered-methods count.
+- **BUG-023** — partial fix (Phase 3 prep).
+- **BUG-035 / BUG-036** — strict-schema leaks fixed tool-side.
+- **BUG-047, BUG-049, BUG-057** — Phase 4 content-creation + magic-wrapper smoke fixes.
+- **BUG-069** — `BaseTool.query()` unwrap contract documented; typed generic + JSDoc + CI guard.
+- **BUG-070** — post-write field verification; `Document.update()` no-op vs silent-drop disambiguation.
+- **BUG-080 / BUG-082** — Phase 5 MCP surface fixes; BUG-081 partial guard.
+- **BUG-086** — envelope `UPDATE_ACTOR_NOT_PERSISTED` throw on drift, with `verifyPersistence:false` opt-out for auto-derived fields.
+- **BUG-089** — closure-footprint fix in mcp-server tool layer.
+
+### 🧹 Phase 2 cleanup — dead-code removal
+
+- Removed **ComfyUI surface** entirely (`comfyui-client`, `job-queue`, `comfyui-manager`, `campaign-hooks`, foundry-connector dispatch).
+- Removed `map-generation` and `campaign-management` server tools.
+- Scene tools extracted to dedicated `scene.ts`.
+- 4 orphan query handlers removed.
+
+### 🗑️ v0.8 final cleanup (commit `bfc456f`)
+
+- Deleted legacy NSIS installer scaffolding (`installer/build-nsis.js`, `installer/nsis/`, `installer/inetc_plugin/`).
+- Removed dead `wfrp_system/wfrp.js` (~32k lines) and `wfrp_system/wfrp_system.js` (~5k lines).
+- Pruned stale planning docs (`IMPLEMENTATION_STATUS.md`, `TOOL_CONSOLIDATION_PLAN.md`, `skills-mcp.md`).
+- README expanded to current state.
+
+### 📦 Version metadata bumps
+
+- Root `package.json`: 0.2.4 → 0.8.0
+- `packages/foundry-module/{package.json, module.json}`: 0.2.3 → 0.8.0
+- `packages/mcp-server/package.json`: 0.2.3 → 0.8.0
+- `shared/package.json`: 0.2.3 → 0.8.0
+- `docs/INSTRUCTIONS.md`, `docs/standalone_server.md` version stamps refreshed.
+
+---
+
 ## v0.2.4 (2025-01-31)
 
 ### 🔧 Tool Consolidation Phase 2 Complete
