@@ -57,6 +57,9 @@ coverage/
 test-results/
 *test-result*.txt
 
+# Evals (local runs / fixtures)
+evals/
+
 # Installer Build Output
 installer/*.exe
 installer/temp/
