@@ -87,16 +87,16 @@ function formatLightView(l: LightViewModel): string {
   ].join('\n');
 }
 
-function formatLightListItem(l: LightListItem): string {
+export function formatLightListItem(l: LightListItem): string {
   return (
     `- \`${l.id}\` @ scene \`${l.sceneId}\`` +
     ` · dim=${l.dim} bright=${l.bright}` +
-    (l.isGlobal ? ' · **global**' : '') +
-    (l.hidden ? ' · _hidden_' : '')
+    ` · isGlobal=${l.isGlobal ? 'yes' : 'no'}` +
+    ` · hidden=${l.hidden ? 'yes' : 'no'}`
   );
 }
 
-export interface LightToolOptions extends BaseToolOptions {}
+export interface LightToolOptions extends BaseToolOptions { }
 
 export class LightTool extends BaseTool {
   constructor(options: LightToolOptions) {
