@@ -783,6 +783,152 @@ describe('buildEffectPayload — compendium clone regression', () => {
   });
 });
 
+// ────────────── Phase 2: money subtype + branch count (2026-05-19) ──────────────
+
+describe('core: money — Phase 2 addition', () => {
+  it('accepts actor destination with default coinValue (BP = 1)', () => {
+    const parsed = CreateCustomItemInputSchema.parse({
+      itemType: 'money',
+      name: 'Brass Pennies',
+      ...actorDest('Hans'),
+    });
+    expect(parsed.itemType).toBe('money');
+    const sys = buildSystemForSubtype(parsed) as any;
+    expect(sys.coinValue.value).toBe(1);
+  });
+
+  it('accepts coinValue=240 (Gold Crown denomination)', () => {
+    const parsed = CreateCustomItemInputSchema.parse({
+      itemType: 'money',
+      name: 'Gold Crown',
+      coinValue: 240,
+      quantity: 5,
+      ...worldDest(['Custom', 'Money']),
+    });
+    const sys = buildSystemForSubtype(parsed) as any;
+    expect(sys.coinValue.value).toBe(240);
+    expect(sys.quantity.value).toBe(5);
+  });
+
+  it('accepts actor-scope destination for embedding on character', () =>
+    expect(() =>
+      CreateCustomItemInputSchema.parse({
+        itemType: 'money',
+        name: 'Silver Shillings',
+        coinValue: 12,
+        quantity: 10,
+        ...actorDest('Merchant'),
+      })
+    ).not.toThrow());
+});
+
+describe('subtype coverage (Phase 2 — money + branch count)', () => {
+  it('CreateCustomItemInputSchema has exactly 26 branches (19 core + 7 module)', () => {
+    // z.discriminatedUnion exposes branch schemas via ._def.options in Zod v3.
+    const options = (CreateCustomItemInputSchema as any)._def.options;
+    expect(Array.isArray(options)).toBe(true);
+    expect(options.length).toBe(26);
+  });
+
+  it('"money" is a valid itemType discriminator in the schema', () =>
+    expect(() =>
+      CreateCustomItemInputSchema.parse({
+        itemType: 'money',
+        name: 'Test Coin',
+        ...actorDest(),
+      })
+    ).not.toThrow());
+});
+
+// ────────────── Phase 3: schema gap closures (2026-05-20) ──────────────
+
+describe('core: skill — Phase 3 gap closure: advances.force + costModifier', () => {
+  it('creates a skill item with advances.force=true and advances.costModifier=5', () => {
+    const parsed = CreateCustomItemInputSchema.parse({
+      itemType: 'skill',
+      name: 'Melee (Basic)',
+      characteristic: 'ws',
+      advances: { value: 3, force: true, costModifier: 5 },
+      ...actorDest(),
+    });
+    const sys = buildSystemForSubtype(parsed) as any;
+    expect(sys.advances.force).toBe(true);
+    expect(sys.advances.costModifier).toBe(5);
+    expect(sys.advances.value).toBe(3);
+  });
+
+  it('scalar advances form still produces force=false costModifier=0 defaults', () => {
+    const parsed = CreateCustomItemInputSchema.parse({
+      itemType: 'skill',
+      name: 'Dodge',
+      advances: 7,
+      ...actorDest(),
+    });
+    const sys = buildSystemForSubtype(parsed) as any;
+    expect(sys.advances.value).toBe(7);
+    expect(sys.advances.force).toBe(false);
+    expect(sys.advances.costModifier).toBe(0);
+  });
+});
+
+describe('core: talent — Phase 3 gap closure: advances.force', () => {
+  it('creates a talent item with advances.force=true', () => {
+    const parsed = CreateCustomItemInputSchema.parse({
+      itemType: 'talent',
+      name: 'Marksman',
+      advances: { value: 2, force: true },
+      ...actorDest(),
+    });
+    const sys = buildSystemForSubtype(parsed) as any;
+    expect(sys.advances.force).toBe(true);
+    expect(sys.advances.value).toBe(2);
+  });
+});
+
+describe('core: spell — Phase 3 gap closure: typed overcast', () => {
+  it('creates a spell with typed overcast.valuePerOvercast block', () => {
+    const parsed = CreateCustomItemInputSchema.parse({
+      itemType: 'spell',
+      name: 'Fireball',
+      lore: 'fire',
+      cn: 7,
+      overcast: {
+        enabled: true,
+        label: 'Extra Damage',
+        valuePerOvercast: { type: 'damage', value: 1, SL: false },
+        initial: { type: 'damage', value: 3 },
+      },
+      ...actorDest('Mage'),
+    });
+    const sys = buildSystemForSubtype(parsed) as any;
+    expect(sys.overcast.enabled).toBe(true);
+    expect(sys.overcast.valuePerOvercast.type).toBe('damage');
+    expect(sys.overcast.valuePerOvercast.value).toBe(1);
+    expect(sys.overcast.initial.value).toBe(3);
+  });
+});
+
+describe('core: prayer — Phase 3 gap closure: typed overcast with additional', () => {
+  it('creates a prayer with typed overcast including additional field', () => {
+    const parsed = CreateCustomItemInputSchema.parse({
+      itemType: 'prayer',
+      name: 'Beacon of Righteous Virtue',
+      type: 'miracle',
+      god: 'Sigmar',
+      overcast: {
+        enabled: true,
+        valuePerOvercast: { type: 'target', value: 1, additional: 'and one ally' },
+        initial: { type: 'target', value: 1, additional: 'friendly' },
+      },
+      ...actorDest(),
+    });
+    const sys = buildSystemForSubtype(parsed) as any;
+    expect(sys.overcast.enabled).toBe(true);
+    expect(sys.overcast.valuePerOvercast.additional).toBe('and one ally');
+    expect(sys.overcast.initial.additional).toBe('friendly');
+  });
+});
+
 // ────────────── TOOL-IDEA-010 (2026-05-14): structured response envelope ──────────────
 
 describe('handle() — TOOL-IDEA-010 structured response envelope', () => {

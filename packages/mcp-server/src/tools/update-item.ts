@@ -25,7 +25,7 @@ export class UpdateItemTool extends BaseTool {
           openWorldHint: true,
         },
         description:
-          'Apply an arbitrary update to an item. Supports both actor-embedded and world-scope items. Thin pass-through to the Foundry-module updateItem query — does not enforce WFRP rules. Legacy shape `{actorId, itemId, updateData}` still accepted for backward compat. New shape: `{destination: {type:"actor"|"world", ...}, itemId? or itemName?, updateData}`. Used by skills like /wfrp-advance to write skill.system.advances.value or talent.system.advances.value, and by world-item maintenance flows.',
+          'Apply an arbitrary update to an item. Supports both actor-embedded and world-scope items. Thin pass-through to the Foundry-module updateItem query — does not enforce WFRP rules. Legacy shape `{actorId, itemId, updateData}` still accepted for backward compat. New shape: `{destination: {type:"actor"|"world", ...}, itemId? or itemName?, updateData}`. Used by skills like /wfrp-advance to write skill.system.advances.value or talent.system.advances.value, and by world-item maintenance flows. Pass verifyPersistence:false to opt out of post-write drift check for auto-derived fields.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -65,6 +65,11 @@ export class UpdateItemTool extends BaseTool {
               },
               description:
                 'Optional Foundry update-options bag passed through to Item.update(data, options). Currently supports skipExperienceChecks.',
+            },
+            verifyPersistence: {
+              type: 'boolean',
+              description:
+                'When false, skips post-write field drift check. Use only for system-derived fields that Foundry auto-rewrites via prepareDerivedData.',
             },
           },
           required: ['updateData'],

@@ -365,14 +365,15 @@ export async function rollOnTable(data: unknown): Promise<Envelope<any>> {
   }
 
   const drawResult = draw.results[0];
+  const serialisedResult = serialiseResult(drawResult);
   return {
     success: true,
     data: {
       tableName: table.name,
       formula: table.formula,
       roll: draw.roll?.total || 0,
-      text: drawResult.text,
-      drawn: drawResult.drawn,
+      text: serialisedResult.text,
+      drawn: serialisedResult.drawn,
     },
   };
 }

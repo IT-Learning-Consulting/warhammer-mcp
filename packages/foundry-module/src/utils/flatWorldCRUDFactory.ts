@@ -66,7 +66,19 @@ export interface FlatWorldFactoryConfig<_TCreate, TUpdate, TViewModel, TListItem
   };
   /** Whether schemas should be parsed via .strict(). Default true. */
   strictParse?: boolean;
-  /** Field names to skip in DP-16 scalar comparison loop. Always skips 'flags'. */
+  /**
+   * Additional fields to skip in DP-16 post-write verification.
+   *
+   * NOTE: `'flags'` is ALWAYS skipped unconditionally inside the factory (see the
+   * `skip` Set construction in the update handler — `new Set(['flags', ...dp16SkipFields])`).
+   * Do NOT include `'flags'` in this array; the inclusion is redundant and misleads
+   * future consumers into thinking the skip is opt-in.
+   *
+   * Use this for handler-specific fields that need to be excluded — typically:
+   * nested objects (`speaker`, `system`), HTML content (`content`, `flavor`),
+   * or any field where Foundry's persisted value diverges from the requested value
+   * after a normalising getter / setter.
+   */
   dp16SkipFields: string[];
   /** Build the view model for create/update/get responses. (no parent arg — flat) */
   formatter: (doc: any) => TViewModel;
@@ -174,7 +186,7 @@ export function createFlatWorldDocCRUDHandlers<
   const formatSummary = config.formatNotifySummary
     ?? ((_input: any) => `${documentLabel}`);
 
-  const errorTag = documentLabel.toUpperCase().replace(/-/g, '_');
+  const errorTag = documentLabel.toUpperCase().replace(/[-\s]+/g, '_');
   const denyMessage = (op: string) =>
     `Access denied: ${op}${capitalize(documentLabel)} requires GM`;
 
@@ -260,6 +272,7 @@ export function createFlatWorldDocCRUDHandlers<
 
       // DP-16 post-verify: re-read + F08 _source compare.
       const persisted = getDocOrThrow(docId);
+      // 'flags' is always skipped unconditionally — see FlatWorldFactoryConfig.dp16SkipFields JSDoc.
       const skip = new Set<string>(['flags', ...dp16SkipFields]);
 
       for (const [field, requestedValue] of Object.entries(requestedChanges)) {
@@ -299,10 +312,12 @@ export function createFlatWorldDocCRUDHandlers<
     const docId = input[idField] as string;
     const doc = getDocOrThrow(docId);
 
-    // Pre-delete audit (WARN-ONLY orphan-ref scan for Phase 8).
-    const preDeleteAuditResult = preDeleteAudit ? preDeleteAudit(doc) : undefined;
-
     return wrappedWrite(`${documentLabel}.delete${capitalize(documentLabel)}`, async () => {
+      // Pre-delete audit (WARN-ONLY orphan-ref scan for Phase 8) runs INSIDE the
+      // wrappedWrite envelope so audit-side throws are wrapped in the same error-
+      // handling envelope as the delete itself (defense-in-depth, Phase 6 hardening).
+      const preDeleteAuditResult = preDeleteAudit ? preDeleteAudit(doc) : undefined;
+
       await doc.delete();
 
       // DP-16 post-verify: confirm removal.

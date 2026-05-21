@@ -82,7 +82,10 @@ export type NotifyKind =
   | 'user'
   | 'compendium-pack'
   | 'compendium-document'
-  | 'cross-doc-fk';
+  | 'cross-doc-fk'
+  | 'folder'
+  | 'setting'
+  | 'chatMessage';
 
 export type NotifySeverity =
   | 'created'

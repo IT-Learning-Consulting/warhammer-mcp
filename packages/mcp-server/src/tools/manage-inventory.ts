@@ -2,6 +2,7 @@ import { z } from "zod";
 import { FoundryClient } from "../foundry-client.js";
 import { Logger } from "../logger.js";
 import { BaseTool, BaseToolOptions } from "../base-tool.js";
+import { CreateCustomItemTool } from "./create-custom-item.js";
 
 // BUG-007 rewire: typed generics for new query call sites per the BUG-077
 // prevention stack (no `<any>` propagation on new writes).
@@ -235,34 +236,43 @@ Examples:
         return inventoryReport;
     }
 
+    /**
+     * @deprecated Use mcp__foundry-mcp__create-custom-item with
+     * destination={type:"actor", actorName} instead.
+     * Delegates to CreateCustomItemTool.handle() for full-stats item creation.
+     * Response shape preserved verbatim (HC5 back-compat). The "money" itemType,
+     * previously a live latent bug (enum present but no Foundry route), now works
+     * via the delegation path.
+     */
     private async handleAddItem(args: { characterName: string; itemName: string; itemType: string; encumbrance: number; quantity?: number | undefined }): Promise<string> {
-        this.logger.info("Adding item to inventory", args);
+        this.logger.warn('manage-inventory.add-item is deprecated; prefer mcp__foundry-mcp__create-custom-item with destination={type:"actor", actorName}.');
+        this.logger.info("Adding item to inventory via create-custom-item delegation", args);
 
         const quantity = args.quantity || 1;
-
-        // BUG-007 rewire: `addItemToInventory` was a dead query key. The live
-        // equivalent for this tool's "custom inventory item" shape is
-        // `createItem` with destination=actor, itemData carrying name/type +
-        // wfrp4e-canonical `system.encumbrance.value` + `system.quantity.value`.
-        // wfrp4e's "armor" subtype is spelled `armour`; remap before write.
+        // wfrp4e's "armor" subtype is spelled `armour`; remap before delegation.
         const wfrp4eType = args.itemType === "armor" ? "armour" : args.itemType;
-        await this.query<WriteResult>(
-            "createItem",
-            {
-                itemData: {
-                    name: args.itemName,
-                    type: wfrp4eType,
-                    system: {
-                        encumbrance: { value: args.encumbrance },
-                        quantity: { value: quantity }
-                    }
-                },
-                destination: { type: "actor", actorName: args.characterName }
-            }
-        );
 
+        const createInput = {
+            itemType: wfrp4eType,
+            name: args.itemName,
+            destination: { type: "actor", actorName: args.characterName },
+            systemOverrides: {
+                encumbrance: { value: args.encumbrance },
+                quantity: { value: quantity },
+            },
+        };
+
+        let result: any;
+        try {
+            const tool = new CreateCustomItemTool({ foundryClient: this.foundryClient, logger: this.logger });
+            result = await tool.handle(createInput);
+        } catch (err) {
+            throw new Error(`ADD_ITEM_DELEGATION_FAILED: ${err instanceof Error ? err.message : String(err)}`);
+        }
+
+        const itemName = result?.structuredContent?.itemName ?? args.itemName;
         const totalWeight = args.encumbrance * quantity;
-        return `✅ Added ${quantity}x **${args.itemName}** to ${args.characterName}'s inventory (${totalWeight} Enc)`;
+        return `✅ Added ${quantity}x **${itemName}** to ${args.characterName}'s inventory (${totalWeight} Enc)`;
     }
 
     private async handleRemoveItem(args: { characterName: string; itemName: string; quantity?: number | undefined }): Promise<string> {

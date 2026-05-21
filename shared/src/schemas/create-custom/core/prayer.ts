@@ -12,7 +12,26 @@ export const PrayerSchema = CreateCustomItemCommon.extend({
   target: z.string().optional(),
   damage: z.string().optional(),
   damageDice: z.string().optional(),
-  overcast: z.record(z.unknown()).optional(),
+  overcast: z.object({
+    enabled: z.boolean().optional(),
+    label: z.string().optional(),
+    valuePerOvercast: z.object({
+      type: z.string().optional(),
+      value: z.number().optional(),
+      SL: z.boolean().optional(),
+      characteristic: z.string().optional(),
+      bonus: z.boolean().optional(),
+      additional: z.string().optional(),
+    }).optional(),
+    initial: z.object({
+      type: z.string().optional(),
+      value: z.number().optional(),
+      SL: z.boolean().optional(),
+      characteristic: z.string().optional(),
+      bonus: z.boolean().optional(),
+      additional: z.string().optional(),
+    }).optional(),
+  }).optional(),
 });
 
 export type PrayerInput = z.infer<typeof PrayerSchema>;

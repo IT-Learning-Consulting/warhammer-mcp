@@ -99,6 +99,10 @@ export class FoundryClient {
     return this.connector.isConnected();
   }
 
+  get pendingEvents() {
+    return this.connector.pendingEvents;
+  }
+
   sendMessage(message: any): void {
     this.logger.debug('Sending message to Foundry', { type: message.type, requestId: message.requestId });
     this.connector.sendToFoundry(message);

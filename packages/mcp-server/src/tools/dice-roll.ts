@@ -54,6 +54,11 @@ export class DiceRollTools extends BaseTool {
               type: 'string',
               description: 'Optional flavor text to describe the roll context (e.g., "Testing fear against the approaching beastmen", "Sneaking past the guard")',
               default: ''
+            },
+            awaitResult: {
+              type: 'boolean',
+              description: 'Optional. When true, the tool awaits the player completing the roll and returns a structured result envelope with success/SL/outcome. When false or omitted (default), returns immediately with fire-and-forget acknowledgement.',
+              default: false
             }
           },
           required: ['rollType', 'rollTarget', 'targetPlayer', 'isPublic', 'userConfirmedVisibility']
@@ -70,7 +75,8 @@ export class DiceRollTools extends BaseTool {
       isPublic: z.boolean(),
       userConfirmedVisibility: z.literal(true),
       rollModifier: z.string().default(''),
-      flavor: z.string().default('')
+      flavor: z.string().default(''),
+      awaitResult: z.boolean().optional().default(false),
     });
 
     try {
@@ -85,9 +91,22 @@ export class DiceRollTools extends BaseTool {
         return 'You must determine the roll visibility before calling this function. Either: 1) The user already specified "public" or "private" in their request, or 2) You need to ask: "Do you want this to be a PUBLIC roll or PRIVATE roll?" Set userConfirmedVisibility to true only when you are confident about the visibility preference.';
       }
 
-      // Strip MCP-tool-only validation field; Foundry handler's strict schema rejects unknown keys.
-      const { userConfirmedVisibility: _uc, ...foundryPayload } = params;
-      const response = await this.query<any>('request-player-rolls', foundryPayload);
+      // Strip MCP-tool-only + awaitResult fields; Foundry handler's strict schema rejects unknown keys.
+      const { userConfirmedVisibility: _uc, awaitResult, ...foundryPayload } = params;
+
+      interface RollRequestResponse { requestId?: string; message?: string }
+      const response = await this.query<RollRequestResponse>('request-player-rolls', foundryPayload);
+
+      if (awaitResult && response?.requestId) {
+        try {
+          const result = await this.foundryClient.pendingEvents.register(response.requestId);
+          return `Roll completed. ${JSON.stringify(result)}`;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          return `Roll request sent but await timed out or failed: ${msg}`;
+        }
+      }
+
       return `Roll request sent successfully! ${response?.message ?? ''}`;
     } catch (error) {
       this.logger.error('Error requesting player rolls', error);

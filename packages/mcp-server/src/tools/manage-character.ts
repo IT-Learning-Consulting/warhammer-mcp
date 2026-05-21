@@ -31,8 +31,11 @@ type WriteResult = unknown;
 const UpdateStatsSchema = z.object({
     action: z.literal("update-stats"),
     characterName: z.string(),
+    // Back-compat (HC5): actorType defaults to 'character' so existing callers are unaffected.
+    // Pass 'npc' or 'creature' to route to the NPC/creature-shared branch.
+    actorType: z.enum(['character', 'npc', 'creature']).optional().default('character'),
     updates: z.object({
-        // Characteristics
+        // Characteristics (all actor types)
         weaponSkill: z.number().optional(),
         ballisticSkill: z.number().optional(),
         strength: z.number().optional(),
@@ -43,24 +46,23 @@ const UpdateStatsSchema = z.object({
         intelligence: z.number().optional(),
         willpower: z.number().optional(),
         fellowship: z.number().optional(),
-        // Status
+        // Status — shared
         currentWounds: z.number().optional(),
+        // Character-only pools (rejected on npc/creature at runtime)
         fortune: z.number().optional(),
         fate: z.number().optional(),
         resilience: z.number().optional(),
         resolve: z.number().optional(),
-        // Physical details
+        // Physical details (character-only)
         age: z.union([z.string(), z.number()]).optional(),
         height: z.string().optional(),
         weight: z.string().optional(),
         hair: z.string().optional(),
         eyes: z.string().optional(),
-        gender: z.string().optional(),
         distinguishingMarks: z.string().optional(),
         starSign: z.string().optional(),
-        // PC creation details
+        // PC creation details (character-only)
         motivation: z.string().optional(),
-        move: z.union([z.string(), z.number()]).optional(),
         class: z.string().optional(),
         career: z.string().optional(),
         careerlevel: z.string().optional(),
@@ -68,7 +70,23 @@ const UpdateStatsSchema = z.object({
         personalAmbitionLong: z.string().optional(),
         partyAmbitionName: z.string().optional(),
         partyAmbitionShort: z.string().optional(),
-        partyAmbitionLong: z.string().optional()
+        partyAmbitionLong: z.string().optional(),
+        // NPC/creature-specific fields (rejected on character at runtime)
+        species: z.string().optional(),
+        subspecies: z.string().optional(),
+        biography: z.string().optional(),
+        gmnotes: z.string().optional(),
+        size: z.enum(['avg', 'sml', 'lrg', 'grg', 'enor', 'mnst']).optional(),
+        god: z.string().optional(),
+        statusTier: z.number().optional(),
+        statusStanding: z.string().optional(),
+        advantage: z.number().optional(),
+        criticalWounds: z.number().optional(),
+        sin: z.number().optional(),
+        corruption: z.number().optional(),
+        // Shared across all types (move: character uses it for career/creation; npc/creature for actual movement)
+        gender: z.string().optional(),
+        move: z.union([z.string(), z.number()]).optional(),
     })
 });
 
@@ -111,7 +129,7 @@ const AddXPLogSchema = z.object({
     updateTotal: z.boolean().default(false)
 });
 
-const ManageCharacterSchema = z.discriminatedUnion("action", [
+export const ManageCharacterSchema = z.discriminatedUnion("action", [
     UpdateStatsSchema,
     UpdateSkillTalentSchema,
     AddSkillTalentSchema,
@@ -176,6 +194,12 @@ Use for quick stat changes, character creation, testing, or corrections where yo
                         description: "Action to perform"
                     },
                     characterName: { type: "string", description: "Character name" },
+                    actorType: {
+                        type: "string",
+                        enum: ["character", "npc", "creature"],
+                        default: "character",
+                        description: "Actor type discriminator for update-stats. Defaults to character for back-compat. Pass npc or creature to route to the NPC/creature-shared branch (different DataModel fields)."
+                    },
                     // update-stats fields
                     updates: {
                         type: "object",
@@ -220,7 +244,20 @@ Use for quick stat changes, character creation, testing, or corrections where yo
                             partyAmbitionLong: { type: "string" },
                             // Skill/talent updates
                             advances: { type: "number" },
-                            modifier: { type: "number" }
+                            modifier: { type: "number" },
+                            // NPC/creature-specific fields (actorType=npc|creature)
+                            species: { type: "string", description: "Species name (npc/creature)" },
+                            subspecies: { type: "string", description: "Subspecies label (npc/creature)" },
+                            biography: { type: "string", description: "Biography text (npc/creature)" },
+                            gmnotes: { type: "string", description: "GM notes (npc/creature)" },
+                            size: { type: "string", enum: ["avg", "sml", "lrg", "grg", "enor", "mnst"], description: "Creature size (npc/creature)" },
+                            god: { type: "string", description: "God/patron deity (npc/creature)" },
+                            statusTier: { type: "number", description: "Status tier numeric (npc/creature; 1=brass, 2=silver, 3=gold)" },
+                            statusStanding: { type: "string", description: "Status standing value (npc/creature)" },
+                            advantage: { type: "number", description: "Advantage counter (npc/creature)" },
+                            criticalWounds: { type: "number", description: "Critical wounds count (npc/creature)" },
+                            sin: { type: "number", description: "Sin points (npc/creature)" },
+                            corruption: { type: "number", description: "Corruption points (npc/creature)" }
                         }
                     },
                     // add-skill-talent fields
@@ -276,9 +313,35 @@ Use for quick stat changes, character creation, testing, or corrections where yo
     }
 
     private async handleUpdateStats(args: z.infer<typeof UpdateStatsSchema>): Promise<string> {
-        this.logger.info("Updating character stats", { characterName: args.characterName });
+        const actorType = args.actorType ?? 'character';
+        this.logger.info("Updating character stats", { characterName: args.characterName, actorType });
 
-        // Get character first
+        // Characteristics mapping shared across all actor types
+        const charMap: Record<string, string> = {
+            weaponSkill: 'ws', ballisticSkill: 'bs', strength: 's', toughness: 't',
+            initiative: 'i', agility: 'ag', dexterity: 'dex', intelligence: 'int',
+            willpower: 'wp', fellowship: 'fel'
+        };
+
+        // Character-only fields — rejected on npc/creature (MCP Completion v1 Phase 1 R1.1)
+        const CHARACTER_ONLY_FIELDS = new Set(['fate', 'fortune', 'resilience', 'resolve',
+            'age', 'height', 'weight', 'hair', 'eyes', 'distinguishingmarks', 'starsign',
+            'motivation', 'class', 'career', 'careerlevel',
+            'personalambitionshort', 'personalambitionlong',
+            'partyambitionname', 'partyambitionshort', 'partyambitionlong']);
+
+        if (actorType === 'npc' || actorType === 'creature') {
+            const charOnlyPresent = Object.entries(args.updates)
+                .filter(([k, v]) => v !== undefined && CHARACTER_ONLY_FIELDS.has(k.toLowerCase()))
+                .map(([k]) => k);
+            if (charOnlyPresent.length > 0) {
+                throw new Error(
+                    `UPDATE_STATS_TYPE_MISMATCH: ${charOnlyPresent.join(', ')} is character-only; actorType="${actorType}" does not support these fields`
+                );
+            }
+        }
+
+        // Get actor
         const character = await this.query<CharacterInfoResult>("getCharacterInfo", {
             characterName: args.characterName
         });
@@ -287,107 +350,73 @@ Use for quick stat changes, character creation, testing, or corrections where yo
             return `❌ Character "${args.characterName}" not found`;
         }
 
-        // Map user-friendly names to Foundry paths
         const updateData: Record<string, any> = {};
 
-        // Characteristics mapping
-        const charMap: Record<string, string> = {
-            weaponSkill: 'ws',
-            ballisticSkill: 'bs',
-            strength: 's',
-            toughness: 't',
-            initiative: 'i',
-            agility: 'ag',
-            dexterity: 'dex',
-            intelligence: 'int',
-            willpower: 'wp',
-            fellowship: 'fel'
-        };
+        if (actorType === 'npc' || actorType === 'creature') {
+            // NPC/creature branch — MCP Completion v1 Phase 1 (R1.1)
+            for (const [key, value] of Object.entries(args.updates)) {
+                if (value === undefined) continue;
+                const lowerKey = key.toLowerCase();
 
-        for (const [key, value] of Object.entries(args.updates)) {
-            if (value === undefined) continue;
+                // Characteristics (same paths as character)
+                if (charMap[key as keyof typeof charMap]) {
+                    updateData[`system.characteristics.${charMap[key as keyof typeof charMap]}.initial`] = value;
+                }
+                // Shared status pools
+                else if (lowerKey === 'currentwounds') { updateData['system.status.wounds.value'] = value; }
+                else if (lowerKey === 'advantage') { updateData['system.status.advantage.value'] = value; }
+                else if (lowerKey === 'criticalwounds') { updateData['system.status.criticalWounds.value'] = value; }
+                else if (lowerKey === 'sin') { updateData['system.status.sin.value'] = value; }
+                else if (lowerKey === 'corruption') { updateData['system.status.corruption.value'] = value; }
+                // Shared detail fields
+                else if (lowerKey === 'gender') { updateData['system.details.gender.value'] = value; }
+                else if (lowerKey === 'move') { updateData['system.details.move.value'] = value; }
+                // NPC/creature-specific details
+                else if (lowerKey === 'species') { updateData['system.details.species.value'] = value; }
+                else if (lowerKey === 'subspecies') { updateData['system.details.species.subspecies'] = value; }
+                else if (lowerKey === 'biography') { updateData['system.details.biography.value'] = value; }
+                else if (lowerKey === 'gmnotes') { updateData['system.details.gmnotes.value'] = value; }
+                else if (lowerKey === 'size') { updateData['system.details.size.value'] = value; }
+                else if (lowerKey === 'god') { updateData['system.details.god.value'] = value; }
+                else if (lowerKey === 'statustier') { updateData['system.details.status.tier'] = value; }
+                else if (lowerKey === 'statusstanding') { updateData['system.details.status.standing'] = value; }
+            }
+        } else {
+            // Character branch — existing logic (back-compat for all pre-Phase-1 callers)
+            for (const [key, value] of Object.entries(args.updates)) {
+                if (value === undefined) continue;
+                const lowerKey = key.toLowerCase();
 
-            const lowerKey = key.toLowerCase();
-
-            // Characteristics
-            if (charMap[key as keyof typeof charMap]) {
-                const charKey = charMap[key as keyof typeof charMap];
-                updateData[`system.characteristics.${charKey}.initial`] = value;
-            }
-            // Status values
-            else if (lowerKey === 'currentwounds') {
-                updateData['system.status.wounds.value'] = value;
-            }
-            else if (lowerKey === 'fortune') {
-                updateData['system.status.fortune.value'] = value;
-            }
-            else if (lowerKey === 'fate') {
-                updateData['system.status.fate.value'] = value;
-            }
-            else if (lowerKey === 'resilience') {
-                updateData['system.status.resilience.value'] = value;
-            }
-            else if (lowerKey === 'resolve') {
-                updateData['system.status.resolve.value'] = value;
-            }
-            // Physical details
-            else if (lowerKey === 'age') {
-                updateData['system.details.age.value'] = value;
-            }
-            else if (lowerKey === 'height') {
-                updateData['system.details.height.value'] = value;
-            }
-            else if (lowerKey === 'weight') {
-                updateData['system.details.weight'] = value;
-            }
-            else if (lowerKey === 'hair') {
-                updateData['system.details.haircolour.value'] = value;
-            }
-            else if (lowerKey === 'eyes') {
-                updateData['system.details.eyecolour.value'] = value;
-            }
-            else if (lowerKey === 'gender') {
-                updateData['system.details.gender.value'] = value;
-            }
-            else if (lowerKey === 'distinguishingmarks') {
-                updateData['system.details.distinguishingmark.value'] = value;
-            }
-            else if (lowerKey === 'starsign') {
-                updateData['system.details.starsign.value'] = value;
-            }
-            // PC creation details — Phase 1 wfrp_pc_creation.
-            // Note the .value vs flat-hyphenated asymmetry: motivation/move/class/career/careerlevel
-            // use a `.value` sub-key; the 5 ambition fields store the string directly at a
-            // hyphenated path (wfrp4e.js:5385-5393).
-            else if (lowerKey === 'motivation') {
-                updateData['system.details.motivation.value'] = value;
-            }
-            else if (lowerKey === 'move') {
-                updateData['system.details.move.value'] = value;
-            }
-            else if (lowerKey === 'class') {
-                updateData['system.details.class.value'] = value;
-            }
-            else if (lowerKey === 'career') {
-                updateData['system.details.career.value'] = value;
-            }
-            else if (lowerKey === 'careerlevel') {
-                updateData['system.details.careerlevel.value'] = value;
-            }
-            else if (lowerKey === 'personalambitionshort') {
-                updateData['system.details.personal-ambitions.short-term'] = value;
-            }
-            else if (lowerKey === 'personalambitionlong') {
-                updateData['system.details.personal-ambitions.long-term'] = value;
-            }
-            else if (lowerKey === 'partyambitionname') {
-                updateData['system.details.party-ambitions.name'] = value;
-            }
-            else if (lowerKey === 'partyambitionshort') {
-                updateData['system.details.party-ambitions.short-term'] = value;
-            }
-            else if (lowerKey === 'partyambitionlong') {
-                updateData['system.details.party-ambitions.long-term'] = value;
+                if (charMap[key as keyof typeof charMap]) {
+                    updateData[`system.characteristics.${charMap[key as keyof typeof charMap]}.initial`] = value;
+                }
+                else if (lowerKey === 'currentwounds') { updateData['system.status.wounds.value'] = value; }
+                else if (lowerKey === 'fortune') { updateData['system.status.fortune.value'] = value; }
+                else if (lowerKey === 'fate') { updateData['system.status.fate.value'] = value; }
+                else if (lowerKey === 'resilience') { updateData['system.status.resilience.value'] = value; }
+                else if (lowerKey === 'resolve') { updateData['system.status.resolve.value'] = value; }
+                else if (lowerKey === 'age') { updateData['system.details.age.value'] = value; }
+                else if (lowerKey === 'height') { updateData['system.details.height.value'] = value; }
+                else if (lowerKey === 'weight') { updateData['system.details.weight.value'] = value; }
+                else if (lowerKey === 'hair') { updateData['system.details.haircolour.value'] = value; }
+                else if (lowerKey === 'eyes') { updateData['system.details.eyecolour.value'] = value; }
+                else if (lowerKey === 'gender') { updateData['system.details.gender.value'] = value; }
+                else if (lowerKey === 'distinguishingmarks') { updateData['system.details.distinguishingmark.value'] = value; }
+                else if (lowerKey === 'starsign') { updateData['system.details.starsign.value'] = value; }
+                // PC creation details — Phase 1 wfrp_pc_creation.
+                // Note the .value vs flat-hyphenated asymmetry: motivation/move/class/career/careerlevel
+                // use a `.value` sub-key; the 5 ambition fields store the string directly at a
+                // hyphenated path (wfrp4e.js:5385-5393).
+                else if (lowerKey === 'motivation') { updateData['system.details.motivation.value'] = value; }
+                else if (lowerKey === 'move') { updateData['system.details.move.value'] = value; }
+                else if (lowerKey === 'class') { updateData['system.details.class.value'] = value; }
+                else if (lowerKey === 'career') { updateData['system.details.career.value'] = value; }
+                else if (lowerKey === 'careerlevel') { updateData['system.details.careerlevel.value'] = value; }
+                else if (lowerKey === 'personalambitionshort') { updateData['system.details.personal-ambitions.short-term'] = value; }
+                else if (lowerKey === 'personalambitionlong') { updateData['system.details.personal-ambitions.long-term'] = value; }
+                else if (lowerKey === 'partyambitionname') { updateData['system.details.party-ambitions.name'] = value; }
+                else if (lowerKey === 'partyambitionshort') { updateData['system.details.party-ambitions.short-term'] = value; }
+                else if (lowerKey === 'partyambitionlong') { updateData['system.details.party-ambitions.long-term'] = value; }
             }
         }
 
@@ -396,47 +425,49 @@ Use for quick stat changes, character creation, testing, or corrections where yo
             updateData
         });
 
-        // DP-16 post-write verification (CCR-5 / Q1 lock — applied to the 10 new fields only;
-        // backfilling the 12 legacy fields is v2 hygiene).
-        const newFieldVerifyMap: Record<string, string> = {
-            motivation: 'system.details.motivation.value',
-            move: 'system.details.move.value',
-            class: 'system.details.class.value',
-            career: 'system.details.career.value',
-            careerlevel: 'system.details.careerlevel.value',
-            personalAmbitionShort: 'system.details.personal-ambitions.short-term',
-            personalAmbitionLong: 'system.details.personal-ambitions.long-term',
-            partyAmbitionName: 'system.details.party-ambitions.name',
-            partyAmbitionShort: 'system.details.party-ambitions.short-term',
-            partyAmbitionLong: 'system.details.party-ambitions.long-term',
-        };
-        const newFieldsInPayload = Object.entries(args.updates).filter(
-            ([k, v]) => v !== undefined && newFieldVerifyMap[k] !== undefined,
-        );
-        if (newFieldsInPayload.length > 0) {
-            const verifyActor = await this.query<CharacterInfoResult>("getCharacterInfo", {
-                characterName: args.characterName,
-            });
-            for (const [apiKey, requestedValue] of newFieldsInPayload) {
-                const path = newFieldVerifyMap[apiKey]!.split('.');
-                let cursor: any = verifyActor;
-                for (const segment of path) {
-                    cursor = cursor?.[segment];
-                    if (cursor === undefined) break;
-                }
-                const actual = cursor;
-                // String coercion tolerance for `move` (number → string per Foundry StringField)
-                // and any other string field receiving a numeric input.
-                const equivalent = String(actual) === String(requestedValue);
-                if (!equivalent) {
-                    throw new Error(
-                        `UPDATE_STATS_NOT_PERSISTED: ${apiKey} expected ${JSON.stringify(requestedValue)}, got ${JSON.stringify(actual)}`,
-                    );
+        if (actorType === 'character') {
+            // DP-16 post-write verification (CCR-5 / Q1 lock — applied to the 10 new fields only;
+            // backfilling the 12 legacy fields is v2 hygiene).
+            const newFieldVerifyMap: Record<string, string> = {
+                motivation: 'system.details.motivation.value',
+                move: 'system.details.move.value',
+                class: 'system.details.class.value',
+                career: 'system.details.career.value',
+                careerlevel: 'system.details.careerlevel.value',
+                personalAmbitionShort: 'system.details.personal-ambitions.short-term',
+                personalAmbitionLong: 'system.details.personal-ambitions.long-term',
+                partyAmbitionName: 'system.details.party-ambitions.name',
+                partyAmbitionShort: 'system.details.party-ambitions.short-term',
+                partyAmbitionLong: 'system.details.party-ambitions.long-term',
+            };
+            const newFieldsInPayload = Object.entries(args.updates).filter(
+                ([k, v]) => v !== undefined && newFieldVerifyMap[k] !== undefined,
+            );
+            if (newFieldsInPayload.length > 0) {
+                const verifyActor = await this.query<CharacterInfoResult>("getCharacterInfo", {
+                    characterName: args.characterName,
+                });
+                for (const [apiKey, requestedValue] of newFieldsInPayload) {
+                    const path = newFieldVerifyMap[apiKey]!.split('.');
+                    let cursor: any = verifyActor;
+                    for (const segment of path) {
+                        cursor = cursor?.[segment];
+                        if (cursor === undefined) break;
+                    }
+                    const actual = cursor;
+                    // String coercion tolerance for `move` (number → string per Foundry StringField)
+                    // and any other string field receiving a numeric input.
+                    const equivalent = String(actual) === String(requestedValue);
+                    if (!equivalent) {
+                        throw new Error(
+                            `UPDATE_STATS_NOT_PERSISTED: ${apiKey} expected ${JSON.stringify(requestedValue)}, got ${JSON.stringify(actual)}`,
+                        );
+                    }
                 }
             }
         }
 
-        let result = `✅ Updated stats for **${character.name}**\n`;
+        let result = `✅ Updated stats for **${character.name}** (actorType: ${actorType})\n`;
         const updates = Object.entries(args.updates).filter(([_, v]) => v !== undefined);
 
         if (updates.length > 0) {

@@ -4,6 +4,7 @@ import { QueryHandlers } from './queries.js';
 import { ModuleSettings } from './settings.js';
 import { runHealthCheck, captureInitError, installRuntimeCapture } from './health-check.js';
 import { notify } from './notify.js';
+import { registerRollRelayHook } from './hooks/createChatMessage-roll-relay.js';
 // Connection control now handled through settings menu
 
 /**
@@ -103,6 +104,9 @@ class FoundryMCPBridge {
 
       // Expose data access globally for settings UI
       (window as any).foundryMCPBridge.dataAccess = this.queryHandlers.dataAccess;
+      // Expose emitRollEvent for data-access roll-result relay.
+      (window as any).foundryMCPBridge.emitRollEvent = (requestId: string, payload: any) =>
+        this.socketBridge?.emitRollEvent(requestId, payload);
 
       this.isInitialized = true;
       notify.lifecycle('init', 'Warhammer MCP initialized');
@@ -629,6 +633,9 @@ Hooks.on('closeSettingsConfig', () => {
     console.error(`[${MODULE_ID}] Error handling settings change:`, error);
   }
 });
+
+// Register roll-result relay for WFRP4e test messages (awaitResult round-trip).
+registerRollRelayHook();
 
 // Global hook to handle MCP roll button rendering and state management
 // Using renderChatMessageHTML for Foundry v13 compatibility (renderChatMessage is deprecated)

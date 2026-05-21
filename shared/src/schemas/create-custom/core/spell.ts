@@ -24,7 +24,24 @@ export const SpellSchema = CreateCustomItemCommon.extend({
       xp: z.number().optional(),
     })
     .optional(),
-  overcast: z.record(z.unknown()).optional(),
+  overcast: z.object({
+    enabled: z.boolean().optional(),
+    label: z.string().optional(),
+    valuePerOvercast: z.object({
+      type: z.string().optional(),
+      value: z.number().optional(),
+      SL: z.boolean().optional(),
+      characteristic: z.string().optional(),
+      bonus: z.boolean().optional(),
+    }).optional(),
+    initial: z.object({
+      type: z.string().optional(),
+      value: z.number().optional(),
+      SL: z.boolean().optional(),
+      characteristic: z.string().optional(),
+      bonus: z.boolean().optional(),
+    }).optional(),
+  }).optional(),
 });
 
 export type SpellInput = z.infer<typeof SpellSchema>;

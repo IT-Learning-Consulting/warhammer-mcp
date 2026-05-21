@@ -59,6 +59,7 @@ export const CreateActorInput = z.object({
 export const UpdateActorInput = z.object({
   actorId: z.string(),
   updateData: z.record(z.unknown()),
+  verifyPersistence: z.boolean().optional(),
 }).strict();
 
 export const CreateActorFromCompendiumInput = z.object({

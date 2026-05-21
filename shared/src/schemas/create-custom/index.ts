@@ -1,5 +1,5 @@
 // create-custom-item discriminated-union assembly.
-// 25 branches: 16 core PRIORITY + 2 OPTIONAL + 7 module-contributed.
+// 26 branches: 17 core PRIORITY + 2 OPTIONAL + 7 module-contributed.
 // All core branches use a flat string as `itemType`; module branches use a
 // dotted `<module-id>.<type>` key matching CONFIG.Item.dataModels registration.
 
@@ -23,6 +23,7 @@ import { DiseaseSchema, buildDiseaseSystem } from './core/disease.js';
 import { TemplateSchema, buildTemplateSystem } from './core/template.js';
 import { CargoSchema, buildCargoSystem } from './core/cargo.js';
 import { InjurySchema, buildInjurySystem } from './core/injury.js';
+import { MoneySchema, buildMoneySystem } from './core/money.js';
 import { PsychologySchema, buildPsychologySystem } from './core/psychology.js';
 
 // Module-contributed subtypes (7)
@@ -56,6 +57,7 @@ export const CreateCustomItemInputSchema = z.discriminatedUnion('itemType', [
   TemplateSchema,
   CargoSchema,
   InjurySchema,
+  MoneySchema,
   PsychologySchema,
   GrimoireSchema,
   ScrollSchema,
@@ -108,6 +110,8 @@ export function buildSystemForSubtype(parsed: CreateCustomItemInput): Record<str
       return buildCargoSystem(parsed);
     case 'injury':
       return buildInjurySystem(parsed);
+    case 'money':
+      return buildMoneySystem(parsed);
     case 'psychology':
       return buildPsychologySystem(parsed);
     case 'forien-armoury.grimoire':

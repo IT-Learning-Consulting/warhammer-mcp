@@ -818,6 +818,13 @@ export class FoundryDataAccess {
       );
     }
 
+    // Partial-name fallback (EvalFinding-Phase3-02): parity with findActor /
+    // findActorByIdentifier so manage-inventory + similar callers accept short forms
+    // like "Lupus" for "Lupus Leonard Joachim Rohrig".
+    if (!actor) {
+      actor = this.findActorByIdentifier(identifier);
+    }
+
     if (!actor) {
       throw new Error(`${ERROR_MESSAGES.CHARACTER_NOT_FOUND}: ${identifier}`);
     }
@@ -2248,7 +2255,7 @@ export class FoundryDataAccess {
     isPublic: boolean;
     rollModifier: string;
     flavor: string;
-  }): Promise<{ success: boolean; message: string; error?: string }> {
+  }): Promise<{ success: boolean; requestId?: string; message: string; error?: string }> {
     this.validateFoundryState();
 
     try {
@@ -2270,6 +2277,7 @@ export class FoundryDataAccess {
 
       // Generate roll button HTML
       const buttonId = (foundry.utils as any).randomID();
+      const requestId = (foundry.utils as any).randomID();
       const buttonLabel = this.buildRollButtonLabel(data.rollType, data.rollTarget, data.isPublic);
 
       // Check if this type of roll was already performed (optional: could check for duplicate recent rolls)
@@ -2281,16 +2289,17 @@ export class FoundryDataAccess {
           <p><strong>Roll Request:</strong> ${buttonLabel}</p>
           <p><strong>Target:</strong> ${playerInfo.targetName} ${playerInfo.character ? `(${playerInfo.character.name})` : ''}</p>
           ${data.flavor ? `<p><strong>Context:</strong> ${data.flavor}</p>` : ''}
-          
+
           <div style="text-align: center; margin-top: 8px;">
             <!-- Single Roll Button (clickable by both character owner and GM) -->
-            <button class="mcp-roll-button mcp-button-active" 
+            <button class="mcp-roll-button mcp-button-active"
                     data-button-id="${buttonId}"
                     data-roll-formula="${rollFormula}"
                     data-roll-label="${buttonLabel}"
                     data-is-public="${data.isPublic}"
                     data-character-id="${playerInfo.character?.id || ''}"
-                    data-target-user-id="${playerInfo.user?.id || ''}">
+                    data-target-user-id="${playerInfo.user?.id || ''}"
+                    data-request-id="${requestId}">
               🎲 ${buttonLabel}
             </button>
           </div>
@@ -2330,6 +2339,7 @@ export class FoundryDataAccess {
         whisper: whisperTargets,
         flags: {
           [MODULE_ID]: {
+            requestId,
             rollButtons: {
               [buttonId]: {
                 rolled: false,
@@ -2358,6 +2368,7 @@ export class FoundryDataAccess {
 
       return {
         success: true,
+        requestId,
         message: `Roll request sent to ${playerInfo.targetName}. ${data.isPublic ? 'Public roll' : 'Private roll'} button created in chat.`
       };
 
@@ -2806,6 +2817,15 @@ export class FoundryDataAccess {
 
         // Use roll.toMessage() with proper rollMode
         await roll.toMessage(messageData);
+
+        // Emit roll-result event if an awaitResult requestId is set on this button.
+        const rollRequestId = button.data('request-id');
+        if (rollRequestId) {
+          const emitRollEvent = (window as any).foundryMCPBridge?.emitRollEvent;
+          if (typeof emitRollEvent === 'function') {
+            emitRollEvent(rollRequestId, { outcome: 'roll_completed', SL: roll.total, success: true });
+          }
+        }
 
         // Update the ChatMessage to reflect rolled state
         const buttonId = button.data('button-id');
@@ -4144,7 +4164,7 @@ export class FoundryDataAccess {
    * Update actor data
    * Allows updating any actor properties using dot notation for nested fields
    */
-  async updateActor(data: { actorId: string; updateData: Record<string, any>; warnings?: string[]; verifyPersistence?: boolean }): Promise<any> {
+  async updateActor(data: { actorId: string; updateData: Record<string, any>; warnings?: string[]; verifyPersistence?: boolean | undefined }): Promise<any> {
     this.validateFoundryState();
 
     try {
@@ -4586,12 +4606,42 @@ export class FoundryDataAccess {
       | undefined;
     updateData: Record<string, any>;
     options?: { skipExperienceChecks?: boolean | undefined } | undefined;
+    verifyPersistence?: boolean | undefined;
   }): Promise<any> {
     this.validateFoundryState();
 
     try {
       const { item, owner, scope } = this._resolveItem(data);
       await item.update(data.updateData, (data.options ?? {}) as any);
+
+      // MCP Completion v1 Phase 1 (R1.2): item.update() does NOT throw on
+      // DataModelValidationError; Foundry logs to console.warn but resolves
+      // silently. Without post-write verification our success envelope lies.
+      // Mirrors updateActor's BUG-086 verify-block (data-access.ts:4190-4211).
+      // Pass verifyPersistence:false to opt out when writing auto-derived fields.
+      if (data.verifyPersistence !== false) {
+        const freshItem =
+          scope === 'actor'
+            ? (game.actors as any)?.get(owner?.id)?.items?.get(item.id)
+            : (game.items as any)?.get(item.id);
+        if (!freshItem) {
+          throw new Error(`UPDATE_ITEM_NOT_PERSISTED: item ${item.id} disappeared after update`);
+        }
+        const flat = (foundry as any).utils.flattenObject(data.updateData) as Record<string, unknown>;
+        const drift: string[] = [];
+        for (const [path, expected] of Object.entries(flat)) {
+          if (path.includes('.-=')) continue;
+          const actual = (foundry as any).utils.getProperty(freshItem, path);
+          if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+            drift.push(`${path}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
+          }
+        }
+        if (drift.length > 0) {
+          throw new Error(
+            `UPDATE_ITEM_NOT_PERSISTED: ${drift.length} field(s) did not persist (DataModelValidationError? auto-derive overwrite?). Drift: ${drift.slice(0, 3).join('; ')}${drift.length > 3 ? `; +${drift.length - 3} more` : ''}`
+          );
+        }
+      }
 
       const ownerLabel = scope === 'world' ? '(world)' : owner?.name ?? '(unknown)';
       notify.updated('item', item.name, { summary: `on ${ownerLabel}`, uuid: (item as any).uuid });

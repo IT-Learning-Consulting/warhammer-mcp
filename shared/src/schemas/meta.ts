@@ -103,6 +103,8 @@ export const RequestPlayerRollsInput = z.object({
   isPublic: z.boolean(),
   rollModifier: z.string(),
   flavor: z.string(),
+  /** When true, the mcp-server awaits the player's roll result before returning. */
+  awaitResult: z.boolean().optional().default(false),
 }).strict();
 
 // ── RollTable schemas (Phase 2 mcp_crud_expansion) ─────────────────────────

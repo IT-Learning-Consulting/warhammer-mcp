@@ -63,6 +63,14 @@ import { dispatchUser as dispatchUserHandler } from './handlers/user.js';
 import { dispatchCompendium as dispatchCompendiumHandler } from './handlers/compendium.js';
 // Phase 10 mcp_crud_expansion — Cross-doc FK audit + repair (3 actions; closes PRD).
 import { dispatchCrossDocFk as dispatchCrossDocFkHandler } from './handlers/cross-doc-fk.js';
+// Phase wfrp-disease — Disease umbrella (8 actions).
+import { dispatchDisease as dispatchDiseaseHandler } from './handlers/disease.js';
+// Phase 4 mcp_completion_v1 — Folder umbrella (6 actions; custom delete + list-contents).
+import { dispatchFolder as dispatchFolderHandler } from './handlers/folder.js';
+// Phase 4 mcp_completion_v1 — Setting umbrella (4 actions; hand-rolled; force gate + blocklist).
+import { dispatchSetting as dispatchSettingHandler } from './handlers/setting.js';
+// Phase 5 mcp_completion_v1 — ChatMessage umbrella (5 actions).
+import { dispatchChatMessage as dispatchChatMessageHandler } from './handlers/chat-message.js';
 // Phase 6.1 mcp_crud_expansion — FilePicker handlers (upload/list + notify.warn round-trip).
 import {
   uploadFile as uploadFileHandler,
@@ -276,6 +284,14 @@ export class QueryHandlers {
     // Phase 4 mcp_notify_coverage — `notify` umbrella surfaces notify.* to MCP
     // skills as workflow bookends + ad-hoc GM-visible events. GM-gated.
     CONFIG.queries[`${modulePrefix}.notify`] = this.handleNotify.bind(this);
+    // Phase wfrp-disease — Disease umbrella (8 actions).
+    CONFIG.queries[`${modulePrefix}.disease`] = this.handleDisease.bind(this);
+    // Phase 4 mcp_completion_v1 — Folder umbrella (6 actions).
+    CONFIG.queries[`${modulePrefix}.folder`] = this.handleFolder.bind(this);
+    // Phase 4 mcp_completion_v1 — Setting umbrella (4 actions).
+    CONFIG.queries[`${modulePrefix}.setting`] = this.handleSetting.bind(this);
+    // Phase 5 mcp_completion_v1 — ChatMessage umbrella (5 actions).
+    CONFIG.queries[`${modulePrefix}.chat-message`] = this.handleChatMessage.bind(this);
   }
 
   unregisterHandlers(): void {
@@ -672,6 +688,48 @@ export class QueryHandlers {
     }
   }
 
+  async handleDisease(data: unknown): Promise<any> {
+    try {
+      this.dataAccess.validateFoundryState();
+      return await dispatchDiseaseHandler(data);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to dispatch disease action: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  async handleFolder(data: unknown): Promise<any> {
+    try {
+      this.dataAccess.validateFoundryState();
+      return await dispatchFolderHandler(data);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to dispatch folder action: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  async handleSetting(data: unknown): Promise<any> {
+    try {
+      // fail-closed: setting reads succeed pre-ready (game.settings is available before Foundry hits 'ready'),
+      // but treat as fully-init flow for predictability. Diagnostic intentionally skips this; setting does not, per canonical-pass review 2026-05-21.
+      this.dataAccess.validateFoundryState();
+      return await dispatchSettingHandler(data);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to dispatch setting action: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  async handleChatMessage(data: unknown): Promise<any> {
+    try {
+      this.dataAccess.validateFoundryState();
+      return await dispatchChatMessageHandler(data);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to dispatch chat-message action: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
   async handleRequestPlayerRolls(data: unknown): Promise<any> {
     try {
       const gmCheck = this.validateGMAccess();
@@ -1002,25 +1060,75 @@ export class QueryHandlers {
           ownerLabel = actor.name;
         }
 
-        // BUG-012: Foundry deep-merges update objects; removing a key requires
-        // the `-=` deletion syntax. In-memory `delete` on a copied object is a
-        // silent no-op after the merge. Adds use dotted paths; removes use -=.
-        const updateData: Record<string, unknown> = {};
+        const normaliseEntry = (entry: any) => {
+          const normalised: Record<string, unknown> = { name: String(entry.name).toLowerCase() };
+          if (entry.value !== undefined) normalised.value = entry.value;
+          return normalised;
+        };
+        const readEntries = (key: 'qualities' | 'flaws') => {
+          const raw = item.system?.[key]?.value;
+          return Array.isArray(raw) ? raw.map((entry: any) => ({ ...entry })) : [];
+        };
+        const mergeEntries = (
+          current: any[],
+          additions: any[],
+          removals: string[]
+        ) => {
+          const removeSet = new Set(removals.map((name) => name.toLowerCase()));
+          const addNames = new Set(additions.map((entry) => String(entry.name).toLowerCase()));
+          const next = current.filter((entry) => {
+            const name = String(entry?.name ?? '').toLowerCase();
+            return !removeSet.has(name) && !addNames.has(name);
+          });
+          next.push(...additions.map(normaliseEntry));
+          return next;
+        };
 
-        for (const quality of parsed.addQualities) {
-          updateData[`system.properties.qualities.${quality.name}`] = quality.value || true;
-        }
-        for (const quality of parsed.removeQualities) {
-          updateData[`system.properties.qualities.-=${quality}`] = null;
-        }
-        for (const flaw of parsed.addFlaws) {
-          updateData[`system.properties.flaws.${flaw.name}`] = flaw.value || true;
-        }
-        for (const flaw of parsed.removeFlaws) {
-          updateData[`system.properties.flaws.-=${flaw}`] = null;
-        }
+        const nextQualities = mergeEntries(
+          readEntries('qualities'),
+          parsed.addQualities,
+          parsed.removeQualities
+        );
+        const nextFlaws = mergeEntries(
+          readEntries('flaws'),
+          parsed.addFlaws,
+          parsed.removeFlaws
+        );
+
+        const updateData: Record<string, unknown> = {
+          'system.qualities.value': nextQualities,
+          'system.flaws.value': nextFlaws,
+        };
 
         await item.update(updateData);
+
+        const persistedQualityNames = new Set(
+          (item.system?.qualities?.value ?? []).map((entry: any) => String(entry?.name ?? '').toLowerCase())
+        );
+        const persistedFlawNames = new Set(
+          (item.system?.flaws?.value ?? []).map((entry: any) => String(entry?.name ?? '').toLowerCase())
+        );
+        for (const quality of parsed.addQualities) {
+          if (!persistedQualityNames.has(String(quality.name).toLowerCase())) {
+            throw new Error(`MODIFY_ITEM_QUALITIES_NOT_PERSISTED: missing added quality "${quality.name}"`);
+          }
+        }
+        for (const quality of parsed.removeQualities) {
+          if (persistedQualityNames.has(quality.toLowerCase())) {
+            throw new Error(`MODIFY_ITEM_QUALITIES_NOT_PERSISTED: quality "${quality}" was not removed`);
+          }
+        }
+        for (const flaw of parsed.addFlaws) {
+          if (!persistedFlawNames.has(String(flaw.name).toLowerCase())) {
+            throw new Error(`MODIFY_ITEM_QUALITIES_NOT_PERSISTED: missing added flaw "${flaw.name}"`);
+          }
+        }
+        for (const flaw of parsed.removeFlaws) {
+          if (persistedFlawNames.has(flaw.toLowerCase())) {
+            throw new Error(`MODIFY_ITEM_QUALITIES_NOT_PERSISTED: flaw "${flaw}" was not removed`);
+          }
+        }
+
         notify.updated('item', item.name, {
           summary: `qualities modified on ${ownerLabel}`,
           uuid: (item as any).uuid,

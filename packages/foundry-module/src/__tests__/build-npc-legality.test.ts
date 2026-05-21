@@ -96,6 +96,6 @@ describe('build-npc legality — unknown inputs throw', () => {
   });
 
   it('unknown species throws', () => {
-    expect(() => checkLegality('Ogre', 'Soldier', 'warn')).toThrow(/species/);
+    expect(() => checkLegality('Unknown Species', 'Soldier', 'warn')).toThrow(/species/);
   });
 });

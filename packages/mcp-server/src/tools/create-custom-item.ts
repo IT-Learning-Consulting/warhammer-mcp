@@ -110,14 +110,17 @@ export class CreateCustomItemTool extends BaseTool {
           idempotentHint: false,
           openWorldHint: true,
         },
-        description: `Create a custom WFRP4e Item — world-scope (the Items sidebar, Foundry's canonical item library, see https://foundryvtt.com/article/items/) or actor-embedded. Supports 25 itemType branches (18 core + 7 module-contributed) with optional Active Effects at creation time and optional compendium-clone seeding.
+        description: `Create a custom WFRP4e Item — world-scope (the Items sidebar, Foundry's canonical item library, see https://foundryvtt.com/article/items/) or actor-embedded. Supports 26 subtypes (19 core + 7 module-contributed) with optional Active Effects at creation time and optional compendium-clone seeding.
 
 **Destination (required, no default — caller decides):**
 - World scope (primary use case): \`destination: { type: "world", folder?: ["Custom", "Weapons"] }\` — folder chain is auto-created if missing; omit \`folder\` for root placement.
 - Actor scope: \`destination: { type: "actor", actorName: "Hans" }\` OR \`{ type: "actor", actorId: "<id>" }\` — embeds on the resolved actor.
 
-**Core subtypes (18):**
-weapon, armour, trapping, ammunition, container, spell, prayer, talent, career, skill, trait, mutation, critical, disease, template, cargo, injury, psychology.
+**Core subtypes (19):**
+weapon, armour, trapping, ammunition, container, spell, prayer, talent, career, skill, trait, mutation, critical, disease, template, cargo, injury, money, psychology.
+
+**Subtype-specific required fields (top-level, beyond \`itemType\` / \`name\` / \`destination\`):**
+- \`prayer\` — \`type: "blessing" | "miracle"\` is REQUIRED (Core p.213 prayer category discriminator). Pass at top-level alongside \`itemType\`, NOT inside \`systemOverrides\`. Example: \`{ itemType: "prayer", type: "miracle", name: "Sigmar's Fiery Hammer", god: "Sigmar", destination: { type: "world" } }\`. Omitting \`type\` causes Zod-parse rejection.
 
 **Module-contributed subtypes (require matching module active):**
 - \`forien-armoury.grimoire\`, \`forien-armoury.scroll\` (Forien's Armoury)
@@ -145,7 +148,7 @@ Security: script / preApplyScript / enableScript fields are executed by Foundry 
             itemType: {
               type: 'string',
               description:
-                'Item subtype discriminator. One of 18 core names or 7 dotted module keys. See tool description.',
+                'Item subtype discriminator. One of 19 core names or 7 dotted module keys. See tool description.',
             },
             name: { type: 'string', description: 'Item name.' },
             img: { type: 'string', description: 'Icon path (optional).' },

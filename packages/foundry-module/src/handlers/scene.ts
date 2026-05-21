@@ -689,6 +689,16 @@ export async function thumbnailScene(
     if (!thumbData || !thumbData.thumb) {
       throw new Error('SCENE_WRITE_NOT_PERSISTED: createThumbnail returned no data');
     }
+    // BUG-116: Foundry returns a transparent placeholder data URL with
+    // width=0/height=0 when the scene has no background image to thumbnail
+    // from. Fail loudly so callers don't think they got a useful thumbnail.
+    if (thumbData.width === 0 || thumbData.height === 0) {
+      throw new Error(
+        'SCENE_THUMBNAIL_NO_BACKGROUND: createThumbnail returned 0×0 dimensions. ' +
+        `Scene "${scene.name as string}" has no background image to render. ` +
+        'Set a background via scene { action: "update", changes: { "background.src": "<path>" } } first.',
+      );
+    }
 
     return {
       success: true as const,

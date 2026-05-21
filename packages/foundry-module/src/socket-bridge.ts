@@ -440,6 +440,11 @@ export class SocketBridge {
     });
   }
 
+  /** Emit a roll-result event to the mcp-server pending-event registry. */
+  emitRollEvent(requestId: string, payload: { outcome: string; SL: number; success: boolean }): void {
+    this.emitToServer('mcp-event', { event_type: 'roll-result', requestId, payload });
+  }
+
   isConnected(): boolean {
     return this.connectionState === CONNECTION_STATES.CONNECTED;
   }

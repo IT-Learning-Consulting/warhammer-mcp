@@ -500,7 +500,7 @@ async function updateDocumentInPack(input: any): Promise<Envelope<UpdateDocument
 
     try {
       await DocClass.updateDocuments(
-        [{ _id: doc.id, ...input.changes }],
+        [{ ...input.changes, _id: doc.id }],
         { pack: pack.metadata.id },
       );
     } catch (e) {

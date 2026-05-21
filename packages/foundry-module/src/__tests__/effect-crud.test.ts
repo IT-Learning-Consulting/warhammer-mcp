@@ -300,6 +300,7 @@ describe('_resolveItem regression (Phase A: legacy paths preserved)', () => {
       actorId: 'a1',
       itemId: 'i1',
       updateData: { 'system.advances.value': 2 },
+      verifyPersistence: false,
     });
     expect(res.success).toBe(true);
     expect(res.scope).toBe('actor');

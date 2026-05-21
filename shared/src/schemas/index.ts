@@ -45,3 +45,13 @@ export * from './macro.js';
 export * from './user.js';
 // Phase 10 mcp_crud_expansion — cross-doc FK audit + repair umbrella (3 actions).
 export * from './cross-doc-fk.js';
+// Phase wfrp-disease — bidirectional event-push transport (EventEnvelope + RollResultPayload).
+export * from './event-envelope.js';
+// Phase wfrp-disease — Disease umbrella (8 actions).
+export * from './disease.js';
+// Phase 4 mcp_completion_v1 — Folder umbrella (6 actions; delete has confirm gate + deleteContents cascade).
+export * from './folder.js';
+// Phase 4 mcp_completion_v1 — Setting umbrella (4 actions; set has force gate + blocklist + onChange-advisory).
+export * from './setting.js';
+// Phase 5 mcp_completion_v1 — ChatMessage umbrella (5 actions; delete confirm gate; rollMode resolution; rolls-immutability).
+export * from './chat-message.js';

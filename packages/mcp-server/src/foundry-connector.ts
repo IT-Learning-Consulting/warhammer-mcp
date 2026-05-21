@@ -2,6 +2,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { createServer } from 'http';
 import { Logger } from './logger.js';
 import { Config } from './config.js';
+import { PendingEventRegistry } from './pending-events.js';
 
 export interface FoundryConnectorOptions {
   config: Config['foundry'];
@@ -23,6 +24,7 @@ export class FoundryConnector {
   private foundrySocket: WebSocket | null = null;
   private pendingQueries = new Map<string, PendingQuery>();
   private queryIdCounter = 0;
+  public readonly pendingEvents = new PendingEventRegistry();
 
   constructor({ config, logger }: FoundryConnectorOptions) {
     this.config = config;
@@ -157,6 +159,12 @@ export class FoundryConnector {
         this.pendingQueries.delete(message.id);
         pending.resolve(message.data);
       }
+      return;
+    }
+
+    if (message.type === 'mcp-event' && message.data?.requestId) {
+      this.logger.debug('mcp-event received', { event_type: message.data.event_type, requestId: message.data.requestId });
+      this.pendingEvents.resolve(message.data.requestId, message.data);
       return;
     }
 

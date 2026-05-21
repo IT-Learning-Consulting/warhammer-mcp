@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { coerceArgsBySchema } from '../backend.js';
+import { coerceArgsBySchema } from '../coerce-args.js';
 
 const schema = {
   type: 'object',

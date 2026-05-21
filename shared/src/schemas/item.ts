@@ -34,6 +34,7 @@ export const UpdateItemInput = z.object({
   options: z.object({
     skipExperienceChecks: z.boolean().optional(),
   }).strict().optional(),
+  verifyPersistence: z.boolean().optional(),
 }).strict();
 
 export const DeleteItemInput = z.object({

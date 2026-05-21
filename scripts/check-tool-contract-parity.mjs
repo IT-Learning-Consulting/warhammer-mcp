@@ -379,6 +379,9 @@ function main() {
     }
   }
 
+  // PRD mcp_completion_v1 RC.1: this section IS the "check-input-schema-coverage" gate.
+  // Inherited from mcp_crud_expansion_v1.1 Phase 8 BUG-088 extension. Do not duplicate into a separate file.
+  // See .agents/prds/mcp_completion/mcp_completion_v1_prd.md §9 RC.1 (v1.5 amendment).
   // ── Phase 8 extension 2 — top-level coverage gate (BUG-088) ───────────────
   // Calibration: file-level skips for nested/inline-only shapes that don't
   // surface at the top of the tool inputSchema. Keeps the gate green on the

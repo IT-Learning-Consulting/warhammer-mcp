@@ -45,6 +45,23 @@
     randomID: () => 'test-id-' + Math.random().toString(36).slice(2),
     mergeObject: (a: any, b: any) => ({ ...a, ...b }),
     deepClone: (v: any) => JSON.parse(JSON.stringify(v)),
+    flattenObject(obj: any): Record<string, any> {
+      const result: Record<string, any> = {};
+      for (const [k, v] of Object.entries(obj)) {
+        if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
+          const nested = (globalThis as any).foundry.utils.flattenObject(v);
+          for (const [nk, nv] of Object.entries(nested)) {
+            result[`${k}.${nk}`] = nv;
+          }
+        } else {
+          result[k] = v;
+        }
+      }
+      return result;
+    },
+    getProperty(obj: any, path: string): any {
+      return path.split('.').reduce((cursor: any, seg: string) => cursor?.[seg], obj);
+    },
   },
   applications: {
     apps: {

@@ -25,7 +25,7 @@ export class UpdateActorTool extends BaseTool {
           openWorldHint: true,
         },
         description:
-          'Apply an arbitrary system.* update to an actor. Thin pass-through to the Foundry-module updateActor query — does not enforce WFRP rules. Skills (e.g. /wfrp-advance, /wfrp-resources, /wfrp-status) own the rules and call this primitive to write the result. Use Foundry update syntax for nested paths (e.g. {"system.characteristics.ws.advances": 3, "system.details.experience.spent": 75}).',
+          'Apply an arbitrary system.* update to an actor. Thin pass-through to the Foundry-module updateActor query — does not enforce WFRP rules. Skills (e.g. /wfrp-advance, /wfrp-resources, /wfrp-status) own the rules and call this primitive to write the result. Use Foundry update syntax for nested paths (e.g. {"system.characteristics.ws.advances": 3, "system.details.experience.spent": 75}). Pass verifyPersistence:false to opt out of post-write drift check for auto-derived fields.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -38,6 +38,11 @@ export class UpdateActorTool extends BaseTool {
               additionalProperties: true,
               description:
                 'Foundry update payload. Keys can be dot-paths (e.g. "system.status.fate.value"); values are the new values. NEVER write *.max for fate / fortune / resilience / resolve (per PRD R4.2).',
+            },
+            verifyPersistence: {
+              type: 'boolean',
+              description:
+                'When false, skips post-write field drift check. Use only for system-derived fields that Foundry auto-rewrites via prepareDerivedData (e.g. character status.{tier,standing} per CharacterModel.computeCareer).',
             },
           },
           required: ['actorId', 'updateData'],
