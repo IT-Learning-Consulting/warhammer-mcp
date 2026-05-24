@@ -150,9 +150,40 @@ const folderFactoryHandlers = createFlatWorldDocCRUDHandlers<
   },
 });
 
-// ── Exported CRUD handlers (pass-through from factory for create/get/list) ────
+// ── Exported CRUD handlers ────────────────────────────────────────────────────
 
-export const createFolder = folderFactoryHandlers.create;
+// BUG-155: create-path depth pre-check must run BEFORE Foundry validation.
+// Foundry's FolderDataModel.validateJoint can reject depth overflow during
+// create(), which bypasses our cleaner MCP error token unless we gate early.
+export async function createFolder(data: unknown): Promise<Envelope<any>> {
+  const gate = validateGMAccess();
+  if (!gate.allowed) return { success: false, error: 'Access denied: createFolder requires GM' };
+
+  let input: any;
+  try {
+    input = FolderCreateInput.strict().parse(data ?? {});
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Invalid input';
+    throw new Error(`Invalid input: ${msg}`);
+  }
+
+  if (input.folder !== undefined && input.folder !== null) {
+    const parentFolder = (game as any).folders?.get(input.folder);
+    if (parentFolder) {
+      const newDepth = ((parentFolder.depth as number) ?? 0) + 1;
+      const FOLDER_MAX_DEPTH = (globalThis as any).CONST?.FOLDER_MAX_DEPTH ?? 4;
+      if (newDepth > FOLDER_MAX_DEPTH) {
+        return {
+          success: false,
+          error: `FOLDER_MAX_DEPTH_EXCEEDED: creating this folder would put it at depth ${newDepth} which exceeds CONST.FOLDER_MAX_DEPTH (${FOLDER_MAX_DEPTH})`,
+        };
+      }
+    }
+  }
+
+  return folderFactoryHandlers.create(data);
+}
+
 export const getFolder = folderFactoryHandlers.get;
 export const listFolders = folderFactoryHandlers.list;
 

@@ -46,6 +46,9 @@ const ROLE_VALUE_BY_NAME: Record<UserRoleNameType, number> = {
     GAMEMASTER: 4,
 };
 
+// UserToolInputInternal mirrors the public UserToolInput from shared/src/schemas/user.ts but
+// strips create/delete actions so the factory's internal contract matches what dispatchUser
+// actually allows. Any new field added to the shared schema must be mirrored here manually.
 const UserCreateInputInternal = z.object({
     action: z.literal('create'),
 }).strict();
@@ -365,6 +368,22 @@ export async function updateUser(input: UpdateUserInputType): Promise<Envelope<U
             changes,
         });
         if (!result.success) return result;
+
+        // PARITY-010: compensating verify for permissions (skipped by factory dp16SkipFields).
+        // Sparse-delta: compare only requested keys via _source (F08-safe; derived getter
+        // applies role defaults that would false-positive on a full-object compare).
+        if (changes.permissions && typeof changes.permissions === 'object') {
+            const freshUser = resolveTargetUser(input.userId);
+            const freshPerms = (freshUser._source as any)?.permissions ?? {};
+            for (const [key, expected] of Object.entries(changes.permissions as Record<string, unknown>)) {
+                const actual = freshPerms[key] ?? false;
+                if (actual !== expected) {
+                    throw new Error(
+                        `USER_WRITE_NOT_PERSISTED: permissions[${JSON.stringify(key)}] expected ${JSON.stringify(expected)} but found ${JSON.stringify(actual)}`,
+                    );
+                }
+            }
+        }
 
         const payload = result.data as {
             user: UserViewModel;

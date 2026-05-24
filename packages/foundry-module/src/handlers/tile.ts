@@ -130,6 +130,7 @@ const handlers = createEmbeddedCRUDHandlers<any, any, TileViewModel, TileListIte
     listArray: 'tiles',
     remainingCount: 'remainingTiles', // not actually used; delete builder overridden below
   },
+  notifyKind: 'tile',
   defaultPageSize: 50,
   // B3 guard: video sub-fields arriving as undefined must be stripped so Foundry
   // does not merge AlphaField initial (0) over existing volume on partial update.

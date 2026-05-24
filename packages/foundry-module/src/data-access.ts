@@ -1,5 +1,6 @@
 import { MODULE_ID, ERROR_MESSAGES, TOKEN_DISPOSITIONS } from './constants.js';
 import { notify } from './notify.js';
+import { verifyDocWrite } from './utils/verifyWrite.js';
 // Local type definitions to avoid shared package import issues
 interface CharacterInfo {
   id: string;
@@ -866,12 +867,12 @@ export class FoundryDataAccess {
   /**
    * Search compendium packs for items matching query with optional filters
    */
-  async searchCompendium(query: string, packType?: string, filters?: {
-    challengeRating?: number | { min?: number; max?: number };
-    creatureType?: string;
-    size?: string;
-    spellcaster?: boolean;
-  }, itemType?: string): Promise<CompendiumSearchResult[]> {
+  async searchCompendium(query: string, packType?: string | undefined, filters?: {
+    challengeRating?: number | { min?: number | undefined; max?: number | undefined } | undefined;
+    creatureType?: string | undefined;
+    size?: string | undefined;
+    spellcaster?: boolean | undefined;
+  } | undefined, itemType?: string | undefined): Promise<CompendiumSearchResult[]> {
 
     // Add defensive checks for query parameter
     if (!query || typeof query !== 'string' || query.trim().length < 2) {
@@ -1111,12 +1112,12 @@ export class FoundryDataAccess {
    * List creatures by criteria using enhanced persistent index - optimized for instant filtering
    */
   async listCreaturesByCriteria(criteria: {
-    threatLevel?: number | { min?: number; max?: number };
-    creatureType?: string;
-    size?: string;
-    hasSpells?: boolean;
-    hasSpecialAbilities?: boolean;
-    limit?: number;
+    threatLevel?: number | { min?: number | undefined; max?: number | undefined } | undefined;
+    creatureType?: string | undefined;
+    size?: string | undefined;
+    hasSpells?: boolean | undefined;
+    hasSpecialAbilities?: boolean | undefined;
+    limit?: number | undefined;
   }): Promise<{ creatures: any[], searchSummary: any }> {
 
     const limit = criteria.limit || 500;
@@ -1218,11 +1219,11 @@ export class FoundryDataAccess {
    * Check if enhanced creature passes all specified criteria
    */
   private passesEnhancedCriteria(creature: EnhancedCreatureIndex, criteria: {
-    threatLevel?: number | { min?: number; max?: number };
-    creatureType?: string;
-    size?: string;
-    hasSpells?: boolean;
-    hasSpecialAbilities?: boolean;
+    threatLevel?: number | { min?: number | undefined; max?: number | undefined } | undefined;
+    creatureType?: string | undefined;
+    size?: string | undefined;
+    hasSpells?: boolean | undefined;
+    hasSpecialAbilities?: boolean | undefined;
   }): boolean {
 
     // Challenge Rating filter
@@ -1730,11 +1731,17 @@ export class FoundryDataAccess {
     const actor = game.actors?.get(data.id);
     if (!actor) {
       this.auditLog('deleteActor', data, 'failure', 'not found');
-      return { success: false };
+      // BUG-212: throw instead of {success:false} — matches updateActor/duplicateActor not-found convention.
+      // CCR-2: no consumer reads {success:false} from deleteActor; throw propagates via query().
+      throw new Error(`Actor with ID "${data.id}" not found`);
     }
     const actorName = actor.name;
     const actorUuid = (actor as any).uuid;
     await actor.delete();
+    // BUG-212 + PARITY-020: post-verify the deletion persisted.
+    if (game.actors?.get(data.id)) {
+      throw new Error(`DELETE_ACTOR_NOT_PERSISTED: actor ${data.id} still present after delete (preDelete hook may have cancelled)`);
+    }
     notify.deleted('actor', actorName, { uuid: actorUuid });
     this.auditLog('deleteActor', data, 'success');
     return { success: true };
@@ -3599,17 +3606,29 @@ export class FoundryDataAccess {
         throw new Error(`Actor ${actor.name} (type ${(actor as any).type}) has no system.advance method; wfrp4e system may have changed`);
       }
 
+      // BUG-217: StandardActorModel.advance() is synchronous but fire-and-forgets async actor.update().
+      // HC1: bare `await model.advance()` is a NON-FIX (returns undefined). Observer pattern mirrors
+      // updateActor:4231-4234 exactly — register BEFORE the sync call, await AFTER.
+      const commitObserved = this.waitForActorUpdateCommit(String(actor.id), 250);
       model.advance(career);
+      await commitObserved;
 
-      notify.updated('actor', actor.name ?? 'unknown', { summary: `advancing via ${career.name}`, uuid: (actor as any).uuid });
+      // BUG-218: re-read actor + career after commit to confirm persistence.
+      const fresh = game.actors?.get(data.actorId);
+      const freshCareer = fresh?.items?.get(data.careerItemId);
+      if (!fresh || !freshCareer) {
+        throw new Error(`APPLY_NPC_CAREER_ADVANCE_NOT_PERSISTED: actor ${data.actorId} or career ${data.careerItemId} missing after advance`);
+      }
+
+      notify.updated('actor', fresh.name ?? 'unknown', { summary: `advancing via ${freshCareer.name}`, uuid: (fresh as any).uuid });
 
       return {
         success: true,
-        actorId: actor.id,
-        actorName: actor.name,
-        careerItemId: career.id,
-        careerName: career.name,
-        careerLevel: (career as any).system?.level?.value ?? null
+        actorId: fresh.id,
+        actorName: fresh.name,
+        careerItemId: freshCareer.id,
+        careerName: freshCareer.name,
+        careerLevel: (freshCareer as any).system?.level?.value ?? null
       };
     } catch (error) {
       throw new Error(`Failed to apply NPC career advance: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -3710,7 +3729,30 @@ export class FoundryDataAccess {
       }
 
       const templateId: string = (template as any).id ?? data.templateUuid;
-      const result = await this._runTemplateApply(actor, template, templateId, data.preResolvedChoices ?? {});
+
+      // Redirect template-triggered condition scripts away from the world actor.
+      const baseActor: any = (globalThis as any).game?.actors?.get(tokenDoc.actorId);
+      let restoreAddCondition: (() => void) | null = null;
+      if (baseActor && baseActor !== actor && typeof baseActor.addCondition === 'function') {
+        const originalAddCondition = baseActor.addCondition;
+        baseActor.addCondition = async (...args: any[]) => {
+          const tokenActor: any = tokenDoc.actor;
+          if (tokenActor && tokenActor !== baseActor && typeof tokenActor.addCondition === 'function') {
+            return await tokenActor.addCondition(...args);
+          }
+          return await originalAddCondition.apply(baseActor, args as any);
+        };
+        restoreAddCondition = () => {
+          baseActor.addCondition = originalAddCondition;
+        };
+      }
+
+      let result: any;
+      try {
+        result = await this._runTemplateApply(actor, template, templateId, data.preResolvedChoices ?? {});
+      } finally {
+        if (restoreAddCondition) restoreAddCondition();
+      }
 
       // TokenDocument.name is captured at add-actors-to-scene time from the base
       // actor ("Goblin") and never re-reads from the delta. Sync it here + replicate
@@ -3764,229 +3806,229 @@ export class FoundryDataAccess {
       trappings?: Record<string, string> | undefined;
     },
   ): Promise<any> {
-      const sys: any = (template as any).system;
-      const rng = (): number => Math.random();
-      const pick = <T,>(arr: T[]): T | undefined => (arr.length === 0 ? undefined : arr[Math.floor(rng() * arr.length)]);
+    const sys: any = (template as any).system;
+    const rng = (): number => Math.random();
+    const pick = <T,>(arr: T[]): T | undefined => (arr.length === 0 ? undefined : arr[Math.floor(rng() * arr.length)]);
 
-      // --- name + characteristics (single update payload) ---
-      const pre = (sys.alterName?.pre ?? '').trim();
-      const post = (sys.alterName?.post ?? '').trim();
-      const newName = `${pre} ${actor.name} ${post}`.trim().replace(/\s+/g, ' ');
+    // --- name + characteristics (single update payload) ---
+    const pre = (sys.alterName?.pre ?? '').trim();
+    const post = (sys.alterName?.post ?? '').trim();
+    const newName = `${pre} ${actor.name} ${post}`.trim().replace(/\s+/g, ' ');
 
-      const updateData: Record<string, any> = { name: newName, 'prototypeToken.name': newName };
-      const characteristicDeltas: Record<string, number> = {};
-      const chars = sys.characteristics ?? {};
-      for (const key of ['ws', 'bs', 's', 't', 'i', 'ag', 'dex', 'int', 'wp', 'fel']) {
-        const delta = chars[key];
-        if (typeof delta === 'number' && delta !== 0) {
-          characteristicDeltas[key] = delta;
-          const current = Number(foundry.utils.getProperty(actor, `system.characteristics.${key}.advances`)) || 0;
-          updateData[`system.characteristics.${key}.advances`] = current + delta;
-        }
+    const updateData: Record<string, any> = { name: newName, 'prototypeToken.name': newName };
+    const characteristicDeltas: Record<string, number> = {};
+    const chars = sys.characteristics ?? {};
+    for (const key of ['ws', 'bs', 's', 't', 'i', 'ag', 'dex', 'int', 'wp', 'fel']) {
+      const delta = chars[key];
+      if (typeof delta === 'number' && delta !== 0) {
+        characteristicDeltas[key] = delta;
+        const current = Number(foundry.utils.getProperty(actor, `system.characteristics.${key}.advances`)) || 0;
+        updateData[`system.characteristics.${key}.advances`] = current + delta;
       }
+    }
 
-      // --- skills: group collapse, spec expansion ---
-      const skillList: Array<{ name: string; advances: number; group?: number | null; specialisations?: number | null }> =
-        (sys.skills?.list ?? []).map((s: any) => ({ ...s }));
+    // --- skills: group collapse, spec expansion ---
+    const skillList: Array<{ name: string; advances: number; group?: number | null; specialisations?: number | null }> =
+      (sys.skills?.list ?? []).map((s: any) => ({ ...s }));
 
-      // Group collapse: if multiple entries share a group, pick one (or honor override).
-      const ungroupedSkills = skillList.filter(s => s.group == null);
-      const skillGroupIds = Array.from(new Set(skillList.filter(s => s.group != null).map(s => String(s.group))));
-      const collapsedSkillGroups: typeof skillList = [];
-      for (const gid of skillGroupIds) {
-        const members = skillList.filter(s => String(s.group) === gid);
-        const override = choices.skillGroups?.[gid];
-        const chosen = (override && members.find(m => m.name === override)) || pick(members);
-        if (chosen) collapsedSkillGroups.push(chosen);
-      }
-      let resolvedSkills: typeof skillList = ungroupedSkills.concat(collapsedSkillGroups);
+    // Group collapse: if multiple entries share a group, pick one (or honor override).
+    const ungroupedSkills = skillList.filter(s => s.group == null);
+    const skillGroupIds = Array.from(new Set(skillList.filter(s => s.group != null).map(s => String(s.group))));
+    const collapsedSkillGroups: typeof skillList = [];
+    for (const gid of skillGroupIds) {
+      const members = skillList.filter(s => String(s.group) === gid);
+      const override = choices.skillGroups?.[gid];
+      const chosen = (override && members.find(m => m.name === override)) || pick(members);
+      if (chosen) collapsedSkillGroups.push(chosen);
+    }
+    let resolvedSkills: typeof skillList = ungroupedSkills.concat(collapsedSkillGroups);
 
-      // Spec expansion: skills with specialisations > 1 get expanded to N concrete skill entries.
-      const specExpansions: typeof skillList = [];
-      for (const s of resolvedSkills) {
-        if ((s.specialisations ?? 0) > 1) {
-          const overrides = choices.specialisations?.[s.name];
-          let picks: string[];
-          if (overrides && overrides.length === s.specialisations) {
-            picks = overrides;
-          } else {
-            const allSkills: any[] = (await (globalThis as any).warhammer?.utility?.findAllItems?.('skill', 'Loading Skills')) ?? [];
-            const candidates = allSkills.filter((i: any) => i.baseName === s.name);
-            const used = new Set<string>();
-            picks = [];
-            while (picks.length < (s.specialisations ?? 1) && candidates.length > 0) {
-              const c = pick(candidates);
-              if (c && !used.has((c as any).name)) {
-                used.add((c as any).name);
-                picks.push((c as any).name);
-              }
-              if (used.size === candidates.length) break;
+    // Spec expansion: skills with specialisations > 1 get expanded to N concrete skill entries.
+    const specExpansions: typeof skillList = [];
+    for (const s of resolvedSkills) {
+      if ((s.specialisations ?? 0) > 1) {
+        const overrides = choices.specialisations?.[s.name];
+        let picks: string[];
+        if (overrides && overrides.length === s.specialisations) {
+          picks = overrides;
+        } else {
+          const allSkills: any[] = (await (globalThis as any).warhammer?.utility?.findAllItems?.('skill', 'Loading Skills')) ?? [];
+          const candidates = allSkills.filter((i: any) => i.baseName === s.name);
+          const used = new Set<string>();
+          picks = [];
+          while (picks.length < (s.specialisations ?? 1) && candidates.length > 0) {
+            const c = pick(candidates);
+            if (c && !used.has((c as any).name)) {
+              used.add((c as any).name);
+              picks.push((c as any).name);
             }
-          }
-          for (const p of picks) {
-            specExpansions.push({ name: p, advances: s.advances });
+            if (used.size === candidates.length) break;
           }
         }
+        for (const p of picks) {
+          specExpansions.push({ name: p, advances: s.advances });
+        }
       }
-      resolvedSkills = resolvedSkills
-        .filter(s => !((s.specialisations ?? 0) > 1))
-        .concat(specExpansions);
+    }
+    resolvedSkills = resolvedSkills
+      .filter(s => !((s.specialisations ?? 0) > 1))
+      .concat(specExpansions);
 
-      // --- lore pick (BUG-051: hoisted above skills so `Channelling (Any)` can correlate) ---
-      const loreList: Array<{ name: string; number: number }> = (sys.lores?.list ?? []).map((l: any) => ({ ...l }));
-      const magicLoresConfig: Record<string, string> = (globalThis as any).game?.wfrp4e?.config?.magicLores ?? {};
-      const loreDisplayValues = Object.values(magicLoresConfig) as string[];
-      const resolvedLoreNames: string[] = [];
+    // --- lore pick (BUG-051: hoisted above skills so `Channelling (Any)` can correlate) ---
+    const loreList: Array<{ name: string; number: number }> = (sys.lores?.list ?? []).map((l: any) => ({ ...l }));
+    const magicLoresConfig: Record<string, string> = (globalThis as any).game?.wfrp4e?.config?.magicLores ?? {};
+    const loreDisplayValues = Object.values(magicLoresConfig) as string[];
+    const resolvedLoreNames: string[] = [];
+    for (let i = 0; i < loreList.length; i++) {
+      const l = loreList[i]!;
+      let name = l.name;
+      if (name === '*') {
+        const override = choices.lores?.[i];
+        name = override || (loreDisplayValues.length > 0 ? (pick(loreDisplayValues) as string) : '');
+      }
+      resolvedLoreNames.push(name);
+    }
+
+    // --- trappings resolved BEFORE skills (BUG-051: weapon-group leaks into `Melee (Any)` spec) ---
+    const trappingItems = await this.walkTrappingsTree(sys.trappings, actor, choices, resolvedSkills);
+    const pickedWeaponGroups: string[] = [];
+    for (const it of trappingItems) {
+      const wg = foundry.utils.getProperty(it, 'system.weaponGroup.value');
+      if (typeof wg === 'string' && wg.length > 0) pickedWeaponGroups.push(wg);
+    }
+
+    // --- resolve `(Any)` wildcards in skill names using lore + weapon-group context ---
+    const resolveContext = { lores: resolvedLoreNames, weaponGroups: pickedWeaponGroups };
+    const wildcardResolvedSkills: typeof resolvedSkills = resolvedSkills.map(s => ({
+      ...s,
+      name: this.resolveSkillWildcard(s.name, resolveContext, choices),
+    }));
+
+    // --- skill compendium lookup (wildcards now concrete) ---
+    const skillItems: any[] = [];
+    for (const s of wildcardResolvedSkills) {
+      const found: any = await (globalThis as any).game?.wfrp4e?.utility?.findSkill?.(s.name);
+      if (found) {
+        const obj = found.toObject();
+        foundry.utils.setProperty(obj, 'system.advances.value', s.advances);
+        skillItems.push(obj);
+      }
+    }
+
+    // --- talents: group collapse + multi-advance duplication ---
+    const talentList: Array<{ name: string; advances: number; group?: number | null }> =
+      (sys.talents?.list ?? []).map((t: any) => ({ ...t }));
+    const ungroupedTalents = talentList.filter(t => t.group == null);
+    const talentGroupIds = Array.from(new Set(talentList.filter(t => t.group != null).map(t => String(t.group))));
+    const collapsedTalentGroups: typeof talentList = [];
+    for (const gid of talentGroupIds) {
+      const members = talentList.filter(t => String(t.group) === gid);
+      const override = choices.talentGroups?.[gid];
+      const chosen = (override && members.find(m => m.name === override)) || pick(members);
+      if (chosen) collapsedTalentGroups.push(chosen);
+    }
+    const resolvedTalents = ungroupedTalents.concat(collapsedTalentGroups);
+
+    const talentItems: any[] = [];
+    for (const t of resolvedTalents) {
+      const found: any = await (globalThis as any).game?.wfrp4e?.utility?.findTalent?.(t.name);
+      if (!found) continue;
+      const copies = Math.max(1, t.advances ?? 1);
+      for (let i = 0; i < copies; i++) {
+        talentItems.push(found.toObject());
+      }
+    }
+
+    // --- spells (consumes already-picked resolvedLoreNames from above) ---
+    const spellItems: any[] = [];
+    if (loreList.length > 0) {
+      const allSpells: any[] =
+        (await (globalThis as any).warhammer?.utility?.findAllItems?.('spell', 'Loading Spells', true, ['system.lore.value'])) ?? [];
+
       for (let i = 0; i < loreList.length; i++) {
-        const l = loreList[i]!;
-        let name = l.name;
-        if (name === '*') {
-          const override = choices.lores?.[i];
-          name = override || (loreDisplayValues.length > 0 ? (pick(loreDisplayValues) as string) : '');
-        }
-        resolvedLoreNames.push(name);
-      }
+        const lore = loreList[i]!;
+        const loreName = resolvedLoreNames[i] ?? '';
 
-      // --- trappings resolved BEFORE skills (BUG-051: weapon-group leaks into `Melee (Any)` spec) ---
-      const trappingItems = await this.walkTrappingsTree(sys.trappings, actor, choices, resolvedSkills);
-      const pickedWeaponGroups: string[] = [];
-      for (const it of trappingItems) {
-        const wg = foundry.utils.getProperty(it, 'system.weaponGroup.value');
-        if (typeof wg === 'string' && wg.length > 0) pickedWeaponGroups.push(wg);
-      }
+        const matching = allSpells.filter((s: any) => {
+          const key = s.system?.lore?.value;
+          const display = magicLoresConfig[key] ?? key;
+          return display === loreName;
+        });
 
-      // --- resolve `(Any)` wildcards in skill names using lore + weapon-group context ---
-      const resolveContext = { lores: resolvedLoreNames, weaponGroups: pickedWeaponGroups };
-      const wildcardResolvedSkills: typeof resolvedSkills = resolvedSkills.map(s => ({
-        ...s,
-        name: this.resolveSkillWildcard(s.name, resolveContext, choices),
-      }));
-
-      // --- skill compendium lookup (wildcards now concrete) ---
-      const skillItems: any[] = [];
-      for (const s of wildcardResolvedSkills) {
-        const found: any = await (globalThis as any).game?.wfrp4e?.utility?.findSkill?.(s.name);
-        if (found) {
-          const obj = found.toObject();
-          foundry.utils.setProperty(obj, 'system.advances.value', s.advances);
-          skillItems.push(obj);
-        }
-      }
-
-      // --- talents: group collapse + multi-advance duplication ---
-      const talentList: Array<{ name: string; advances: number; group?: number | null }> =
-        (sys.talents?.list ?? []).map((t: any) => ({ ...t }));
-      const ungroupedTalents = talentList.filter(t => t.group == null);
-      const talentGroupIds = Array.from(new Set(talentList.filter(t => t.group != null).map(t => String(t.group))));
-      const collapsedTalentGroups: typeof talentList = [];
-      for (const gid of talentGroupIds) {
-        const members = talentList.filter(t => String(t.group) === gid);
-        const override = choices.talentGroups?.[gid];
-        const chosen = (override && members.find(m => m.name === override)) || pick(members);
-        if (chosen) collapsedTalentGroups.push(chosen);
-      }
-      const resolvedTalents = ungroupedTalents.concat(collapsedTalentGroups);
-
-      const talentItems: any[] = [];
-      for (const t of resolvedTalents) {
-        const found: any = await (globalThis as any).game?.wfrp4e?.utility?.findTalent?.(t.name);
-        if (!found) continue;
-        const copies = Math.max(1, t.advances ?? 1);
-        for (let i = 0; i < copies; i++) {
-          talentItems.push(found.toObject());
-        }
-      }
-
-      // --- spells (consumes already-picked resolvedLoreNames from above) ---
-      const spellItems: any[] = [];
-      if (loreList.length > 0) {
-        const allSpells: any[] =
-          (await (globalThis as any).warhammer?.utility?.findAllItems?.('spell', 'Loading Spells', true, ['system.lore.value'])) ?? [];
-
-        for (let i = 0; i < loreList.length; i++) {
-          const lore = loreList[i]!;
-          const loreName = resolvedLoreNames[i] ?? '';
-
-          const matching = allSpells.filter((s: any) => {
-            const key = s.system?.lore?.value;
-            const display = magicLoresConfig[key] ?? key;
-            return display === loreName;
-          });
-
-          const overrideSpells = choices.spells?.[loreName];
-          const picks: any[] = [];
-          if (overrideSpells && overrideSpells.length > 0) {
-            for (const name of overrideSpells.slice(0, lore.number)) {
-              const m = matching.find((s: any) => s.name === name);
-              if (m) picks.push(m);
-            }
-          } else {
-            const pool = [...matching];
-            for (let k = 0; k < lore.number && pool.length > 0; k++) {
-              const idx = Math.floor(rng() * pool.length);
-              const [chosen] = pool.splice(idx, 1);
-              picks.push(chosen);
-            }
+        const overrideSpells = choices.spells?.[loreName];
+        const picks: any[] = [];
+        if (overrideSpells && overrideSpells.length > 0) {
+          for (const name of overrideSpells.slice(0, lore.number)) {
+            const m = matching.find((s: any) => s.name === name);
+            if (m) picks.push(m);
           }
-
-          for (const p of picks) {
-            spellItems.push(p.toObject ? p.toObject() : p);
+        } else {
+          const pool = [...matching];
+          for (let k = 0; k < lore.number && pool.length > 0; k++) {
+            const idx = Math.floor(rng() * pool.length);
+            const [chosen] = pool.splice(idx, 1);
+            picks.push(chosen);
           }
         }
-      }
 
-      // --- traits (DiffReferenceListModel.awaitDocuments equivalent) ---
-      const traitItems: any[] = [];
-      const traitEntries: Array<{ uuid: string; diff?: Record<string, unknown> }> = sys.traits?.list ?? [];
-      for (const entry of traitEntries) {
-        const doc: any = await (globalThis as any).warhammer?.utility?.findItemId?.(entry.uuid);
-        if (!doc) continue;
-        const obj = doc.toObject();
-        if (entry.diff && Object.keys(entry.diff).length > 0) {
-          foundry.utils.mergeObject(obj, entry.diff);
+        for (const p of picks) {
+          spellItems.push(p.toObject ? p.toObject() : p);
         }
-        traitItems.push(obj);
       }
+    }
 
-      // --- single actor.update + single createEmbeddedDocuments ---
-      await actor.update(updateData, { skipExperienceChecks: true } as any);
+    // --- traits (DiffReferenceListModel.awaitDocuments equivalent) ---
+    const traitItems: any[] = [];
+    const traitEntries: Array<{ uuid: string; diff?: Record<string, unknown> }> = sys.traits?.list ?? [];
+    for (const entry of traitEntries) {
+      const doc: any = await (globalThis as any).warhammer?.utility?.findItemId?.(entry.uuid);
+      if (!doc) continue;
+      const obj = doc.toObject();
+      if (entry.diff && Object.keys(entry.diff).length > 0) {
+        foundry.utils.mergeObject(obj, entry.diff);
+      }
+      traitItems.push(obj);
+    }
 
-      const allItems = [...skillItems, ...talentItems, ...spellItems, ...traitItems, ...trappingItems];
-      // skipSpecialisationChoice (2026-05-19): the wfrp4e SkillModel._handleSpecialisationChoice
-      // hook (wfrp4e.js:28490-28518) opens a UI dialog whenever an isSpec skill (e.g. bare
-      // "Channelling") is embedded with an empty specifier, blocking server-side execution
-      // until the user picks a wind. wfrp4e itself uses this flag for bulk operations
-      // (wfrp4e.js:12653, 18806, 18821). The template walker has no UI; surface this flag here
-      // so apply-template runs to completion. Skills with concrete specifiers (e.g.
-      // "Channelling (Aqshy)") are unaffected — the flag only short-circuits the dialog when
-      // the specifier is empty AND isSpec, which is exactly the unwanted case.
-      const created: any[] = (await (actor as any).createEmbeddedDocuments(
-        'Item',
-        allItems,
-        { fromTemplate: templateId, skipSpecialisationChoice: true }
-      )) ?? [];
+    // --- single actor.update + single createEmbeddedDocuments ---
+    await actor.update(updateData, { skipExperienceChecks: true } as any);
 
-      notify.updated('actor', actor.name, { summary: `applied template ${(template as any).name}`, uuid: (actor as any).uuid });
+    const allItems = [...skillItems, ...talentItems, ...spellItems, ...traitItems, ...trappingItems];
+    // skipSpecialisationChoice (2026-05-19): the wfrp4e SkillModel._handleSpecialisationChoice
+    // hook (wfrp4e.js:28490-28518) opens a UI dialog whenever an isSpec skill (e.g. bare
+    // "Channelling") is embedded with an empty specifier, blocking server-side execution
+    // until the user picks a wind. wfrp4e itself uses this flag for bulk operations
+    // (wfrp4e.js:12653, 18806, 18821). The template walker has no UI; surface this flag here
+    // so apply-template runs to completion. Skills with concrete specifiers (e.g.
+    // "Channelling (Aqshy)") are unaffected — the flag only short-circuits the dialog when
+    // the specifier is empty AND isSpec, which is exactly the unwanted case.
+    const created: any[] = (await (actor as any).createEmbeddedDocuments(
+      'Item',
+      allItems,
+      { fromTemplate: templateId, skipSpecialisationChoice: true }
+    )) ?? [];
 
-      return {
-        success: true,
-        actorId: actor.id,
-        actorName: actor.name,
-        templateId,
-        templateName: (template as any).name,
-        applied: {
-          name: newName,
-          characteristics: characteristicDeltas,
-          itemIds: created.map((i: any) => i.id),
-          itemsByType: {
-            skill: created.filter((i: any) => i.type === 'skill').length,
-            talent: created.filter((i: any) => i.type === 'talent').length,
-            spell: created.filter((i: any) => i.type === 'spell').length,
-            trait: created.filter((i: any) => i.type === 'trait').length,
-            trapping: created.filter((i: any) => !['skill', 'talent', 'spell', 'trait'].includes(i.type)).length,
-          },
+    notify.updated('actor', actor.name, { summary: `applied template ${(template as any).name}`, uuid: (actor as any).uuid });
+
+    return {
+      success: true,
+      actorId: actor.id,
+      actorName: actor.name,
+      templateId,
+      templateName: (template as any).name,
+      applied: {
+        name: newName,
+        characteristics: characteristicDeltas,
+        itemIds: created.map((i: any) => i.id),
+        itemsByType: {
+          skill: created.filter((i: any) => i.type === 'skill').length,
+          talent: created.filter((i: any) => i.type === 'talent').length,
+          spell: created.filter((i: any) => i.type === 'spell').length,
+          trait: created.filter((i: any) => i.type === 'trait').length,
+          trapping: created.filter((i: any) => !['skill', 'talent', 'spell', 'trait'].includes(i.type)).length,
         },
-      };
+      },
+    };
   }
 
   // Accept either a full UUID (Compendium.pack.Item.id), a bare 16-char id, or a pack-qualified id.
@@ -4198,7 +4240,10 @@ export class FoundryDataAccess {
       // experience.log entry in updateData (since auto-append is now skipped).
       // The old `skipDialog: true` flag was a no-op — no code in wfrp4e or warhammer-lib
       // references it.
+      const commitObserved =
+        data.verifyPersistence !== false ? this.waitForActorUpdateCommit(String(actor.id), 250) : null;
       await actor.update(data.updateData, { skipExperienceChecks: true } as any);
+      if (commitObserved) await commitObserved;
 
       // BUG-086 fix (2026-05-17): actor.update() does NOT throw on DataModelValidationError;
       // Foundry logs to console.warn but resolves the promise silently. Without post-write
@@ -4534,9 +4579,9 @@ export class FoundryDataAccess {
     itemId?: string | undefined;
     itemName?: string | undefined;
     destination?:
-      | { type: 'actor'; actorId?: string | undefined; actorName?: string | undefined }
-      | { type: 'world'; folder?: string[] | undefined }
-      | undefined;
+    | { type: 'actor'; actorId?: string | undefined; actorName?: string | undefined }
+    | { type: 'world'; folder?: string[] | undefined }
+    | undefined;
   }): { item: any; owner: any | null; scope: 'actor' | 'world' } {
     const dest = target.destination;
     const hasActorLegacy = !!target.actorId;
@@ -4601,9 +4646,9 @@ export class FoundryDataAccess {
     itemId?: string | undefined;
     itemName?: string | undefined;
     destination?:
-      | { type: 'actor'; actorId?: string | undefined; actorName?: string | undefined }
-      | { type: 'world'; folder?: string[] | undefined }
-      | undefined;
+    | { type: 'actor'; actorId?: string | undefined; actorName?: string | undefined }
+    | { type: 'world'; folder?: string[] | undefined }
+    | undefined;
     updateData: Record<string, any>;
     options?: { skipExperienceChecks?: boolean | undefined } | undefined;
     verifyPersistence?: boolean | undefined;
@@ -4612,7 +4657,19 @@ export class FoundryDataAccess {
 
     try {
       const { item, owner, scope } = this._resolveItem(data);
-      await item.update(data.updateData, (data.options ?? {}) as any);
+      const flat =
+        data.verifyPersistence !== false
+          ? ((foundry as any).utils.flattenObject(data.updateData) as Record<string, unknown>)
+          : null;
+      const beforeValues =
+        flat && data.verifyPersistence !== false
+          ? Object.fromEntries(
+            Object.entries(flat)
+              .filter(([path]) => !path.includes('.-='))
+              .map(([path]) => [path, (foundry as any).utils.getProperty(item, path)]),
+          )
+          : null;
+      const updateResult = await item.update(data.updateData, (data.options ?? {}) as any);
 
       // MCP Completion v1 Phase 1 (R1.2): item.update() does NOT throw on
       // DataModelValidationError; Foundry logs to console.warn but resolves
@@ -4620,6 +4677,24 @@ export class FoundryDataAccess {
       // Mirrors updateActor's BUG-086 verify-block (data-access.ts:4190-4211).
       // Pass verifyPersistence:false to opt out when writing auto-derived fields.
       if (data.verifyPersistence !== false) {
+        const flatUpdate = flat ?? {};
+        // BUG-134: Foundry returns `undefined` when a preUpdate hook cancels the write.
+        // Treat that as a failed persistence attempt whenever the requested payload
+        // would have changed at least one field.
+        if (updateResult === undefined && beforeValues) {
+          const cancelled = Object.entries(flatUpdate)
+            .filter(([path]) => !path.includes('.-='))
+            .filter(([path, expected]) => JSON.stringify(beforeValues[path]) !== JSON.stringify(expected));
+          if (cancelled.length > 0) {
+            const preview = cancelled
+              .slice(0, 3)
+              .map(([path, expected]) => `${path}: expected ${JSON.stringify(expected)}, before ${JSON.stringify(beforeValues[path])}`)
+              .join('; ');
+            throw new Error(
+              `UPDATE_ITEM_NOT_PERSISTED: Item.update() returned undefined (preUpdate cancelled write?). Requested changes were not applied. ${preview}${cancelled.length > 3 ? `; +${cancelled.length - 3} more` : ''}`,
+            );
+          }
+        }
         const freshItem =
           scope === 'actor'
             ? (game.actors as any)?.get(owner?.id)?.items?.get(item.id)
@@ -4627,9 +4702,8 @@ export class FoundryDataAccess {
         if (!freshItem) {
           throw new Error(`UPDATE_ITEM_NOT_PERSISTED: item ${item.id} disappeared after update`);
         }
-        const flat = (foundry as any).utils.flattenObject(data.updateData) as Record<string, unknown>;
         const drift: string[] = [];
-        for (const [path, expected] of Object.entries(flat)) {
+        for (const [path, expected] of Object.entries(flatUpdate)) {
           if (path.includes('.-=')) continue;
           const actual = (foundry as any).utils.getProperty(freshItem, path);
           if (JSON.stringify(actual) !== JSON.stringify(expected)) {
@@ -4695,8 +4769,8 @@ export class FoundryDataAccess {
   async createItem(data: {
     itemData: Record<string, any>;
     destination:
-      | { type: 'actor'; actorId?: string | undefined; actorName?: string | undefined }
-      | { type: 'world'; folder?: string[] | undefined };
+    | { type: 'actor'; actorId?: string | undefined; actorName?: string | undefined }
+    | { type: 'world'; folder?: string[] | undefined };
     fromCompendium?: string | undefined;
     returnFullPayload?: boolean | undefined;
   }): Promise<any> {
@@ -4839,8 +4913,17 @@ export class FoundryDataAccess {
       delete cloned._id;
       if (cloned.system?.quantity) cloned.system.quantity.value = data.quantity;
 
-      // Decrement source
-      await item.update({ 'system.quantity.value': sourceQty - data.quantity });
+      // Decrement source — capture result for DP-16 verify BEFORE creating destination.
+      // BUG-213: if source decrement fails silently, dest create would duplicate the item.
+      // The throw MUST precede toActor.createEmbeddedDocuments — that ordering IS the fix.
+      const updateResult = await item.update({ 'system.quantity.value': sourceQty - data.quantity });
+      const freshItem = fromActor.items?.get(data.itemId);
+      const freshQty = (freshItem as any)?.system?.quantity?.value ?? sourceQty;
+      if (updateResult === undefined || freshQty !== sourceQty - data.quantity) {
+        throw new Error(
+          `TRADE_ITEM_SOURCE_DECREMENT_NOT_PERSISTED: source quantity expected ${sourceQty - data.quantity} but found ${freshQty} (updateResult=${updateResult === undefined ? 'undefined' : 'ok'})`,
+        );
+      }
 
       // Create on destination
       const destCreated = await toActor.createEmbeddedDocuments('Item', [cloned]);
@@ -4893,9 +4976,9 @@ export class FoundryDataAccess {
     itemId?: string | undefined;
     itemName?: string | undefined;
     destination?:
-      | { type: 'actor'; actorId?: string | undefined; actorName?: string | undefined }
-      | { type: 'world'; folder?: string[] | undefined }
-      | undefined;
+    | { type: 'actor'; actorId?: string | undefined; actorName?: string | undefined }
+    | { type: 'world'; folder?: string[] | undefined }
+    | undefined;
   }): Promise<any> {
     this.validateFoundryState();
 
@@ -4952,8 +5035,8 @@ export class FoundryDataAccess {
    */
   async addActiveEffect(data: {
     target:
-      | { scope: 'actor'; actorId?: string | undefined; actorName?: string | undefined; itemId?: string | undefined; itemName?: string | undefined }
-      | { scope: 'world'; itemId?: string | undefined; itemName?: string | undefined };
+    | { scope: 'actor'; actorId?: string | undefined; actorName?: string | undefined; itemId?: string | undefined; itemName?: string | undefined }
+    | { scope: 'world'; itemId?: string | undefined; itemName?: string | undefined };
     effect: any;
     returnFullPayload?: boolean | undefined;
   }): Promise<any> {
@@ -5008,8 +5091,8 @@ export class FoundryDataAccess {
    */
   async updateActiveEffect(data: {
     target:
-      | { scope: 'actor'; actorId?: string | undefined; actorName?: string | undefined; itemId?: string | undefined; itemName?: string | undefined }
-      | { scope: 'world'; itemId?: string | undefined; itemName?: string | undefined };
+    | { scope: 'actor'; actorId?: string | undefined; actorName?: string | undefined; itemId?: string | undefined; itemName?: string | undefined }
+    | { scope: 'world'; itemId?: string | undefined; itemName?: string | undefined };
     effectId?: string | undefined;
     effectName?: string | undefined;
     updates: any;
@@ -5064,7 +5147,36 @@ export class FoundryDataAccess {
         updatePayload['system.transferData'] = (fullInflated as any).system.transferData;
       }
 
-      await effect.update(updatePayload);
+      // Snapshot before-values for the undefined-cancel guard (mirrors updateItem:4665).
+      const flatUpdate = (foundry as any).utils.flattenObject(updatePayload) as Record<string, unknown>;
+      const beforeValues: Record<string, unknown> = {};
+      for (const path of Object.keys(flatUpdate)) {
+        if (path.includes('.-=')) continue;
+        beforeValues[path] = (foundry as any).utils.getProperty(effect, path);
+      }
+
+      const updateResult = await effect.update(updatePayload);
+
+      // BUG-216: full DP-16 post-verify (token: UPDATE_ACTIVE_EFFECT_NOT_PERSISTED).
+      if (updateResult === undefined) {
+        const cancelled = Object.entries(flatUpdate)
+          .filter(([path]) => !path.includes('.-='))
+          .filter(([path, expected]) => JSON.stringify(beforeValues[path]) !== JSON.stringify(expected));
+        if (cancelled.length > 0) {
+          const preview = cancelled.slice(0, 3).map(([path, expected]) =>
+            `${path}: expected ${JSON.stringify(expected)}, before ${JSON.stringify(beforeValues[path])}`
+          ).join('; ');
+          throw new Error(
+            `UPDATE_ACTIVE_EFFECT_NOT_PERSISTED: effect.update() returned undefined (preUpdate cancelled write?). ${preview}`,
+          );
+        }
+      }
+      // Re-read via _findEffect (not game.actors — effect is on item.effects).
+      const freshEffect = this._findEffect(item, effect.id);
+      if (!freshEffect) {
+        throw new Error(`UPDATE_ACTIVE_EFFECT_NOT_PERSISTED: effect ${effect.id} disappeared after update`);
+      }
+      verifyDocWrite(freshEffect, flatUpdate, 'UPDATE_ACTIVE_EFFECT_NOT_PERSISTED');
 
       notify.updated('active-effect', effect.name, {
         summary: `on ${item.name}`,
@@ -5081,7 +5193,7 @@ export class FoundryDataAccess {
         updated: Object.keys(updatePayload),
       };
       if (data.returnFullPayload === true) {
-        base.effectData = effect.toObject?.() ?? null;
+        base.effectData = freshEffect.toObject?.() ?? null;
       }
       return base;
     } catch (error) {
@@ -5096,8 +5208,8 @@ export class FoundryDataAccess {
    */
   async deleteActiveEffect(data: {
     target:
-      | { scope: 'actor'; actorId?: string | undefined; actorName?: string | undefined; itemId?: string | undefined; itemName?: string | undefined }
-      | { scope: 'world'; itemId?: string | undefined; itemName?: string | undefined };
+    | { scope: 'actor'; actorId?: string | undefined; actorName?: string | undefined; itemId?: string | undefined; itemName?: string | undefined }
+    | { scope: 'world'; itemId?: string | undefined; itemName?: string | undefined };
     effectId?: string | undefined;
     effectName?: string | undefined;
   }): Promise<any> {
@@ -5136,8 +5248,8 @@ export class FoundryDataAccess {
     itemId?: string | undefined;
     itemName?: string | undefined;
     destination:
-      | { type: 'actor'; actorId?: string | undefined; actorName?: string | undefined }
-      | { type: 'world' };
+    | { type: 'actor'; actorId?: string | undefined; actorName?: string | undefined }
+    | { type: 'world' };
   } {
     if (target?.scope === 'world') {
       return {
@@ -5221,7 +5333,7 @@ export class FoundryDataAccess {
     };
   }
 
-  async getCombat(data: { combatId?: string } = {}): Promise<any> {
+  async getCombat(data: { combatId?: string | undefined } = {}): Promise<any> {
     this.validateFoundryState();
     const combat = this.resolveCombat(data.combatId);
     if (!combat) return null;
@@ -5237,7 +5349,7 @@ export class FoundryDataAccess {
     };
   }
 
-  async listCombatants(data: { combatId?: string } = {}): Promise<any[]> {
+  async listCombatants(data: { combatId?: string | undefined } = {}): Promise<any[]> {
     this.validateFoundryState();
     const combat = this.resolveCombat(data.combatId);
     if (!combat) return [];
@@ -5253,7 +5365,7 @@ export class FoundryDataAccess {
   }
 
   async advanceCombat(data: {
-    combatId?: string;
+    combatId?: string | undefined;
     action: 'start' | 'next' | 'prev' | 'nextRound' | 'prevRound' | 'rollAll' | 'rollNPC';
   }): Promise<any> {
     this.validateFoundryState();
@@ -5297,9 +5409,9 @@ export class FoundryDataAccess {
   }
 
   async addCombatants(data: {
-    combatId?: string;
+    combatId?: string | undefined;
     actorIds: string[];
-    sceneId?: string;
+    sceneId?: string | undefined;
   }): Promise<{ added: string[] }> {
     this.validateFoundryState();
     let combat: any = this.resolveCombat(data.combatId);
@@ -5312,16 +5424,28 @@ export class FoundryDataAccess {
 
     const scene: any = combat.scene ?? (game as any).scenes?.get(data.sceneId) ?? (game as any).scenes?.active;
     const creates: any[] = [];
+    const missingTokens: string[] = [];
     for (const actorId of data.actorIds) {
       const actor: any = (game as any).actors?.get(actorId);
       if (!actor) continue;
       const token: any = scene?.tokens?.find((t: any) => t.actorId === actorId);
+      if (!token?.id) {
+        missingTokens.push(`${actor.name ?? actorId} (${actorId})`);
+        continue;
+      }
       creates.push({
         actorId,
-        tokenId: token?.id,
+        tokenId: token.id,
         sceneId: scene?.id,
         hidden: token?.hidden ?? false,
       });
+    }
+
+    if (missingTokens.length > 0) {
+      const sceneLabel = scene?.name ?? scene?.id ?? data.sceneId ?? '(unknown scene)';
+      throw new Error(
+        `ADD_COMBATANTS_TOKEN_REQUIRED: add-combatants requires a scene-placed token on scene "${sceneLabel}". Missing token context for: ${missingTokens.join(', ')}. Pass sceneId for the target scene or place tokens before adding combatants.`,
+      );
     }
 
     const created: any[] = await combat.createEmbeddedDocuments('Combatant', creates);
@@ -5334,20 +5458,31 @@ export class FoundryDataAccess {
   }
 
   async removeCombatants(data: {
-    combatId?: string;
+    combatId?: string | undefined;
     combatantIds: string[];
   }): Promise<{ removed: string[] }> {
     this.validateFoundryState();
     const combat: any = this.resolveCombat(data.combatId);
     if (!combat) throw new Error('No combat found');
-    await combat.deleteEmbeddedDocuments('Combatant', data.combatantIds);
-    notify.deleted('combatant', `${data.combatantIds.length} combatant(s)`, {
+    // BUG-215 + PARITY-025: pre-filter the requested IDs against the live combatant
+    // collection BEFORE deleting. Foundry's deleteEmbeddedDocuments THROWS on any id not
+    // present in the EmbeddedCollection (it does NOT silently skip), so a mixed valid/bogus
+    // batch would otherwise fail wholesale and remove nothing. We then map the delete return
+    // to surface only the IDs Foundry actually removed (mirrors addCombatants:5400).
+    // (BUG-215 re-fix 2026-05-24: original fix assumed silent-skip — a false premise surfaced
+    // by /agent-validate live eval; deleteEmbeddedDocuments throws, so the pre-filter is required.)
+    const validIds = data.combatantIds.filter((id) => combat.combatants?.get(id));
+    const deleted = validIds.length
+      ? await combat.deleteEmbeddedDocuments('Combatant', validIds)
+      : [];
+    const removedIds = deleted.map((c: any) => c.id).filter(Boolean);
+    notify.deleted('combatant', `${removedIds.length} combatant(s)`, {
       summary: `from combat ${combat.id}`,
     });
-    return { removed: data.combatantIds };
+    return { removed: removedIds };
   }
 
-  async endCombat(data: { combatId?: string } = {}): Promise<{ ended: string }> {
+  async endCombat(data: { combatId?: string | undefined } = {}): Promise<{ ended: string }> {
     this.validateFoundryState();
     const combat: any = this.resolveCombat(data.combatId);
     if (!combat) throw new Error('No combat found');
@@ -5357,11 +5492,35 @@ export class FoundryDataAccess {
     return { ended: id };
   }
 
+  private async waitForActorUpdateCommit(actorId: string, timeoutMs: number = 250): Promise<void> {
+    const hooksApi: any = (globalThis as any).Hooks;
+    if (!hooksApi?.on || !hooksApi?.off) {
+      await Promise.resolve();
+      return;
+    }
+
+    let hookId: number | undefined;
+    let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await new Promise<void>((resolve) => {
+        hookId = hooksApi.on('updateActor', (updatedActor: any) => {
+          if (updatedActor?.id === actorId) {
+            resolve();
+          }
+        });
+        timeoutHandle = setTimeout(resolve, timeoutMs);
+      });
+    } finally {
+      if (hookId !== undefined) hooksApi.off('updateActor', hookId);
+      if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
+    }
+  }
+
   async applyDamage(data: {
     actorId: string;
     amount: number;
-    damageType?: 'NORMAL' | 'IGNORE_AP' | 'IGNORE_TB' | 'IGNORE_ALL';
-    hitLocation?: 'head' | 'body' | 'rArm' | 'lArm' | 'rLeg' | 'lLeg';
+    damageType?: 'NORMAL' | 'IGNORE_AP' | 'IGNORE_TB' | 'IGNORE_ALL' | undefined;
+    hitLocation?: 'head' | 'body' | 'rArm' | 'lArm' | 'rLeg' | 'lLeg' | undefined;
   }): Promise<any> {
     this.validateFoundryState();
     const actor: any = (game as any).actors?.get(data.actorId);
@@ -5433,7 +5592,7 @@ export class FoundryDataAccess {
   async applyCondition(data: {
     actorId: string;
     conditionKey: string;
-    value?: number;
+    value?: number | undefined;
   }): Promise<any> {
     this.validateFoundryState();
     const actor: any = (game as any).actors?.get(data.actorId);
@@ -5475,7 +5634,7 @@ export class FoundryDataAccess {
   async removeCondition(data: {
     actorId: string;
     conditionKey: string;
-    count?: number;
+    count?: number | undefined;
   }): Promise<any> {
     this.validateFoundryState();
     const actor: any = (game as any).actors?.get(data.actorId);
@@ -5516,8 +5675,8 @@ export class FoundryDataAccess {
 
   async listActiveEffects(data: {
     actorId: string;
-    filter?: 'all' | 'applied' | 'temporary' | 'conditions';
-    includeItemAEs?: boolean;
+    filter?: 'all' | 'applied' | 'temporary' | 'conditions' | undefined;
+    includeItemAEs?: boolean | undefined;
   }): Promise<any[]> {
     this.validateFoundryState();
     const actor: any = (game as any).actors?.get(data.actorId);
@@ -5607,8 +5766,8 @@ export class FoundryDataAccess {
    */
   async getActiveEffectByName(data: {
     target:
-      | { scope: 'actor'; actorId?: string | undefined; actorName?: string | undefined; itemId?: string | undefined; itemName?: string | undefined }
-      | { scope: 'world'; itemId?: string | undefined; itemName?: string | undefined };
+    | { scope: 'actor'; actorId?: string | undefined; actorName?: string | undefined; itemId?: string | undefined; itemName?: string | undefined }
+    | { scope: 'world'; itemId?: string | undefined; itemName?: string | undefined };
     effectId?: string | undefined;
     effectName?: string | undefined;
   }): Promise<any> {

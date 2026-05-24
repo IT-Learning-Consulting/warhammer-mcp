@@ -160,7 +160,7 @@ export class SoundTool extends BaseTool {
             y: { type: 'number', description: '[create] Required y-coordinate.' },
             elevation: { type: 'number', description: '[create/update.changes] Elevation value.' },
             radius: { type: 'number', minimum: 0, description: '[create/update.changes] Sound emission radius.' },
-            path: { type: 'string', description: '[create/update.changes] Audio file path (null to clear).' },
+            path: { type: ['string', 'null'], description: '[create/update.changes] Audio file path (null to clear).' },
             repeat: { type: 'boolean', description: '[create/update.changes] Loop the sound.' },
             volume: { type: 'number', minimum: 0, maximum: 1, description: '[create/update.changes] Playback volume 0-1.' },
             walls: { type: 'boolean', description: '[create/update.changes] Whether sound is blocked by walls.' },

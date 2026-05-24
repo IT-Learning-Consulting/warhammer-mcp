@@ -107,6 +107,8 @@ export interface FactoryConfig<_TCreate, TUpdate, TViewModel, TListItem> {
     /** Key for delete's remaining count. e.g. 'remainingLights' */
     remainingCount: string;
   };
+  /** NotifyKind for notify.created/updated/deleted calls. */
+  notifyKind: NotifyKind;
   /** Default list pageSize when not specified by caller. Default 20. */
   defaultPageSize?: number;
   /** Optional pre-create transform — e.g. for note B5 FK resolution. Default: identity. */
@@ -184,6 +186,7 @@ export function createEmbeddedCRUDHandlers<
     applyListFilters,
     isFilterApplied,
     responseKeys,
+    notifyKind,
     defaultPageSize = 20,
     preCreateTransform,
   } = config;
@@ -221,8 +224,24 @@ export function createEmbeddedCRUDHandlers<
       // DP-16 post-verify: re-read from scene collection.
       const persisted = getEmbeddedOrThrow<any>(scene, collection, doc.id, documentName);
 
+      // PARITY-003: field-compare loop mirrors update:261-274 (F08 _source read).
+      // Skip flags + family-specific dp16SkipFields (normalization / deep objects).
+      // preCreateTransform is unused by all 4 families (template/light/tile/sound) —
+      // safe to compare requestedChanges (pre-transform) against persisted._source.
+      const createSkip = new Set<string>(['flags', ...dp16SkipFields]);
+      for (const [field, requestedValue] of Object.entries(requestedChanges)) {
+        if (createSkip.has(field)) continue;
+        const persistedValue = (persisted._source as any)?.[field];
+        if (persistedValue !== requestedValue) {
+          throw new Error(
+            `${errorTag}_WRITE_NOT_PERSISTED: field "${field}" expected ${JSON.stringify(requestedValue)} ` +
+              `but post-create _source value is ${JSON.stringify(persistedValue)}`,
+          );
+        }
+      }
+
       notify.created(
-        documentLabel as NotifyKind,
+        notifyKind,
         `${capitalize(documentLabel)} @(${persisted.x ?? 0},${persisted.y ?? 0})`,
         { summary: `on scene ${input.sceneId}` },
       );
@@ -271,7 +290,7 @@ export function createEmbeddedCRUDHandlers<
       }
 
       notify.updated(
-        documentLabel as NotifyKind,
+        notifyKind,
         `${capitalize(documentLabel)} ${docId}`,
         { summary: changedFields.join(', ') },
       );
@@ -313,7 +332,7 @@ export function createEmbeddedCRUDHandlers<
       }
 
       notify.deleted(
-        documentLabel as NotifyKind,
+        notifyKind,
         `${capitalize(documentLabel)} ${docId}`,
       );
 

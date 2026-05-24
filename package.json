@@ -10,7 +10,8 @@
   "scripts": {
     "dev": "npm run dev --workspace=packages/mcp-server",
     "build": "npm run build:shared && npm run build:server && npm run build:foundry",
-    "build:foundry": "npm run build --workspace=packages/foundry-module",
+    "check:handlers": "node scripts/check-handler-envelope.mjs",
+    "build:foundry": "npm run check:handlers && npm run build --workspace=packages/foundry-module",
     "build:server": "npm run build --workspace=packages/mcp-server",
     "build:shared": "npm run build --workspace=shared",
     "bundle:server": "npm run build:bundle --workspace=packages/mcp-server",

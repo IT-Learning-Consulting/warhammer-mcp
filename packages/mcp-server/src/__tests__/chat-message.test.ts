@@ -102,10 +102,13 @@ describe('ChatMessageToolInput schema', () => {
     ).not.toThrow();
   });
 
-  it('update changes schema excludes rolls (CHATMESSAGE_ROLLS_IMMUTABLE guard)', () => {
+  it('update changes schema accepts rolls so the handler CHATMESSAGE_ROLLS_IMMUTABLE guard stays reachable', () => {
+    // Rolls is intentionally accepted at the schema layer: .strict() would otherwise
+    // reject it at parse time, making the handler's CHATMESSAGE_ROLLS_IMMUTABLE token
+    // unreachable. Immutability is enforced in the Foundry-side preUpdateTransform, not here.
     expect(() =>
       ChatMessageToolInput.parse({ action: 'update', messageId: 'msg-123', changes: { rolls: [] as any } }),
-    ).toThrow();
+    ).not.toThrow();
   });
 
   it('list defaults page=1, pageSize=20, sortOrder=desc', () => {
@@ -206,10 +209,14 @@ describe('ChatMessageTool delete — confirm gate', () => {
 });
 
 describe('ChatMessageTool update — rolls-immutability', () => {
-  it('schema rejects rolls in changes at parse time', () => {
-    expect(() =>
-      ChatMessageToolInput.parse({ action: 'update', messageId: 'abc', changes: { rolls: [] as any } }),
-    ).toThrow();
+  it('rolls in changes passes schema parse and reaches the handler guard (not rejected at parse)', async () => {
+    // The schema deliberately accepts rolls so the request reaches the Foundry-side
+    // preUpdateTransform guard. If rolls were rejected at parse, execute() would surface
+    // a validation error instead of the handler's CHATMESSAGE_ROLLS_IMMUTABLE token.
+    const tool = makeTool(null, 'CHATMESSAGE_ROLLS_IMMUTABLE: rolls cannot be modified after creation');
+    const result = await tool.execute({ action: 'update', messageId: 'abc', changes: { rolls: [] as any } });
+    expect((result as any).isError).toBe(true);
+    expect((result as any).content[0].text).toContain('CHATMESSAGE_ROLLS_IMMUTABLE');
   });
 
   it('surfaces CHATMESSAGE_ROLLS_IMMUTABLE when handler rejects', async () => {

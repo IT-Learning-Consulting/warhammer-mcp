@@ -165,7 +165,7 @@ export class TemplateTool extends BaseTool {
             width: { type: 'number', description: '[create/update.changes] Width (ray templates).' },
             borderColor: { type: 'string', description: '[create/update.changes] Border color hex string.' },
             fillColor: { type: 'string', description: '[create/update.changes] Fill color hex string (supports alpha, e.g. "#ff000080").' },
-            texture: { type: 'string', description: '[create/update.changes] Texture file path or null.' },
+            texture: { type: ['string', 'null'], description: '[create/update.changes] Texture file path or null.' },
             hidden: { type: 'boolean', description: '[create/update.changes] Hide the template from players.' },
             elevation: { type: 'number', description: '[create/update.changes] Elevation value.' },
             sort: { type: 'integer', description: '[create/update.changes] Render sort order.' },

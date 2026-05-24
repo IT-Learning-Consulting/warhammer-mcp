@@ -105,6 +105,7 @@ const handlers = createEmbeddedCRUDHandlers<any, any, TemplateViewModel, Templat
     listArray: 'templates',
     remainingCount: 'remainingTemplates',
   },
+  notifyKind: 'template',
   // template always paginates (pre-factory list never returned bare-array shape).
   listAlwaysPaginated: true,
   responseBuilders: {

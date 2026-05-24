@@ -291,17 +291,16 @@ function main() {
   const violations = [];
   const checked = [];
 
-  // Pre-existing BUG-071-class drift surfaced by Phase 8's improved single-line
-  // inputSchema extractor (the original extractor missed single-line entries
-  // and thus silently passed these). Tracked as friction notes for a future
-  // hygiene sprint; gate exits 0 today by allowlisting them here. Each entry:
-  // `<tool-basename>.ts:<fieldName>`.
+  // False-positive entries: findNullableFields() matches `.nullable()` at ANY nesting
+  // depth. In shared/src/schemas/token.ts, `TokenRingColorsInput.ring` (color string)
+  // and `TokenRingSubjectInput.texture` (string) are nullable — but the top-level
+  // exported `ring` field is `TokenRingInput.optional()` and `texture` is
+  // `TextureDataSchema.optional()`, neither nullable. Adding null to their inputSchema
+  // types would be incorrect. Fix: improve findNullableFields to restrict matching to
+  // the exported top-level input object only (tracked for a future tooling sprint).
   const PRE_EXISTING_NULLABLE_DRIFT = new Set([
-    'sound.ts:path',
-    'template.ts:texture',
-    'token.ts:ring',
-    'token.ts:texture',
-    'token.ts:actorId',
+    'token.ts:ring',    // FALSE POSITIVE — nullable is on TokenRingColorsInput.ring (nested)
+    'token.ts:texture', // FALSE POSITIVE — nullable is on TokenRingSubjectInput.texture (nested)
   ]);
 
   for (const schemaFile of schemaFiles) {

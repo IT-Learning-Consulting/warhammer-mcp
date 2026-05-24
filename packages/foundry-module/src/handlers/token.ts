@@ -477,6 +477,16 @@ export async function addTokens(
     if (!sceneId) {
       throw new Error('TOKEN_ADD_NO_SCENE: addActorsToScene returned no sceneId and none was supplied');
     }
+    const tokenIds = (result?.tokenIds as string[]) ?? [];
+
+    // PARITY-019 + BUG-204: scene-presence verify for each returned tokenId (mirrors createToken:256).
+    // Empty tokenIds is a safe no-op (no actors → no verify).
+    const verifyScene = getSceneOrThrow(sceneId);
+    for (const id of tokenIds) {
+      if (!verifyScene.tokens?.get(id)) {
+        throw new Error(`TOKEN_WRITE_NOT_PERSISTED: token "${id}" not found in scene.tokens after addActorsToScene`);
+      }
+    }
 
     return {
       success: true as const,
@@ -484,8 +494,8 @@ export async function addTokens(
         success: true,
         sceneId,
         // F12: fallback to tokenIds.length when the underlying facade omits `added`.
-        added: (result?.added as number) ?? ((result?.tokenIds as string[])?.length ?? 0),
-        tokenIds: (result?.tokenIds as string[]) ?? [],
+        added: (result?.added as number) ?? tokenIds.length,
+        tokenIds,
         placement: (result?.placement as string) ?? input.placement ?? 'random',
       } satisfies TokenAddResponse,
     };
@@ -510,10 +520,20 @@ export async function deleteTokenAction(
   const token = getEmbeddedOrThrow<any>(scene, 'tokens', input.tokenId, 'Token');
   const deletedName = (token.name as string) ?? '';
 
+  const sizeBefore = scene.tokens?.size ?? 0;
   return wrappedWrite('token.delete-token', async () => {
-    const result = await dataAccess.deleteToken({ sceneId: input.sceneId, tokenId: input.tokenId });
+    await dataAccess.deleteToken({ sceneId: input.sceneId, tokenId: input.tokenId });
+
+    // PARITY-018: mirror deleteToken's two-part DP-18 assert (presence + size-delta).
+    if (scene.tokens?.get(input.tokenId)) {
+      throw new Error(`TOKEN_WRITE_NOT_PERSISTED: token "${input.tokenId}" still present after delete-token`);
+    }
     const sizeAfter = scene.tokens?.size ?? 0;
-    const remainingTokens = (result?.remainingTokens as number) ?? sizeAfter;
+    if (sizeAfter !== sizeBefore - 1) {
+      throw new Error(
+        `TOKEN_WRITE_NOT_PERSISTED: scene.tokens.size expected ${sizeBefore - 1} but found ${sizeAfter}`,
+      );
+    }
 
     notify.deleted('token', deletedName || `Token ${input.tokenId}`, {
       summary: `from ${scene.name}`,
@@ -526,7 +546,7 @@ export async function deleteTokenAction(
         deletedId: input.tokenId,
         deletedName,
         sceneId: input.sceneId,
-        remainingTokens,
+        remainingTokens: sizeAfter,
       } satisfies TokenDeleteResponse,
     };
   }, { sceneId: input.sceneId });

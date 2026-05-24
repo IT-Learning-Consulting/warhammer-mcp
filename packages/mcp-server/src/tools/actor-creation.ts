@@ -61,11 +61,6 @@ export class ActorCreationTools extends BaseTool {
               description: 'Custom names for the created actors (e.g., ["Flameheart", "Sneak", "Peek"])',
               minItems: 1,
             },
-            customNames: {
-              type: 'array',
-              items: { type: 'string' },
-              description: 'Alias for names — accepted when skills pass customNames directly. Handler reads names; if only customNames is provided, pass it as names.',
-            },
             quantity: {
               type: 'number',
               description: 'Number of actors to create (default: based on names array length)',

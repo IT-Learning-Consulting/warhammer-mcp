@@ -110,6 +110,7 @@ const handlers = createEmbeddedCRUDHandlers<any, any, SoundViewModel, SoundListI
     listArray: 'sounds',
     remainingCount: 'remainingSounds',
   },
+  notifyKind: 'sound',
 });
 
 export const createSound = handlers.create;

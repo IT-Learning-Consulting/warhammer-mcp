@@ -357,6 +357,9 @@ async function finishDiseaseDuration(input: {
   const item = getDiseaseItemOrThrow(actor, input.diseaseItemId);
   const diseaseName = item.name;
 
+  // BUG-229: capture beforeDuration for three-terminal-state post-verify.
+  const beforeDuration = item.system?.duration?.value;
+
   // Snapshot disease IDs before, to detect newly-created Lingering diseases
   const diseaseIdsBefore = new Set(
     actor.items.filter((i: any) => i.type === 'disease').map((i: any) => i.id)
@@ -373,6 +376,20 @@ async function finishDiseaseDuration(input: {
     (i: any) => i.type === 'disease' && !diseaseIdsBefore.has(i.id)
   );
   const newDisease = newDiseases[0] ?? null;
+
+  // BUG-229: three-terminal-state verify (CN-1 from verifier: equality-throw false-positives
+  // on Lingering escalation where duration is unchanged but a new disease item was created).
+  // Throw only when NONE of the three legitimate outcomes holds.
+  const afterDuration = (after as any)?._source?.system?.duration?.value;
+  const cured = resolved;                          // (a) item gone
+  const extended = !resolved && afterDuration !== beforeDuration;  // (b) duration changed
+  const escalated = newDiseases.length > 0;        // (c) Lingering → new disease item
+  if (!cured && !extended && !escalated) {
+    throw new Error(
+      `DISEASE_FINISH_NOT_PERSISTED: finishDuration() left no observable change — ` +
+      `duration unchanged (${beforeDuration}→${afterDuration}), item still present, no new disease created`,
+    );
+  }
 
   if (resolved) {
     notify.deleted('item', `${actor.name}: ${diseaseName}`, { summary: 'duration finished, disease cured' });

@@ -56,6 +56,7 @@ import {
 } from '@foundry-mcp/shared';
 import { wrappedWrite } from '../transaction-manager.js';
 import { getEmbeddedOrThrow } from '../utils/getEmbeddedOrThrow.js';
+import { verifyDocWrite } from '../utils/verifyWrite.js';
 import { notify } from '../notify.js';
 
 type AccessGate = { allowed: boolean };
@@ -484,7 +485,21 @@ export async function updateBehavior(
     const payload = deepStripUndefined(changes);
     await behavior.update(payload);
 
-    notify.updated('region', behavior.type as string, {
+    // BUG-203 + PARITY-016: re-read after update (mirrors createBehavior:426).
+    const persisted = getEmbeddedOrThrow<any>(region, 'behaviors', input.behaviorId, 'RegionBehavior');
+
+    // Field-drift verify for scalar fields (F08-safe _source read).
+    const scalarExpected: Record<string, unknown> = {};
+    if (input.name !== undefined) scalarExpected['name'] = input.name;
+    if (input.disabled !== undefined) scalarExpected['disabled'] = input.disabled;
+    if (Object.keys(scalarExpected).length > 0) {
+      verifyDocWrite(persisted, scalarExpected, 'BEHAVIOR_WRITE_NOT_PERSISTED', { readSource: true });
+    }
+    if (input.behavior && (persisted._source as any)?.system == null) {
+      throw new Error('BEHAVIOR_WRITE_NOT_PERSISTED: system was null/undefined after update');
+    }
+
+    notify.updated('region', persisted.type as string, {
       summary: `on region ${region.name}`,
     });
 
@@ -493,7 +508,7 @@ export async function updateBehavior(
       data: {
         success: true,
         regionId: region.id as string,
-        behavior: serializeBehaviorSummary(behavior),
+        behavior: serializeBehaviorSummary(persisted),
         changedFields,
       } satisfies RegionBehaviorUpdateResponse,
     };

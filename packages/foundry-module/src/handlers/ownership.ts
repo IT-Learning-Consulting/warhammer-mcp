@@ -31,6 +31,16 @@ type EnvelopeOK<T> = { success: true; data: T };
 type EnvelopeErr = { success: false; error: string };
 type Envelope<T> = EnvelopeOK<T> | EnvelopeErr;
 
+const OWNERSHIP_NOTIFY_KIND: Record<DocumentType, NotifyKind> = {
+  actor: 'actor',
+  item: 'item',
+  journal: 'journal',
+  scene: 'scene',
+  rolltable: 'rolltable',
+  folder: 'folder',
+  macro: 'macro',
+};
+
 interface Target {
   documentType: DocumentType;
   uuid?: string | undefined;
@@ -233,7 +243,7 @@ export async function setDocumentOwnership(input: SetDocumentOwnershipInputType)
     // BUG-070 prevention: doc.update() returns undefined on silent rejection.
     verifyOwnershipWrite(updateResult, doc, { userId: resolvedUserId, default: isDefault, level });
 
-    notify.updated(documentType as NotifyKind, (doc.name as string | null) ?? `${documentType} ${doc.id}`, {
+    notify.updated(OWNERSHIP_NOTIFY_KIND[documentType], (doc.name as string | null) ?? `${documentType} ${doc.id}`, {
       summary: `ownership level ${level}`,
     });
 
@@ -388,7 +398,7 @@ export async function bulkSetDocumentOwnership(input: BulkSetDocumentOwnershipIn
           }
         }
         if (succeeded > 0) {
-          notify.updated(documentType as NotifyKind, `${succeeded}/${group.length} ${documentType}`, {
+          notify.updated(OWNERSHIP_NOTIFY_KIND[documentType], `${succeeded}/${group.length} ${documentType}`, {
             summary: `level ${level}`,
           });
         }
@@ -434,7 +444,7 @@ export async function resetDocumentOwnership(input: ResetDocumentOwnershipInputT
     // BUG-070 prevention: verify the reset actually persisted.
     verifyOwnershipWrite(updateResult, doc, { default: true, level: 0 });
 
-    notify.updated(input.documentType as NotifyKind, (doc.name as string | null) ?? `${input.documentType} ${doc.id}`, {
+    notify.updated(OWNERSHIP_NOTIFY_KIND[input.documentType], (doc.name as string | null) ?? `${input.documentType} ${doc.id}`, {
       summary: 'ownership reset',
     });
 

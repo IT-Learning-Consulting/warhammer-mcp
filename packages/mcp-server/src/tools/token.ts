@@ -194,7 +194,7 @@ export class TokenTool extends BaseTool {
             name: { type: 'string', description: '[create] Required token name.' },
             x: { type: 'number', description: '[create] Required x-coordinate.' },
             y: { type: 'number', description: '[create] Required y-coordinate.' },
-            actorId: { type: 'string', description: '[create/update.changes] Linked actor document ID.' },
+            actorId: { type: ['string', 'null'], description: '[create/update.changes] Linked actor document ID.' },
             actorLink: { type: 'boolean', description: '[create/update.changes] Whether token is linked to actor data.' },
             width: { type: 'number', description: '[create/update.changes] Token width in grid units.' },
             height: { type: 'number', description: '[create/update.changes] Token height in grid units.' },

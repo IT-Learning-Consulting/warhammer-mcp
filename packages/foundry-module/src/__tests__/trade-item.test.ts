@@ -10,22 +10,29 @@ function makeActor(
   items: Array<{ id: string; name: string; type: string; quantity?: number }>
 ) {
   const itemMap = new Map(
-    items.map((i) => [
-      i.id,
-      {
+    items.map((i) => {
+      // Use a mutable box so update() can mutate and return a non-undefined result
+      // (BUG-213 fix: updateResult===undefined triggers TRADE_ITEM_SOURCE_DECREMENT_NOT_PERSISTED).
+      const qtyBox = { value: i.quantity ?? 1 };
+      const itemObj: any = {
         id: i.id,
         name: i.name,
         type: i.type,
-        system: { quantity: { value: i.quantity ?? 1 } },
+        system: { quantity: qtyBox },
         toObject: () => ({
           _id: i.id,
           name: i.name,
           type: i.type,
-          system: { quantity: { value: i.quantity ?? 1 } },
+          system: { quantity: { value: qtyBox.value } },
         }),
-        update: vi.fn(async () => {}),
-      },
-    ])
+        update: vi.fn(async (payload: Record<string, unknown>) => {
+          const newQty = payload['system.quantity.value'];
+          if (typeof newQty === 'number') qtyBox.value = newQty;
+          return itemObj; // non-undefined = success signal for BUG-213 guard
+        }),
+      };
+      return [i.id, itemObj] as const;
+    })
   );
   return {
     id,
@@ -190,5 +197,35 @@ describe('tradeItem — encumbrance stays system-owned (HC3)', () => {
     // Foundry prepareData recomputes encumbrance on item-list change.
     expect(fromActor.update).not.toHaveBeenCalled();
     expect(toActor.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('tradeItem — BUG-213 duplication guard (partial-quantity silent drop)', () => {
+  it('throws TRADE_ITEM_SOURCE_DECREMENT_NOT_PERSISTED and does NOT call createEmbeddedDocuments when update() returns undefined', async () => {
+    // Simulate a preUpdate hook cancelling the source decrement (update returns undefined).
+    // Without the guard, handler would unconditionally create on destination → item duplication.
+    const fromActor = makeActor('a1', 'Hans', [
+      { id: 'stack', name: 'Arrows', type: 'ammunition', quantity: 5 },
+    ]);
+    const toActor = makeActor('a2', 'Maria', []);
+
+    // Override update to return undefined (hook-cancelled write) without mutating qty.
+    const srcItem: any = fromActor._itemMap.get('stack');
+    srcItem.update = vi.fn(async () => undefined);
+
+    (globalThis as any).game = {
+      ...(globalThis as any).game,
+      actors: {
+        get: (id: string) => (id === 'a1' ? fromActor : id === 'a2' ? toActor : null),
+      },
+    };
+    const da = makeDA();
+
+    await expect(
+      da.tradeItem({ fromActorId: 'a1', toActorId: 'a2', itemId: 'stack', quantity: 2 }),
+    ).rejects.toThrow(/TRADE_ITEM_SOURCE_DECREMENT_NOT_PERSISTED/);
+
+    // The duplication invariant: destination create must NOT have been called.
+    expect(toActor.createEmbeddedDocuments).not.toHaveBeenCalled();
   });
 });

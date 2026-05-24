@@ -533,9 +533,3 @@ export class JournalTool extends BaseTool {
     };
   }
 }
-
-// Backward-compat alias — backend.ts previously imported `JournalTools` (plural).
-// Phase 3 renames to JournalTool (singular) to match other umbrella class names
-// like RollTableTool. Re-export under the old name so a future grep cleanup is
-// a one-line removal rather than a cross-file refactor risk.
-export { JournalTool as JournalTools };

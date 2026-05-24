@@ -474,6 +474,29 @@ export async function playPlaylist(data: unknown): Promise<Envelope<any>> {
     if (!persisted) {
       throw new Error(`PLAYLIST_WRITE_NOT_PERSISTED: Playlist "${input.playlistId}" missing after playAll`);
     }
+    // BUG-201: assert _source.playing===true after playAll.
+    // DISABLED-mode (mode:-1) is a legitimate no-op — playAll does not start DISABLED playlists.
+    // Return a suppressed flag instead of throwing a false PLAYLIST_WRITE_NOT_PERSISTED.
+    if (persisted._source.mode === -1) {
+      notify.updated('playlist', `Playlist "${persisted._source.name}"`, {
+        summary: 'play suppressed (DISABLED mode)',
+      });
+      return {
+        success: true as const,
+        data: {
+          success: true,
+          playlistId: input.playlistId,
+          playing: false,
+          mode: persisted._source.mode,
+          suppressed: true,
+        },
+      };
+    }
+    if (persisted._source.playing !== true) {
+      throw new Error(
+        `PLAYLIST_WRITE_NOT_PERSISTED: _source.playing is false after playAll (mode: ${JSON.stringify(persisted._source.mode)})`,
+      );
+    }
 
     notify.updated('playlist', `Playlist "${persisted._source.name}"`, {
       summary: input.mode ? `playing (${input.mode})` : 'playing',
@@ -504,6 +527,13 @@ export async function stopPlaylist(data: unknown): Promise<Envelope<any>> {
     const persisted = (game as any).playlists?.get(input.playlistId);
     if (!persisted) {
       throw new Error(`PLAYLIST_WRITE_NOT_PERSISTED: Playlist "${input.playlistId}" missing after stopAll`);
+    }
+    // BUG-202: assert _source.playing===false after stopAll.
+    // Idempotent double-stop: already-stopped leaves playing:false → no throw.
+    if (persisted._source.playing !== false) {
+      throw new Error(
+        `PLAYLIST_WRITE_NOT_PERSISTED: _source.playing is still true after stopAll`,
+      );
     }
 
     notify.updated('playlist', `Playlist "${persisted._source.name}"`, {

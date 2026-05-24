@@ -647,6 +647,30 @@ export async function updatePage(
         );
       }
     }
+    // BUG-209: text.content — CN-1: read from _source (F08-safe); do NOT strict-compare
+    // against raw input (Foundry sanitiseHtml strips <script>/on*/javascript: on ingest —
+    // strict-equals would false-positive JOURNAL_WRITE_NOT_PERSISTED on legitimate sanitisation).
+    if (input.changes.text?.content !== undefined) {
+      const persistedContent = (updated as any)._source?.text?.content;
+      if (persistedContent === null || persistedContent === undefined || persistedContent === '') {
+        throw new Error(
+          `JOURNAL_WRITE_NOT_PERSISTED: page text.content was cleared after updateEmbeddedDocuments ` +
+          `(expected non-empty, got ${JSON.stringify(persistedContent)})`,
+        );
+      }
+    }
+    // PARITY-029 (updatePage half): flags + ownership — mirror updateEntry:356-367
+    // (presence/object-type check; Foundry merges these maps, deep-equal is over-strict).
+    for (const field of ['flags', 'ownership'] as const) {
+      if ((input.changes as any)[field] !== undefined) {
+        const persisted = (updated as any)[field];
+        if (!persisted || typeof persisted !== 'object') {
+          throw new Error(
+            `JOURNAL_WRITE_NOT_PERSISTED: ${field} expected an object post-update but found ${typeof persisted}`,
+          );
+        }
+      }
+    }
 
     notify.updated('journal', updated.name as string, {
       summary: `on ${entry.name}`,
@@ -901,6 +925,17 @@ export async function updateCategory(
         `JOURNAL_WRITE_NOT_PERSISTED: category sort expected ${input.changes.sort} but ` +
         `post-update value is ${updated.sort}`,
       );
+    }
+    // BUG-211 + PARITY-029 (updateCategory half): flags presence/object-type check
+    // mirrors updateEntry:356-367. Note: derived flags defaults to {} so this is
+    // primarily parity-restoration; a stronger per-key _source check is a future follow-up.
+    if (input.changes.flags !== undefined) {
+      const persisted = (updated as any).flags;
+      if (!persisted || typeof persisted !== 'object') {
+        throw new Error(
+          `JOURNAL_WRITE_NOT_PERSISTED: flags expected an object post-update but found ${typeof persisted}`,
+        );
+      }
     }
 
     notify.updated('journal', updated.name as string, {

@@ -352,7 +352,7 @@ export class QueryHandlers {
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
       const parsed = SearchCompendiumInput.strict().parse(data ?? {});
-      return { success: true, data: await this.dataAccess.searchCompendium(parsed.query, parsed.packType, parsed.filters as any, parsed.itemType) };
+      return { success: true, data: await this.dataAccess.searchCompendium(parsed.query, parsed.packType, parsed.filters, parsed.itemType) };
     } catch (error) {
       rethrowAsInvalidInput(error);
       throw new Error(`Failed to search compendium: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -403,7 +403,7 @@ export class QueryHandlers {
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
       const parsed = ListCreaturesByCriteriaInput.strict().parse(data ?? {});
-      const result = await this.dataAccess.listCreaturesByCriteria(parsed as any);
+      const result = await this.dataAccess.listCreaturesByCriteria(parsed);
       return { success: true, data: result };
     } catch (error) {
       rethrowAsInvalidInput(error);
@@ -1290,7 +1290,7 @@ export class QueryHandlers {
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
       const parsed = GetCombatInput.strict().parse(data ?? {});
-      return { success: true, data: await this.dataAccess.getCombat(parsed as any) };
+      return { success: true, data: await this.dataAccess.getCombat(parsed) };
     } catch (error) {
       rethrowAsInvalidInput(error);
       throw new Error(`Failed to get combat: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -1303,7 +1303,7 @@ export class QueryHandlers {
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
       const parsed = ListCombatantsInput.strict().parse(data ?? {});
-      return { success: true, data: await this.dataAccess.listCombatants(parsed as any) };
+      return { success: true, data: await this.dataAccess.listCombatants(parsed) };
     } catch (error) {
       rethrowAsInvalidInput(error);
       throw new Error(`Failed to list combatants: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -1318,7 +1318,7 @@ export class QueryHandlers {
       const parsed = AdvanceCombatInput.strict().parse(data ?? {});
       return await wrappedWrite('advanceCombat', async () => ({
         success: true,
-        data: await this.dataAccess.advanceCombat(parsed as any),
+        data: await this.dataAccess.advanceCombat(parsed),
       }));
     } catch (error) {
       rethrowAsInvalidInput(error);
@@ -1334,7 +1334,7 @@ export class QueryHandlers {
       const parsed = AddCombatantsInput.strict().parse(data ?? {});
       return await wrappedWrite('addCombatants', async () => ({
         success: true,
-        data: await this.dataAccess.addCombatants(parsed as any),
+        data: await this.dataAccess.addCombatants(parsed),
       }));
     } catch (error) {
       rethrowAsInvalidInput(error);
@@ -1350,7 +1350,7 @@ export class QueryHandlers {
       const parsed = RemoveCombatantsInput.strict().parse(data ?? {});
       return await wrappedWrite('removeCombatants', async () => ({
         success: true,
-        data: await this.dataAccess.removeCombatants(parsed as any),
+        data: await this.dataAccess.removeCombatants(parsed),
       }));
     } catch (error) {
       rethrowAsInvalidInput(error);
@@ -1366,7 +1366,7 @@ export class QueryHandlers {
       const parsed = EndCombatInput.strict().parse(data ?? {});
       return await wrappedWrite('endCombat', async () => ({
         success: true,
-        data: await this.dataAccess.endCombat(parsed as any),
+        data: await this.dataAccess.endCombat(parsed),
       }));
     } catch (error) {
       rethrowAsInvalidInput(error);
@@ -1382,7 +1382,7 @@ export class QueryHandlers {
       const parsed = ApplyDamageInput.strict().parse(data ?? {});
       return await wrappedWrite('applyDamage', async () => ({
         success: true,
-        data: await this.dataAccess.applyDamage(parsed as any),
+        data: await this.dataAccess.applyDamage(parsed),
       }));
     } catch (error) {
       rethrowAsInvalidInput(error);
@@ -1398,7 +1398,7 @@ export class QueryHandlers {
       const parsed = ApplyConditionInput.strict().parse(data ?? {});
       return await wrappedWrite('applyCondition', async () => ({
         success: true,
-        data: await this.dataAccess.applyCondition(parsed as any),
+        data: await this.dataAccess.applyCondition(parsed),
       }));
     } catch (error) {
       rethrowAsInvalidInput(error);
@@ -1414,7 +1414,7 @@ export class QueryHandlers {
       const parsed = RemoveConditionInput.strict().parse(data ?? {});
       return await wrappedWrite('removeCondition', async () => ({
         success: true,
-        data: await this.dataAccess.removeCondition(parsed as any),
+        data: await this.dataAccess.removeCondition(parsed),
       }));
     } catch (error) {
       rethrowAsInvalidInput(error);
@@ -1428,7 +1428,7 @@ export class QueryHandlers {
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
       const parsed = ListConditionsInput.strict().parse(data ?? {});
-      return { success: true, data: await this.dataAccess.listConditions(parsed as any) };
+      return { success: true, data: await this.dataAccess.listConditions(parsed) };
     } catch (error) {
       rethrowAsInvalidInput(error);
       throw new Error(`Failed to list conditions: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -1441,7 +1441,7 @@ export class QueryHandlers {
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
       const parsed = ListActiveEffectsInput.strict().parse(data ?? {});
-      return { success: true, data: await this.dataAccess.listActiveEffects(parsed as any) };
+      return { success: true, data: await this.dataAccess.listActiveEffects(parsed) };
     } catch (error) {
       rethrowAsInvalidInput(error);
       throw new Error(`Failed to list active effects: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -1471,7 +1471,7 @@ export class QueryHandlers {
       const parsed = AddActiveEffectInput.strict().parse(data ?? {});
       return await wrappedWrite('addActiveEffect', async () => ({
         success: true,
-        data: await this.dataAccess.addActiveEffect(parsed as any),
+        data: await this.dataAccess.addActiveEffect(parsed),
       }));
     } catch (error) {
       rethrowAsInvalidInput(error);
@@ -1489,7 +1489,7 @@ export class QueryHandlers {
       }
       return await wrappedWrite('updateActiveEffect', async () => ({
         success: true,
-        data: await this.dataAccess.updateActiveEffect(parsed as any),
+        data: await this.dataAccess.updateActiveEffect(parsed),
       }));
     } catch (error) {
       rethrowAsInvalidInput(error);
@@ -1507,7 +1507,7 @@ export class QueryHandlers {
       }
       return await wrappedWrite('deleteActiveEffect', async () => ({
         success: true,
-        data: await this.dataAccess.deleteActiveEffect(parsed as any),
+        data: await this.dataAccess.deleteActiveEffect(parsed),
       }));
     } catch (error) {
       rethrowAsInvalidInput(error);
@@ -1528,7 +1528,7 @@ export class QueryHandlers {
       }
       return {
         success: true,
-        data: await this.dataAccess.getActiveEffectByName(parsed as any),
+        data: await this.dataAccess.getActiveEffectByName(parsed),
       };
     } catch (error) {
       rethrowAsInvalidInput(error);

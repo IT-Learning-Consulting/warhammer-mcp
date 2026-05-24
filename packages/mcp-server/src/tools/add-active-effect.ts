@@ -37,7 +37,7 @@ export class AddActiveEffectTool extends BaseTool {
             effect: {
               type: 'object',
               description:
-                'Flat ActiveEffect input. name + trigger are required; script defaults to "" and is optional. Other fields (label/transfer/disabled/changes/statuses/duration/flags/equipTransfer/enableScript/preApplyScript/testIndependent) are optional.',
+                'Flat ActiveEffect input. name + trigger are required; script defaults to "" and is optional. Other fields are optional. transfer is an optional object (not a boolean) — {disabled: boolean, actorId?: string, name?: string} — that controls whether the effect transfers to owned actors when the item is equipped; buildEffectPayload maps this object into the Foundry nested shape.',
               properties: {
                 name: { type: 'string', minLength: 1, description: 'Effect display name (required).' },
                 trigger: {
@@ -46,6 +46,16 @@ export class AddActiveEffectTool extends BaseTool {
                 },
                 script: { type: 'string', description: 'JS body executed under GM authority. Defaults to "".' },
                 label: { type: 'string' },
+                transfer: {
+                  type: 'object',
+                  description: 'Transfer config object (not a boolean). Controls whether the AE transfers to owned actors when item is equipped. Keys: disabled (boolean), actorId (string, optional), name (string, optional). buildEffectPayload maps this into Foundry\'s nested ActiveEffect shape.',
+                  properties: {
+                    disabled: { type: 'boolean' },
+                    actorId: { type: 'string' },
+                    name: { type: 'string' },
+                  },
+                  additionalProperties: true,
+                },
                 disabled: { type: 'boolean' },
                 changes: { type: 'array', items: { type: 'object' } },
                 statuses: { type: 'array', items: { type: 'string' } },

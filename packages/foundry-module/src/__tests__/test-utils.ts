@@ -19,6 +19,6 @@ export function expectEnvelope<T = unknown>(
   expect(typeof result).toBe('object');
   const r = result as { success?: unknown; data?: unknown; error?: unknown };
   expect(r.success).toBe(true);
-  expect(r).toHaveProperty('data');
+  expect(r.data).not.toBeUndefined(); // data-present guard: expectEnvelope is for data-returning handlers only
   expect(r.error).toBeUndefined();
 }

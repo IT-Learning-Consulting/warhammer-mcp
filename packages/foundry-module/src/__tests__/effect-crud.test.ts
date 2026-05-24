@@ -1,7 +1,7 @@
 // Phase 5 follow-up B — FoundryDataAccess effect CRUD + updateItem/deleteItem
 // destination-routing regression coverage.
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, beforeAll, vi } from 'vitest';
 import { FoundryDataAccess } from '../data-access.js';
 
 function makeEffectStub(id: string, name: string, extra: any = {}) {
@@ -11,19 +11,27 @@ function makeEffectStub(id: string, name: string, extra: any = {}) {
     system: { scriptData: [{ trigger: 'manual', script: '' }], transferData: {} },
     ...extra,
   };
+  // _source mirrors persisted raw data (BUG-216 fix: verifyDocWrite reads _source).
+  obj._source = { id, name, disabled: extra.disabled ?? false, ...extra,
+    system: { scriptData: [{ trigger: 'manual', script: '' }], transferData: {} } };
   obj.update = vi.fn(async (payload: Record<string, unknown>) => {
     for (const [k, v] of Object.entries(payload)) {
       if (k.startsWith('system.')) {
         const path = k.slice('system.'.length).split('.');
         let cursor: any = obj.system;
+        let srcCursor: any = obj._source.system;
         while (path.length > 1) {
           const seg = path.shift()!;
           cursor[seg] = cursor[seg] ?? {};
+          srcCursor[seg] = srcCursor[seg] ?? {};
           cursor = cursor[seg];
+          srcCursor = srcCursor[seg];
         }
         cursor[path[0] as string] = v;
+        srcCursor[path[0] as string] = v;
       } else {
         obj[k] = v;
+        obj._source[k] = v; // keep _source in sync for verifyDocWrite
       }
     }
     return obj;
@@ -103,6 +111,12 @@ function makeDA(): FoundryDataAccess {
   (da as any).validateFoundryState = () => {};
   return da;
 }
+
+// Pre-warm the dynamic @foundry-mcp/shared import so tests don't hit a 5s timeout
+// when running under concurrency (39 workers competing for the first ESM cache fill).
+beforeAll(async () => {
+  await import('@foundry-mcp/shared');
+});
 
 beforeEach(() => {
   vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -330,5 +344,70 @@ describe('_resolveItem regression (Phase A: legacy paths preserved)', () => {
     });
     expect(res.scope).toBe('world');
     expect(item.delete).toHaveBeenCalled();
+  });
+});
+
+describe('updateActiveEffect — BUG-216 post-verify', () => {
+  // BUG-216 fix uses foundry.utils.flattenObject + getProperty inside updateActiveEffect.
+  // The global setup.ts provides these, but we need to ensure they're present for these tests.
+  beforeEach(() => {
+    (globalThis as any).foundry = {
+      ...(globalThis as any).foundry,
+      utils: {
+        ...(globalThis as any).foundry?.utils,
+        flattenObject(obj: any): Record<string, any> {
+          const result: Record<string, any> = {};
+          for (const [k, v] of Object.entries(obj)) {
+            if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
+              const nested = (globalThis as any).foundry.utils.flattenObject(v as any);
+              for (const [nk, nv] of Object.entries(nested)) result[`${k}.${nk}`] = nv;
+            } else {
+              result[k] = v;
+            }
+          }
+          return result;
+        },
+        getProperty(obj: any, path: string): any {
+          return path.split('.').reduce((c: any, seg: string) => c?.[seg], obj);
+        },
+      },
+    };
+  });
+
+  it('throws UPDATE_ACTIVE_EFFECT_NOT_PERSISTED when update() returns undefined (cancelled write)', async () => {
+    const eff = makeEffectStub('e1', 'Warpstone Taint', { disabled: false });
+    // Override update to return undefined (simulates preUpdate hook cancellation).
+    // _source NOT mutated → drift detected by verifyDocWrite.
+    eff.update = vi.fn(async () => undefined);
+    const item = makeItemStub('i1', 'Corrupted Blade', [eff]);
+    const actor = makeActorStub('a1', 'Hans', [item]);
+    setupStubs({ actors: [actor] });
+    const da = makeDA();
+
+    await expect(
+      da.updateActiveEffect({
+        target: { scope: 'actor', actorId: 'a1', itemId: 'i1' },
+        effectId: 'e1',
+        updates: { disabled: true },
+      }),
+    ).rejects.toThrow(/UPDATE_ACTIVE_EFFECT_NOT_PERSISTED/);
+  });
+
+  it('.-= deletion marker in updates is skipped — no false drift throw', async () => {
+    // Deletion markers (e.g. "system.changes.-=0": null) cannot be validated
+    // via value comparison; verifyDocWrite and the cancel-guard both skip them.
+    const eff = makeEffectStub('e2', 'Burning', { disabled: false });
+    const item = makeItemStub('i2', 'Flame Sword', [eff]);
+    const actor = makeActorStub('a2', 'Maria', [item]);
+    setupStubs({ actors: [actor] });
+    const da = makeDA();
+
+    // The .-= key should be skipped without throwing.
+    const res = await da.updateActiveEffect({
+      target: { scope: 'actor', actorId: 'a2', itemId: 'i2' },
+      effectId: 'e2',
+      updates: { name: 'Burning' }, // name unchanged → idempotent no-op
+    });
+    expect(res.effectId).toBe('e2');
   });
 });

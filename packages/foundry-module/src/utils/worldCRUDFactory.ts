@@ -168,8 +168,8 @@ export interface WorldFactoryConfig<_TCreate, TUpdate, TViewModel, TListItem> {
     listArray: string;
     remainingCount: string;
   };
-  /** NotifyKind for this doc-type's notify.* calls. Defaults to documentLabel cast. */
-  notifyKind?: NotifyKind;
+  /** NotifyKind for this doc-type's notify.* calls (explicit to avoid cast drift). */
+  notifyKind: NotifyKind;
   /** Notify-title builder. Receives the persisted doc; returns the toast title. */
   formatNotifyTitle?: (doc: any) => string;
   /** Notify-summary builder. Receives the parsed input (post-validation); returns summary text. */
@@ -250,7 +250,7 @@ export function createWorldDocCRUDHandlers<
   const useStrictParse = config.strictParse ?? true;
   const listAlwaysPaginated = config.listAlwaysPaginated ?? false;
   const responseBuilders = config.responseBuilders ?? {};
-  const notifyKind = (config.notifyKind ?? (documentLabel as NotifyKind));
+  const notifyKind = config.notifyKind;
   const formatTitle = config.formatNotifyTitle ?? ((doc: any) => `${capitalize(documentLabel)} "${doc?.name ?? '(unnamed)'}"`);
   const formatSummary = config.formatNotifySummary ?? ((input: any) => `on ${parentLabel} ${input[parentIdField]}`);
 

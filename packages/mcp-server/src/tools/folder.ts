@@ -189,7 +189,7 @@ Examples:
                         },
                         cascade: {
                             type: 'boolean',
-                            description: '[delete] Reserved for Phase 10 cross-doc FK cleanup. Default false.',
+                            description: '[delete] Reserved for Phase 10 cross-doc FK cleanup. Not yet implemented — passing true returns FOLDER_CASCADE_NOT_IMPLEMENTED. Default false.',
                         },
                         changes: {
                             type: 'object',

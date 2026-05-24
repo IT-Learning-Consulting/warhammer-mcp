@@ -126,6 +126,7 @@ const handlers = createEmbeddedCRUDHandlers<any, any, LightViewModel, LightListI
     listArray: 'lights',
     remainingCount: 'remainingLights',
   },
+  notifyKind: 'light',
 });
 
 export const createLight = handlers.create;

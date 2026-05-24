@@ -55,7 +55,7 @@ import { ApplyNpcCareerAdvanceTool } from './tools/apply-npc-career-advance.js';
 import { ApplyTemplateTool } from './tools/apply-template.js';
 import { ApplyTemplateToTokenTool } from './tools/apply-template-to-token.js';
 import { GetWfrpConfigTool } from './tools/get-wfrp-config.js';
-import { JournalTools } from './tools/journal.js';
+import { JournalTool } from './tools/journal.js';
 import { WorldDeleteTools } from './tools/world-delete.js';
 // Phase 4 mcp_crud_expansion — AddActorsToSceneTool + DeleteTokenTool folded
 // into the scene umbrella (actions: 'add-tokens' / 'delete-token').
@@ -263,7 +263,7 @@ async function startBackend(): Promise<void> {
   const addItemFromCompendiumTool = new AddItemFromCompendiumTool({ foundryClient, logger });
   const deleteItemTool = new DeleteItemTool({ foundryClient, logger });
   const getWfrpConfigTool = new GetWfrpConfigTool({ foundryClient, logger });
-  const journalTools = new JournalTools({ foundryClient, logger });
+  const journalTool = new JournalTool({ foundryClient, logger });
   const worldDeleteTools = new WorldDeleteTools({ foundryClient, logger });
   // Phase 4 mcp_crud_expansion — addActorsToSceneTool + deleteTokenTool folded into sceneTool.
   const duplicateActorTool = new DuplicateActorTool({ foundryClient, logger });
@@ -364,7 +364,7 @@ async function startBackend(): Promise<void> {
   // Phase 3 mcp_crud_expansion — single `journal` umbrella replaces 5 legacy tool keys
   // (list-journals / get-journal-content / create-journal-entry / update-journal-content /
   // delete-journal-entry). 13 actions dispatched server-side.
-  registry.register('journal', (args) => journalTools.execute(args));
+  registry.register('journal', (args) => journalTool.execute(args));
   // Phase 5 mcp_crud_expansion — 7 per-doc-type embedded-CRUD umbrellas.
   registry.register('token', (args) => tokenTool.execute(args));
   registry.register('light', (args) => lightTool.execute(args));
@@ -438,7 +438,7 @@ async function startBackend(): Promise<void> {
 
     ...getWfrpConfigTool.getToolDefinitions(),
 
-    ...journalTools.getToolDefinitions(),
+    ...journalTool.getToolDefinitions(),
 
     ...worldDeleteTools.getToolDefinitions(),
 

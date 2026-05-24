@@ -26,7 +26,7 @@ async function runSessionPrep(): Promise<{ briefing: string; missingPcs: string[
     callMcp('warhammer-mcp.getWorldInfo'),
     callMcp('warhammer-mcp.listActors', { type: 'character' }),
     callMcp('warhammer-mcp.getActiveScene'),
-    callMcp('warhammer-mcp.listJournals'),
+    callMcp('warhammer-mcp.listJournals', { filterQuests: true }),
   ]);
 
   const listActorsEnvelope = listActorsRes as { success: boolean; data?: CharacterStub[] };
@@ -155,7 +155,11 @@ function defaultMocks(opts: {
     data: [...partyPcs, ...npcs.map(n => ({ ...n }))],
   });
   mockMcpCall('warhammer-mcp.getActiveScene', { success: true, data: scene });
-  mockMcpCall('warhammer-mcp.listJournals', { success: true, data: journals });
+  mockMcpCall('warhammer-mcp.listJournals', (input: any) => ({
+    success: true,
+    // Simulate server-side filtering: filterQuests:true returns only Quest: journals.
+    data: input?.filterQuests ? journals.filter(j => /^quest:/i.test(j.name)) : journals,
+  }));
   mockMcpCall('warhammer-mcp.getCharacterInfo', (input: any) => {
     if (opts.charLookupOverride) return opts.charLookupOverride(input.characterId);
     const all = [...partyPcs, ...npcs];
@@ -197,6 +201,10 @@ describe('wfrp-session-prep / happy path', () => {
     // getJournalContent: exactly 2 (the active Quest: journals)
     const jcount = keys.filter(k => k === 'warhammer-mcp.getJournalContent').length;
     expect(jcount).toBe(2);
+
+    // filterQuests:true must be passed so the server filters to quest-type journals only
+    const listJournalsCall = log.find(e => e.queryKey === 'warhammer-mcp.listJournals');
+    expect((listJournalsCall?.input as any)?.filterQuests).toBe(true);
 
     // Briefing has all sections
     expect(briefing).toContain('Party Status');

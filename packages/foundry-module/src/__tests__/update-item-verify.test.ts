@@ -125,6 +125,38 @@ describe('updateItem verify-block (MCP Completion v1 Phase 1 R1.2)', () => {
     ).rejects.toThrow(/UPDATE_ITEM_NOT_PERSISTED/);
   });
 
+  it('BUG-134: preUpdate-cancelled write (update returns undefined) throws instead of returning false success', async () => {
+    const item = makeItem('i1', 'Melee (Basic)', { advances: { value: 0 } });
+    item.update = vi.fn(async () => undefined);
+    const actor = makeActor('a1', 'Hans', [item]);
+    setupGame({ actors: [actor] });
+    const da = makeDA();
+
+    await expect(
+      da.updateItem({
+        actorId: 'a1',
+        itemId: 'i1',
+        updateData: { 'system.advances.value': 3 },
+      })
+    ).rejects.toThrow(/preUpdate cancelled write/i);
+  });
+
+  it('BUG-134: cancelled no-op does not throw when requested value already matches', async () => {
+    const item = makeItem('i1', 'Melee (Basic)', { advances: { value: 3 } });
+    item.update = vi.fn(async () => undefined);
+    const actor = makeActor('a1', 'Hans', [item]);
+    setupGame({ actors: [actor] });
+    const da = makeDA();
+
+    const res = await da.updateItem({
+      actorId: 'a1',
+      itemId: 'i1',
+      updateData: { 'system.advances.value': 3 },
+    });
+
+    expect(res.success).toBe(true);
+  });
+
   it('disappearance: item gone after update — throws UPDATE_ITEM_NOT_PERSISTED with id', async () => {
     const item = makeItem('i1', 'Rapier');
     item.update = vi.fn(async () => item);
