@@ -186,6 +186,7 @@ export const GetRollTableInput = z.object({
 export const RollOnTableInput = z.object({
   tableId: z.string().min(1),
   rollMode: z.string().optional(),
+  modifier: z.number().int().optional(),
 }).strict();
 
 export const DeleteRollTableInput = z.object({

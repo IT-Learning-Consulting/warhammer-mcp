@@ -472,6 +472,7 @@ export async function listEntries(
   const gate = validateGMAccess();
   if (!gate.allowed) return { success: false, error: 'Access denied: listEntries requires GM' };
 
+  try {
   const input: JournalListEntriesInputType = JournalListEntriesInput_strict_parse(data);
 
   // Resolve filterQuests alias → filterTemplate: "quest".
@@ -481,7 +482,8 @@ export async function listEntries(
   const all: any[] = ((game as any).journal as any)?.contents ?? [];
   let filtered = all;
   if (filterTemplate) {
-    const re = new RegExp(`^${filterTemplate}:`, 'i');
+    const escapedTemplate = filterTemplate.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp(`^${escapedTemplate}:`, 'i');
     filtered = filtered.filter((j) => re.test(j.name ?? ''));
   }
   if (input.folder !== undefined) {
@@ -509,6 +511,9 @@ export async function listEntries(
   });
 
   return { success: true, data: payload };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : 'JOURNAL_LIST_ENTRIES_ERROR: unknown error' };
+  }
 }
 
 // ── 5. getEntry ─────────────────────────────────────────────────────────────
@@ -517,6 +522,7 @@ export async function getEntry(data: unknown): Promise<Envelope<JournalGetEntryR
   const gate = validateGMAccess();
   if (!gate.allowed) return { success: false, error: 'Access denied: getEntry requires GM' };
 
+  try {
   const input: JournalGetEntryInputType = JournalGetEntryInput_strict_parse(data);
   const entry = getEntryOrThrow(input.entryId);
 
@@ -524,6 +530,9 @@ export async function getEntry(data: unknown): Promise<Envelope<JournalGetEntryR
     input.shallow === true ? serialiseEntryShallow(entry) : serialiseEntryDeep(entry);
 
   return { success: true, data: payload };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : 'JOURNAL_GET_ENTRY_ERROR: unknown error' };
+  }
 }
 
 // ── 6. addPage ──────────────────────────────────────────────────────────────

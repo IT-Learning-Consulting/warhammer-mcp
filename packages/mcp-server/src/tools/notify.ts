@@ -28,6 +28,9 @@ function errorContent(action: string, message: string) {
 
 export interface NotifyToolOptions extends BaseToolOptions {}
 
+// Internal: `warhammer-mcp.filepickerNotifyWarn` (formerly `notify.warn`) is a separate
+// query key registered in queries.ts, handled by handlers/filepicker.ts:notifyWarn. It is a
+// filepicker-internal round-trip and is NOT a sub-action of this NotifyTool. See PARITY-012.
 export class NotifyTool extends BaseTool {
   constructor(options: NotifyToolOptions) {
     super(options);

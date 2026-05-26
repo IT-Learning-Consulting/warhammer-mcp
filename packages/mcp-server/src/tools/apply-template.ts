@@ -106,6 +106,12 @@ export class ApplyTemplateTool extends BaseTool {
       templateUuid: parsed.templateUuid,
       hasPreResolved: !!parsed.preResolvedChoices,
     });
-    return await this.query<any>('applyTemplate', parsed);
+    const data = await this.query<Record<string, unknown>>('applyTemplate', parsed);
+    const d = data as any;
+    const applied = d?.applied?.itemsByType ?? {};
+    const text = `Applied template ${d?.templateName ?? d?.templateId ?? ''} to ${d?.actorName ?? d?.actorId ?? ''}: ` +
+      `${applied.skill ?? 0} skills, ${applied.talent ?? 0} talents, ` +
+      `${applied.spell ?? 0} spells, ${applied.trapping ?? 0} trappings.`;
+    return { content: [{ type: 'text' as const, text }], structuredContent: data };
   }
 }

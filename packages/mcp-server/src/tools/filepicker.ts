@@ -161,7 +161,7 @@ export class FilePickerTool extends BaseTool {
           const msg = err instanceof Error ? err.message : String(err);
           conversionWarnings.push(`Conversion failed for ${resolved.originalFilename}: ${msg}`);
           try {
-            await this.query<{}>('notify.warn', {
+            await this.query<{}>('filepickerNotifyWarn', {
               message: `Conversion failed for ${resolved.originalFilename} — uploaded original (${msg})`,
             });
           } catch {
@@ -271,7 +271,7 @@ export class FilePickerTool extends BaseTool {
           const msg = err instanceof Error ? err.message : String(err);
           conversionWarnings.push(`Conversion failed for ${resolved.originalFilename}: ${msg}`);
           try {
-            await this.query<{}>('notify.warn', {
+            await this.query<{}>('filepickerNotifyWarn', {
               message: `Conversion failed for ${resolved.originalFilename}: ${msg}`,
             });
           } catch {

@@ -115,6 +115,14 @@ export interface NotifyOpts {
   durationMs?: number | undefined;
   /** Optional summary appended to the label. */
   summary?: string | undefined;
+  /**
+   * Pre-built HTML for the chat channel's message body, used VERBATIM in place
+   * of the escaped plain label.  The caller owns escaping of any dynamic text;
+   * this is the only way to emit Foundry content links (`@UUID[…]`) or markup
+   * (`<strong>`) into the GM-whispered record while the toast/console keep the
+   * plain label.  Ignored by every channel except chat.
+   */
+  chatHtml?: string | undefined;
 }
 
 export interface ProgressHandle {
@@ -312,10 +320,13 @@ function emitChat(severity: NotifySeverity, label: string, opts?: NotifyOpts): v
   const uuidHtml = opts?.uuid
     ? `<div class="mcp-audit-uuid"><code>${escapeHtml(opts.uuid)}</code></div>`
     : '';
+  // chatHtml (when provided) is used verbatim — the caller owns escaping so it
+  // can embed @UUID content links / markup the plain label can't carry.
+  const messageHtml = opts?.chatHtml ?? escapeHtml(label);
   const content =
     `<div class="${cssClass}">` +
     `<span class="${badgeClass}">${tag}</span> ` +
-    `<span class="mcp-audit-message">${escapeHtml(label)}</span>` +
+    `<span class="mcp-audit-message">${messageHtml}</span>` +
     `${summaryHtml}${uuidHtml}` +
     `</div>`;
   try {

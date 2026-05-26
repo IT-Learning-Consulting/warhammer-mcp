@@ -266,12 +266,14 @@ export async function listFiles(
 }
 
 // ── notify.warn round-trip handler (design (d)) ─────────────────────────────
-// MCP-server invokes this via game.user.query('warhammer-mcp.notify.warn', {message}).
+// MCP-server invokes this via game.user.query('warhammer-mcp.filepickerNotifyWarn', {message}).
 // Required for the conversion-failure UX even when no upload occurs (filepicker.convert).
 export async function notifyWarn(
   data: unknown
 ): Promise<{ success: true } | EnvelopeErr> {
   try {
+    const gmCheck = validateGMAccess();
+    if (!gmCheck.allowed) return { success: false, error: 'Access denied (GM-only)' };
     const payload = data as { message?: string };
     if (typeof payload?.message !== 'string' || payload.message.length === 0) {
       return { success: false, error: 'notifyWarn: missing message' };

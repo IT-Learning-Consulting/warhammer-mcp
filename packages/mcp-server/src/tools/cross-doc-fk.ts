@@ -255,6 +255,7 @@ Examples:
                         },
                         confirm: {
                             type: 'boolean',
+                            const: true,
                             description: '[repair-orphans] Must be exactly true — defensive gate against accidental bulk clears.',
                         },
                         dryRun: {

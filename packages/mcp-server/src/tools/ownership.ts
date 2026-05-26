@@ -378,10 +378,9 @@ export class OwnershipTool extends BaseTool {
   }
 
   private async handleReset(args: z.infer<typeof ResetOwnershipSchema>) {
-    const input = this.resolveLegacyAlias(args);
-    this.validateSingleTarget(input, "reset");
-
     try {
+      const input = this.resolveLegacyAlias(args);
+      this.validateSingleTarget(input, "reset");
       const payload: any = {
         documentType: input.documentType,
         ...(input.uuid ? { uuid: input.uuid } : {}),

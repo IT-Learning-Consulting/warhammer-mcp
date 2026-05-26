@@ -1,0 +1,247 @@
+// Phase 1 mcp_coverage_expansion — Item-directory umbrella handler.
+//
+// Covers 5 actions over game.items (world WorldCollection):
+//   list / get / search / duplicate / import-from-compendium
+//
+// Architecture:
+//   - list / get / search are read-only; run inline with GM gate + validateFoundryState.
+//   - duplicate + import-from-compendium are writes; wrapped in wrappedWrite + notify.created.
+//   - CCR-2a: duplicate and import both re-read the created document to confirm id ≠ source.
+//   - HC1 / CCR-3: no CONFIG.WFRP4E / game-rule logic.
+//   - BUG-069 class: handler always returns {success:true, data} envelopes; never bare.
+//
+// Error tokens:
+//   ITEM_NOT_FOUND, ITEM_PACK_NOT_FOUND, ITEM_DUPLICATE_FAILED, ITEM_IMPORT_FAILED
+
+import {
+  ItemDirectoryToolInput,
+  type ItemDirectoryToolInputType,
+} from '@foundry-mcp/shared';
+import { wrappedWrite } from '../transaction-manager.js';
+import { notify } from '../notify.js';
+
+// ── GM gate helper (inline, mirrors folder.ts + diagnostic.ts pattern) ────────
+
+function validateGMAccess(): void {
+  if (!game.user?.isGM) {
+    throw new Error('Access denied: GM-only operation');
+  }
+}
+
+// ── Serializer ────────────────────────────────────────────────────────────────
+
+function serializeWorldItem(item: any): Record<string, unknown> {
+  return {
+    id: item.id,
+    name: item.name,
+    type: item.type,
+    img: item.img ?? null,
+    folderId: item._source?.folder ?? null,
+    system: item._source?.system ?? {},
+    flags: item._source?.flags ?? {},
+  };
+}
+
+// ── Envelope type ─────────────────────────────────────────────────────────────
+
+type Envelope<T> = { success: true; data: T };
+
+// ── Action handlers ───────────────────────────────────────────────────────────
+
+function listWorldItems(input: Extract<ItemDirectoryToolInputType, { action: 'list' }>): Envelope<unknown> {
+  const allItems: any[] = Array.from((game.items as any)?.contents ?? []);
+
+  const filtered = input.typeFilter
+    ? allItems.filter((i: any) => i.type === input.typeFilter)
+    : input.folderId
+    ? allItems.filter((i: any) => (i._source?.folder ?? null) === input.folderId)
+    : allItems;
+
+  const page = input.page ?? 1;
+  const pageSize = input.pageSize ?? 100;
+  const total = filtered.length;
+  const start = (page - 1) * pageSize;
+  const paged = filtered.slice(start, start + pageSize);
+
+  return {
+    success: true,
+    data: {
+      items: paged.map(serializeWorldItem),
+      total,
+      page,
+      pageSize,
+      typeFilter: input.typeFilter ?? null,
+      folderId: input.folderId ?? null,
+    },
+  };
+}
+
+function getWorldItem(input: Extract<ItemDirectoryToolInputType, { action: 'get' }>): Envelope<unknown> {
+  const item = (game.items as any)?.get(input.itemId);
+  if (!item) {
+    throw new Error(`ITEM_NOT_FOUND: no world item with id "${input.itemId}"`);
+  }
+  return { success: true, data: serializeWorldItem(item) };
+}
+
+function searchWorldItems(input: Extract<ItemDirectoryToolInputType, { action: 'search' }>): Envelope<unknown> {
+  const searchOpts: Record<string, unknown> = {};
+  if (input.query) searchOpts.query = input.query;
+  if (input.filters) searchOpts.filters = input.filters;
+  if (input.exclude) searchOpts.exclude = input.exclude;
+
+  const results: any[] = (game.items as any)?.search(searchOpts) ?? [];
+  return {
+    success: true,
+    data: {
+      items: results.map(serializeWorldItem),
+      total: results.length,
+      query: input.query ?? null,
+    },
+  };
+}
+
+async function duplicateWorldItem(
+  input: Extract<ItemDirectoryToolInputType, { action: 'duplicate' }>,
+): Promise<Envelope<unknown>> {
+  validateGMAccess();
+
+  return wrappedWrite('item-directory.duplicate', async () => {
+    const source: any = (game.items as any)?.get(input.itemId);
+    if (!source) {
+      throw new Error(`ITEM_NOT_FOUND: no world item with id "${input.itemId}"`);
+    }
+
+    const sourceId = source.id as string;
+    const itemData: any = source.toObject();
+
+    delete itemData._id;
+    delete itemData.folder;
+    delete itemData.sort;
+
+    // Strip embedded ActiveEffect ids so Foundry generates fresh ones on create.
+    if (Array.isArray(itemData.effects)) {
+      for (const eff of itemData.effects) delete eff._id;
+    }
+
+    if (input.newName) itemData.name = input.newName;
+
+    const created: any = await (Item as any).create(itemData);
+    if (!created) throw new Error('ITEM_DUPLICATE_FAILED: Item.create returned null');
+
+    // CCR-2a: confirm new id ≠ source id.
+    if (created.id === sourceId) {
+      throw new Error(
+        `ITEM_DUPLICATE_FAILED: duplicate id equals source id "${sourceId}" — creation may have been a no-op`,
+      );
+    }
+
+    notify.created('item', created.name, {
+      summary: `duplicated from ${source.name}`,
+      uuid: (created as any).uuid,
+    });
+
+    return {
+      success: true,
+      data: {
+        id: created.id,
+        name: created.name,
+        type: created.type,
+        sourceId,
+        img: created.img ?? null,
+        folderId: created._source?.folder ?? null,
+      },
+    } satisfies Envelope<unknown>;
+  });
+}
+
+async function importFromCompendium(
+  input: Extract<ItemDirectoryToolInputType, { action: 'import-from-compendium' }>,
+): Promise<Envelope<unknown>> {
+  validateGMAccess();
+
+  return wrappedWrite('item-directory.import-from-compendium', async () => {
+    const pack: any = (game.packs as any)?.get(input.packId);
+    if (!pack) {
+      throw new Error(`ITEM_PACK_NOT_FOUND: no compendium pack with id "${input.packId}"`);
+    }
+
+    // game.items.importFromCompendium is the canonical path (runs WorldCollection.fromCompendium).
+    // Signature: (pack, id, updateData?, options?): Promise<Item>.
+    // Foundry v13 PRESERVES the source compendium _id on import (fromCompendium keepId default) —
+    // so the imported world item id EQUALS input.itemId by design (cross-collection import, unlike
+    // same-collection `duplicate` which re-keys). clearFolder:true drops the compendium folder FK,
+    // which has no world counterpart (avoids dangling folder references on the imported item).
+    const created: any = await (game.items as any).importFromCompendium(
+      pack,
+      input.itemId,
+      input.updateData ?? {},
+      { clearFolder: true },
+    );
+
+    if (!created) {
+      throw new Error(
+        `ITEM_IMPORT_FAILED: importFromCompendium returned null for pack "${input.packId}" id "${input.itemId}"`,
+      );
+    }
+
+    // DP-16: confirm the imported item actually persisted in the world collection.
+    // (created.id may equal input.itemId — that is the NORMAL v13 outcome, NOT a collision.)
+    const fresh: any = (game.items as any)?.get(created.id);
+    if (!fresh) {
+      throw new Error(
+        `ITEM_IMPORT_FAILED: imported item id "${created.id}" did not persist in game.items (pack "${input.packId}")`,
+      );
+    }
+
+    notify.created('item', created.name, {
+      summary: `imported from ${input.packId}`,
+      uuid: (created as any).uuid,
+    });
+
+    return {
+      success: true,
+      data: {
+        id: created.id,
+        name: created.name,
+        type: created.type,
+        packId: input.packId,
+        compendiumItemId: input.itemId,
+        idMatchesCompendium: created.id === input.itemId,
+        img: created.img ?? null,
+        folderId: created._source?.folder ?? null,
+      },
+    } satisfies Envelope<unknown>;
+  });
+}
+
+// ── Dispatcher ────────────────────────────────────────────────────────────────
+
+export async function dispatchItemDirectory(data: unknown): Promise<Envelope<unknown>> {
+  let input: ItemDirectoryToolInputType;
+  try {
+    input = ItemDirectoryToolInput.parse(data ?? {});
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'Invalid input';
+    throw new Error(`Invalid input: ${message}`);
+  }
+
+  validateGMAccess();
+
+  if (!game.items) {
+    throw new Error('Foundry state not ready: game.items unavailable');
+  }
+
+  switch (input.action) {
+    case 'list':
+      return listWorldItems(input);
+    case 'get':
+      return getWorldItem(input);
+    case 'search':
+      return searchWorldItems(input);
+    case 'duplicate':
+      return duplicateWorldItem(input);
+    case 'import-from-compendium':
+      return importFromCompendium(input);
+  }
+}

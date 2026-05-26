@@ -47,7 +47,7 @@ export class GetWfrpConfigTool extends BaseTool {
   async handle(args: any): Promise<any> {
     const parsed = GetWfrp4eConfigInput.parse(args);
     this.logger.info('get-wfrp-config', { keys: parsed.keys });
-    const output = await this.query<any>('getWfrp4eConfig', parsed);
+    const output = await this.query<Record<string, unknown>>('getWfrp4eConfig', parsed);
     GetWfrpConfigOutput.parse(output);
     return {
       content: [{ type: 'text', text: JSON.stringify(output) }],

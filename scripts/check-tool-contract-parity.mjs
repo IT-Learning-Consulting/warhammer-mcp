@@ -301,6 +301,7 @@ function main() {
   const PRE_EXISTING_NULLABLE_DRIFT = new Set([
     'token.ts:ring',    // FALSE POSITIVE — nullable is on TokenRingColorsInput.ring (nested)
     'token.ts:texture', // FALSE POSITIVE — nullable is on TokenRingSubjectInput.texture (nested)
+    'actor-config.ts:src', // FALSE POSITIVE — nullable is on TokenTurnMarkerInput.src (nested in changes.turnMarker); top-level set-art src is z.string() non-null
   ]);
 
   for (const schemaFile of schemaFiles) {

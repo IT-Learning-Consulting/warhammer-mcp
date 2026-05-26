@@ -71,6 +71,15 @@ import { dispatchFolder as dispatchFolderHandler } from './handlers/folder.js';
 import { dispatchSetting as dispatchSettingHandler } from './handlers/setting.js';
 // Phase 5 mcp_completion_v1 — ChatMessage umbrella (5 actions).
 import { dispatchChatMessage as dispatchChatMessageHandler } from './handlers/chat-message.js';
+// Phase 1 mcp_coverage_expansion — item-directory umbrella (5 actions: list/get/search/duplicate/import-from-compendium).
+import { dispatchItemDirectory as dispatchItemDirectoryHandler } from './handlers/item-directory.js';
+// Phase 1 mcp_coverage_expansion — actor-config umbrella (4 actions: get/update-prototype-token + get/set-art).
+import { dispatchActorConfig as dispatchActorConfigHandler } from './handlers/actor-config.js';
+// Phase 2 mcp_coverage_expansion — dice-roll tool (roll/validate/simulate over Foundry Roll).
+import { dispatchDiceRoll as dispatchDiceRollHandler } from './handlers/dice-roll.js';
+// Phase 1 module_integration_v1 — module-probe umbrella (always-on, read-only) + module-matt stub.
+import { dispatchModuleProbe as dispatchModuleProbeHandler } from './handlers/modules/probe/probe.js';
+import { dispatchModuleMatt as dispatchModuleMattHandler } from './handlers/modules/monks-active-tiles/matt.js';
 // Phase 6.1 mcp_crud_expansion — FilePicker handlers (upload/list + notify.warn round-trip).
 import {
   uploadFile as uploadFileHandler,
@@ -99,7 +108,7 @@ import {
   CreateItemInput,
   UpdateItemInput,
   DeleteItemInput,
-  ModifyItemQualitiesInput,
+  ModifyItemQualitiesV2Input,
   AddItemFromCompendiumInput,
   TradeItemInput,
   // compendium domain
@@ -280,7 +289,7 @@ export class QueryHandlers {
     // Phase 6.1 mcp_crud_expansion — FilePicker surface (upload/list + notify.warn round-trip).
     CONFIG.queries[`${modulePrefix}.uploadFile`] = (data: unknown) => uploadFileHandler(data);
     CONFIG.queries[`${modulePrefix}.listFiles`] = (data: unknown) => listFilesHandler(data);
-    CONFIG.queries[`${modulePrefix}.notify.warn`] = (data: unknown) => notifyWarnHandler(data);
+    CONFIG.queries[`${modulePrefix}.filepickerNotifyWarn`] = (data: unknown) => notifyWarnHandler(data);
     // Phase 4 mcp_notify_coverage — `notify` umbrella surfaces notify.* to MCP
     // skills as workflow bookends + ad-hoc GM-visible events. GM-gated.
     CONFIG.queries[`${modulePrefix}.notify`] = this.handleNotify.bind(this);
@@ -292,6 +301,19 @@ export class QueryHandlers {
     CONFIG.queries[`${modulePrefix}.setting`] = this.handleSetting.bind(this);
     // Phase 5 mcp_completion_v1 — ChatMessage umbrella (5 actions).
     CONFIG.queries[`${modulePrefix}.chat-message`] = this.handleChatMessage.bind(this);
+    // Phase 1 mcp_coverage_expansion — item-directory umbrella (5 actions: list/get/search/duplicate/import-from-compendium).
+    CONFIG.queries[`${modulePrefix}.item-directory`] = this.handleItemDirectory.bind(this);
+    // Phase 1 mcp_coverage_expansion — actor-config umbrella (4 actions: get/update-prototype-token + get/set-art).
+    CONFIG.queries[`${modulePrefix}.actor-config`] = this.handleActorConfig.bind(this);
+    // Phase 2 mcp_coverage_expansion — dice-roll tool (roll/validate/simulate over Foundry Roll).
+    CONFIG.queries[`${modulePrefix}.dice-roll`] = this.handleDiceRoll.bind(this);
+    // Phase 1 module_integration_v1 — module-probe umbrella (always-on, read-only).
+    // Does NOT call validateFoundryState() — game.modules is available before full init
+    // (mirrors handleDiagnostic pattern, not handleSetting). No enableDiagnosticTools gate.
+    CONFIG.queries[`${modulePrefix}.module-probe`] = this.handleModuleProbe.bind(this);
+    // Phase 1 module_integration_v1 — module-matt stub (monks-active-tiles conditional).
+    // requireModuleActive guard in the dispatcher returns MODULE_NOT_ACTIVE when inactive.
+    CONFIG.queries[`${modulePrefix}.module-matt`] = this.handleModuleMatt.bind(this);
   }
 
   unregisterHandlers(): void {
@@ -375,7 +397,9 @@ export class QueryHandlers {
         if (!itemDoc) throw new Error(`Item with UUID "${uuid}" not found in compendium`);
 
         const itemData = itemDoc.toObject();
-        const createdItems = await actor.createEmbeddedDocuments('Item', [itemData]);
+        const embedOptions: Record<string, unknown> = {};
+        if (parsed.skipSpecialisationChoice) embedOptions.skipSpecialisationChoice = true;
+        const createdItems = await actor.createEmbeddedDocuments('Item', [itemData], embedOptions);
         if (!createdItems || createdItems.length === 0) throw new Error('Failed to create item on actor');
 
         const createdItem = createdItems[0];
@@ -540,6 +564,31 @@ export class QueryHandlers {
     } catch (error) {
       rethrowAsInvalidInput(error);
       throw new Error(`Failed to dispatch journal action: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  // Phase 1 module_integration_v1 — module-probe umbrella dispatcher.
+  // Intentionally skips validateFoundryState() — game.modules is available
+  // before Foundry reaches full ready state (mirrors handleDiagnostic).
+  // No enableDiagnosticTools gate — module-probe is a standalone read-only probe.
+  private async handleModuleProbe(data: unknown): Promise<any> {
+    try {
+      return await dispatchModuleProbeHandler(data);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to dispatch module-probe action: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  // Phase 1 module_integration_v1 — module-matt stub dispatcher.
+  // requireModuleActive('monks-active-tiles') guard runs inside dispatchModuleMatt.
+  // Returns MODULE_NOT_ACTIVE when the module is absent/inactive.
+  private async handleModuleMatt(data: unknown): Promise<any> {
+    try {
+      return await dispatchModuleMattHandler(data);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to dispatch module-matt action: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
@@ -995,7 +1044,7 @@ export class QueryHandlers {
     try {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
-      const parsed = ModifyItemQualitiesInput.strict().parse(data ?? {});
+      const parsed = ModifyItemQualitiesV2Input.parse(data ?? {});
       return await wrappedWrite('modifyItemQualities', async () => {
         // Phase 5: route on destination discriminator OR fall back to legacy characterName.
         let item: any = null;
@@ -1030,17 +1079,12 @@ export class QueryHandlers {
                 (a: any) => a.name?.toLowerCase() === dest.actorName!.toLowerCase()
               );
             }
-          } else if (parsed.characterName) {
-            actor = (game.actors as any)?.find(
-              (a: any) => a.name?.toLowerCase() === parsed.characterName!.toLowerCase()
-            );
           }
           if (!actor) {
             throw new Error(
-              `Actor not found: ${parsed.characterName ??
-              (parsed.destination?.type === 'actor'
+              `Actor not found: ${parsed.destination?.type === 'actor'
                 ? parsed.destination.actorId ?? parsed.destination.actorName
-                : '(no identifier)')
+                : '(no identifier)'
               }`
             );
           }
@@ -1468,6 +1512,7 @@ export class QueryHandlers {
     try {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
+      this.dataAccess.validateFoundryState();
       const parsed = AddActiveEffectInput.strict().parse(data ?? {});
       return await wrappedWrite('addActiveEffect', async () => ({
         success: true,
@@ -1483,6 +1528,7 @@ export class QueryHandlers {
     try {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
+      this.dataAccess.validateFoundryState();
       const parsed = UpdateActiveEffectInput.strict().parse(data ?? {});
       if (!parsed.effectId && !parsed.effectName) {
         throw new Error('updateActiveEffect requires one of effectId or effectName');
@@ -1501,6 +1547,7 @@ export class QueryHandlers {
     try {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
+      this.dataAccess.validateFoundryState();
       const parsed = DeleteActiveEffectInput.strict().parse(data ?? {});
       if (!parsed.effectId && !parsed.effectName) {
         throw new Error('deleteActiveEffect requires one of effectId or effectName');
@@ -1585,6 +1632,39 @@ export class QueryHandlers {
         return { success: false, error: `NOTIFY_INVALID_INPUT: ${error.message}` };
       }
       throw new Error(`Failed to dispatch notify: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  // Phase 1 mcp_coverage_expansion — item-directory umbrella (5 actions).
+  async handleItemDirectory(data: unknown): Promise<any> {
+    try {
+      this.dataAccess.validateFoundryState();
+      return await dispatchItemDirectoryHandler(data);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to dispatch item-directory action: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  // Phase 2 mcp_coverage_expansion — dice-roll tool (roll/validate/simulate).
+  async handleDiceRoll(data: unknown): Promise<any> {
+    try {
+      this.dataAccess.validateFoundryState();
+      return await dispatchDiceRollHandler(data);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to dispatch dice-roll action: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  // Phase 1 mcp_coverage_expansion — actor-config umbrella (4 actions).
+  async handleActorConfig(data: unknown): Promise<any> {
+    try {
+      this.dataAccess.validateFoundryState();
+      return await dispatchActorConfigHandler(data);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to dispatch actor-config action: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 }

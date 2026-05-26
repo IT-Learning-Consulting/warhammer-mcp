@@ -559,6 +559,9 @@ export const updatePlaylistSound = soundFactoryHandlers.update;
 // for generic reuse). Mirrors deletePlaylist pattern; cascade targets are
 // Scene.playlistSound FKs pointing at this specific sound.
 export async function deletePlaylistSound(data: unknown): Promise<Envelope<any>> {
+  const gate = validateGMAccess();
+  if (!gate.allowed) return { success: false, error: PLAYLIST_DENY('delete-sound') };
+
   const input: any = data ?? {};
   // No cascade fast path: delegate to factory.
   if (input.cascade !== true) {

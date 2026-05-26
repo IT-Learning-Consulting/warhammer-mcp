@@ -11,6 +11,7 @@
     "dev": "npm run dev --workspace=packages/mcp-server",
     "build": "npm run build:shared && npm run build:server && npm run build:foundry",
     "check:handlers": "node scripts/check-handler-envelope.mjs",
+    "check:registry": "node scripts/check-registry-orphans.mjs",
     "build:foundry": "npm run check:handlers && npm run build --workspace=packages/foundry-module",
     "build:server": "npm run build --workspace=packages/mcp-server",
     "build:shared": "npm run build --workspace=shared",

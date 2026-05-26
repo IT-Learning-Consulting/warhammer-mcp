@@ -278,64 +278,6 @@ export interface PlaylistListItem {
   folder: string | null;
 }
 
-export interface PlaylistCreatePlaylistResponse {
-  id: string;
-  name: string;
-  soundIds: string[];  // IDs of inline-created sounds (Phase 2 F09 result-ID surfacing)
-}
-
-export interface PlaylistUpdatePlaylistResponse {
-  playlistId: string;
-  changes: Record<string, unknown>;
-}
-
-export interface PlaylistDeletePlaylistResponse {
-  playlistId: string;
-  // DP-18 cascade-aware verify: how many embedded sounds were deleted with the parent.
-  deletedSoundCount: number;
-  // Phase 10: populated only when input cascade:true was set.
-  affectedDocs?: import('./cross-doc-fk.js').FkAffectedDocEntry[];
-}
-
-export type PlaylistGetPlaylistResponse = PlaylistViewModel;
-
-export interface PlaylistListPlaylistsResponse {
-  total: number;
-  page: number;
-  pageSize: number;
-  items: PlaylistListItem[];
-}
-
-export interface PlaylistAddSoundResponse {
-  playlistId: string;
-  soundId: string;
-  name: string;
-}
-
-export interface PlaylistUpdateSoundResponse {
-  playlistId: string;
-  soundId: string;
-  changes: Record<string, unknown>;
-}
-
-export interface PlaylistDeleteSoundResponse {
-  playlistId: string;
-  soundId: string;
-  // Phase 10: populated only when input cascade:true was set.
-  affectedDocs?: import('./cross-doc-fk.js').FkAffectedDocEntry[];
-}
-
-export interface PlaylistPlayResponse {
-  playlistId: string;
-  playing: boolean;
-  mode: number;
-}
-
-export interface PlaylistStopResponse {
-  playlistId: string;
-  playing: boolean;
-}
-
 // Re-export the mode alias map so handler + tool can share a single source of truth.
 export const PLAYLIST_PLAY_MODE_ALIASES = {
   disabled: -1,

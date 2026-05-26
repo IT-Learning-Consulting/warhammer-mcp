@@ -12,9 +12,12 @@ import { TextureDataSchema, type TextureData } from './texture-data.js';
 
 const FOUNDRY_ID = z.string().min(1);
 
+// BUG-194: local mirror of OCCLUSION_MODES — rejects mode=2 (undefined Foundry gap).
+const OCCLUSION_MODES = { NONE: 0, FADE: 1, RADIAL: 3, VISION: 4 } as const;
+
 const TileOcclusionInput = z
   .object({
-    mode: z.number().int().min(0).max(4).optional(),
+    mode: z.nativeEnum(OCCLUSION_MODES).optional(),
     alpha: z.number().min(0).max(1).optional(),
   })
   .strict();

@@ -1,6 +1,7 @@
 import { MODULE_ID, DEFAULT_CONFIG } from './constants.js';
 import type { BridgeConfig } from './socket-bridge.js';
 import { notify } from './notify.js';
+import { playDialogChime } from './hooks/mcp-dialog-chime.js';
 
 export class ModuleSettings {
   private moduleId: string = MODULE_ID;
@@ -55,6 +56,46 @@ export class ModuleSettings {
         }
       },
       restricted: true
+    });
+
+    // Dialog Chime test-button submenu
+    (game.settings as any).registerMenu(this.moduleId, 'dialogChimeMenu', {
+      name: 'MCP Dialog Chime',
+      label: 'Test Dialog Chime',
+      hint: 'Play the configured chime sound on demand to verify your settings.',
+      icon: 'fas fa-bell',
+      type: class extends FormApplication {
+        static get defaultOptions() {
+          return foundry.utils.mergeObject(super.defaultOptions, {
+            title: 'MCP Dialog Chime',
+            template: `modules/${MODULE_ID}/templates/dialog-chime-menu.html`,
+            width: 420,
+            height: 'auto',
+            resizable: false,
+            closeOnSubmit: true,
+          } as any);
+        }
+
+        getData(): any {
+          return {
+            dialogChimeEnabled: game.settings.get(MODULE_ID, 'dialogChimeEnabled'),
+            dialogChimeSound: game.settings.get(MODULE_ID, 'dialogChimeSound'),
+            dialogChimeVolume: game.settings.get(MODULE_ID, 'dialogChimeVolume'),
+          };
+        }
+
+        activateListeners(html: JQuery) {
+          super.activateListeners(html);
+          html.find('.play-test-chime').click(() => {
+            playDialogChime();
+          });
+        }
+
+        async _updateObject(_event: Event, _formData: any) {
+          // No form fields to save — settings are managed via the main config panel.
+        }
+      },
+      restricted: true,
     });
 
     // ============================================================================
@@ -247,6 +288,52 @@ export class ModuleSettings {
       config: false,
       type: Object,
       default: {},
+    });
+
+    // ============================================================================
+    // SECTION: DIALOG CHIME — audible alert for MCP-triggered blocking dialogs
+    // ============================================================================
+
+    game.settings.register(this.moduleId, 'dialogChimeEnabled', {
+      name: 'MCP Dialog Chime: Enable',
+      hint: 'Play a chime when a blocking dialog appears during an MCP request (e.g. specialisation-choice popups). Never beeps for manual dialogs.',
+      scope: 'client',
+      config: true,
+      type: Boolean,
+      default: true,
+    });
+
+    game.settings.register(this.moduleId, 'dialogChimeSound', {
+      name: 'MCP Dialog Chime: Sound',
+      hint: 'Audio file to play when the chime fires. Defaults to Foundry\'s built-in notify sound.',
+      scope: 'client',
+      config: true,
+      type: String,
+      default: 'sounds/notify.wav',
+      filePicker: 'audio',
+    } as any);
+
+    game.settings.register(this.moduleId, 'dialogChimeVolume', {
+      name: 'MCP Dialog Chime: Volume',
+      hint: 'Playback volume (0 = silent, 1 = full). Uses the Interface audio channel.',
+      scope: 'client',
+      config: true,
+      type: Number,
+      default: 0.8,
+      range: {
+        min: 0,
+        max: 1,
+        step: 0.05,
+      },
+    });
+
+    game.settings.register(this.moduleId, 'dialogChimeClasses', {
+      name: 'MCP Dialog Chime: Extra Dialog Classes',
+      hint: 'Comma-separated list of ApplicationV2 class names that should trigger the chime in addition to DialogV2 and its subclasses.',
+      scope: 'client',
+      config: true,
+      type: String,
+      default: 'ItemDialog,ValueDialog,DialogV2',
     });
 
   }

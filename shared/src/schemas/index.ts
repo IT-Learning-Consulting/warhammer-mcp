@@ -55,3 +55,12 @@ export * from './folder.js';
 export * from './setting.js';
 // Phase 5 mcp_completion_v1 — ChatMessage umbrella (5 actions; delete confirm gate; rollMode resolution; rolls-immutability).
 export * from './chat-message.js';
+// Phase 1 mcp_coverage_expansion — item-directory umbrella (5 actions: list/get/search/duplicate/import-from-compendium).
+export * from './item-directory.js';
+// Phase 1 mcp_coverage_expansion — actor-config umbrella (4 actions: get/update-prototype-token + get/set-art).
+export * from './actor-config.js';
+// Phase 2 mcp_coverage_expansion — dice-roll tool (roll/validate/simulate over Foundry Roll).
+export * from './dice-roll.js';
+// Phase 1 module_integration_v1 — module-probe umbrella (is-active / list-active).
+// Generic types only; module-specific schemas live in package-local tools/modules/<id>/schemas.ts.
+export * from './module-probe.js';

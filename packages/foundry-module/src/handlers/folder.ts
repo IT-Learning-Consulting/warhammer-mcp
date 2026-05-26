@@ -285,9 +285,12 @@ export async function deleteFolder(data: unknown): Promise<Envelope<any>> {
         const docIds = contents.map((d: any) => d.id).filter(Boolean);
         if (docIds.length > 0) {
           const DocClass = (globalThis as any)[folder.type];
-          if (DocClass && typeof DocClass.deleteDocuments === 'function') {
-            await DocClass.deleteDocuments(docIds);
+          if (!DocClass || typeof DocClass.deleteDocuments !== 'function') {
+            throw new Error(
+              `FOLDER_DELETE_CONTENTS_FAILED: no deleteDocuments method found for folder type "${folder.type}" — cannot delete contents`,
+            );
           }
+          await DocClass.deleteDocuments(docIds);
         }
       }
 

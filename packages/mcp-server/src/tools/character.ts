@@ -86,9 +86,11 @@ export class CharacterTools extends BaseTool {
     this.logger.info('Getting character information', { identifier, sections });
 
     try {
-      const characterData = await this.query<any>('getCharacterInfo', {
-        characterName: identifier,
-      });
+      const isId = /^[A-Za-z0-9]{16}$/.test(identifier);
+      const characterData = await this.query<any>('getCharacterInfo', isId
+        ? { characterId: identifier }
+        : { characterName: identifier }
+      );
 
       this.logger.debug('Successfully retrieved character data', {
         characterId: characterData.id,
@@ -124,7 +126,7 @@ export class CharacterTools extends BaseTool {
     // F01 (2026-05-14): hitLocationTable moved from identity → vitals to match the plan's mapping
     // table (TOOL-IDEA-006). It's a combat-resolution field (which RollTable to roll on for crit
     // location), so it belongs with the other combat vitals.
-    const identityKeys = ['species', 'career', 'status', 'gender', 'age', 'height', 'weight', 'hair', 'eyes', 'starSign', 'movement', 'distinguishingMarks'];
+    const identityKeys = ['species', 'career', 'class', 'careerLevel', 'status', 'gender', 'age', 'height', 'weight', 'hair', 'eyes', 'starSign', 'movement', 'distinguishingMarks'];
     const vitalsKeys = ['wounds', 'fortune', 'fate', 'resilience', 'resolve', 'corruption', 'toughness', 'money', 'criticalWounds', 'hitLocationTable'];
     const biographyKeys = ['biography', 'gmNotes', 'experience', 'experienceLog'];
 
@@ -313,9 +315,32 @@ export class CharacterTools extends BaseTool {
       basicInfo.hitLocationTable = system.details.hitLocationTable.value;
     }
 
-    // Career
-    if (system.details?.career?.value) {
-      basicInfo.career = system.details.career.value;
+    // Career / Class / Career level — BUG-184 (revised 2026-05-24 in /agent-validate REVISE).
+    // In wfrp4e the manual `system.details.career/class/careerlevel` text fields are typically
+    // left blank — wfrp4e's computeCareer() writes details.status from the current career but does
+    // NOT write back career/class/careerlevel. The live values come from the CURRENT career Item
+    // (the embedded career with system.current.value === true): name = career, system.class.value =
+    // class (e.g. "Warrior"), system.level.value = career level (1-4). See
+    // wfrp4e_system/data/Item/career.md. Prefer that item; fall back to the manual details fields.
+    const currentCareer = (items as any[]).find(
+      (i: any) => i.type === 'career' && i.system?.current?.value === true
+    );
+    const careerName = currentCareer?.name ?? (system.details?.career?.value || undefined);
+    if (careerName) {
+      basicInfo.career = careerName;
+    }
+    const className = currentCareer?.system?.class?.value ?? (system.details?.class?.value || undefined);
+    if (className) {
+      basicInfo.class = className;
+    }
+    // careerlevel (canonical field is all-lowercase per character.md:160) — prefer the current
+    // career Item's level; keep the manual-field fallbacks for actors that fill them in.
+    const careerLevel = currentCareer?.system?.level?.value
+      ?? system.details?.careerlevel?.value
+      ?? system.details?.level?.value
+      ?? system.details?.careerLevel?.value;
+    if (careerLevel !== undefined && careerLevel !== null && careerLevel !== '') {
+      basicInfo.careerLevel = careerLevel;
     }
 
     // Status/Class
@@ -339,16 +364,23 @@ export class CharacterTools extends BaseTool {
     }
 
     // Biography - WFRP 4e stores motivation and ambitions as separate fields
-    if (system.details?.motivation?.value || system.details?.["personal-ambitions"]) {
+    if (system.details?.motivation?.value || system.details?.["personal-ambitions"] || system.details?.["party-ambitions"]) {
       basicInfo.biography = {};
-      if (system.details.motivation?.value) {
+      if (system.details?.motivation?.value) {
         basicInfo.biography.motivation = system.details.motivation.value;
       }
-      if (system.details["personal-ambitions"]?.["short-term"]) {
+      if (system.details?.["personal-ambitions"]?.["short-term"]) {
         basicInfo.biography.shortTermAmbition = system.details["personal-ambitions"]["short-term"];
       }
-      if (system.details["personal-ambitions"]?.["long-term"]) {
+      if (system.details?.["personal-ambitions"]?.["long-term"]) {
         basicInfo.biography.longTermAmbition = system.details["personal-ambitions"]["long-term"];
+      }
+      // Party ambitions — BUG-184
+      const pa = system.details?.["party-ambitions"];
+      if (pa) {
+        if (pa.name) basicInfo.biography.partyAmbitionName = pa.name;
+        if (pa["short-term"]) basicInfo.biography.partyAmbitionShort = pa["short-term"];
+        if (pa["long-term"]) basicInfo.biography.partyAmbitionLong = pa["long-term"];
       }
     }
 

@@ -17,10 +17,12 @@
 // Run from repo root: node scripts/check-handler-envelope.mjs
 // Exit codes: 0 = clean, 1 = violation found.
 
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 const HANDLERS_DIR = 'packages/foundry-module/src/handlers';
+// Phase 1 module_integration_v1 — extend scan to handlers/modules/** (subdirs).
+const MODULES_DIR = 'packages/foundry-module/src/handlers/modules';
 
 // Match: `case '...': return {` (single-line) where `success:` is absent on the same line.
 // Captures dispatch switch cases that return a bare object literal without the Envelope contract.
@@ -42,6 +44,27 @@ for (const file of readdirSync(HANDLERS_DIR)) {
     if (DISPATCH_BARE_RETURN.test(line)) {
       offenders.push({ path: filePath, line: i + 1, text: line.trim() });
       fail = 1;
+    }
+  }
+}
+
+// Phase 1 module_integration_v1 — recursive scan of handlers/modules/** .ts files.
+// Uses Node 20+ readdirSync({ recursive: true }) which returns slash-separated
+// relative paths. existsSync guard: dir may not exist until Phase 1 lands.
+if (existsSync(MODULES_DIR)) {
+  for (const rel of readdirSync(MODULES_DIR, { recursive: true })) {
+    if (!String(rel).endsWith('.ts')) continue;
+    const filePath = join(MODULES_DIR, String(rel));
+    const src = readFileSync(filePath, 'utf8');
+    const lines = src.split(/\r?\n/);
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (/^\s*\/\//.test(line)) continue;
+      if (DISPATCH_BARE_RETURN.test(line)) {
+        offenders.push({ path: filePath, line: i + 1, text: line.trim() });
+        fail = 1;
+      }
     }
   }
 }

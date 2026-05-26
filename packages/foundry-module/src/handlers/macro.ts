@@ -373,9 +373,15 @@ export async function executeMacro(rawInput: unknown): Promise<Envelope<MacroExe
       scriptReturnValue = sanitizeForJSON(result);
     }
 
-    notify.updated('macro', `Macro "${macro._source?.name ?? input.macroId}" executed`, {
-      summary: `${macroType}, ${elapsedMs}ms${threw ? ', threw' : ''}`,
-    });
+    if (threw) {
+      notify.warn(`Macro "${macro._source?.name ?? input.macroId}" threw during execution`, {
+        summary: `${macroType}, ${elapsedMs}ms, threw`,
+      });
+    } else {
+      notify.updated('macro', `Macro "${macro._source?.name ?? input.macroId}" executed`, {
+        summary: `${macroType}, ${elapsedMs}ms`,
+      });
+    }
 
     return {
       success: true as const,

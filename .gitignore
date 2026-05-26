@@ -118,7 +118,9 @@ CLAUDE.md
 # Foundry user data / worlds (never commit)
 Data/
 worlds/
-modules/
+# root-anchored: ignore a repo-root Foundry-data modules/ only, NOT nested source dirs
+# like packages/*/src/handlers/modules or tools/modules (the warhammer-mcp module-* layer)
+/modules/
 userdata/
 foundrydata/
 foundry-data/

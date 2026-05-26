@@ -224,9 +224,10 @@ function validateCharacterTarget(actorId: string | null | undefined): string | n
         : `ACTOR_NOT_FOUND: no actor with id "${actorId}"`;
 }
 
-function verifyScalarFieldsPersisted(userId: string, changes: Record<string, unknown>): any {
+function verifyScalarFieldsPersisted(userId: string, changes: Record<string, unknown>, skipFields?: Set<string>): any {
     const persisted = resolveTargetUser(userId);
     for (const [field, requestedValue] of Object.entries(changes)) {
+        if (skipFields?.has(field)) continue;
         const persistedValue = (persisted._source as Record<string, unknown> | undefined)?.[field];
         if (JSON.stringify(persistedValue) !== JSON.stringify(requestedValue)) {
             throw new Error(
@@ -357,9 +358,10 @@ export async function updateUser(input: UpdateUserInputType): Promise<Envelope<U
     const characterError = validateCharacterTarget(changes.character as string | null | undefined);
     if (characterError) return { success: false, error: characterError };
 
-    const targetUser = resolveTargetUser(input.userId);
     const denied = validateSelfUpdateChanges(input.userId, changes);
     if (denied) return { success: false, error: denied };
+
+    const targetUser = resolveTargetUser(input.userId);
 
     if (game.user?.isGM) {
         const result = await userFactoryHandlers.update({
@@ -403,7 +405,7 @@ export async function updateUser(input: UpdateUserInputType): Promise<Envelope<U
 
     return wrappedWrite('user.updateUserSelf', async () => {
         await targetUser.update(changes);
-        const persisted = verifyScalarFieldsPersisted(input.userId, changes);
+        const persisted = verifyScalarFieldsPersisted(input.userId, changes, new Set(['flags']));
         const changedFields = Object.keys(changes);
 
         notify.updated('user', `User "${persisted.name ?? input.userId}"`, {

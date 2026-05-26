@@ -5,6 +5,8 @@ import { ModuleSettings } from './settings.js';
 import { runHealthCheck, captureInitError, installRuntimeCapture } from './health-check.js';
 import { notify } from './notify.js';
 import { registerRollRelayHook } from './hooks/createChatMessage-roll-relay.js';
+import { registerMcpDialogChimeHook } from './hooks/mcp-dialog-chime.js';
+import { registerMcpDialogAutoResolve } from './mcp-dialog-autoresolve.js';
 // Connection control now handled through settings menu
 
 /**
@@ -636,6 +638,12 @@ Hooks.on('closeSettingsConfig', () => {
 
 // Register roll-result relay for WFRP4e test messages (awaitResult round-trip).
 registerRollRelayHook();
+
+// Register audible chime for MCP-triggered blocking dialogs.
+registerMcpDialogChimeHook();
+
+// Register dialog auto-resolve net — suppresses blocking spec-choice dialogs during MCP requests.
+registerMcpDialogAutoResolve();
 
 // Global hook to handle MCP roll button rendering and state management
 // Using renderChatMessageHTML for Foundry v13 compatibility (renderChatMessage is deprecated)

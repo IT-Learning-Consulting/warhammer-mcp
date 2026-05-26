@@ -129,7 +129,7 @@ export class TemplateTool extends BaseTool {
 **texture:** Bare FilePathField (string or null) — not a TextureData sub-object.
 
 **Examples:**
-- create: {action:"create", sceneId:"abc", x:500, y:300, t:"circle", distance:10, fillColor:"#ff000080"}
+- create: {action:"create", sceneId:"abc", x:500, y:300, t:"circle", distance:10, fillColor:"#ff0000"}
 - update: {action:"update", sceneId:"abc", templateId:"xyz", changes:{hidden:true, distance:20}}
 - delete: {action:"delete", sceneId:"abc", templateId:"xyz"}
 - get: {action:"get", sceneId:"abc", templateId:"xyz"}
@@ -164,7 +164,7 @@ export class TemplateTool extends BaseTool {
             angle: { type: 'number', minimum: 0, maximum: 360, description: '[create/update.changes] Cone/ray angle 0-360°.' },
             width: { type: 'number', description: '[create/update.changes] Width (ray templates).' },
             borderColor: { type: 'string', description: '[create/update.changes] Border color hex string.' },
-            fillColor: { type: 'string', description: '[create/update.changes] Fill color hex string (supports alpha, e.g. "#ff000080").' },
+            fillColor: { type: 'string', description: '[create/update.changes] Fill color hex string — 6-char hex only, e.g. "#ff0000" (alpha not supported by F09 schema constraint).' },
             texture: { type: ['string', 'null'], description: '[create/update.changes] Texture file path or null.' },
             hidden: { type: 'boolean', description: '[create/update.changes] Hide the template from players.' },
             elevation: { type: 'number', description: '[create/update.changes] Elevation value.' },

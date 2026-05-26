@@ -130,7 +130,6 @@ async function handleSet(input: any): Promise<Envelope<any>> {
     success: true,
     data: {
       setting: buildViewModel(ns, key, persistedValue, updatedCfg),
-      previousValue: undefined,
       verified: true,
     },
   };

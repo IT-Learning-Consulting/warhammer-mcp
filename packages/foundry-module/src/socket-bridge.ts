@@ -1,5 +1,6 @@
 import { MODULE_ID, CONNECTION_STATES } from './constants.js';
 import { notify, type ProgressHandle } from './notify.js';
+import { beginMcpActivity, endMcpActivity, setMcpRequestContext } from './mcp-activity.js';
 
 export interface BridgeConfig {
   enabled: boolean;
@@ -200,11 +201,28 @@ export class SocketBridge {
         throw new Error(`No handler found for query: ${data.method}`);
       }
 
-      // Execute the query handler
-      const result = await handler(data.data || {});
-      
-      this.log(`Query completed: ${data.method}`);
-      callback({ success: true, data: result });
+      // Capture request context so the dialog auto-resolve GM notice can name
+      // the actor + operation that triggered a silent auto-pick.
+      const args = data.data || {};
+      const method = queryKey.includes('.') ? queryKey.split('.').pop()! : queryKey;
+      const ctxActorId: string | undefined = args.actorId ?? args.id ?? undefined;
+      let ctxActorName: string | undefined;
+      try {
+        ctxActorName = ctxActorId ? (game as any)?.actors?.get(ctxActorId)?.name : undefined;
+      } catch {
+        ctxActorName = undefined;
+      }
+      setMcpRequestContext({ method, actorId: ctxActorId, actorName: ctxActorName });
+
+      // Execute the query handler — counter guards the dialog-chime hook.
+      beginMcpActivity();
+      try {
+        const result = await handler(data.data || {});
+        this.log(`Query completed: ${data.method}`);
+        callback({ success: true, data: result });
+      } finally {
+        endMcpActivity();
+      }
 
     } catch (error) {
       this.log(`Query failed: ${data.method} - ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -361,6 +379,7 @@ export class SocketBridge {
 
       if (folder) {
         this.log(`Created AI Generated Maps folder with ID: ${folder.id}`);
+        notify.created('folder', folderName);
         return folder.id;
       }
 

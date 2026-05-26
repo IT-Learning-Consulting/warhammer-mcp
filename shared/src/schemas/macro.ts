@@ -78,7 +78,7 @@ export const ListMacrosInput = z.object({
   folderId: FOUNDRY_ID.optional(),
   type: MACRO_TYPE.optional(),
   page: z.number().int().positive().optional(),
-  pageSize: z.number().int().positive().optional(),
+  pageSize: z.number().int().min(1).max(100).optional(),
   countOnly: z.boolean().optional(),
 });
 

@@ -16,8 +16,8 @@
 //
 // rollMode is a server-side convenience field resolved via ChatMessage.applyRollMode:
 //   publicroll  → whisper=[], blind=false (all players see)
-//   gmroll      → whisper=[GM IDs], blind=false
-//   blindroll   → whisper=[GM IDs], blind=true (hides result from sender)
+//   gmroll      → whisper=[GM IDs], blind=false (if whisper field is non-empty, it is kept as-is; rollMode whisper assignment skipped)
+//   blindroll   → whisper=[GM IDs], blind=true, hides result from sender (if whisper field is non-empty, kept as-is)
 //   selfroll    → whisper=[current GM user id (game.user.id)], blind=false — MCP server always runs as the active GM user, so selfroll whispers to that user regardless of the author field
 //   roll        → inherits game.settings rollMode
 //
@@ -128,8 +128,8 @@ IMPORTANT — author vs user trap: always pass the Foundry user ID in the \`auth
 
 rollMode (server-side convenience, resolved via ChatMessage.applyRollMode):
   publicroll  → whisper=[], blind=false (all players see the message)
-  gmroll      → whisper=[active GM IDs], blind=false
-  blindroll   → whisper=[active GM IDs], blind=true (dice hidden from sender)
+  gmroll      → whisper=[active GM IDs], blind=false (if whisper is non-empty, kept as-is; rollMode whisper assignment skipped)
+  blindroll   → whisper=[active GM IDs], blind=true, dice hidden from sender (if whisper is non-empty, kept as-is)
   selfroll    → whisper=[current GM user id (game.user.id)], blind=false (author only — MCP server always runs as the active GM user)
   roll        → inherits game.settings.get("core","rollMode")
 

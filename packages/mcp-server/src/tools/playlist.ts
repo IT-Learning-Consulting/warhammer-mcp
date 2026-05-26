@@ -95,6 +95,7 @@ interface PlaylistPlayResponse {
   playlistId: string;
   playing: boolean;
   mode: number;
+  suppressed?: boolean;
 }
 interface PlaylistStopResponse {
   playlistId: string;
@@ -454,8 +455,11 @@ export class PlaylistTool extends BaseTool {
   private async handlePlay(args: ArgsFor<'play'>) {
     try {
       const data = await this.query<PlaylistPlayResponse>('playlist', args);
-      const text =
+      let text =
         `Playlist Started\n\n**Playlist:** \`${data.playlistId}\`\n**Mode:** ${modeName(data.mode)}\n**Playing:** ${data.playing ? 'yes' : 'no'}`;
+      if (data.suppressed) {
+        text += `\nSuppressed: yes (DISABLED mode — play is a no-op)`;
+      }
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
       return errorContent('play', e instanceof Error ? e.message : String(e));

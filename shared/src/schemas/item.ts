@@ -68,4 +68,5 @@ export const AddItemFromCompendiumInput = z.object({
   actorId: z.string(),
   itemUuid: z.string().optional(),
   compendiumId: z.string().optional(),
+  skipSpecialisationChoice: z.boolean().optional(),
 }).strict();

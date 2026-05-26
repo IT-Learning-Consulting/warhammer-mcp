@@ -1,0 +1,298 @@
+// Phase 1 mcp_coverage_expansion — Item-directory umbrella tool.
+//
+// Covers world game.items collection: list / get / search / duplicate / import-from-compendium.
+//
+// Scope: game.items only (world WorldCollection).
+//   - Actor-embedded items → list-actor-items.
+//   - Compendium reads → search-compendium / get-compendium-entry-full.
+//   - Placed-token art → token {action:"update", changes:{texture:{src}}}.
+//
+// CCR-1 / BUG-069: all this.query<T> calls use concrete response interfaces, never <any>.
+// CCR-6: write actions (duplicate, import-from-compendium) trigger notify.created on the Foundry side.
+
+import { z } from 'zod';
+import { ItemDirectoryToolInput } from '@foundry-mcp/shared';
+import { BaseTool, BaseToolOptions } from '../base-tool.js';
+
+type ItemDirectoryArgs = z.infer<typeof ItemDirectoryToolInput>;
+type ArgsFor<A extends ItemDirectoryArgs['action']> = Extract<ItemDirectoryArgs, { action: A }>;
+
+// ── Inline response interfaces ────────────────────────────────────────────────
+
+interface WorldItemSummary {
+  id: string;
+  name: string;
+  type: string;
+  img: string | null;
+  folderId: string | null;
+  system: Record<string, unknown>;
+  flags: Record<string, unknown>;
+}
+
+interface ItemDirectoryListResponse {
+  items: WorldItemSummary[];
+  total: number;
+  page: number;
+  pageSize: number;
+  typeFilter: string | null;
+  folderId: string | null;
+}
+
+interface ItemDirectoryGetResponse {
+  id: string;
+  name: string;
+  type: string;
+  img: string | null;
+  folderId: string | null;
+  system: Record<string, unknown>;
+  flags: Record<string, unknown>;
+}
+
+interface ItemDirectorySearchResponse {
+  items: WorldItemSummary[];
+  total: number;
+  query: string | null;
+}
+
+interface ItemDirectoryDuplicateResponse {
+  id: string;
+  name: string;
+  type: string;
+  sourceId: string;
+  img: string | null;
+  folderId: string | null;
+}
+
+interface ItemDirectoryImportResponse {
+  id: string;
+  name: string;
+  type: string;
+  packId: string;
+  compendiumItemId: string;
+  idMatchesCompendium: boolean;
+  img: string | null;
+  folderId: string | null;
+}
+
+// ── Utilities ─────────────────────────────────────────────────────────────────
+
+function errorContent(action: string, message: string) {
+  return {
+    content: [{ type: 'text' as const, text: `❌ **item-directory/${action} failed**\n\n${message}` }],
+    isError: true,
+  };
+}
+
+function formatWorldItem(item: WorldItemSummary): string {
+  return (
+    `- **${item.name}** \`${item.id}\` · type: ${item.type}` +
+    (item.folderId ? ` · folder: \`${item.folderId}\`` : '') +
+    (item.img ? ` · img: \`${item.img}\`` : '')
+  );
+}
+
+// ── Tool class ────────────────────────────────────────────────────────────────
+
+export interface ItemDirectoryToolOptions extends BaseToolOptions {}
+
+export class ItemDirectoryTool extends BaseTool {
+  constructor(options: ItemDirectoryToolOptions) {
+    super(options);
+  }
+
+  getToolDefinitions() {
+    return [
+      {
+        name: 'item-directory',
+        title: 'World Item Directory',
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: false,
+          openWorldHint: true,
+        },
+        description:
+          `Browse and manage the Foundry world Item directory (game.items) via 5 actions.
+
+**Scope:** world game.items only.
+- Actor-embedded items → list-actor-items.
+- Compendium reads → search-compendium / get-compendium-entry-full.
+- Placed-token art → token {action:"update", changes:{texture:{src}}}.
+
+**Actions:**
+- **list**: List world items. Optional: typeFilter (item type string), folderId (folder id), page/pageSize (default 100).
+- **get**: Get a single world item by itemId. Returns full serialized item.
+- **search**: Search world items. Optional: query (name substring), filters ({type?, folder?}), exclude (id array).
+- **duplicate**: Clone a world item. Strips _id/folder/sort + effects._id so Foundry generates fresh ids. Optional: newName. Returns new id + sourceId.
+- **import-from-compendium**: Import a compendium entry to the world Items directory. Required: packId (e.g. "wfrp4e-core.items"), itemId (bare in-pack id). Optional: updateData (merge overrides). Uses the canonical importFromCompendium path (clears the compendium folder FK). Foundry v13 PRESERVES the source compendium id on the imported world item, so the returned world id normally equals the compendium id (see idMatchesCompendium). Re-importing the same entry collides on that id — delete the existing world item first.
+
+**Examples:**
+- list: {action:"list", typeFilter:"weapon"}
+- get: {action:"get", itemId:"abc123"}
+- search: {action:"search", query:"Healing", filters:{type:"trapping"}}
+- duplicate: {action:"duplicate", itemId:"abc123", newName:"My Custom Copy"}
+- import-from-compendium: {action:"import-from-compendium", packId:"wfrp4e-core.items", itemId:"gxdjLQoQUTYgD6fm"}`,
+        inputSchema: {
+          type: 'object',
+          properties: {
+            action: {
+              type: 'string',
+              enum: ['list', 'get', 'search', 'duplicate', 'import-from-compendium'],
+              description: 'The item-directory action to perform.',
+            },
+            itemId: {
+              type: 'string',
+              description: '[get/duplicate] World item document id.',
+            },
+            typeFilter: {
+              type: 'string',
+              description: '[list] Filter to items of this type (e.g. "weapon", "skill", "trapping").',
+            },
+            folderId: {
+              type: 'string',
+              description: '[list] Filter to items in this folder id.',
+            },
+            page: {
+              type: 'integer',
+              minimum: 1,
+              description: '[list] 1-based page number (default 1).',
+            },
+            pageSize: {
+              type: 'integer',
+              minimum: 1,
+              maximum: 200,
+              description: '[list] Items per page (default 100, max 200).',
+            },
+            query: {
+              type: 'string',
+              description: '[search] Name substring query.',
+            },
+            filters: {
+              type: 'object',
+              description: '[search] Optional filter object: {type?: string, folder?: string}.',
+              properties: {
+                type: { type: 'string', description: 'Filter by item type.' },
+                folder: { type: 'string', description: 'Filter by folder id.' },
+              },
+            },
+            exclude: {
+              type: 'array',
+              items: { type: 'string' },
+              description: '[search] Array of item ids to exclude from results.',
+            },
+            newName: {
+              type: 'string',
+              description: '[duplicate] New name for the cloned item. If omitted, keeps source name.',
+            },
+            packId: {
+              type: 'string',
+              description: '[import-from-compendium] Compendium pack id (e.g. "wfrp4e-core.items").',
+            },
+            updateData: {
+              type: 'object',
+              description: '[import-from-compendium] Optional merge overrides applied after import.',
+            },
+          },
+          required: ['action'],
+        },
+      },
+    ];
+  }
+
+  async execute(args: ItemDirectoryArgs) {
+    this.logger.info('Executing item-directory action', { action: args.action });
+    switch (args.action) {
+      case 'list':
+        return this.handleList(args);
+      case 'get':
+        return this.handleGet(args);
+      case 'search':
+        return this.handleSearch(args);
+      case 'duplicate':
+        return this.handleDuplicate(args);
+      case 'import-from-compendium':
+        return this.handleImportFromCompendium(args);
+    }
+  }
+
+  // ── Handlers ────────────────────────────────────────────────────────────────
+
+  private async handleList(args: ArgsFor<'list'>) {
+    try {
+      const data = await this.query<ItemDirectoryListResponse>('item-directory', args);
+      if (data.items.length === 0) {
+        return { content: [{ type: 'text' as const, text: '📦 **No world items found**' }] };
+      }
+      const pageInfo = `page ${data.page} · ${data.items.length} of ${data.total} total`;
+      const filterNote = data.typeFilter ? ` · type: ${data.typeFilter}` : '';
+      const lines = data.items.map(formatWorldItem);
+      const text = `📦 **World Items** (${pageInfo}${filterNote})\n\n${lines.join('\n')}`;
+      return { content: [{ type: 'text' as const, text }] };
+    } catch (e) {
+      return errorContent('list', e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  private async handleGet(args: ArgsFor<'get'>) {
+    try {
+      const data = await this.query<ItemDirectoryGetResponse>('item-directory', args);
+      const text =
+        `📦 **World Item** \`${data.id}\`\n\n` +
+        `- **Name:** ${data.name}\n` +
+        `- **Type:** ${data.type}\n` +
+        `- **img:** ${data.img ?? '_(none)_'}\n` +
+        `- **folderId:** ${data.folderId ?? '_(root)_'}`;
+      return { content: [{ type: 'text' as const, text }] };
+    } catch (e) {
+      return errorContent('get', e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  private async handleSearch(args: ArgsFor<'search'>) {
+    try {
+      const data = await this.query<ItemDirectorySearchResponse>('item-directory', args);
+      if (data.items.length === 0) {
+        return { content: [{ type: 'text' as const, text: '📦 **No items matched the search**' }] };
+      }
+      const lines = data.items.map(formatWorldItem);
+      const text =
+        `📦 **Item Search** (${data.total} results${data.query ? ` · query: "${data.query}"` : ''})\n\n` +
+        lines.join('\n');
+      return { content: [{ type: 'text' as const, text }] };
+    } catch (e) {
+      return errorContent('search', e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  private async handleDuplicate(args: ArgsFor<'duplicate'>) {
+    try {
+      const data = await this.query<ItemDirectoryDuplicateResponse>('item-directory', args);
+      const text =
+        `✅ **Item Duplicated**\n\n` +
+        `- **New id:** \`${data.id}\`\n` +
+        `- **Name:** ${data.name}\n` +
+        `- **Type:** ${data.type}\n` +
+        `- **Source id:** \`${data.sourceId}\``;
+      return { content: [{ type: 'text' as const, text }] };
+    } catch (e) {
+      return errorContent('duplicate', e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  private async handleImportFromCompendium(args: ArgsFor<'import-from-compendium'>) {
+    try {
+      const data = await this.query<ItemDirectoryImportResponse>('item-directory', args);
+      const text =
+        `✅ **Item Imported from Compendium**\n\n` +
+        `- **World id:** \`${data.id}\`\n` +
+        `- **Name:** ${data.name}\n` +
+        `- **Type:** ${data.type}\n` +
+        `- **Pack:** ${data.packId}\n` +
+        `- **Compendium id:** \`${data.compendiumItemId}\`` +
+        (data.idMatchesCompendium ? ` _(preserved — Foundry v13 keeps the compendium id on import)_` : ` _(re-keyed to a new world id)_`);
+      return { content: [{ type: 'text' as const, text }] };
+    } catch (e) {
+      return errorContent('import-from-compendium', e instanceof Error ? e.message : String(e));
+    }
+  }
+}

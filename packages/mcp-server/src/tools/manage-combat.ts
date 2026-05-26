@@ -51,7 +51,7 @@ export class ManageCombatTools extends BaseTool {
           idempotentHint: true,
           openWorldHint: true,
         },
-        description: 'List combatants in the current or specified WFRP 4e combat. Returns {combatId, combatants:[]} envelope: combatId=null means no active combat on the scene; combatId="<id>" with combatants=[] means active combat with zero combatants. Each combatant entry has initiative, conditions, and wounds snapshot. Read-only.',
+        description: 'List combatants in the current or specified WFRP 4e combat. Returns {combatId, combatants:[]} envelope: combatId=null means no active combat on the scene; combatId="<id>" with combatants=[] means active combat with zero combatants. Each combatant entry has id, actorId, tokenId, name, initiative (null if not yet rolled), defeated, and hidden. Read-only.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -71,7 +71,7 @@ export class ManageCombatTools extends BaseTool {
           idempotentHint: false,
           openWorldHint: true,
         },
-        description: 'Advance WFRP 4e combat state. action="rollNPC" and "next/prev/nextRound/prevRound" are dialog-free and fire-and-forget. action="rollAll" and "start" open the Foundry initiative dialog and BLOCK the MCP call until the GM dismisses it — use these only when an interactive GM is at the keyboard. Use end-combat to clear the tracker.',
+        description: 'Advance WFRP 4e combat state. action="rollNPC" and "next/prev/nextRound/prevRound" are dialog-free and fire-and-forget. action="rollAll" and "start" open the Foundry initiative dialog and BLOCK the MCP call until the GM dismisses it — use these only when an interactive GM is at the keyboard. For autonomous flows (no GM at keyboard), use rollNPC to roll initiative for all NPCs, then next to advance turns — this is the dialog-free pattern and is what eval probes use. Use end-combat to clear the tracker.',
         inputSchema: {
           type: 'object',
           properties: {

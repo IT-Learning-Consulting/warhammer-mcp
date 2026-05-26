@@ -1,0 +1,27 @@
+<form class="dcm-settings">
+  <section class="dcm-block">
+    <h2 class="dcm-title">MCP Dialog Chime</h2>
+    <p class="dcm-note">
+      Plays a sound whenever a blocking dialog appears during an MCP request — most commonly
+      the specialisation-choice popup. The chime fires only while the MCP is processing a
+      request; manual dialogs opened during normal play are always silent.
+    </p>
+  </section>
+
+  <hr class="dcm-divider" />
+
+  <section class="dcm-block">
+    <h3 class="dcm-subtitle">Test Chime</h3>
+    <p class="dcm-hint">
+      Click to play the configured sound at the configured volume. Useful for verifying
+      your settings without triggering a real MCP request.
+    </p>
+    <button type="button" class="dcm-btn play-test-chime" data-action="test-chime">
+      <i class="fas fa-bell"></i> Play test chime
+    </button>
+  </section>
+
+  <div class="form-footer">
+    <button type="submit" class="dcm-btn"><i class="fas fa-save"></i> Close</button>
+  </div>
+</form>

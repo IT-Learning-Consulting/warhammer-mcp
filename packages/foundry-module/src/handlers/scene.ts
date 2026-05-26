@@ -778,7 +778,9 @@ export async function listScenesAction(
     include_active_only: input.include_active_only,
   };
   if (input.page !== undefined) params.page = input.page;
-  if (input.pageSize !== undefined) params.pageSize = input.pageSize;
+  // BUG-182: hard cap — unfiltered list on 200+ scene worlds exceeds ~68k transport limit.
+  // Default to page 1 / 100 scenes when caller provides no pageSize.
+  params.pageSize = input.pageSize !== undefined ? input.pageSize : 100;
   if (input.countOnly !== undefined) params.countOnly = input.countOnly;
 
   const raw = await dataAccess.listScenes(params);

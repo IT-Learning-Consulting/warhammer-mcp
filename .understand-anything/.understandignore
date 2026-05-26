@@ -1,0 +1,122 @@
+# .understandignore — patterns for files/dirs to exclude from analysis
+# Syntax: same as .gitignore (globs, # comments, ! negation, trailing / for dirs)
+# Lines below are suggestions — uncomment to activate.
+# Use ! prefix to force-include something excluded by defaults.
+#
+# Built-in defaults (always excluded unless negated):
+#   node_modules/, .git/, dist/, build/, obj/, *.lock, *.min.js, etc.
+#
+# --- ACTIVE exclusions (applied) ---
+# Foundry world DB snapshot used as a test fixture (LevelDB .ldb, LOCK/CURRENT/
+# MANIFEST, .old backups, .backup-* copy) — data, not source.
+**/test-fixtures/**
+# Eval run outputs (gitignored)
+evals/
+# Build artifacts / logs / backups / full-project dumps
+*.tsbuildinfo
+*.log
+*.old
+*.fullproject
+*.ldb
+
+# --- From .gitignore (uncomment to exclude) ---
+
+# CLAUDE.md
+# DISTRIBUTION.md
+# RELEASE-PROCESS.md
+# .pnpm-debug.log*
+# .env
+# .env.*
+# !.env.example
+# *.tsbuildinfo
+# **/*.tsbuildinfo
+# *.swp
+# *.swo
+# .DS_Store
+# .DS_Store?
+# ._*
+# .Spotlight-V100
+# .Trashes
+# ehthumbs.db
+# Thumbs.db
+# nul
+# logs
+# npm-debug.log*
+# yarn-debug.log*
+# yarn-error.log*
+# pnpm-debug.log*
+# lerna-debug.log*
+# pids
+# *.pid
+# *.seed
+# *.pid.lock
+# *.lcov
+# test-results/
+# *test-result*.txt
+# evals/
+# installer/*.exe
+# installer/temp/
+# installer/*.zip
+# *.exe
+# !installer/build/*.exe
+# !installer/nsis/*.exe
+# test-*.ps1
+# config.local.json
+# .claude/foundry-mcp-server-*.zip
+# foundry-vtt-mcp.zip
+# *.local.json
+# *.md.fullproject
+# *.test (1).md
+# *.d.ts.map
+# *.js.map
+# packages/*/dist/
+# packages/*/build/
+# packages/*/node_modules/
+# packages/*/tsconfig.tsbuildinfo
+# packages/*/package-lock.json
+# shared/dist/
+# shared/tsconfig.tsbuildinfo
+# .claude/settings.local.json
+# test_result.md
+# test-results/
+# !installer/build/*.zip
+# !installer/nsis/*.zip
+# *.exe
+# !installer/build/*.exe
+# !installer/nsis/*.exe
+# *.log*
+# .claude/
+# .vscode/*
+# !.vscode/settings.json
+# !.vscode/extensions.json
+# CLAUDE.md
+# *.pem
+# *.key
+# *.p12
+# *.pfx
+# *.keystore
+# Data/
+# worlds/
+# modules/
+# userdata/
+# foundrydata/
+# foundry-data/
+# foundry_vtt_data/
+# *.db
+# *.sqlite
+# *.sqlite3
+# *.db-journal
+# packages/mcp-server/test-fixtures/eval-world-snapshot/
+
+# --- Detected directories (uncomment to exclude) ---
+
+# test/
+# tests/
+# docs/
+# scripts/
+
+# --- Test file patterns (uncomment to exclude) ---
+
+# *.test.*
+# *.spec.*
+# *.snap

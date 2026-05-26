@@ -2,6 +2,49 @@ import { z } from 'zod';
 import { FoundryClient } from '../foundry-client.js';
 import { Logger } from '../logger.js';
 import { BaseTool, BaseToolOptions } from '../base-tool.js';
+// Phase 2 mcp_coverage_expansion — dice-roll tool (roll/validate/simulate over Foundry Roll).
+import { DiceRollToolInput } from '@foundry-mcp/shared';
+
+// ── dice-roll response interfaces (CCR-1: concrete generics on this.query, never <any>) ──
+
+type DiceRollArgs = z.infer<typeof DiceRollToolInput>;
+type DiceArgsFor<A extends DiceRollArgs['action']> = Extract<DiceRollArgs, { action: A }>;
+
+interface SerializedRollTerm {
+  class: string;
+  formula: string;
+  total: number | null;
+  evaluated: boolean;
+  results?: Array<{ result: number; active: boolean; discarded?: boolean }>;
+}
+
+interface DiceRollRollResponse {
+  total: number;
+  formula: string;
+  result: string;
+  terms: SerializedRollTerm[];
+  messageId?: string | null;
+}
+
+interface DiceRollValidateResponse {
+  valid: boolean;
+  formula: string;
+}
+
+interface DiceRollSimulateResponse {
+  totals: number[];
+  n: number;
+  min: number;
+  max: number;
+  mean: number;
+}
+
+function diceErrorContent(action: string, message: string) {
+  return {
+    content: [{ type: 'text' as const, text: `❌ **dice-roll/${action} failed**\n\n${message}` }],
+    isError: true,
+  };
+}
 
 export class DiceRollTools extends BaseTool {
   constructor(options: BaseToolOptions) {
@@ -63,7 +106,84 @@ export class DiceRollTools extends BaseTool {
           },
           required: ['rollType', 'rollTarget', 'targetPlayer', 'isPublic', 'userConfirmedVisibility']
         }
-      }
+      },
+      // Phase 2 mcp_coverage_expansion — GM-side immediate formula evaluation.
+      {
+        name: 'dice-roll',
+        title: 'Dice Roll (immediate)',
+        annotations: {
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: false,
+          openWorldHint: true,
+        },
+        description:
+          `Immediately evaluate a dice formula GM-side and return the result. For INTERACTIVE player roll buttons (a player clicks to roll), use request-player-rolls instead — this tool rolls now and hands back the numbers.
+
+**Actions:**
+- **roll**: Evaluate a formula. Required: formula (e.g. "4d6kh3+2", "1d100", "2d10+@characteristics.ws.value"). Optional: actorId (resolves @-paths via the actor's roll data), createMessage (post the result to chat), rollMode (publicroll/gmroll/blindroll/selfroll), flavor (chat label), speaker ({alias?, actor?, token?, scene?} ids). Returns {total, formula, result, terms[], messageId?}.
+- **validate**: Check whether a formula is parseable WITHOUT rolling it. Required: formula. Returns {valid:boolean, formula}. A bad formula returns valid:false (it does not error).
+- **simulate**: Monte-Carlo a formula's distribution. Required: formula, n (1–1000). Returns {totals[], n, min, max, mean}.
+
+**Notes:**
+- Thin primitive: no WFRP rules. Actor formulas read the actor's roll data only.
+- @-path formulas need an actorId; without it, @refs resolve to 0.
+- n is capped at 1000 (larger samples are rejected — use mean/min/max for the shape).
+
+**Examples:**
+- roll: {action:"roll", formula:"4d6kh3+2"}
+- roll with actor: {action:"roll", formula:"1d100", actorId:"abc123", flavor:"Weapon Skill test", createMessage:true}
+- validate: {action:"validate", formula:"1d20+"}
+- simulate: {action:"simulate", formula:"1d6", n:1000}`,
+        inputSchema: {
+          type: 'object',
+          properties: {
+            action: {
+              type: 'string',
+              enum: ['roll', 'validate', 'simulate'],
+              description: 'The dice-roll action to perform.',
+            },
+            formula: {
+              type: 'string',
+              description: 'Dice formula to evaluate (all actions). E.g. "4d6kh3+2", "1d100", "2d10+@characteristics.ws.value".',
+            },
+            actorId: {
+              type: 'string',
+              description: '[roll] Actor id whose roll data resolves @-path references in the formula.',
+            },
+            createMessage: {
+              type: 'boolean',
+              description: '[roll] If true, post the roll as a ChatMessage and return its messageId.',
+            },
+            rollMode: {
+              type: 'string',
+              enum: ['publicroll', 'gmroll', 'blindroll', 'selfroll'],
+              description: '[roll] Visibility mode for the posted message (only with createMessage).',
+            },
+            flavor: {
+              type: 'string',
+              description: '[roll] Flavor/label text for the posted message (only with createMessage).',
+            },
+            speaker: {
+              type: 'object',
+              description: '[roll] Optional speaker override for the posted message.',
+              properties: {
+                alias: { type: 'string', description: 'Display name for the speaker.' },
+                actor: { type: 'string', description: 'Actor id.' },
+                token: { type: 'string', description: 'Token id (requires scene).' },
+                scene: { type: 'string', description: 'Scene id.' },
+              },
+            },
+            n: {
+              type: 'integer',
+              minimum: 1,
+              maximum: 1000,
+              description: '[simulate] Number of simulations (1–1000).',
+            },
+          },
+          required: ['action', 'formula'],
+        },
+      },
     ];
   }
 
@@ -120,6 +240,72 @@ export class DiceRollTools extends BaseTool {
         return `Parameter error: ${messages.join(', ')}`;
       }
       throw error;
+    }
+  }
+
+  // ── Phase 2 mcp_coverage_expansion — dice-roll (immediate evaluation) ──────────
+
+  async handleDiceRoll(args: unknown) {
+    let params: DiceRollArgs;
+    try {
+      params = DiceRollToolInput.parse(args);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        const messages = error.errors.map((e) => `${e.path.join('.') || '(root)'}: ${e.message}`);
+        return diceErrorContent('dice-roll', messages.join('; '));
+      }
+      return diceErrorContent('dice-roll', error instanceof Error ? error.message : String(error));
+    }
+
+    switch (params.action) {
+      case 'roll':
+        return this.handleRoll(params);
+      case 'validate':
+        return this.handleValidate(params);
+      case 'simulate':
+        return this.handleSimulate(params);
+    }
+  }
+
+  private async handleRoll(args: DiceArgsFor<'roll'>) {
+    try {
+      const data = await this.query<DiceRollRollResponse>('dice-roll', args);
+      const termLines = data.terms
+        .map((t) => `  - ${t.class} \`${t.formula}\`${t.total !== null ? ` = ${t.total}` : ''}`)
+        .join('\n');
+      let text =
+        `🎲 **Roll** \`${data.formula}\`\n\n` +
+        `- **Total:** ${data.total}\n` +
+        `- **Result:** ${data.result}`;
+      if (data.terms.length) text += `\n- **Terms:**\n${termLines}`;
+      if (data.messageId) text += `\n- **Message:** \`${data.messageId}\``;
+      return { content: [{ type: 'text' as const, text }] };
+    } catch (e) {
+      return diceErrorContent('roll', e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  private async handleValidate(args: DiceArgsFor<'validate'>) {
+    try {
+      const data = await this.query<DiceRollValidateResponse>('dice-roll', args);
+      const text = `🎲 **Validate** \`${data.formula}\`\n\n- **Valid:** ${data.valid ? '✅ yes' : '❌ no'}`;
+      return { content: [{ type: 'text' as const, text }] };
+    } catch (e) {
+      return diceErrorContent('validate', e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  private async handleSimulate(args: DiceArgsFor<'simulate'>) {
+    try {
+      const data = await this.query<DiceRollSimulateResponse>('dice-roll', args);
+      const text =
+        `🎲 **Simulate** \`${args.formula}\` (n=${data.n})\n\n` +
+        `- **Mean:** ${data.mean.toFixed(2)}\n` +
+        `- **Min:** ${data.min}\n` +
+        `- **Max:** ${data.max}`;
+      return { content: [{ type: 'text' as const, text }] };
+    } catch (e) {
+      return diceErrorContent('simulate', e instanceof Error ? e.message : String(e));
     }
   }
 }

@@ -177,13 +177,6 @@ async function createCompendiumPack(input: any): Promise<Envelope<CreatePackResp
       error: `COMPENDIUM_MODULE_SCOPE_RUNTIME_NOT_SUPPORTED: module-scope packs must be declared in the module's manifest at module.json; runtime creation silently downgrades to world-scope. Use a world-scope pack instead.`,
     };
   }
-  if (input.scope === 'module' && !input.moduleId) {
-    return {
-      success: false,
-      error: `COMPENDIUM_MODULE_ID_REQUIRED: scope "module" requires moduleId`,
-    };
-  }
-
   const wantedId = `world.${input.name}`;
   const existing = (game as any).packs?.get(wantedId);
   if (existing) {
@@ -318,6 +311,10 @@ async function updateCompendiumPack(input: any): Promise<Envelope<UpdatePackResp
 }
 
 async function readCompendiumPack(input: any): Promise<Envelope<ReadPackResponse>> {
+  // PARITY-001: per-handler gate (CCR-Trust convention — matches sibling handlers)
+  const gate = validateGMAccess();
+  if (!gate.allowed) return { success: false, error: COMPENDIUM_DENY('read-pack') };
+
   let pack: any;
   try { pack = getPackOrThrow(input.packId); }
   catch (e) { return { success: false, error: e instanceof Error ? e.message : String(e) }; }
@@ -560,6 +557,10 @@ async function updateDocumentInPack(input: any): Promise<Envelope<UpdateDocument
 }
 
 async function readDocumentFromPack(input: any): Promise<Envelope<ReadDocumentResponse>> {
+  // PARITY-001: per-handler gate (CCR-Trust convention — matches sibling handlers)
+  const gate = validateGMAccess();
+  if (!gate.allowed) return { success: false, error: COMPENDIUM_DENY('read-document-from-pack') };
+
   let pack: any;
   try { pack = getPackOrThrow(input.packId); }
   catch (e) { return { success: false, error: e instanceof Error ? e.message : String(e) }; }
@@ -598,11 +599,10 @@ async function readDocumentFromPack(input: any): Promise<Envelope<ReadDocumentRe
 // ── Umbrella dispatcher ───────────────────────────────────────────────────
 
 export async function dispatchCompendium(data: unknown): Promise<any> {
-  // GM-gate at dispatcher so the deny string is uniform across actions.
-  const gate = validateGMAccess();
-  if (!gate.allowed) {
-    return { success: false, error: COMPENDIUM_DENY('compendium umbrella') };
-  }
+  // PARITY-001: dispatcher-level gate removed (was the only umbrella with a dispatcher gate,
+  // violating CCR-Trust). Each handler self-gates, including read handlers. See per-handler
+  // validateGMAccess() calls in createCompendiumPack/updateCompendiumPack/readCompendiumPack/
+  // addDocumentToPack/updateDocumentInPack/readDocumentFromPack.
 
   let input: CompendiumToolInputType;
   try {

@@ -97,6 +97,13 @@ import { FolderTool } from './tools/folder.js';
 import { SettingTool } from './tools/setting.js';
 // Phase 5 mcp_completion_v1 — ChatMessage umbrella (5 actions; delete confirm; rollMode resolution; rolls-immutability).
 import { ChatMessageTool } from './tools/chat-message.js';
+// Phase 1 mcp_coverage_expansion — item-directory umbrella (5 actions: list/get/search/duplicate/import-from-compendium).
+import { ItemDirectoryTool } from './tools/item-directory.js';
+// Phase 1 mcp_coverage_expansion — actor-config umbrella (4 actions: get/update-prototype-token + get/set-art).
+import { ActorConfigTool } from './tools/actor-config.js';
+// Phase 1 module_integration_v1 — always-registered module-probe + conditional module-matt stub.
+import { ModuleProbeTool } from './tools/modules/probe/probe.js';
+import { ModuleMattTool } from './tools/modules/monks-active-tiles/matt.js';
 // BUG-107: extracted to side-effect-free module so test imports don't boot backend.
 import { coerceArgsBySchema } from './coerce-args.js';
 
@@ -310,6 +317,12 @@ async function startBackend(): Promise<void> {
   const settingTool = new SettingTool({ foundryClient, logger });
   // Phase 5 mcp_completion_v1 — ChatMessage umbrella.
   const chatMessageTool = new ChatMessageTool({ foundryClient, logger });
+  // Phase 1 mcp_coverage_expansion — item-directory + actor-config umbrellas.
+  const itemDirectoryTool = new ItemDirectoryTool({ foundryClient, logger });
+  const actorConfigTool = new ActorConfigTool({ foundryClient, logger });
+  // Phase 1 module_integration_v1 — module-probe (always-on) + module-matt (conditional stub).
+  const moduleProbeTool = new ModuleProbeTool({ foundryClient, logger });
+  const moduleMattTool = new ModuleMattTool({ foundryClient, logger });
 
   const registry = new ToolRegistry();
   registry.register('get-character', (args) => characterTools.handleGetCharacter(args));
@@ -337,6 +350,8 @@ async function startBackend(): Promise<void> {
   registry.register('create-actor-from-compendium', (args) => actorCreationTools.handleCreateActorFromCompendium(args));
   registry.register('get-compendium-entry-full', (args) => actorCreationTools.handleGetCompendiumEntryFull(args));
   registry.register('request-player-rolls', (args) => diceRollTools.handleRequestPlayerRolls(args));
+  // Phase 2 mcp_coverage_expansion — dice-roll (immediate roll/validate/simulate); reuses DiceRollTools.
+  registry.register('dice-roll', (args) => diceRollTools.handleDiceRoll(args));
   registry.register('ownership', (args) => ownershipTool.execute(args));
   // Phase 4 mcp_crud_expansion — list-scenes + switch-scene folded into scene umbrella.
   registry.register('rolltable', (args) => rollTableTool.execute(args));
@@ -396,6 +411,12 @@ async function startBackend(): Promise<void> {
   registry.register('setting', (args) => settingTool.execute(args));
   // Phase 5 mcp_completion_v1 — ChatMessage umbrella (5 actions).
   registry.register('chat-message', (args) => chatMessageTool.execute(args));
+  // Phase 1 mcp_coverage_expansion — item-directory + actor-config umbrellas.
+  registry.register('item-directory', (args) => itemDirectoryTool.execute(args));
+  registry.register('actor-config', (args) => actorConfigTool.execute(args));
+  // Phase 1 module_integration_v1 — module-probe (always-on) + module-matt (conditional stub).
+  registry.register('module-probe', (args) => moduleProbeTool.execute(args as any));
+  registry.register('module-matt', (args) => moduleMattTool.execute(args as any));
   // Phase 4 mcp_crud_expansion — add-actors-to-scene + delete-token folded into scene umbrella.
   registry.register('delete-actor', (args) => worldDeleteTools.handleDeleteActor(args));
 
@@ -490,6 +511,13 @@ async function startBackend(): Promise<void> {
     ...settingTool.getToolDefinitions(),
     // Phase 5 mcp_completion_v1 — ChatMessage umbrella (5 actions).
     ...chatMessageTool.getToolDefinitions(),
+    // Phase 1 mcp_coverage_expansion — item-directory + actor-config umbrellas.
+    ...itemDirectoryTool.getToolDefinitions(),
+    ...actorConfigTool.getToolDefinitions(),
+
+    // Phase 1 module_integration_v1 — module-probe (always-on) + module-matt (conditional stub).
+    ...moduleProbeTool.getToolDefinitions(),
+    ...moduleMattTool.getToolDefinitions(),
 
   ];
 

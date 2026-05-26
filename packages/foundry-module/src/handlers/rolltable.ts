@@ -359,7 +359,31 @@ export async function rollOnTable(data: unknown): Promise<Envelope<any>> {
   if (!table) throw new Error(`ROLLTABLE_TABLE_NOT_FOUND: no table with id "${input.tableId}"`);
 
   const rollMode = input.rollMode || 'public';
-  const draw = await table.draw({ rollMode: rollMode as any });
+  let draw: any;
+  if (input.modifier) {
+    const roll = await new (globalThis as any).Roll(`${table.formula} + ${input.modifier}`).evaluate();
+    // BUG-237: Foundry's RollTable#draw({roll}) null-derefs ("Cannot read properties
+    // of null (reading 'map')") when the supplied roll matches no result range — the
+    // v13 draw() API does not gracefully return an empty result set for an out-of-range
+    // provided roll. Pre-validate the modified total against the table's result ranges
+    // and return a structured error instead of letting draw() crash. (The downstream
+    // POOL_EXHAUSTED guard only catches the non-replacement already-drawn case.)
+    const total = roll.total ?? 0;
+    const inRange = (table.results as any).some((r: any) => {
+      const range = r.range as [number, number] | undefined;
+      return Array.isArray(range) && total >= range[0] && total <= range[1];
+    });
+    if (!inRange) {
+      throw new Error(
+        `ROLLTABLE_MODIFIER_OUT_OF_RANGE: modified roll ${total} ` +
+        `(formula "${table.formula}" + modifier ${input.modifier}) matches no result ` +
+        `range on table "${table.name}"`,
+      );
+    }
+    draw = await table.draw({ rollMode: rollMode as any, roll });
+  } else {
+    draw = await table.draw({ rollMode: rollMode as any });
+  }
   if (!draw || !draw.results || draw.results.length === 0) {
     throw new Error('ROLLTABLE_POOL_EXHAUSTED: No result drawn from table — pool may be exhausted');
   }
@@ -496,10 +520,18 @@ export async function updateTableResults(
   }
 
   return wrappedWrite('updateTableResults', async () => {
-    await table.updateEmbeddedDocuments('TableResult', input.updates);
+    // BUG-233: remap `text`→`name` per v13 BaseTableResult.defineSchema (no `text` field).
+    const normalisedUpdates = input.updates.map((u: any) => {
+      if (u.text !== undefined) {
+        const { text, ...rest } = u;
+        return { ...rest, name: text };
+      }
+      return u;
+    });
+    await table.updateEmbeddedDocuments('TableResult', normalisedUpdates);
 
     // BUG-070 post-verify: re-read each result and compare changed fields.
-    for (const update of input.updates) {
+    for (const update of normalisedUpdates) {
       const result = table.results.get(update._id);
       if (!result) {
         throw new Error(

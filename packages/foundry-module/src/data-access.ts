@@ -225,7 +225,12 @@ interface TokenPlacementResult {
  */
 class PersistentCreatureIndex {
   private moduleId: string = MODULE_ID;
-  private readonly INDEX_VERSION = '1.0.0';
+  // BUG-180 (bumped 2026-05-24): the creatureType derivation in extractEnhancedCreatureData now
+  // applies SPECIES_TO_CREATURE_TYPE (species display-name → filter enum, e.g. 'Goblin'→'greenskin').
+  // The enhanced index is persisted to worlds/<id>/enhanced-creature-index.json and only rebuilt
+  // when this version (or a pack fingerprint) changes — so any change to the index derivation MUST
+  // bump this version, or the stale pre-fix index keeps being served and creatureType filters miss.
+  private readonly INDEX_VERSION = '1.1.0';
   private readonly INDEX_FILENAME = 'enhanced-creature-index.json';
   private buildInProgress = false;
   private hooksRegistered = false;
@@ -696,6 +701,21 @@ class PersistentCreatureIndex {
       if (typeof creatureType !== 'string') {
         creatureType = String(creatureType || 'unknown');
       }
+
+      // BUG-180: Map species names to the filter enum values used by search-compendium.
+      // WFRP species field stores display names ('Goblin', 'Orc') but the filter enum
+      // uses category keys ('greenskin'). Without this map, creatureType:'greenskin' returns 0.
+      const SPECIES_TO_CREATURE_TYPE: Record<string, string> = {
+        goblin: 'greenskin', orc: 'greenskin', gnoblar: 'greenskin',
+        'night goblin': 'greenskin', 'forest goblin': 'greenskin',
+        skaven: 'chaos', beastman: 'beastman', gor: 'beastman', ungor: 'beastman',
+        zombie: 'undead', skeleton: 'undead', wight: 'undead', ghoul: 'undead', vampire: 'undead',
+        daemon: 'daemon', 'chaos spawn': 'chaos',
+        human: 'human', halfling: 'halfling', dwarf: 'dwarf',
+        elf: 'elf', 'wood elf': 'elf', 'high elf': 'elf', 'dark elf': 'elf',
+      };
+      const mappedType = SPECIES_TO_CREATURE_TYPE[creatureType.toLowerCase()];
+      if (mappedType) creatureType = mappedType;
 
       // Extract size (WFRP specific)
       let size = 'average';
@@ -3319,6 +3339,7 @@ export class FoundryDataAccess {
       };
 
       const folder = await Folder.create(folderData);
+      if (folder) notify.created('folder', folderName);
       return folder?.id || null;
     } catch (error) {
       console.warn(`[${this.moduleId}] Failed to create folder "${folderName}":`, error);
@@ -4755,6 +4776,7 @@ export class FoundryDataAccess {
       if (!created?.id) {
         throw new Error(`Folder.create returned no id for segment "${name}"`);
       }
+      notify.created('folder', name);
       parentId = created.id;
     }
     return parentId;

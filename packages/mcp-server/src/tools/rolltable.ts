@@ -572,6 +572,7 @@ export class RollTableTool extends BaseTool {
     private async handleRoll(args: {
         tableId: string;
         rollMode: string;
+        modifier?: number | undefined;
     }) {
         this.logger.info("Rolling on table", { tableId: args.tableId });
 
@@ -580,6 +581,7 @@ export class RollTableTool extends BaseTool {
             {
                 tableId: args.tableId,
                 rollMode: args.rollMode,
+                ...(args.modifier !== undefined ? { modifier: args.modifier } : {}),
             }
         );
 

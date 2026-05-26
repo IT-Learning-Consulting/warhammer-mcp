@@ -25,7 +25,7 @@ export class AddItemFromCompendiumTool extends BaseTool {
           openWorldHint: true,
         },
         description:
-          'Embed a compendium item onto an actor. Accepts the full Foundry UUID via itemUuid (preferred) or the legacy compendiumId alias (deprecated). Thin pass-through to the Foundry-module addItemFromCompendium query — preserves the source item\'s Active Effects chain (e.g. critical-wound bleeding, mutation stat penalties, disease incubation). Used by /wfrp-critical, /wfrp-mutation, /wfrp-disease, /wfrp-corruption. Does not enforce WFRP rules. Exactly one of {itemUuid, compendiumId} must be supplied.',
+          'Embed a compendium item onto an actor. Accepts the full Foundry UUID via itemUuid (preferred) or the legacy compendiumId alias (deprecated). Thin pass-through to the Foundry-module addItemFromCompendium query — preserves the source item\'s Active Effects chain (e.g. critical-wound bleeding, mutation stat penalties, disease incubation). Used by /wfrp-critical, /wfrp-mutation, /wfrp-disease, /wfrp-corruption. Does not enforce WFRP rules. Exactly one of {itemUuid, compendiumId} must be supplied. Pass skipSpecialisationChoice:true when adding bare isSpec skills (e.g. "Lore ()") to suppress the WFRP4e specialisation-choice dialog that would otherwise block autonomous flows.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -40,6 +40,10 @@ export class AddItemFromCompendiumTool extends BaseTool {
             compendiumId: {
               type: 'string',
               description: 'Deprecated alias for itemUuid. Accepted for backwards compatibility — prefer itemUuid in new code.',
+            },
+            skipSpecialisationChoice: {
+              type: 'boolean',
+              description: 'When true, suppresses the WFRP4e specialisation-choice dialog for bare isSpec skills (e.g. "Lore ()", "Language ()"). Required for autonomous NPC/PC builds that embed specialisation skills without user interaction. Default false.',
             },
           },
           required: ['actorId'],
