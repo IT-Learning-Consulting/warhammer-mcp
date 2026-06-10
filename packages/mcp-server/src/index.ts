@@ -17,10 +17,15 @@ const CONTROL_PORT = 31414;
 type BackendReq = { id: string; method: string; params?: any };
 type BackendRes = { id: string; result?: any; error?: { message: string } };
 
+// BUG-313: per-request timeout — above the Foundry-side 180s query timeout so the
+// backend's own timeout error wins when the bridge is healthy; this only fires when
+// the backend itself never answers (hung process, dropped socket without close event).
+const REQUEST_TIMEOUT_MS = 200_000;
+
 class BackendClient {
   private socket: net.Socket | null = null;
   private buffer = '';
-  private pending = new Map<string, { resolve: (v: any) => void; reject: (e: any) => void }>();
+  private pending = new Map<string, { resolve: (v: any) => void; reject: (e: any) => void; timer: NodeJS.Timeout }>();
   private logFile = path.join(os.tmpdir(), 'foundry-mcp-server', 'wrapper.log');
 
   private log(msg: string, meta?: any) {
@@ -135,6 +140,7 @@ class BackendClient {
         const p = this.pending.get(msg.id);
         if (!p) continue;
         this.pending.delete(msg.id);
+        clearTimeout(p.timer);
         if (msg.error) p.reject(new Error(msg.error.message));
         else p.resolve(msg.result);
       } catch {
@@ -144,7 +150,10 @@ class BackendClient {
   }
 
   private rejectAll(err: any) {
-    for (const [, p] of this.pending) p.reject(err);
+    for (const [, p] of this.pending) {
+      clearTimeout(p.timer);
+      p.reject(err);
+    }
     this.pending.clear();
     this.socket = null;
   }
@@ -159,12 +168,21 @@ class BackendClient {
       }
       const id = Math.random().toString(36).slice(2);
       const req: BackendReq = { id, method, params };
-      this.pending.set(id, { resolve, reject });
+      // BUG-313: never leave a pending entry hanging forever if the backend goes silent.
+      const timer = setTimeout(() => {
+        if (this.pending.delete(id)) {
+          this.log('send(): request timed out', { method });
+          reject(new Error(`BACKEND_TIMEOUT: backend did not respond in ${REQUEST_TIMEOUT_MS / 1000}s`));
+        }
+      }, REQUEST_TIMEOUT_MS);
+      timer.unref?.(); // don't hold the wrapper's event loop open for idle timeouts
+      this.pending.set(id, { resolve, reject, timer });
       try {
         this.log('send(): write', { method });
         this.socket!.write(JSON.stringify(req) + '\n', 'utf8');
       } catch (e) {
         this.pending.delete(id);
+        clearTimeout(timer);
         this.log('send(): write error', { error: (e as any)?.message });
         reject(e);
       }

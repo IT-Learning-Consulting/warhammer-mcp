@@ -26,10 +26,12 @@ export function registerRollRelayHook(): void {
       const outcome: string = testData.result?.outcome ?? 'unknown';
       const SL: number = Number(testData.result?.SL ?? 0);
       const success = outcome === 'success';
+      // BUG-272 payload parity with the roll-button path: include the raw d100 value.
+      const total: number = Number(testData.result?.roll ?? 0);
 
       const emitRollEvent = (window as any).foundryMCPBridge?.emitRollEvent;
       if (typeof emitRollEvent === 'function') {
-        emitRollEvent(requestId, { outcome, SL, success });
+        emitRollEvent(requestId, { outcome, total, SL, success });
       }
     } catch (err) {
       console.warn(`[${MODULE_ID}] createChatMessage roll-relay hook error:`, err);

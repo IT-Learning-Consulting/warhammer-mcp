@@ -387,18 +387,15 @@ async function addDocumentToPack(input: any): Promise<Envelope<AddDocumentRespon
         };
       }
 
-      // D5 safety net: snapshot-clone via toObject() — cheap insurance even
-      // though Probe D confirmed importDocument is COPY-by-default.
-      const cloned = typeof source.toObject === 'function' ? source.toObject() : source;
+      // BUG-298 (NOT-A-BUG, verified): v13 importDocument is copy-by-default — it
+      // deep-clones via toCompendium() → toObject() → deepClone(_source) and never
+      // mutates the world doc. The former { clone:false, data:cloned } options were
+      // silently-ignored dead code (toCompendium recognizes neither key).
       try {
-        newDoc = await pack.importDocument(source, { clone: false, data: cloned });
-      } catch (e1) {
-        // Some Foundry versions don't accept `data` in opts — retry plain.
-        try { newDoc = await pack.importDocument(source); }
-        catch (e2) {
-          const msg = e2 instanceof Error ? e2.message : String(e2);
-          return { success: false as const, error: `COMPENDIUM_IMPORT_FAILED: ${msg}` };
-        }
+        newDoc = await pack.importDocument(source);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return { success: false as const, error: `COMPENDIUM_IMPORT_FAILED: ${msg}` };
       }
 
       // Risk 9.E surfacing — confirm world source still resolves.

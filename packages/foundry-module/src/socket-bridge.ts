@@ -500,7 +500,7 @@ export class SocketBridge {
   }
 
   /** Emit a roll-result event to the mcp-server pending-event registry. */
-  emitRollEvent(requestId: string, payload: { outcome: string; SL: number; success: boolean }): void {
+  emitRollEvent(requestId: string, payload: { outcome: string; total: number; SL: number | null; success: boolean | null }): void {
     this.emitToServer('mcp-event', { event_type: 'roll-result', requestId, payload });
   }
 

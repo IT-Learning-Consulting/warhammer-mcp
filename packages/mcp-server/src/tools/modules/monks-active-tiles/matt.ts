@@ -315,7 +315,7 @@ fire-trigger-as also requires confirm:true after reviewing the explicit-token im
 - get-trigger-tile { tileUuid, returnFullPayload? } — full MATT config + ordered actions + variables + history for one tile. returnFullPayload:true emits a machine-readable JSON bundle (geometry + texture + full actions[] + regionLinks) for tilepack export.
 - list-trigger-tiles { sceneId? }        — MATT-armed tiles on a scene (defaults to active scene).
 - validate-sequence { actions }          — catalog-validate an ordered action array before write/fire.
-- create-trigger-tile { sceneId, x, y, trigger[], ... } — create a Tile + full MATT flag block + optional initial actions.
+- create-trigger-tile { sceneId, x, y, trigger[], config?, ... } — create a Tile + full MATT flag block + optional initial actions. Config flags may be passed nested (config:{pertoken:true}) or flattened (pertoken:true); flattened wins per key.
 - update-trigger-config { tileUuid, trigger?, config? }  — patch config fields (never touches actions[]).
 - replace-action-sequence { tileUuid, actions[] }        — write a complete validated ordered sequence.
 - add-action / insert-action             — append / insert one action (insert needs index).
@@ -324,7 +324,7 @@ fire-trigger-as also requires confirm:true after reviewing the explicit-token im
 - set-variables { tileUuid, variables }  — write tile variable store.
 - reset-history { tileUuid, tokenId? }   — clear trigger history (all or per-token).
 - fire-trigger { tileUuid, confirm }     — fire a tile via game.MonksActiveTiles.triggerTile() (uses controlled tokens).
-- fire-trigger-as { tileUuid, tokenIds[], method?, confirm } — fire a tile via TileDocument.prototype.trigger() with an explicit token array (bypasses controlled-token resolution — use for NPC-as-trigger, patrol sim, automated test).
+- fire-trigger-as { tileUuid, tokenIds[], method?, landing?, confirm } — fire a tile via TileDocument.prototype.trigger() with an explicit token array (bypasses controlled-token resolution — use for NPC-as-trigger, patrol sim, automated test). landing:"<anchorTag>" starts at the action AFTER that named anchor (the supported resume-from-bookmark idiom; stop{continue:true} has NO upstream resume in MATT v13.06).
 - find-trigger-tile { name|tileUuid|tag|libraryId, sceneId? }  — read-only exact lookup. Errors on no match or ambiguous multiple matches.
 - link-region-trigger { sceneId, regionId, tileUuid } — create the monks-active-tiles.triggerTile RegionBehavior bridge.
 
@@ -363,7 +363,7 @@ Examples:
             data: { type: 'object', description: '[update-action] New data object for the action.' },
             newActionKey: { type: 'string', description: '[update-action] Optionally change the action key.' },
             order: { type: 'array', items: { type: 'string' }, description: '[reorder-actions] Full list of action ids in the new order.' },
-            config: { type: 'object', description: '[update-trigger-config] Config fields to patch (active, restriction, controlled, chance, pertoken, cooldown, vision, allowpaused, minrequired, name, files, fileindex, usealpha, pointer, record).' },
+            config: { type: 'object', description: '[create-trigger-tile/update-trigger-config] Config fields (active, restriction, controlled, chance, pertoken, cooldown, vision, allowpaused, minrequired, name, files, fileindex, usealpha, pointer, record). At create-time, flattened top-level fields win over the same key in config.' },
             variables: { type: 'object', description: '[set-variables] Key/value variable store to write.' },
             tokenId: { type: 'string', description: '[reset-history] Limit history clear to one token id (omit for all).' },
             events: { type: 'array', items: { type: 'string' }, description: '[link-region-trigger] Region event names (optional; defaults to standard token-enter/exit).' },
@@ -373,6 +373,7 @@ Examples:
             confirm: { type: 'boolean', description: 'Required (true) for dangerous action authoring, fire-trigger, and fire-trigger-as. Review the impact report first.' },
             tokenIds: { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 10, description: '[fire-trigger-as] Canvas token ids (1–10) to use as the triggering token(s). Use scene.tokens ids, not actor ids.' },
             method: { type: 'string', description: '[fire-trigger-as] Trigger method string passed to TileDocument.prototype.trigger (default "manual"; e.g. "enter", "click").' },
+            landing: { type: 'string', description: '[fire-trigger-as] Optional anchor tag — execution starts at the action AFTER the anchor action whose data.tag matches (MATT options.landing). The supported resume-from-bookmark idiom.' },
             tag: { type: 'string', description: '[find-trigger-tile] Exact Tagger tag to search for on MATT tiles.' },
             libraryId: { type: 'string', description: '[find-trigger-tile] Stable library identifier stored on MATT/warhammer-mcp tile flags.' },
             returnFullPayload: { type: 'boolean', description: '[get-trigger-tile] When true, return the full machine-readable bundle (geometry + texture + full actions[] with data + variables + region-link metadata) as JSON for tilepack export round-trips, instead of the prose summary.' },

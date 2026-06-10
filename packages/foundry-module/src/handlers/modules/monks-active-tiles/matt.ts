@@ -123,6 +123,41 @@ function normalizeActionData(action: string, raw: Record<string, unknown> | unde
     data.macroid = data.macroUuid;
   }
 
+  // BUG-260: upstream MATT runs a bare "true"/"false" setvariable value through a broken
+  // ternary (getValue ~line 335) that stores boolean false for BOTH literals; the "="
+  // prefix takes the dedicated safe boolean path (~lines 330-338). Normalize on write.
+  if (action === 'setvariable' && typeof data.value === 'string') {
+    const v = (data.value as string).trim();
+    if (v === 'true' || v === 'false') data.value = `= ${v}`;
+  }
+
+  // BUG-262: upstream checkvariable evals `<prop> <comparison>`; a bare unquoted string
+  // identifier RHS throws ReferenceError inside that eval and falls back to the original
+  // (truthy) comparison string — the check then ALWAYS passes, even on absent variables.
+  // Quote bare identifiers so the comparison actually evaluates.
+  if (action === 'checkvariable' && typeof data.value === 'string') {
+    const m = /^(==|!=)\s*([A-Za-z_][A-Za-z0-9_-]*)$/.exec((data.value as string).trim());
+    if (m && !['true', 'false', 'null', 'undefined', 'NaN'].includes(m[2])) {
+      data.value = `${m[1]} "${m[2]}"`;
+    }
+  }
+
+  // BUG-259: MATT's runtime getEntities reads match/scene off the entity OBJECT — a bare
+  // "tagger:<tag>" string loses both options. Coerce to the canonical object form the
+  // MATT UI itself saves; fill missing fields when the object form is partial.
+  for (const field of ['entity', 'location', 'target']) {
+    const value = data[field];
+    if (typeof value === 'string' && value.startsWith('tagger:')) {
+      data[field] = { id: value, match: 'any', scene: '_active' };
+    } else if (value && typeof value === 'object' && !Array.isArray(value)) {
+      const obj = value as Record<string, unknown>;
+      if (typeof obj.id === 'string' && obj.id.startsWith('tagger:')) {
+        if (obj.match === undefined) obj.match = 'any';
+        if (obj.scene === undefined) obj.scene = '_active';
+      }
+    }
+  }
+
   if (action === 'scene') {
     const entity = typeof data.entity === 'string' ? data.entity : undefined;
     const sceneid = typeof data.sceneid === 'string' ? data.sceneid : undefined;
@@ -520,22 +555,26 @@ async function handleCreateTriggerTile(input: CreateInput): Promise<Envelope<unk
     }
   }
 
+  // BUG-257: nested config is accepted alongside flattened fields (the skill docs
+  // author the nested shape); an explicitly-passed flattened field wins per key.
+  const cfg = input.config ?? {};
+  const tileName = input.name ?? cfg.name;
   const flagConfig: Record<string, unknown> = deepStripUndefined({
-    active: input.active ?? true,
-    record: input.record,
-    restriction: input.restriction,
-    controlled: input.controlled,
-    allowpaused: input.allowpaused,
-    usealpha: input.usealpha,
-    pointer: input.pointer,
-    vision: input.vision,
-    pertoken: input.pertoken,
-    minrequired: input.minrequired,
-    cooldown: input.cooldown,
-    chance: input.chance,
-    name: input.name,
-    files: input.files,
-    fileindex: input.fileindex,
+    active: input.active ?? cfg.active ?? true,
+    record: input.record ?? cfg.record,
+    restriction: input.restriction ?? cfg.restriction,
+    controlled: input.controlled ?? cfg.controlled,
+    allowpaused: input.allowpaused ?? cfg.allowpaused,
+    usealpha: input.usealpha ?? cfg.usealpha,
+    pointer: input.pointer ?? cfg.pointer,
+    vision: input.vision ?? cfg.vision,
+    pertoken: input.pertoken ?? cfg.pertoken,
+    minrequired: input.minrequired ?? cfg.minrequired,
+    cooldown: input.cooldown ?? cfg.cooldown,
+    chance: input.chance ?? cfg.chance,
+    name: tileName,
+    files: input.files ?? cfg.files,
+    fileindex: input.fileindex ?? cfg.fileindex,
     trigger: input.trigger,
     actions,
     variables: {},
@@ -563,7 +602,7 @@ async function handleCreateTriggerTile(input: CreateInput): Promise<Envelope<unk
   }
 
   const uuid = persisted.uuid ?? `Scene.${scene.id}.Tile.${persisted.id}`;
-  notify.created('tile', (input.name as string) ?? `MATT tile ${persisted.id}`, { uuid });
+  notify.created('tile', (tileName as string) ?? `MATT tile ${persisted.id}`, { uuid });
 
   return {
     success: true,
@@ -573,7 +612,7 @@ async function handleCreateTriggerTile(input: CreateInput): Promise<Envelope<unk
       sceneId: scene.id,
       trigger: persistedFlags.trigger,
       actionCount: Array.isArray(persistedFlags.actions) ? persistedFlags.actions.length : 0,
-      name: input.name ?? null,
+      name: tileName ?? null,
       ...(taggerResolution.length > 0 ? { taggerResolution } : {}),
       ...(taggerWarnings.length > 0 ? { taggerWarnings } : {}),
     },
@@ -993,7 +1032,13 @@ async function handleFireTriggerAs(input: FireTriggerAsInput): Promise<Envelope<
     };
   }
 
-  await tile.trigger({ tokens: eligibleTokenDocs, method });
+  // BUG-258: `stop {continue:true}` coroutine resume does not exist in MATT v13.06 (the
+  // upstream resume checkbox is commented out; savestate is only reachable via delay/dialog
+  // pauses). The supported resume-from-bookmark idiom is a named anchor + options.landing —
+  // trigger() starts at the action AFTER the matching anchor (monks-active-tiles.js:4945).
+  const triggerArgs: Record<string, unknown> = { tokens: eligibleTokenDocs, method };
+  if (input.landing) triggerArgs.options = { landing: input.landing };
+  await tile.trigger(triggerArgs);
 
   notify.info(
     `MATT fire-trigger-as: ${input.tileUuid} (${actions.length} action(s), method="${method}", tokens=[${eligibleTokenDocs.map((t) => t.id).join(', ')}]${skippedCount ? `, ${skippedCount} skipped (pertoken)` : ''})`,

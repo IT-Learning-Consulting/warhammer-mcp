@@ -202,10 +202,22 @@ async function handleUpdateEffects(input: UpdateEffectsInput): Promise<Envelope<
   if (!isGM()) return { success: false, error: 'GM_REQUIRED' };
   try {
     const Sequencer = getSequencer();
-    const result = await Sequencer.EffectManager.updateEffects({ ...(input.filter ?? {}), ...(input.updates ?? {}) });
-    notify.updated('sequencer', 'Updated effects', { summary: JSON.stringify(input.filter ?? {}) });
-    const updated = Array.isArray(result) ? result.map(serializeEffect) : [];
-    return { success: true, data: { updatedCount: updated.length, effects: updated } };
+    // BUG-307: updateEffects takes TWO positional args (inFilter, inUpdates) — the
+    // bundled typings showing a single options arg are stale vs the runtime. Merging
+    // both into one object left inUpdates undefined and crashed validateUpdate().
+    if (!input.filter || Object.keys(input.filter).length === 0) {
+      return {
+        success: false,
+        error: 'SEQUENCER_UPDATE_EFFECTS_ERROR: filter is required — provide at least one filter key (name, sceneId, source, target, origin, or effects)',
+      };
+    }
+    const result = await Sequencer.EffectManager.updateEffects(input.filter, input.updates ?? {});
+    notify.updated('sequencer', 'Updated effects', { summary: JSON.stringify(input.filter) });
+    // updateEffects resolves via Promise.allSettled — count outcomes, don't serialize them.
+    const settled = Array.isArray(result) ? result : [];
+    const updatedCount = settled.filter((r: any) => r?.status === 'fulfilled').length;
+    const failedCount = settled.length - updatedCount;
+    return { success: true, data: { updatedCount, failedCount } };
   } catch (e) {
     return { success: false, error: `SEQUENCER_UPDATE_EFFECTS_ERROR: ${e instanceof Error ? e.message : String(e)}` };
   }

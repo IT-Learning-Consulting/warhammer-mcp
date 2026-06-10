@@ -233,7 +233,9 @@ class PersistentCreatureIndex {
   // BUG-269: bumped from 1.1.0 — challengeRating now uses TB (floor(T/10)) not raw T value.
   private readonly INDEX_VERSION = '1.2.0';
   private readonly INDEX_FILENAME = 'enhanced-creature-index.json';
-  private buildInProgress = false;
+  // BUG-268: in-flight build promise — serializes index builds so exactly one
+  // savePersistedIndex writer runs at a time (see buildEnhancedIndex).
+  private buildPromise: Promise<EnhancedCreatureIndex[]> | null = null;
   private hooksRegistered = false;
 
   constructor() {
@@ -491,15 +493,37 @@ class PersistentCreatureIndex {
   }
 
   /**
-   * Build enhanced creature index from all Actor packs with detailed progress tracking
+   * Build enhanced creature index from all Actor packs with detailed progress tracking.
+   * BUG-268: builds are serialized through buildPromise — non-forced callers join the
+   * in-flight build; forced rebuilds chain after it (never race it), so exactly one
+   * savePersistedIndex writer runs at a time.
    */
   private async buildEnhancedIndex(force = false): Promise<EnhancedCreatureIndex[]> {
-    if (this.buildInProgress && !force) {
-      throw new Error('Index build already in progress');
+    if (this.buildPromise && !force) {
+      return this.buildPromise;
     }
 
-    this.buildInProgress = true;
+    const previous = this.buildPromise;
+    const run = (async () => {
+      if (previous) {
+        // Forced rebuild: wait out the in-flight build (its failure is not ours) first.
+        await previous.catch(() => undefined);
+      }
+      return this.runEnhancedIndexBuild();
+    })();
+    this.buildPromise = run;
 
+    // Clear the slot once this build settles so later invalidations rebuild fresh.
+    run.then(
+      () => { if (this.buildPromise === run) this.buildPromise = null; },
+      () => { if (this.buildPromise === run) this.buildPromise = null; }
+    );
+
+    return run;
+  }
+
+  /** The actual index build — only ever invoked via buildEnhancedIndex's serialization. */
+  private async runEnhancedIndexBuild(): Promise<EnhancedCreatureIndex[]> {
     const startTime = Date.now();
     let progressHandle: ReturnType<typeof notify.progress> | null = null;
     let progressDone = false;
@@ -605,8 +629,6 @@ class PersistentCreatureIndex {
       throw error;
 
     } finally {
-      this.buildInProgress = false;
-
       // Defensive: clear progress bar if neither done() nor fail() ran.
       if (progressHandle && !progressDone) {
         progressHandle.done();
@@ -2793,48 +2815,49 @@ export class FoundryDataAccess {
       const originalText = button.text();
       button.text('🎲 Rolling...');
 
-
-      // Check if this button is already being processed by another user
       const buttonId = button.data('button-id');
-      if (buttonId && this.isRollButtonProcessing(buttonId)) {
-        button.text('🎲 Processing...');
-        return;
-      }
 
-      // Mark this button as being processed
-      if (buttonId) {
-        this.setRollButtonProcessing(buttonId, true);
-      }
-
-      // Validate button has required data
-      if (!buttonId) {
-        console.warn(`[${MODULE_ID}] Button missing button-id data attribute`);
-        button.prop('disabled', false);
-        button.text(originalText);
-        return;
-      }
-
-      const rollFormula = button.data('roll-formula');
-      const rollLabel = button.data('roll-label');
-      const isPublicRaw = button.data('is-public');
-      const isPublic = isPublicRaw === true || isPublicRaw === 'true'; // Convert to proper boolean
-      const characterId = button.data('character-id');
-      const targetUserId = button.data('target-user-id');
-      const isGmRoll = game.user?.isGM || false; // Determine if this is a GM executing the roll
-
-
-      // Check if user has permission to execute this roll
-      // Allow GM to roll for any character, or allow character owner to roll for their character
-      const canExecuteRoll = game.user?.isGM || (targetUserId && targetUserId === game.user?.id);
-
-      if (!canExecuteRoll) {
-        console.warn(`[${MODULE_ID}] Permission denied for roll execution`);
-        notify.warn('You do not have permission to execute this roll');
-        return;
-      }
-
+      // BUG-263: a single try/finally spans everything after the disable above, so
+      // every exit path (in-flight guard, missing button-id, permission denied, roll
+      // error) restores the button — only a completed roll leaves it disabled.
+      let rollCompleted = false;
+      let markedProcessing = false;
 
       try {
+        // Another click on this button is already mid-roll; that run owns the
+        // processing flag and will restore/replace the button itself.
+        if (buttonId && this.isRollButtonProcessing(buttonId)) {
+          return;
+        }
+
+        // Validate button has required data
+        if (!buttonId) {
+          console.warn(`[${MODULE_ID}] Button missing button-id data attribute`);
+          return;
+        }
+
+        // Mark this button as being processed
+        this.setRollButtonProcessing(buttonId, true);
+        markedProcessing = true;
+
+        const rollFormula = button.data('roll-formula');
+        const rollLabel = button.data('roll-label');
+        const isPublicRaw = button.data('is-public');
+        const isPublic = isPublicRaw === true || isPublicRaw === 'true'; // Convert to proper boolean
+        const characterId = button.data('character-id');
+        const targetUserId = button.data('target-user-id');
+        const isGmRoll = game.user?.isGM || false; // Determine if this is a GM executing the roll
+
+        // Check if user has permission to execute this roll
+        // Allow GM to roll for any character, or allow character owner to roll for their character
+        const canExecuteRoll = game.user?.isGM || (targetUserId && targetUserId === game.user?.id);
+
+        if (!canExecuteRoll) {
+          console.warn(`[${MODULE_ID}] Permission denied for roll execution`);
+          notify.warn('You do not have permission to execute this roll');
+          return;
+        }
+
         // Create and evaluate the roll
         const roll = new Roll(rollFormula);
         await roll.evaluate();
@@ -2877,13 +2900,12 @@ export class FoundryDataAccess {
         if (rollRequestId) {
           const emitRollEvent = (window as any).foundryMCPBridge?.emitRollEvent;
           if (typeof emitRollEvent === 'function') {
-            emitRollEvent(rollRequestId, { outcome: 'roll_completed', SL: roll.total, success: true });
+            emitRollEvent(rollRequestId, this.buildRollResultPayload(String(rollFormula ?? ''), roll));
           }
         }
 
         // Update the ChatMessage to reflect rolled state
-        const buttonId = button.data('button-id');
-        if (buttonId && game.user?.id) {
+        if (game.user?.id) {
           try {
             await this.updateRollButtonMessage(buttonId, game.user.id, rollLabel);
           } catch (updateError) {
@@ -2893,26 +2915,58 @@ export class FoundryDataAccess {
             button.prop('disabled', true).text('✓ Rolled');
           }
         } else {
-          console.warn(`[${MODULE_ID}] Cannot update ChatMessage - missing buttonId or userId:`, {
-            buttonId,
-            userId: game.user?.id
-          });
+          console.warn(`[${MODULE_ID}] Cannot update ChatMessage - missing userId for button:`, buttonId);
         }
 
+        rollCompleted = true;
       } catch (error) {
         console.error(`[${MODULE_ID}] Error executing roll:`, error);
         notify.error('Failed to execute roll');
-
-        // Re-enable button on error so user can try again
-        button.prop('disabled', false);
-        button.text(originalText);
       } finally {
-        // Clear processing state
-        if (buttonId) {
+        // Clear processing state only if this handler set it (an in-flight run owns it otherwise)
+        if (markedProcessing && buttonId) {
           this.setRollButtonProcessing(buttonId, false);
+        }
+        // BUG-263: restore the button on every non-completed exit so it never
+        // sticks disabled in "Rolling..."; a completed roll keeps its rolled state.
+        if (!rollCompleted) {
+          button.prop('disabled', false);
+          button.text(originalText);
         }
       }
     });
+  }
+
+  /**
+   * Build the awaitResult roll payload with real WFRP4e values (BUG-272).
+   * wfrp4e is roll-under: SL = tens(target) - tens(roll), success = roll <= target,
+   * with automatic success on rolls <=5 (SL floored to +1) and automatic failure on
+   * rolls >=96 (SL clamped to -1) — mirrors TestWFRP.computeResult, default SLMethod.
+   * Foundry's parser DROPS the `<=NN` clause from the formula and folds any appended
+   * modifier into the roll arithmetic, so the d100 value must come from the first die
+   * (not roll.total) and the target (base + modifier) is parsed from the formula text.
+   * Formulas without a `<=target` clause (custom rolls) report the raw total only.
+   */
+  private buildRollResultPayload(
+    rollFormula: string,
+    roll: any
+  ): { outcome: string; total: number; SL: number | null; success: boolean | null } {
+    const targetMatch = /<=\s*([0-9+\- ]+)$/.exec(rollFormula);
+    if (!targetMatch) {
+      return { outcome: 'roll_completed', total: roll.total ?? 0, SL: null, success: null };
+    }
+    // Target expression may carry appended modifiers ("1d100<=50+10" → 60).
+    const target = targetMatch[1]
+      .replace(/\s+/g, '')
+      .split(/(?=[+-])/)
+      .reduce((sum, term) => sum + (parseInt(term, 10) || 0), 0);
+    const d100 = roll.dice?.[0]?.total ?? roll.total ?? 0;
+    const baseSL = Math.floor(target / 10) - Math.floor(d100 / 10);
+    const success = d100 <= 5 || (d100 < 96 && d100 <= target);
+    const SL = success
+      ? (d100 <= 5 && baseSL < 1 ? 1 : baseSL)
+      : (d100 >= 96 && baseSL > -1 ? -1 : baseSL);
+    return { outcome: 'roll_completed', total: d100, SL, success };
   }
 
   /**

@@ -100,7 +100,7 @@ export class DiceRollTools extends BaseTool {
             },
             awaitResult: {
               type: 'boolean',
-              description: 'Optional. When true, the tool awaits the player completing the roll and returns a structured result envelope with success/SL/outcome. When false or omitted (default), returns immediately with fire-and-forget acknowledgement.',
+              description: 'Optional. When true, the tool awaits the player completing the roll and returns a structured result envelope with outcome/total/SL/success (WFRP roll-under: SL = tens(target) - tens(roll); SL/success are null for formulas without a <=target clause). When false or omitted (default), returns immediately with fire-and-forget acknowledgement.',
               default: false
             }
           },

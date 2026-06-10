@@ -48,6 +48,8 @@ export const ModuleMattInput = z.discriminatedUnion('action', [
     actions: z.array(MattActionObj).optional(),
     confirm: z.boolean().optional(),
     ...configFields,
+    // BUG-257: nested config accepted at create-time; flattened fields win per key.
+    config: z.object(configFields).optional(),
   }),
   z.object({
     action: z.literal('update-trigger-config'),
@@ -120,6 +122,8 @@ export const ModuleMattInput = z.discriminatedUnion('action', [
     tileUuid: z.string(),
     tokenIds: z.array(z.string()).min(1).max(10),
     method: z.string().optional(),
+    // BUG-258: optional anchor tag — fire starts at the action AFTER the named anchor.
+    landing: z.string().optional(),
     confirm: z.boolean().optional(),
   }),
   z.object({

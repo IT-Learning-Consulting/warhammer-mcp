@@ -81,6 +81,9 @@ export const ModuleMattInput = z.discriminatedUnion('action', [
       actions: z.array(MattActionObj).optional(),
       confirm: z.boolean().optional(),
       ...configFields,
+      // BUG-257: nested config (the shape update-trigger-config and the skill docs
+      // use) is accepted at create-time too; flattened fields win on key collision.
+      config: z.object(configFields).strict().optional(),
     })
     .strict(),
   z
@@ -183,6 +186,9 @@ export const ModuleMattInput = z.discriminatedUnion('action', [
       tileUuid: z.string().min(1),
       tokenIds: z.array(z.string().min(1)).min(1).max(10),
       method: z.string().optional(),
+      // BUG-258: start at the action AFTER the named anchor (MATT options.landing) —
+      // the supported resume-from-bookmark idiom; stop{continue:true} has no upstream resume.
+      landing: z.string().min(1).optional(),
       confirm: z.boolean().optional(),
     })
     .strict(),
