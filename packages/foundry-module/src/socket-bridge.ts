@@ -24,6 +24,9 @@ export class SocketBridge {
   private maxReconnectAttempts = 5;
   private reconnectTimer: any = null;
   private reconnectHandle: ProgressHandle | null = null;
+  // BUG-283: set by disconnect() so late close/error events from a manually
+  // stopped socket can never schedule a reconnect, regardless of wasClean.
+  private intentionalDisconnect = false;
 
   constructor(private config: BridgeConfig) {
     this.maxReconnectAttempts = config.reconnectAttempts;
@@ -36,11 +39,12 @@ export class SocketBridge {
     }
 
     this.connectionState = CONNECTION_STATES.CONNECTING;
+    this.intentionalDisconnect = false;
     this.log('Connecting to MCP server...');
 
     // Use WebSocket instead of socket.io
     const wsUrl = `ws://${this.config.serverHost}:${this.config.serverPort}${this.config.namespace}`;
-    
+
     return new Promise((resolve, reject) => {
       const connectTimeout = setTimeout(() => {
         this.log('Connection timeout');
@@ -53,18 +57,21 @@ export class SocketBridge {
           // ignore — WS may not have a close path yet
         }
         // BUG-094 — schedule reconnect on timeout, matching the onerror path.
-        // Without this, the bridge stays DISCONNECTED until canvasReady or
-        // manual reconnect fires another start(). With this + BUG-093 fix,
-        // reconnect-success emits notify.lifecycle('connection-up', ...)
-        // automatically so the GM sees the recovery toast + chat audit.
+        // BUG-281: scheduleReconnect is now idempotent (skips when a timer is
+        // already pending), so the close() above re-firing onerror/onclose
+        // cannot double-schedule.
         this.scheduleReconnect();
         reject(new Error('Connection timeout'));
       }, this.config.connectionTimeout * 1000);
 
       try {
-        this.ws = new WebSocket(wsUrl);
+        // BUG-283: capture the socket instance so handlers can detect they
+        // belong to a stale, replaced socket (restart() race) and no-op.
+        const ws = new WebSocket(wsUrl);
+        this.ws = ws;
 
-        this.ws.onopen = () => {
+        ws.onopen = () => {
+          if (this.ws !== ws) return; // stale socket (replaced during restart)
           clearTimeout(connectTimeout);
           const recoveredFromReconnect = this.reconnectHandle !== null;
           this.connectionState = CONNECTION_STATES.CONNECTED;
@@ -86,7 +93,8 @@ export class SocketBridge {
           resolve();
         };
 
-        this.ws.onerror = (error) => {
+        ws.onerror = (error) => {
+          if (this.ws !== ws) return; // stale socket (replaced during restart)
           clearTimeout(connectTimeout);
           // Use more informative message for connection failures
           const isFirstAttempt = this.reconnectAttempts === 0;
@@ -102,9 +110,14 @@ export class SocketBridge {
           reject(new Error('WebSocket connection failed'));
         };
 
-        this.ws.onclose = (event) => {
+        ws.onclose = (event) => {
+          if (this.ws !== ws) return; // stale socket (replaced during restart)
           this.log(`Disconnected: ${event.reason || 'Connection closed'}`);
           this.connectionState = CONNECTION_STATES.DISCONNECTED;
+
+          // BUG-283: a manual stop() must never reconnect, even when the close
+          // handshake was not clean (server unreachable at stop() time).
+          if (this.intentionalDisconnect) return;
 
           if (event.wasClean) {
             // Clean disconnect (manual stop() via code 1000) — stop() already
@@ -129,6 +142,10 @@ export class SocketBridge {
   }
 
   disconnect(): void {
+    // BUG-283: mark intent before close() so the socket's own close/error
+    // events (which may arrive after this method returns) cannot reconnect.
+    this.intentionalDisconnect = true;
+
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
@@ -137,6 +154,14 @@ export class SocketBridge {
     if (this.ws) {
       this.ws.close(1000, 'Manual disconnect');
       this.ws = null;
+    }
+
+    // BUG-285: a manual stop ends the failure streak — the next start()
+    // begins back-off from 1s again instead of inheriting a stale 30s delay.
+    this.reconnectAttempts = 0;
+    if (this.reconnectHandle) {
+      this.reconnectHandle.done('MCP reconnect cancelled');
+      this.reconnectHandle = null;
     }
 
     this.connectionState = CONNECTION_STATES.DISCONNECTED;
@@ -394,6 +419,20 @@ export class SocketBridge {
   }
 
   private scheduleReconnect(): void {
+    // BUG-283: never reconnect after a deliberate stop.
+    if (this.intentionalDisconnect) {
+      return;
+    }
+
+    // BUG-281: idempotent — one failed connect fires up to three paths
+    // (connect timeout, onerror, onclose); only the first may schedule.
+    // Previously each path cleared + rescheduled, double-incrementing
+    // reconnectAttempts and racing parallel connect() calls.
+    if (this.reconnectTimer) {
+      this.log('Reconnect already scheduled — skipping duplicate request');
+      return;
+    }
+
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
       this.log(`Max reconnection attempts reached (${this.maxReconnectAttempts})`);
       // R1.5 — terminal lifecycle event when retries are exhausted.
@@ -406,10 +445,6 @@ export class SocketBridge {
         `MCP failed to reconnect after ${this.maxReconnectAttempts} attempts`,
       );
       return;
-    }
-
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
     }
 
     const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000); // Exponential backoff, max 30s
@@ -430,6 +465,10 @@ export class SocketBridge {
     this.connectionState = CONNECTION_STATES.RECONNECTING;
 
     this.reconnectTimer = setTimeout(async () => {
+      // BUG-281: clear before connect() so a failure inside connect() can
+      // schedule the next attempt (the pending-timer guard above would
+      // otherwise see our own expired timer and refuse).
+      this.reconnectTimer = null;
       try {
         await this.connect();
       } catch (error) {

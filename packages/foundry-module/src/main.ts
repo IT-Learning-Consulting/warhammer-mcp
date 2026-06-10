@@ -20,6 +20,14 @@ class FoundryMCPBridge {
   private heartbeatInterval: number | null = null;
   private lastActivity: Date = new Date();
   private isConnecting = false;
+  // BUG-282: heartbeat restart budget. Each restart() builds a fresh
+  // SocketBridge whose own attempt counter starts at 0, so the bridge-level
+  // cap alone can never terminate. This counter survives bridge replacement;
+  // when exhausted the heartbeat stops auto-restarting until a successful
+  // connect (or manual start) resets it.
+  private consecutiveRestartFailures = 0;
+  private reconnectBudgetExhausted = false;
+  private static readonly MAX_HEARTBEAT_RESTART_FAILURES = 5;
 
   constructor() {
     this.settings = new ModuleSettings();
@@ -253,6 +261,10 @@ class FoundryMCPBridge {
       notify.lifecycle('connection-up', 'Warhammer MCP connected successfully');
       console.log(`[${MODULE_ID}] GM connection established - Bridge active for user: ${game.user?.name}`);
 
+      // BUG-282: a successful connect refunds the heartbeat restart budget.
+      this.consecutiveRestartFailures = 0;
+      this.reconnectBudgetExhausted = false;
+
     } catch (error) {
       // Log as warning instead of error for initial connection failures
       console.warn(`[${MODULE_ID}] Failed to start bridge:`, error);
@@ -399,8 +411,28 @@ class FoundryMCPBridge {
 
           // Attempt auto-reconnection if enabled (with backoff)
           if (this.settings.getSetting('autoReconnectEnabled')) {
-            console.log(`[${MODULE_ID}] Attempting auto-reconnection...`);
-            await this.restart();
+            // BUG-282: respect the cross-restart failure budget. Without it,
+            // every heartbeat tick spawned a fresh SocketBridge with a reset
+            // attempt counter — an unbounded reconnect loop while the MCP
+            // server is down.
+            if (this.reconnectBudgetExhausted) {
+              return;
+            }
+            if (this.consecutiveRestartFailures >= FoundryMCPBridge.MAX_HEARTBEAT_RESTART_FAILURES) {
+              this.reconnectBudgetExhausted = true;
+              notify.lifecycle(
+                'connection-down',
+                `MCP auto-reconnect paused after ${FoundryMCPBridge.MAX_HEARTBEAT_RESTART_FAILURES} failed attempts — reconnect manually from module settings once the MCP server is back`,
+              );
+              return;
+            }
+            console.log(`[${MODULE_ID}] Attempting auto-reconnection (${this.consecutiveRestartFailures + 1}/${FoundryMCPBridge.MAX_HEARTBEAT_RESTART_FAILURES})...`);
+            try {
+              await this.restart();
+            } catch (restartError) {
+              this.consecutiveRestartFailures++;
+              console.warn(`[${MODULE_ID}] Auto-reconnection attempt failed:`, restartError);
+            }
           } else {
             // R1.7 — autoReconnect off: there is no other code path to inform
             // the GM. Fire lifecycle here so the disconnect is never silent.
@@ -418,18 +450,26 @@ class FoundryMCPBridge {
       this.updateLastActivity();
 
     } catch (error) {
+      // BUG-284: never punish an in-flight connect. restart() → start()
+      // silently bails when isConnecting is true, so the old code could
+      // permanently disable autoReconnectEnabled without ever attempting
+      // a reconnect.
+      if (this.isConnecting) {
+        console.log(`[${MODULE_ID}] Heartbeat exception while a connect is in flight — skipping restart`, error);
+        return;
+      }
       // Only attempt reconnect once per failure cycle
       if (this.settings.getSetting('autoReconnectEnabled')) {
         console.log(`[${MODULE_ID}] Heartbeat failure - attempting single reconnection...`);
         try {
           await this.restart();
         } catch (reconnectError) {
+          // BUG-282: count against the restart budget instead of permanently
+          // flipping the autoReconnectEnabled setting (which required the GM
+          // to find and re-toggle it). The budget pauses retries and a
+          // successful connect refunds it.
+          this.consecutiveRestartFailures++;
           console.error(`[${MODULE_ID}] Auto-reconnection failed:`, reconnectError);
-          // Disable further attempts until manual intervention
-          await this.settings.setSetting('autoReconnectEnabled', false);
-          if (this.settings.getSetting('enableNotifications')) {
-            notify.warn('Lost connection to AI model - Auto-reconnect disabled', { sticky: true });
-          }
         }
       }
     }

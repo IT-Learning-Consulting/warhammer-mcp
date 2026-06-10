@@ -111,7 +111,7 @@ export class TransactionManager {
   /**
    * Rollback a transaction (undo all actions)
    */
-  async rollbackTransaction(transactionId: string): Promise<{ success: boolean; errors: string[] }> {
+  async rollbackTransaction(transactionId: string): Promise<{ success: boolean; errors: string[]; actionsRolledBack: number }> {
     let transaction = this.activeTransactions.get(transactionId);
     
     // Also check completed transactions for rollback
@@ -151,7 +151,10 @@ export class TransactionManager {
 
     const success = errors.length === 0;
 
-    return { success, errors };
+    // BUG-287: report how many actions were actually undone. success:true with
+    // zero actions means "nothing to roll back", not "the world was restored" —
+    // wrappedWrite uses this to flag possibly-persisted writes.
+    return { success, errors, actionsRolledBack: transaction.actions.length };
   }
 
   /**
@@ -359,10 +362,23 @@ export async function wrappedWrite<T>(
     transactionManager.commitTransaction(txId);
     return result;
   } catch (err) {
+    let zeroActionRollback = false;
     try {
-      await transactionManager.rollbackTransaction(txId);
+      const rollback = await transactionManager.rollbackTransaction(txId);
+      zeroActionRollback = rollback.actionsRolledBack === 0;
     } catch (rollbackErr) {
       console.error(`[${MODULE_ID}] [wrappedWrite] Rollback of ${operation} failed:`, rollbackErr);
+    }
+    // BUG-287: a post-write verify failure (DP-16 *_NOT_PERSISTED / *_VERIFY_FAILED
+    // sentinels) means the Foundry write already happened — and if the handler
+    // registered no undo actions, "rollback" undid nothing. Don't let the error
+    // imply the world was restored. Pre-write throws (validation, not-found)
+    // don't match the sentinel pattern and pass through unchanged.
+    const message = err instanceof Error ? err.message : String(err);
+    if (zeroActionRollback && /NOT_PERSISTED|VERIFY_FAILED/.test(message)) {
+      throw new Error(
+        `${message} [ROLLBACK_UNAVAILABLE: no undo actions were registered for "${operation}" — the underlying write may have persisted]`,
+      );
     }
     throw err;
   }

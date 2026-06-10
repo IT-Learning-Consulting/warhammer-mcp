@@ -356,50 +356,62 @@ export async function rollOnTable(data: unknown): Promise<Envelope<any>> {
   const input: RollOnTableInputType = RollOnTableInput.strict().parse(data ?? {});
 
   const table = (game as any).tables?.get(input.tableId);
-  if (!table) throw new Error(`ROLLTABLE_TABLE_NOT_FOUND: no table with id "${input.tableId}"`);
+  // BUG-305: failure envelope, not a bare throw — matches every other handler here.
+  if (!table) {
+    return { success: false, error: `ROLLTABLE_TABLE_NOT_FOUND: no table with id "${input.tableId}"` };
+  }
 
   const rollMode = input.rollMode || 'public';
-  let draw: any;
-  if (input.modifier) {
-    const roll = await new (globalThis as any).Roll(`${table.formula} + ${input.modifier}`).evaluate();
-    // BUG-237: Foundry's RollTable#draw({roll}) null-derefs ("Cannot read properties
-    // of null (reading 'map')") when the supplied roll matches no result range — the
-    // v13 draw() API does not gracefully return an empty result set for an out-of-range
-    // provided roll. Pre-validate the modified total against the table's result ranges
-    // and return a structured error instead of letting draw() crash. (The downstream
-    // POOL_EXHAUSTED guard only catches the non-replacement already-drawn case.)
-    const total = roll.total ?? 0;
-    const inRange = (table.results as any).some((r: any) => {
-      const range = r.range as [number, number] | undefined;
-      return Array.isArray(range) && total >= range[0] && total <= range[1];
-    });
-    if (!inRange) {
-      throw new Error(
-        `ROLLTABLE_MODIFIER_OUT_OF_RANGE: modified roll ${total} ` +
-        `(formula "${table.formula}" + modifier ${input.modifier}) matches no result ` +
-        `range on table "${table.name}"`,
-      );
+  // BUG-305: draw() marks results drawn on non-replacement tables — a real
+  // world write that belongs under wrappedWrite like the rest of the file.
+  return wrappedWrite('rolltable.roll', async () => {
+    let draw: any;
+    if (input.modifier) {
+      const roll = await new (globalThis as any).Roll(`${table.formula} + ${input.modifier}`).evaluate();
+      // BUG-237: Foundry's RollTable#draw({roll}) null-derefs ("Cannot read properties
+      // of null (reading 'map')") when the supplied roll matches no result range — the
+      // v13 draw() API does not gracefully return an empty result set for an out-of-range
+      // provided roll. Pre-validate the modified total against the table's result ranges
+      // and return a structured error instead of letting draw() crash. (The downstream
+      // POOL_EXHAUSTED guard only catches the non-replacement already-drawn case.)
+      const total = roll.total ?? 0;
+      const inRange = (table.results as any).some((r: any) => {
+        const range = r.range as [number, number] | undefined;
+        return Array.isArray(range) && total >= range[0] && total <= range[1];
+      });
+      if (!inRange) {
+        return {
+          success: false as const,
+          error:
+            `ROLLTABLE_MODIFIER_OUT_OF_RANGE: modified roll ${total} ` +
+            `(formula "${table.formula}" + modifier ${input.modifier}) matches no result ` +
+            `range on table "${table.name}"`,
+        };
+      }
+      draw = await table.draw({ rollMode: rollMode as any, roll });
+    } else {
+      draw = await table.draw({ rollMode: rollMode as any });
     }
-    draw = await table.draw({ rollMode: rollMode as any, roll });
-  } else {
-    draw = await table.draw({ rollMode: rollMode as any });
-  }
-  if (!draw || !draw.results || draw.results.length === 0) {
-    throw new Error('ROLLTABLE_POOL_EXHAUSTED: No result drawn from table — pool may be exhausted');
-  }
+    if (!draw || !draw.results || draw.results.length === 0) {
+      return {
+        success: false as const,
+        error: 'ROLLTABLE_POOL_EXHAUSTED: No result drawn from table — pool may be exhausted',
+      };
+    }
 
-  const drawResult = draw.results[0];
-  const serialisedResult = serialiseResult(drawResult);
-  return {
-    success: true,
-    data: {
-      tableName: table.name,
-      formula: table.formula,
-      roll: draw.roll?.total || 0,
-      text: serialisedResult.text,
-      drawn: serialisedResult.drawn,
-    },
-  };
+    const drawResult = draw.results[0];
+    const serialisedResult = serialiseResult(drawResult);
+    return {
+      success: true as const,
+      data: {
+        tableName: table.name,
+        formula: table.formula,
+        roll: draw.roll?.total || 0,
+        text: serialisedResult.text,
+        drawn: serialisedResult.drawn,
+      },
+    };
+  });
 }
 
 // ── 6. deleteRollTable ────────────────────────────────────────────────────────
@@ -723,48 +735,57 @@ export async function drawManyFromTable(
 
   // Pre-validate: table must exist.
   const table = (game as any).tables?.get(input.tableId);
-  if (!table) throw new Error(`ROLLTABLE_TABLE_NOT_FOUND: no table with id "${input.tableId}"`);
+  // BUG-305: failure envelope, not a bare throw.
+  if (!table) {
+    return { success: false, error: `ROLLTABLE_TABLE_NOT_FOUND: no table with id "${input.tableId}"` };
+  }
 
   const options: Record<string, unknown> = {};
   if (input.displayChat !== undefined) options.displayChat = input.displayChat;
   if (input.recursive !== undefined) options.recursive = input.recursive;
   if (input.rollMode !== undefined) options.rollMode = input.rollMode;
 
-  const draw = await table.drawMany(input.number, options);
+  // BUG-305: drawMany() marks results drawn:true on non-replacement tables —
+  // an unguarded world write before this fix.
+  return wrappedWrite('rolltable.draw-many', async () => {
+    const draw = await table.drawMany(input.number, options);
 
-  const drawnResults: any[] = draw?.results ?? [];
+    const drawnResults: any[] = draw?.results ?? [];
 
-  // Pool exhaustion handling for non-replacement tables.
-  if (drawnResults.length === 0) {
-    throw new Error(
-      `ROLLTABLE_POOL_EXHAUSTED: drawMany(${input.number}) returned 0 results — ` +
-      `non-replacement pool is exhausted. Call resetRollTableResults first.`,
-    );
-  }
+    // Pool exhaustion handling for non-replacement tables.
+    if (drawnResults.length === 0) {
+      return {
+        success: false as const,
+        error:
+          `ROLLTABLE_POOL_EXHAUSTED: drawMany(${input.number}) returned 0 results — ` +
+          `non-replacement pool is exhausted. Call resetRollTableResults first.`,
+      };
+    }
 
-  // Partial-return warning envelope for non-replacement exhaustion.
-  if (!table.replacement && drawnResults.length < input.number) {
+    // Partial-return warning envelope for non-replacement exhaustion.
+    if (!table.replacement && drawnResults.length < input.number) {
+      return {
+        success: true as const,
+        data: {
+          results: drawnResults.map(serialiseResult),
+          roll: draw.roll?.total ?? 0,
+          tableName: table.name as string,
+          exhausted: true,
+          requested: input.number,
+          returned: drawnResults.length,
+        },
+      };
+    }
+
     return {
-      success: true,
+      success: true as const,
       data: {
         results: drawnResults.map(serialiseResult),
         roll: draw.roll?.total ?? 0,
         tableName: table.name as string,
-        exhausted: true,
-        requested: input.number,
-        returned: drawnResults.length,
       },
     };
-  }
-
-  return {
-    success: true,
-    data: {
-      results: drawnResults.map(serialiseResult),
-      roll: draw.roll?.total ?? 0,
-      tableName: table.name as string,
-    },
-  };
+  });
 }
 
 // ── 13. importRollTableFromCompendium (NEW) ───────────────────────────────────

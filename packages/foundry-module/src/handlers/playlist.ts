@@ -572,8 +572,13 @@ export async function deletePlaylistSound(data: unknown): Promise<Envelope<any>>
   const { walkInboundFor, clearOrphanRef } = await import('./cross-doc-fk.js');
   const inbound = await walkInboundFor('PlaylistSound', input.soundId);
 
-  return wrappedWrite('playlist.deletePlaylistSound.cascade', async () => {
-    const affectedDocs: import('@foundry-mcp/shared').FkAffectedDocEntry[] = [];
+  // BUG-306: only the FK-clear loop runs under this transaction —
+  // clearOrphanRef's contract makes the caller responsible for wrapping.
+  // The factory delete below runs its own wrappedWrite; nesting it here
+  // created a second independent transaction that committed even when the
+  // outer one later failed (transactions don't join), so it now runs after.
+  const affectedDocs = await wrappedWrite('playlist.deletePlaylistSound.cascade', async () => {
+    const docs: import('@foundry-mcp/shared').FkAffectedDocEntry[] = [];
     for (const ref of inbound) {
       await clearOrphanRef({
         sourceDocType: ref.sourceDocType,
@@ -582,22 +587,24 @@ export async function deletePlaylistSound(data: unknown): Promise<Envelope<any>>
         refDocType: ref.refDocType,
         refId: ref.refId,
       });
-      affectedDocs.push({
+      docs.push({
         type: ref.sourceDocType,
         id: ref.sourceDocId,
         name: ref.sourceDocName,
         fkField: ref.sourceField,
       });
     }
-
-    // Factory delete handles the actual deleteEmbeddedDocuments + post-verify.
-    const result = await soundFactoryHandlers.delete(data);
-    if (!result.success) return result;
-    return {
-      success: true as const,
-      data: { ...(result.data as any), affectedDocs },
-    };
+    return docs;
   });
+
+  // Factory delete handles the actual deleteEmbeddedDocuments + post-verify
+  // (and wraps itself in wrappedWrite).
+  const result = await soundFactoryHandlers.delete(data);
+  if (!result.success) return result;
+  return {
+    success: true as const,
+    data: { ...(result.data as any), affectedDocs },
+  };
 }
 
 // ── Umbrella dispatcher ──────────────────────────────────────────────────────

@@ -30,6 +30,9 @@ import {
 } from '@foundry-mcp/shared';
 import { notify } from '../notify.js';
 import { validateGMAccess, type Envelope } from '../utils/flatWorldCRUDFactory.js';
+// BUG-295: disease mutations were the only handler family writing without
+// wrappedWrite (no transaction serialization or permission gate at the write).
+import { wrappedWrite } from '../transaction-manager.js';
 
 type DiseaseHandlerEnvelope<T> = Envelope<T>;
 
@@ -180,22 +183,25 @@ async function contractDisease(input: {
     }
   }
 
-  // Add the disease to the actor
-  const diseaseData = diseaseDoc.toObject();
-  const created = await actor.createEmbeddedDocuments('Item', [diseaseData]);
-  const createdItem = created?.[0];
+  // Add the disease to the actor (BUG-295: wrapped)
+  const verified = await wrappedWrite('disease.contract', async () => {
+    const diseaseData = diseaseDoc.toObject();
+    const created = await actor.createEmbeddedDocuments('Item', [diseaseData]);
+    const createdItem = created?.[0];
 
-  if (!createdItem) {
-    throw new Error(`DISEASE_CREATE_FAILED: createEmbeddedDocuments returned no item for "${input.diseaseName}"`);
-  }
+    if (!createdItem) {
+      throw new Error(`DISEASE_CREATE_FAILED: createEmbeddedDocuments returned no item for "${input.diseaseName}"`);
+    }
 
-  // DP-16 post-verify: item must exist on actor
-  const verified = actor.items.get(createdItem.id);
-  if (!verified) {
-    throw new Error(`DISEASE_WRITE_NOT_PERSISTED: item "${createdItem.id}" not found on actor after create`);
-  }
+    // DP-16 post-verify: item must exist on actor
+    const fresh = actor.items.get(createdItem.id);
+    if (!fresh) {
+      throw new Error(`DISEASE_WRITE_NOT_PERSISTED: item "${createdItem.id}" not found on actor after create`);
+    }
+    return fresh;
+  });
 
-  notify.created('item', `${actor.name}: ${createdItem.name}`, {
+  notify.created('item', `${actor.name}: ${verified.name}`, {
     summary: `disease contracted via warhammer-mcp.disease`,
   });
 
@@ -203,7 +209,7 @@ async function contractDisease(input: {
     success: true,
     data: {
       actorId: input.actorId,
-      diseaseName: createdItem.name,
+      diseaseName: verified.name,
       resisted: false,
       disease: serializeDiseaseItem(verified),
     },
@@ -223,15 +229,19 @@ async function startDiseaseTimer(input: {
   const actor = getActorOrThrow(input.actorId);
   const item = getDiseaseItemOrThrow(actor, input.diseaseItemId);
 
-  await item.system.start(input.type);
+  // BUG-295: wrapped
+  const { after, newValue } = await wrappedWrite('disease.start', async () => {
+    await item.system.start(input.type);
 
-  // DP-16 post-verify: value must be numeric now
-  const after = actor.items.get(input.diseaseItemId);
-  if (!after) throw new Error(`DISEASE_ITEM_DISAPPEARED: item gone after start`);
-  const newValue = (after._source as any)?.system?.[input.type]?.value;
-  if (isNaN(Number(newValue))) {
-    throw new Error(`DISEASE_START_NOT_RESOLVED: ${input.type}.value is still "${newValue}" after start()`);
-  }
+    // DP-16 post-verify: value must be numeric now
+    const fresh = actor.items.get(input.diseaseItemId);
+    if (!fresh) throw new Error(`DISEASE_ITEM_DISAPPEARED: item gone after start`);
+    const resolved = (fresh._source as any)?.system?.[input.type]?.value;
+    if (isNaN(Number(resolved))) {
+      throw new Error(`DISEASE_START_NOT_RESOLVED: ${input.type}.value is still "${resolved}" after start()`);
+    }
+    return { after: fresh, newValue: resolved };
+  });
 
   notify.updated('item', `${actor.name}: ${item.name}`, {
     summary: `${input.type} started, resolved to ${newValue}`,
@@ -268,19 +278,23 @@ async function incrementDisease(input: {
   const beforeDuration = item.system?.duration?.value;
   const beforeIncubation = item.system?.incubation?.value;
 
-  await item.system.increment();
+  // BUG-295: wrapped
+  const { after, afterDuration, afterIncubation } = await wrappedWrite('disease.increment', async () => {
+    await item.system.increment();
 
-  // DP-16: item should still exist and value should have changed
-  const after = actor.items.get(input.diseaseItemId);
-  if (!after) throw new Error(`DISEASE_ITEM_DISAPPEARED: item gone after increment`);
-  const afterDuration = (after._source as any)?.system?.duration?.value;
-  const afterIncubation = (after._source as any)?.system?.incubation?.value;
-  const changed = afterDuration !== beforeDuration || afterIncubation !== beforeIncubation;
-  if (!changed) {
-    throw new Error(
-      `DISEASE_INCREMENT_NOT_PERSISTED: neither duration nor incubation value changed after increment`,
-    );
-  }
+    // DP-16: item should still exist and value should have changed
+    const fresh = actor.items.get(input.diseaseItemId);
+    if (!fresh) throw new Error(`DISEASE_ITEM_DISAPPEARED: item gone after increment`);
+    const dur = (fresh._source as any)?.system?.duration?.value;
+    const inc = (fresh._source as any)?.system?.incubation?.value;
+    const changed = dur !== beforeDuration || inc !== beforeIncubation;
+    if (!changed) {
+      throw new Error(
+        `DISEASE_INCREMENT_NOT_PERSISTED: neither duration nor incubation value changed after increment`,
+      );
+    }
+    return { after: fresh, afterDuration: dur, afterIncubation: inc };
+  });
 
   notify.updated('item', `${actor.name}: ${item.name}`, { summary: 'incremented' });
 
@@ -311,11 +325,27 @@ async function decrementDisease(input: {
   const beforeDuration = item.system?.duration?.value;
   const beforeIncubation = item.system?.incubation?.value;
 
-  await item.system.decrement();
+  // BUG-295: wrapped. The duration→0 cascade (item auto-deleted = cured) is a
+  // legitimate outcome, not a failure — signalled via the discriminated return.
+  const outcome = await wrappedWrite('disease.decrement', async () => {
+    await item.system.decrement();
 
-  // DP-16: item may have been deleted (duration→0 cascade) — check existence first
-  const after = actor.items.get(input.diseaseItemId);
-  if (!after) {
+    // DP-16: item may have been deleted (duration→0 cascade) — check existence first
+    const fresh = actor.items.get(input.diseaseItemId);
+    if (!fresh) return { cured: true as const };
+
+    const dur = (fresh._source as any)?.system?.duration?.value;
+    const inc = (fresh._source as any)?.system?.incubation?.value;
+    const changed = dur !== beforeDuration || inc !== beforeIncubation;
+    if (!changed) {
+      throw new Error(
+        `DISEASE_DECREMENT_NOT_PERSISTED: neither duration nor incubation value changed after decrement`,
+      );
+    }
+    return { cured: false as const, after: fresh, afterDuration: dur, afterIncubation: inc };
+  });
+
+  if (outcome.cured) {
     // disease was cured by cascade — treat as success with resolved state
     notify.deleted('item', `${actor.name}: ${item.name}`, { summary: 'decremented to zero, auto-cured' });
     return {
@@ -330,14 +360,7 @@ async function decrementDisease(input: {
     };
   }
 
-  const afterDuration = (after._source as any)?.system?.duration?.value;
-  const afterIncubation = (after._source as any)?.system?.incubation?.value;
-  const changed = afterDuration !== beforeDuration || afterIncubation !== beforeIncubation;
-  if (!changed) {
-    throw new Error(
-      `DISEASE_DECREMENT_NOT_PERSISTED: neither duration nor incubation value changed after decrement`,
-    );
-  }
+  const { after, afterDuration, afterIncubation } = outcome;
 
   notify.updated('item', `${actor.name}: ${item.name}`, { summary: 'decremented' });
 
@@ -374,31 +397,34 @@ async function finishDiseaseDuration(input: {
     actor.items.filter((i: any) => i.type === 'disease').map((i: any) => i.id)
   );
 
-  await item.system.finishDuration();
+  // BUG-295: wrapped
+  const { after, resolved, newDisease } = await wrappedWrite('disease.finish-duration', async () => {
+    await item.system.finishDuration();
 
-  // Infer outcome from post-call state
-  const after = actor.items.get(input.diseaseItemId);
-  const resolved = !after; // item deleted = cured
+    // Infer outcome from post-call state
+    const fresh = actor.items.get(input.diseaseItemId);
+    const gone = !fresh; // item deleted = cured
 
-  // Find any new disease created (Lingering → Festering/Rot)
-  const newDiseases = actor.items.filter(
-    (i: any) => i.type === 'disease' && !diseaseIdsBefore.has(i.id)
-  );
-  const newDisease = newDiseases[0] ?? null;
-
-  // BUG-229: three-terminal-state verify (CN-1 from verifier: equality-throw false-positives
-  // on Lingering escalation where duration is unchanged but a new disease item was created).
-  // Throw only when NONE of the three legitimate outcomes holds.
-  const afterDuration = (after as any)?._source?.system?.duration?.value;
-  const cured = resolved;                          // (a) item gone
-  const extended = !resolved && afterDuration !== beforeDuration;  // (b) duration changed
-  const escalated = newDiseases.length > 0;        // (c) Lingering → new disease item
-  if (!cured && !extended && !escalated) {
-    throw new Error(
-      `DISEASE_FINISH_NOT_PERSISTED: finishDuration() left no observable change — ` +
-      `duration unchanged (${beforeDuration}→${afterDuration}), item still present, no new disease created`,
+    // Find any new disease created (Lingering → Festering/Rot)
+    const newDiseases = actor.items.filter(
+      (i: any) => i.type === 'disease' && !diseaseIdsBefore.has(i.id)
     );
-  }
+
+    // BUG-229: three-terminal-state verify (CN-1 from verifier: equality-throw false-positives
+    // on Lingering escalation where duration is unchanged but a new disease item was created).
+    // Throw only when NONE of the three legitimate outcomes holds.
+    const afterDuration = (fresh as any)?._source?.system?.duration?.value;
+    const cured = gone;                          // (a) item gone
+    const extended = !gone && afterDuration !== beforeDuration;  // (b) duration changed
+    const escalated = newDiseases.length > 0;    // (c) Lingering → new disease item
+    if (!cured && !extended && !escalated) {
+      throw new Error(
+        `DISEASE_FINISH_NOT_PERSISTED: finishDuration() left no observable change — ` +
+        `duration unchanged (${beforeDuration}→${afterDuration}), item still present, no new disease created`,
+      );
+    }
+    return { after: fresh, resolved: gone, newDisease: newDiseases[0] ?? null };
+  });
 
   if (resolved) {
     notify.deleted('item', `${actor.name}: ${diseaseName}`, { summary: 'duration finished, disease cured' });
@@ -453,24 +479,28 @@ async function applyDiseaseSymptom(input: {
   // existing symptom AEs (effects with flags.wfrp4e.symptom) then creates the new ones.
   // The right post-write invariant is "each requested symptom is present in the
   // resulting symptom AE set", not "total AE count increased".
-  await item.system.updateSymptoms(symptomString);
+  // BUG-295: wrapped
+  const { after, symptomAEs } = await wrappedWrite('disease.apply-symptom', async () => {
+    await item.system.updateSymptoms(symptomString);
 
-  // DP-16: re-read item, verify each requested symptom landed as a symptom AE
-  const after = actor.items.get(input.diseaseItemId);
-  if (!after) throw new Error(`DISEASE_ITEM_DISAPPEARED: item gone after apply-symptom`);
-  const symptomAEs: any[] = [];
-  for (const effect of after.effects) {
-    if ((effect as any).flags?.wfrp4e?.symptom) {
-      symptomAEs.push(effect);
+    // DP-16: re-read item, verify each requested symptom landed as a symptom AE
+    const fresh = actor.items.get(input.diseaseItemId);
+    if (!fresh) throw new Error(`DISEASE_ITEM_DISAPPEARED: item gone after apply-symptom`);
+    const aes: any[] = [];
+    for (const effect of fresh.effects) {
+      if ((effect as any).flags?.wfrp4e?.symptom) {
+        aes.push(effect);
+      }
     }
-  }
-  const resultingNames = symptomAEs.map((e) => e.name);
-  const missing = symptomParts.filter((s) => !resultingNames.includes(s));
-  if (missing.length > 0) {
-    throw new Error(
-      `DISEASE_SYMPTOM_NOT_PERSISTED: requested symptoms not found in resulting AE set (missing: ${missing.join(', ')}; resulting: ${resultingNames.join(', ')})`,
-    );
-  }
+    const resultingNames = aes.map((e) => e.name);
+    const missing = symptomParts.filter((s) => !resultingNames.includes(s));
+    if (missing.length > 0) {
+      throw new Error(
+        `DISEASE_SYMPTOM_NOT_PERSISTED: requested symptoms not found in resulting AE set (missing: ${missing.join(', ')}; resulting: ${resultingNames.join(', ')})`,
+      );
+    }
+    return { after: fresh, symptomAEs: aes };
+  });
 
   notify.updated('item', `${actor.name}: ${item.name}`, {
     summary: `symptoms set: ${symptomString} (REPLACE — prior symptoms cleared)`,
@@ -507,15 +537,18 @@ async function cureDisease(input: {
   const item = getDiseaseItemOrThrow(actor, input.diseaseItemId);
   const diseaseName = item.name;
 
-  await actor.deleteEmbeddedDocuments('Item', [input.diseaseItemId]);
+  // BUG-295: wrapped
+  await wrappedWrite('disease.cure', async () => {
+    await actor.deleteEmbeddedDocuments('Item', [input.diseaseItemId]);
 
-  // DP-16 post-verify: item must be gone
-  const stillExists = actor.items.get(input.diseaseItemId);
-  if (stillExists) {
-    throw new Error(
-      `DISEASE_CURE_NOT_PERSISTED: item "${input.diseaseItemId}" still exists after deleteEmbeddedDocuments`,
-    );
-  }
+    // DP-16 post-verify: item must be gone
+    const stillExists = actor.items.get(input.diseaseItemId);
+    if (stillExists) {
+      throw new Error(
+        `DISEASE_CURE_NOT_PERSISTED: item "${input.diseaseItemId}" still exists after deleteEmbeddedDocuments`,
+      );
+    }
+  });
 
   notify.deleted('item', `${actor.name}: ${diseaseName}`, {
     summary: input.reason ? `cured — ${input.reason}` : 'cured via warhammer-mcp.disease',

@@ -24,7 +24,12 @@ export const DEFAULT_CONFIG = {
   MCP_HOST: 'localhost',
   MCP_PORT: 31415,
   CONNECTION_TIMEOUT: 10,
-  RECONNECT_ATTEMPTS: 999,
+  // BUG-282: was 999 — effectively unbounded per bridge instance, and the
+  // heartbeat rebuilt the bridge (resetting the counter) every tick anyway.
+  // 10 attempts ≈ 8.5 min of capped exponential back-off per instance; the
+  // heartbeat-level restart budget (main.ts MAX_HEARTBEAT_RESTART_FAILURES)
+  // bounds the outer loop.
+  RECONNECT_ATTEMPTS: 10,
   RECONNECT_DELAY: 1000,
   LOG_LEVEL: 'info',
 } as const;
