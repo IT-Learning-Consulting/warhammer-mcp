@@ -141,6 +141,9 @@ class FoundryMCPBridge {
       if (!validation.valid) {
         console.warn(`[${MODULE_ID}] Invalid settings:`, validation.errors);
         notify.warn(`MCP Bridge settings validation failed: ${validation.errors.join(', ')}`);
+        // BUG-292: skip start() on validation failure so the GM sees one coherent
+        // warning instead of a warn followed immediately by a thrown error from start().
+        return;
       }
 
       // Auto-connect when enabled (always automatic)

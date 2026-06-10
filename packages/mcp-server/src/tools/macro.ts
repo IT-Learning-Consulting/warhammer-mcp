@@ -138,8 +138,8 @@ function formatExecuteResult(r: MacroExecuteResponse): string {
     else preview = '`' + JSON.stringify(r.scriptReturnValue) + '`';
     lines.push(`- **Script return:** ${preview}`);
   }
-  if (r.errors.length > 0) {
-    lines.push(``, `### Warnings`, ...r.errors.map((e) => `- ${e}`));
+  if (r.warnings.length > 0) { // BUG-304: field renamed from `errors` to `warnings`
+    lines.push(``, `### Warnings`, ...r.warnings.map((e) => `- ${e}`));
   }
   return lines.join('\n');
 }
@@ -200,7 +200,7 @@ export class MacroTool extends BaseTool {
 - **delete**: Hard delete with CCR-Delete-Safety. macroId + confirm: true (REQUIRED — false rejects). Response surfaces hotbarRefs[] and regionBehaviorRefs[] WARN-only audits (orphan cleanup deferred to Phase 10 cross-doc-fk umbrella).
 - **get**: Fetch a Macro by id. Returns MacroViewModel (id, name, type, scope, command, img, folder, ownership, flags, author).
 - **list**: List world macros. Optional filter (substring on name+command), folderId, type (chat/script), page/pageSize (1-100), countOnly. Items: id, name, type, scope, folder, commandPreview.
-- **execute**: Run a Macro with explicit consent. macroId + confirmedExecution: true (REQUIRED — false or missing rejects at parse-time with MACRO_EXECUTE_NOT_CONFIRMED). Optional scope injection: actorId, tokenId, speakerId resolve to Foundry objects passed to macro.execute(scope). Returns macroType, chatMessageId (chat), scriptReturnValue (script), errors[], threw, thrownError, elapsedMs, executedAt.
+- **execute**: Run a Macro with explicit consent. macroId + confirmedExecution: true (REQUIRED — false or missing rejects at parse-time with MACRO_EXECUTE_NOT_CONFIRMED). Optional scope injection: actorId, tokenId, speakerId resolve to Foundry objects passed to macro.execute(scope). Returns macroType, chatMessageId (chat), scriptReturnValue (script), warnings[], threw, thrownError, elapsedMs, executedAt.
 
 **Scope enum:** global / actors / actor (per CONST.MACRO_SCOPES; live-confirmed Phase 0 probe — NO "world" value).
 

@@ -439,8 +439,9 @@ export class ModuleSettings {
     }
 
     const maxActors = this.getSetting('maxActorsPerRequest');
-    if (!maxActors || typeof maxActors !== 'number' || maxActors < 1 || maxActors > 10) {
-      errors.push('Max actors per request must be between 1 and 10');
+    if (!maxActors || typeof maxActors !== 'number' || maxActors < 1 || maxActors > 50) {
+      // BUG-280: ceiling aligned to 50 to match the registered range: {min:1, max:50}
+      errors.push('Max actors per request must be between 1 and 50');
     }
 
     const heartbeat = this.getSetting('heartbeatInterval');

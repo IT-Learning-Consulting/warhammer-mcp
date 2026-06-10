@@ -391,7 +391,7 @@ export async function executeMacro(rawInput: unknown): Promise<Envelope<MacroExe
         macroType,
         chatMessageId,
         scriptReturnValue,
-        errors: warnings,
+        warnings,  // BUG-304: renamed from `errors` (these are soft scope-resolution notices, not execution errors)
         threw,
         thrownError,
         elapsedMs,

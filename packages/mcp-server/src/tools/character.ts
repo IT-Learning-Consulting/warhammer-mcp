@@ -363,25 +363,26 @@ export class CharacterTools extends BaseTool {
       };
     }
 
-    // Biography - WFRP 4e stores motivation and ambitions as separate fields
-    if (system.details?.motivation?.value || system.details?.["personal-ambitions"] || system.details?.["party-ambitions"]) {
-      basicInfo.biography = {};
-      if (system.details?.motivation?.value) {
-        basicInfo.biography.motivation = system.details.motivation.value;
-      }
-      if (system.details?.["personal-ambitions"]?.["short-term"]) {
-        basicInfo.biography.shortTermAmbition = system.details["personal-ambitions"]["short-term"];
-      }
-      if (system.details?.["personal-ambitions"]?.["long-term"]) {
-        basicInfo.biography.longTermAmbition = system.details["personal-ambitions"]["long-term"];
-      }
-      // Party ambitions — BUG-184
-      const pa = system.details?.["party-ambitions"];
-      if (pa) {
-        if (pa.name) basicInfo.biography.partyAmbitionName = pa.name;
-        if (pa["short-term"]) basicInfo.biography.partyAmbitionShort = pa["short-term"];
-        if (pa["long-term"]) basicInfo.biography.partyAmbitionLong = pa["long-term"];
-      }
+    // BUG-328: always build basicInfo.biography so sections:['biography'] filter
+    // returns the nested object even when motivation/ambitions are unset.
+    // The flat sibling keys (gmNotes, experience, experienceLog) remain at the
+    // basicInfo level and are picked by the biography section filter correctly.
+    basicInfo.biography = {};
+    if (system.details?.motivation?.value) {
+      basicInfo.biography.motivation = system.details.motivation.value;
+    }
+    if (system.details?.["personal-ambitions"]?.["short-term"]) {
+      basicInfo.biography.shortTermAmbition = system.details["personal-ambitions"]["short-term"];
+    }
+    if (system.details?.["personal-ambitions"]?.["long-term"]) {
+      basicInfo.biography.longTermAmbition = system.details["personal-ambitions"]["long-term"];
+    }
+    // Party ambitions — BUG-184
+    const pa = system.details?.["party-ambitions"];
+    if (pa) {
+      if (pa.name) basicInfo.biography.partyAmbitionName = pa.name;
+      if (pa["short-term"]) basicInfo.biography.partyAmbitionShort = pa["short-term"];
+      if (pa["long-term"]) basicInfo.biography.partyAmbitionLong = pa["long-term"];
     }
 
     // GM Notes (WFRP 4e)

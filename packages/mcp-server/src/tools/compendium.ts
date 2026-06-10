@@ -34,7 +34,7 @@ export class CompendiumTools extends BaseTool {
           properties: {
             query: {
               type: 'string',
-              description: 'Search query to find items in compendiums (searches names and descriptions). TIP: For creature discovery, use broad terms like "knight", "warrior", "beast", "beastman", "daemon", "greenskin" or even "*" and rely primarily on filters for specificity.',
+              description: 'Search query to find items in compendiums (searches names and descriptions). Must be at least 2 characters. TIP: For creature discovery, use broad terms like "knight", "warrior", "beast", "beastman", "daemon", "greenskin" and rely primarily on filters for specificity.',
             },
             packType: {
               type: 'string',
@@ -69,6 +69,10 @@ export class CompendiumTools extends BaseTool {
                 spellcaster: {
                   type: 'boolean',
                   description: 'Filter for creatures that can cast spells or use magic'
+                },
+                hasSpecialAbilities: {
+                  type: 'boolean',
+                  description: 'Filter for creatures that have special traits or abilities (WFRP 4e)'
                 }
               }
             },
@@ -160,10 +164,10 @@ export class CompendiumTools extends BaseTool {
             },
             limit: {
               type: 'number',
-              description: 'Maximum results to return (default: 500 for comprehensive surveys, max: 1000)',
+              description: 'Maximum results to return (default: 100, max: 1000)',
               minimum: 1,
               maximum: 1000,
-              default: 500
+              default: 100
             }
           },
           required: []

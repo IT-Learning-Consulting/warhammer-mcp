@@ -27,30 +27,27 @@ type ArgsFor<A extends NoteArgs['action']> = Extract<NoteArgs, { action: A }>;
 
 // ── Inline response interfaces (mirror foundry-module handler data payloads) ──
 
+// BUG-326: removed `success: true` — BaseTool.query<T>() returns bare unwrapped data;
+// the success field never exists on the unwrapped object.
 interface NoteCreateResponse {
-  success: true;
   note: NoteViewModel;
   requestedChanges: Record<string, unknown>;
   journalEntry?: { id: string; firstPageId: string | null };
 }
 interface NoteUpdateResponse {
-  success: true;
   note: NoteViewModel;
   requestedChanges: Record<string, unknown>;
   changedFields: string[];
 }
 interface NoteDeleteResponse {
-  success: true;
   deletedId: string;
   sceneId: string;
   remainingNotes: number;
 }
 interface NoteGetResponse {
-  success: true;
   note: NoteViewModel;
 }
 interface NoteListResponse {
-  success: true;
   notes: NoteListItem[];
   total: number;
   page: number;

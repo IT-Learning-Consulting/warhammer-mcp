@@ -141,6 +141,12 @@ export class FoundryConnector {
         clearTimeout(pending.timeout);
         this.pendingQueries.delete(message.id);
 
+        // BUG-312: guard against malformed frames where message.data is absent
+        if (!message.data || typeof message.data !== 'object') {
+          pending.reject(new Error('Malformed mcp-response frame (missing data)'));
+          return;
+        }
+
         if (message.data.success) {
           this.logger.debug('Query response received', { id: message.id, hasData: !!message.data.data });
           pending.resolve(message.data.data);
@@ -153,7 +159,8 @@ export class FoundryConnector {
     }
 
     if (message.type === 'pong') {
-      const pending = this.pendingQueries.get(message.id);
+      // BUG-314: mirror the message.id guard from the mcp-response branch
+      const pending = message.id && this.pendingQueries.get(message.id);
       if (pending) {
         clearTimeout(pending.timeout);
         this.pendingQueries.delete(message.id);

@@ -238,7 +238,8 @@ Security: script / preApplyScript / enableScript fields are executed by Foundry 
     result: any,
     parsed: ReturnType<typeof CreateCustomItemInputSchema.parse>
   ): any {
-    const data = result?.data ?? result ?? {};
+    // BUG-325: BaseTool.query() already unwraps the envelope; drop the dead ?.data operand
+    const data = result ?? {};
     const scope = data.scope ?? parsed.destination.type;
     const base = `Created **${data.itemName ?? parsed.name}** (${data.itemType ?? parsed.itemType})`;
 

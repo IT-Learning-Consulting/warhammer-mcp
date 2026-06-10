@@ -157,8 +157,8 @@ Examples:
         const maxEncumbrance = strengthBonus + toughnessBonus;
         const currentEncumbrance = character.system?.status?.encumbrance?.value || 0;
 
-        // Calculate encumbrance status
-        const encumbrancePercent = Math.round((currentEncumbrance / maxEncumbrance) * 100);
+        // BUG-318: guard against division by zero when maxEncumbrance is 0
+        const encumbrancePercent = maxEncumbrance > 0 ? Math.round((currentEncumbrance / maxEncumbrance) * 100) : 0;
         let encumbranceStatus = "Normal";
         let encumbrancePenalty = "";
         let statusEmoji = "✅";
@@ -173,9 +173,11 @@ Examples:
             statusEmoji = "🟡";
         }
 
-        // Progress bar for encumbrance
+        // BUG-318: guard against division by zero for progress bar
         const barLength = 20;
-        const filledBars = Math.min(Math.round((currentEncumbrance / maxEncumbrance) * barLength), barLength);
+        const filledBars = maxEncumbrance > 0
+            ? Math.min(Math.round((currentEncumbrance / maxEncumbrance) * barLength), barLength)
+            : 0;
         const emptyBars = barLength - filledBars;
         const progressBar = "█".repeat(filledBars) + "░".repeat(emptyBars);
 

@@ -224,26 +224,32 @@ export async function listFiles(
       };
     }
 
-    // Recursive fan-out: flatten subdirs via Promise.all.
-    const accDirs: string[] = [...(result.dirs ?? [])];
-    const accFiles: string[] = [...(result.files ?? [])];
-    const accPrivateDirs: string[] = [...(result.privateDirs ?? [])];
+    // BUG-296: use Sets for dedup so concurrent Promise.all branches can't both pass
+    // an includes()-check before either has pushed — Set.add is synchronous and atomic.
+    const dirsSet: Set<string> = new Set(result.dirs ?? []);
+    const filesSet: Set<string> = new Set(result.files ?? []);
+    const privateDirsSet: Set<string> = new Set(result.privateDirs ?? []);
 
     async function descend(target: string): Promise<void> {
       const sub = await FilePicker.browse(payload.source, target, {
         bucket: opts.bucket,
         extensions: opts.extensions,
       });
+      const newDirs: string[] = [];
       for (const d of sub.dirs ?? []) {
-        if (!accDirs.includes(d)) accDirs.push(d);
-        await descend(d);
+        if (!dirsSet.has(d)) {
+          dirsSet.add(d);  // add synchronously before any await to prevent races
+          newDirs.push(d);
+        }
       }
       for (const f of sub.files ?? []) {
-        if (!accFiles.includes(f)) accFiles.push(f);
+        filesSet.add(f);
       }
       for (const d of sub.privateDirs ?? []) {
-        if (!accPrivateDirs.includes(d)) accPrivateDirs.push(d);
+        privateDirsSet.add(d);
       }
+      // Recurse into newly-discovered subdirs (already registered in the Set).
+      await Promise.all(newDirs.map((d) => descend(d)));
     }
 
     await Promise.all((result.dirs ?? []).map((d: string) => descend(d)));
@@ -252,11 +258,11 @@ export async function listFiles(
       success: true,
       data: {
         target: result.target,
-        dirs: accDirs,
-        files: accFiles,
+        dirs: Array.from(dirsSet),
+        files: Array.from(filesSet),
         private: !!result.private,
         gridSize: result.gridSize ?? null,
-        privateDirs: accPrivateDirs,
+        privateDirs: Array.from(privateDirsSet),
         extensions: result.extensions ?? [],
       },
     };

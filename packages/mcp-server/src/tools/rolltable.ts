@@ -144,7 +144,9 @@ const RollOnTableSchema = z.object({
 // Delete roll table schema
 const DeleteRollTableSchema = z.object({
     action: z.literal("delete"),
-    tableId: z.string()
+    tableId: z.string(),
+    // BUG-322: CCR-Delete-Safety gate — must pass confirm: true to proceed
+    confirm: z.boolean().optional()
 });
 
 // ── New 8 action schemas ──────────────────────────────────────────────────────
@@ -262,7 +264,7 @@ export class RollTableTool extends BaseTool {
 - **list**: List all roll tables in world.
 - **get**: Get full details + result list for a table.
 - **roll**: Roll once on a table and get a result.
-- **delete**: Permanently delete entire table. ⚠️ Irreversible.
+- **delete**: Permanently delete entire table. ⚠️ Irreversible. Requires confirm: true.
 - **update**: Edit top-level table fields (name, formula, img, description, replacement, displayRoll, folder, sort).
 - **add-results**: Append one or more new results (text/document/compendium types) to an existing table.
 - **update-results**: Update fields on existing results by _id (text, range, weight, drawn, etc.).
@@ -394,6 +396,11 @@ export class RollTableTool extends BaseTool {
                     normalize: {
                         type: "boolean",
                         description: "[import-from-compendium] Normalize ranges after import (overwrites manual ranges)"
+                    },
+                    // BUG-322: CCR-Delete-Safety gate
+                    confirm: {
+                        type: "boolean",
+                        description: "[delete] Required confirmation flag. Must be true to proceed (CCR-Delete-Safety)."
                     },
                     // Phase 10 cross-doc-fk cascade flag (delete action only; current catalog has no inbound FKs to RollTable so this is API-uniform no-op).
                     cascade: {
@@ -601,7 +608,14 @@ export class RollTableTool extends BaseTool {
         };
     }
 
-    private async handleDelete(args: { tableId: string }) {
+    private async handleDelete(args: { tableId: string; confirm?: boolean | undefined }) {
+        // BUG-322: CCR-Delete-Safety gate — mirrors macro.ts handleDelete pattern
+        if (!args.confirm) {
+            return {
+                content: [{ type: "text" as const, text: `❌ **rolltable.delete failed**\n\nROLLTABLE_DELETE_NOT_CONFIRMED: delete requires confirm: true` }],
+                isError: true,
+            };
+        }
         this.logger.info("Deleting roll table", { tableId: args.tableId });
 
         await this.query<any>(

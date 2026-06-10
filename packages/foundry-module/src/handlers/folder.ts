@@ -278,18 +278,21 @@ export async function deleteFolder(data: unknown): Promise<Envelope<any>> {
         ? folder.getSubfolders(true)
         : [];
 
+      // BUG-297: validate DocClass for ALL folders BEFORE deleting anything so the
+      // operation fails atomically-before-side-effects rather than mid-tree.
+      const DocClass = (globalThis as any)[folder.type];
+      if (!DocClass || typeof DocClass.deleteDocuments !== 'function') {
+        throw new Error(
+          `FOLDER_DELETE_CONTENTS_FAILED: no deleteDocuments method found for folder type "${folder.type}" — cannot delete contents`,
+        );
+      }
+
       // Collect contained documents from this folder + all subfolders
       const allFolderIds = [folder, ...subfolders];
       for (const f of allFolderIds) {
         const contents: any[] = f.contents ?? [];
         const docIds = contents.map((d: any) => d.id).filter(Boolean);
         if (docIds.length > 0) {
-          const DocClass = (globalThis as any)[folder.type];
-          if (!DocClass || typeof DocClass.deleteDocuments !== 'function') {
-            throw new Error(
-              `FOLDER_DELETE_CONTENTS_FAILED: no deleteDocuments method found for folder type "${folder.type}" — cannot delete contents`,
-            );
-          }
           await DocClass.deleteDocuments(docIds);
         }
       }

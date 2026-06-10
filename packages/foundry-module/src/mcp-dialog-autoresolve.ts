@@ -163,7 +163,11 @@ export function buildAutoResolveNotice(
   const whoPlain = actorName ? `"${actorName}"` : 'an actor';
   // @UUID without a {label} renders the doc's live name as a clickable link in
   // chat (and dodges escaping the name); plain channels use the readable name.
-  const whoHtml = actorUuid ? `@UUID[${actorUuid}]` : actorName ? `"${escapeHtml(actorName)}"` : 'an actor';
+  // BUG-289: validate UUID against strict pattern before interpolating into HTML
+  // to prevent unsanitized hook-payload data reaching ChatMessage.content.
+  const SAFE_UUID_RE = /^[A-Za-z0-9.\-_]+$/;
+  const safeUuid = actorUuid && SAFE_UUID_RE.test(actorUuid) ? actorUuid : null;
+  const whoHtml = safeUuid ? `@UUID[${safeUuid}]` : actorName ? `"${escapeHtml(actorName)}"` : 'an actor';
 
   const head = (who: string): string =>
     `Auto-resolved ${n} dialog choice${n === 1 ? '' : 's'} on ${who}${op} — GM please verify`;

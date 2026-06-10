@@ -675,7 +675,10 @@ async function startBackend(): Promise<void> {
 
         } catch (e: any) {
 
-          writeResponse({ error: { message: e?.message || 'Bad request' } });
+          // BUG-315: include id when it could be salvaged so the client can dispatch the error
+          let salvageId: string | null = null;
+          try { salvageId = (JSON.parse(line) as any)?.id ?? null; } catch { /* wholly unparseable */ }
+          writeResponse({ id: salvageId, error: { message: e?.message || 'Bad request' } });
 
         }
 

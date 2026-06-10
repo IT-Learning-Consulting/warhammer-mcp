@@ -20,17 +20,16 @@ function makeLogger(): any {
 function makeTool() {
   const calls: any[] = [];
   const foundryClient: any = {
+    // BUG-325: the real foundryClient.query unwraps the {success, data} envelope
+    // and returns the inner data — mock must model the post-unwrap shape.
     query: vi.fn(async (key: string, args: any) => {
       calls.push({ key, args });
       return {
-        success: true,
-        data: {
-          fromActorId: args.fromActorId,
-          toActorId: args.toActorId,
-          itemId: 'new-item-id',
-          itemName: 'Longsword',
-          quantities: { from: 0, to: 1 },
-        },
+        fromActorId: args.fromActorId,
+        toActorId: args.toActorId,
+        itemId: 'new-item-id',
+        itemName: 'Longsword',
+        quantities: { from: 0, to: 1 },
       };
     }),
   };

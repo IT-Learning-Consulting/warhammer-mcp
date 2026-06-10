@@ -117,14 +117,21 @@ async function resolveRef(
     const isCompendiumUuid = typeof refValue === 'string' && refValue.startsWith('Compendium.');
     if (isCompendiumUuid && !includeCompendiums) return 'skip';
 
-    if (entry.isObjectField || entry.isForeignDocumentField) {
+    // BUG-301: some catalog entries are flagged as isForeignDocumentField but actually
+    // store UUID strings (dot-separated, e.g. "Actor.abc123"). Detect UUID-shaped values
+    // and route through fromUuid regardless of catalog flags; bare 16-char IDs keep the
+    // collection.get path to avoid unnecessary async overhead.
+    const looksLikeUuid = /^[A-Za-z]+\.[A-Za-z0-9]/.test(refValue);
+
+    if ((entry.isObjectField || entry.isForeignDocumentField) && !looksLikeUuid) {
         // World id only (16-char bare id) — resolve via collection.get
         const collection = getDocCollection(refDocType);
         if (!collection) return true; // unknown collection — treat as non-orphan
         return collection.get(refValue) != null;
     }
 
-    // DocumentUUIDField (no flag set) — resolve via fromUuid (v13 global)
+    // DocumentUUIDField (no flag set), OR a ForeignDocumentField that turned out to store
+    // a UUID string — resolve via fromUuid (v13 global).
     try {
         const resolved = await (globalThis as any).fromUuid?.(refValue);
         return resolved != null;

@@ -53,7 +53,8 @@ export class TradeItemTool extends BaseTool {
       quantity: parsed.quantity ?? null,
     });
     const result: any = await this.query<any>('tradeItem', parsed);
-    const data = result?.data ?? result ?? {};
+    // BUG-325: BaseTool.query() already unwraps the envelope; drop the dead ?.data operand
+    const data = result ?? {};
     const q = data.quantities
       ? ` (source: ${data.quantities.from === 0 ? 'item fully removed (was qty ' + (parsed.quantity ?? 'all') + ')' : 'qty ' + data.quantities.from + ' remaining'}; destination: qty ${data.quantities.to})`
       : '';

@@ -184,7 +184,8 @@ export class SocketBridge {
         await this.handleJobCompleted(message.data);
       }
     } catch (error) {
-      console.error(`[foundry-mcp-bridge] ERROR in handleJobCompleted:`, error);
+      // BUG-286: use actual message.type rather than hardcoded label
+      console.error(`[foundry-mcp-bridge] ERROR in handleMessage (type=${message?.type ?? 'unknown'}):`, error);
       this.log(`Error handling message: ${error}`);
     }
   }

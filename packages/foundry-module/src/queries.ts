@@ -1207,11 +1207,16 @@ export class QueryHandlers {
 
         await item.update(updateData);
 
+        // BUG-288: re-fetch from parent collection so verify reads persisted
+        // _source, not the stale in-memory reference (DP-16 post-write pattern).
+        const persistedItem = item.parent
+          ? (item.parent.items?.get(item.id) ?? item)
+          : ((game.items as any)?.get(item.id) ?? item);
         const persistedQualityNames = new Set(
-          (item.system?.qualities?.value ?? []).map((entry: any) => String(entry?.name ?? '').toLowerCase())
+          ((persistedItem._source as any)?.system?.qualities?.value ?? []).map((entry: any) => String(entry?.name ?? '').toLowerCase())
         );
         const persistedFlawNames = new Set(
-          (item.system?.flaws?.value ?? []).map((entry: any) => String(entry?.name ?? '').toLowerCase())
+          ((persistedItem._source as any)?.system?.flaws?.value ?? []).map((entry: any) => String(entry?.name ?? '').toLowerCase())
         );
         for (const quality of parsed.addQualities) {
           if (!persistedQualityNames.has(String(quality.name).toLowerCase())) {

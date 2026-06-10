@@ -63,13 +63,22 @@ async function findDiseaseByName(name: string): Promise<any | null> {
   for (const pack of (game as any).packs.filter((p: any) => p.metadata.type === 'Item')) {
     try {
       const index = await pack.getIndex();
-      const entry = index.find((e: any) => e.name?.toLowerCase() === lowerName);
+      // BUG-299: getIndex() may resolve to a plain Map rather than a Collection;
+      // iterate defensively via .values() so both Collection.find() and Map work.
+      let entry: any = null;
+      const iter: Iterable<any> = typeof (index as any).values === 'function'
+        ? (index as any).values()
+        : (index as any);
+      for (const e of iter) {
+        if (e?.name?.toLowerCase() === lowerName) { entry = e; break; }
+      }
       if (entry) {
         const doc = await pack.getDocument(entry._id);
         if (doc && doc.type === 'disease') return doc;
       }
-    } catch {
-      // skip pack errors
+    } catch (err) {
+      // BUG-299: log pack errors instead of swallowing silently
+      console.warn(`[warhammer-mcp] findDiseaseByName: error scanning pack "${pack.metadata?.id}":`, err);
     }
   }
   return null;

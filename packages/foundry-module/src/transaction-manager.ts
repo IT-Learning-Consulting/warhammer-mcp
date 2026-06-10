@@ -335,6 +335,10 @@ export const transactionManager = new TransactionManager();
  * Handler throw rolls back the transaction and re-throws the original error.
  * Rollback-time errors are logged but do not mask the original throw.
  */
+// BUG-291: scene-scoped operation families whose barrier depends on sceneId being
+// threaded through opts.sceneId; warn when callers omit it.
+const SCENE_SCOPED_OP_RE = /\b(light|sound|tile|template)\b/i;
+
 export async function wrappedWrite<T>(
   operation: string,
   fn: () => Promise<T>,
@@ -343,6 +347,11 @@ export async function wrappedWrite<T>(
   const permCheck = permissionManager.checkWritePermission(operation);
   if (!permCheck.allowed) {
     throw new Error(permCheck.reason ?? `Permission denied for ${operation}`);
+  }
+  // BUG-291: debug hint when a scene-scoped op omits sceneId (barrier is silently
+  // bypassed for awaitPendingWritesForScene callers that pass the right sceneId).
+  if (!opts?.sceneId && SCENE_SCOPED_OP_RE.test(operation)) {
+    console.debug(`[${MODULE_ID}] [wrappedWrite] "${operation}" looks scene-scoped but no sceneId was passed — awaitPendingWritesForScene barrier will not track this write`);
   }
   const txId = transactionManager.startTransaction(operation, opts);
   try {

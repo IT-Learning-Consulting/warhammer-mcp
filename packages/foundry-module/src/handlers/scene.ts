@@ -151,7 +151,6 @@ function dispositionName(disposition: number): SceneTokenView['disposition'] {
 function serializeSceneViewModel(scene: any): SceneViewModel {
   const src = scene._source ?? {};
   const env = scene.environment ?? {};
-  const envSrc = src.environment ?? {};
   const fog = scene.fog ?? {};
   const fogSrc = src.fog ?? {};
   const grid = scene.grid ?? {};
@@ -250,7 +249,7 @@ function serializeSceneViewModel(scene: any): SceneViewModel {
     },
     // FK fields: _source has raw ID (stale-survivable per Probe D); .* getters
     // return resolved doc (null when stale). *Linked flags distinguish.
-    journal: envSrc.journal ?? src.journal ?? null,
+    journal: src.journal ?? null, // BUG-311: envSrc.journal is always undefined (journal is a top-level FK, not inside environment)
     journalLinked: !!scene.journal,
     journalEntryPage: src.journalEntryPage ?? null,
     journalEntryPageLinked: !!scene.journalEntryPage,

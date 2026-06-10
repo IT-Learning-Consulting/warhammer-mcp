@@ -752,7 +752,7 @@ async function handleUpdateAction(input: UpdateActionInput): Promise<Envelope<un
   next[idx] = {
     id: input.actionId,
     action: input.newActionKey ?? current[idx].action,
-    data: input.data,
+    data: { ...current[idx].data, ...input.data }, // BUG-310: merge so unspecified keys (entity refs, delays, etc.) are preserved
   };
   return writeActions(scene, tile, next, input.confirm, `updated action ${input.actionId}`, { actionId: input.actionId });
 }

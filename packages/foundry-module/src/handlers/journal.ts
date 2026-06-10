@@ -351,12 +351,19 @@ export async function updateEntry(
   return wrappedWrite('journal.updateEntry', async () => {
     await entry.update(input.changes);
 
-    // BUG-070 post-verify: re-read each requested field.
+    // BUG-302: re-fetch from world collection after the write so the verify loop
+    // reads persisted state, not the in-memory snapshot captured before the call.
+    const fresh = (game as any).journal?.get(input.entryId);
+    if (!fresh) {
+      throw new Error(`JOURNAL_WRITE_NOT_PERSISTED: entry "${input.entryId}" disappeared after update()`);
+    }
+
+    // BUG-070 post-verify: re-read each requested field from fresh.
     for (const [field, requestedValue] of Object.entries(requestedChanges)) {
       // ownership + flags are deep objects — verify keys exist post-write rather
       // than deep-equal (Foundry merges these).
       if (field === 'ownership' || field === 'flags') {
-        const persisted = (entry as any)[field];
+        const persisted = (fresh as any)[field];
         if (!persisted || typeof persisted !== 'object') {
           throw new Error(
             `JOURNAL_WRITE_NOT_PERSISTED: ${field} expected an object post-update but found ` +
@@ -365,20 +372,19 @@ export async function updateEntry(
         }
         continue;
       }
-      // Foundry resolves folder writes through a ForeignDocumentField; the
-      // persisted value is the resolved document, with .id matching the input.
+      // BUG-302: folder is a ForeignDocumentField; the getter can lag. Compare
+      // _source.folder (raw persisted ID string) instead of the resolved accessor.
       if (field === 'folder') {
-        const persisted = (entry as any).folder;
-        const persistedId = persisted?.id ?? persisted ?? null;
-        if (persistedId !== requestedValue) {
+        const persistedId = (fresh._source as any)?.folder ?? null;
+        if (persistedId !== (requestedValue ?? null)) {
           throw new Error(
             `JOURNAL_WRITE_NOT_PERSISTED: folder expected ${JSON.stringify(requestedValue)} but ` +
-            `post-update value is ${JSON.stringify(persistedId)}`,
+            `post-update _source.folder is ${JSON.stringify(persistedId)}`,
           );
         }
         continue;
       }
-      const persistedValue = (entry as any)[field];
+      const persistedValue = (fresh as any)[field];
       if (persistedValue !== requestedValue) {
         throw new Error(
           `JOURNAL_WRITE_NOT_PERSISTED: field "${field}" expected ${JSON.stringify(requestedValue)} ` +
@@ -387,9 +393,9 @@ export async function updateEntry(
       }
     }
 
-    notify.updated('journal', entry.name as string, {
+    notify.updated('journal', fresh.name as string, {
       summary: Object.keys(requestedChanges).join(', '),
-      uuid: (entry as any).uuid,
+      uuid: (fresh as any).uuid,
     });
 
     return {

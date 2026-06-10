@@ -230,7 +230,8 @@ class PersistentCreatureIndex {
   // The enhanced index is persisted to worlds/<id>/enhanced-creature-index.json and only rebuilt
   // when this version (or a pack fingerprint) changes — so any change to the index derivation MUST
   // bump this version, or the stale pre-fix index keeps being served and creatureType filters miss.
-  private readonly INDEX_VERSION = '1.1.0';
+  // BUG-269: bumped from 1.1.0 — challengeRating now uses TB (floor(T/10)) not raw T value.
+  private readonly INDEX_VERSION = '1.2.0';
   private readonly INDEX_FILENAME = 'enhanced-creature-index.json';
   private buildInProgress = false;
   private hooksRegistered = false;
@@ -243,8 +244,8 @@ class PersistentCreatureIndex {
    * Get the file path for the enhanced creature index
    */
   private getIndexFilePath(): string {
-    // Store in world data directory using world ID
-    return `worlds/${game.world.id}/${this.INDEX_FILENAME}`;
+    // BUG-276: path must start with '/' so fetch resolves to /worlds/... not relative to /game.
+    return `/worlds/${game.world.id}/${this.INDEX_FILENAME}`;
   }
 
   /**
@@ -670,10 +671,12 @@ class PersistentCreatureIndex {
 
       // Extract threat rating - WFRP uses characteristics-based assessment
       let challengeRating = 0;
-      const toughness = system.characteristics?.t?.value ?? system.characteristics?.t?.initial ?? 0;
+      const tRaw = system.characteristics?.t?.value ?? system.characteristics?.t?.initial ?? 0;
       const wounds = system.status?.wounds?.max ?? system.status?.wounds?.value ?? 0;
-      // Simple threat calculation: (Toughness + Wounds/10) to approximate difficulty
-      challengeRating = toughness + Math.floor(wounds / 10);
+      // BUG-269: use Toughness Bonus (TB = floor(T/10)) not raw T value.
+      // Authoritative bonus field preferred; fall back to manual floor if absent.
+      const toughnessBonus269 = system.characteristics?.t?.bonus ?? Math.floor(tRaw / 10);
+      challengeRating = toughnessBonus269 + Math.floor(wounds / 10);
 
       // Handle null values
       if (challengeRating === null || challengeRating === undefined) {
@@ -732,7 +735,8 @@ class PersistentCreatureIndex {
 
       // Extract toughness bonus + armor (WFRP defense calculation)
       // WFRP: armour comes from equipped armour Items, not system.* paths
-      const toughnessBonus = Math.floor((system.characteristics?.t?.value ?? 0) / 10);
+      // BUG-269: prefer authoritative .bonus field; fall back to floor(value/10).
+      const toughnessBonus = system.characteristics?.t?.bonus ?? Math.floor((system.characteristics?.t?.value ?? 0) / 10);
       const equippedArmour = (doc.items ?? []).filter((i: any) =>
         i.type === 'armour' && i.system?.equipped?.value);
       const armorPoints = equippedArmour.reduce((sum: number, a: any) =>
@@ -1007,19 +1011,20 @@ export class FoundryDataAccess {
                 const searchCriteria: any = {};
 
                 if (filters.challengeRating) {
-                  const searchTerms = [];
+                  // BUG-266: use a distinct name to avoid shadowing the outer searchTerms.
+                  const crTerms: string[] = [...searchTerms];
                   if (typeof filters.challengeRating === 'number') {
                     if (filters.challengeRating >= 15) {
-                      searchTerms.push('ancient', 'legendary', 'elder', 'greater');
+                      crTerms.push('ancient', 'legendary', 'elder', 'greater');
                     } else if (filters.challengeRating >= 10) {
-                      searchTerms.push('adult', 'warlord', 'champion', 'master');
+                      crTerms.push('adult', 'warlord', 'champion', 'master');
                     } else if (filters.challengeRating >= 5) {
-                      searchTerms.push('captain', 'knight', 'priest', 'mage');
+                      crTerms.push('captain', 'knight', 'priest', 'mage');
                     } else {
-                      searchTerms.push('guard', 'soldier', 'warrior', 'scout');
+                      crTerms.push('guard', 'soldier', 'warrior', 'scout');
                     }
                   }
-                  searchCriteria.searchTerms = searchTerms;
+                  searchCriteria.searchTerms = crTerms;
                 }
 
                 if (filters.creatureType) {
@@ -1906,9 +1911,17 @@ export class FoundryDataAccess {
 
       const sourceActor = sourceDocument as Actor;
 
-      // Prepare custom names
-      const names = customNames.length > 0 ? customNames : [`${sourceActor.name} Copy`];
-      const finalQuantity = Math.min(quantity, names.length);
+      // BUG-273: pad names up to quantity so all requested actors are created.
+      // When customNames covers quantity, use them as-is; otherwise auto-number the remainder.
+      const baseName = customNames.length > 0 ? customNames[0]! : `${sourceActor.name} Copy`;
+      const names: string[] = customNames.length >= quantity
+        ? customNames.slice(0, quantity)
+        : Array.from({ length: quantity }, (_, i) =>
+            i < customNames.length
+              ? customNames[i]!
+              : i === 0 ? baseName : `${baseName} (${i + 1})`
+          );
+      const finalQuantity = quantity;
 
       const createdActors: any[] = [];
       const errors: string[] = [];
@@ -2077,11 +2090,12 @@ export class FoundryDataAccess {
       );
     }
 
-    this.auditLog('addActorsToScene', placement, 'success');
-
     try {
       const tokenData: any[] = [];
       const errors: string[] = [];
+      // BUG-270: compute total token count up-front so grid cols is stable across the batch.
+      const totalTokenCount = placement.actorIds.reduce((sum, _, ai) =>
+        sum + Math.max(1, placement.quantities?.[ai] ?? 1), 0);
 
       for (let ai = 0; ai < placement.actorIds.length; ai++) {
         const actorId = placement.actorIds[ai]!;
@@ -2101,7 +2115,7 @@ export class FoundryDataAccess {
 
           for (let i = 0; i < qty; i++) {
             const tokenDoc = (actor as any).prototypeToken.toObject();
-            const position = this.calculateTokenPosition(placement.placement, scene, tokenData.length, placement.coordinates);
+            const position = this.calculateTokenPosition(placement.placement, scene, tokenData.length, placement.coordinates, totalTokenCount);
 
             if (tokenDoc.texture?.src?.startsWith('http')) {
               notify.warn(`Token texture still remote: ${tokenDoc.texture.src} — placement may render poorly`);
@@ -2147,7 +2161,12 @@ export class FoundryDataAccess {
         ...(errors.length > 0 ? { errors } : {}),
       };
 
-      this.auditLog('addActorsToScene', placement, 'success');
+      // BUG-265: audit after the operation; report partial failure when per-token errors occurred.
+      if (errors.length > 0) {
+        this.auditLog('addActorsToScene', placement, 'failure', `partial: ${errors.join('; ')}`);
+      } else {
+        this.auditLog('addActorsToScene', placement, 'success');
+      }
       return result;
 
     } catch (error) {
@@ -2235,8 +2254,12 @@ export class FoundryDataAccess {
   /**
    * Calculate token position based on placement strategy
    */
-  private calculateTokenPosition(placement: 'random' | 'grid' | 'center' | 'coordinates', scene: any, index: number, coordinates?: { x: number; y: number }[]): { x: number; y: number } {
+  // BUG-270: accept total token count so grid cols is fixed for the whole batch.
+  private calculateTokenPosition(placement: 'random' | 'grid' | 'center' | 'coordinates', scene: any, index: number, coordinates?: { x: number; y: number }[], total?: number): { x: number; y: number } {
     const gridSize = scene.grid?.size || 100;
+    // BUG-270: cols must be derived from the full batch size, not per-index.
+    const effectiveTotal = (total != null && total > 0) ? total : (index + 1);
+    const fixedCols = Math.ceil(Math.sqrt(effectiveTotal));
 
     switch (placement) {
       case 'coordinates':
@@ -2244,9 +2267,8 @@ export class FoundryDataAccess {
           return coordinates[index];
         }
         // Fallback to grid if coordinates not provided or insufficient
-        const fallbackCols = Math.ceil(Math.sqrt(index + 1));
-        const fallbackRow = Math.floor(index / fallbackCols);
-        const fallbackCol = index % fallbackCols;
+        const fallbackRow = Math.floor(index / fixedCols);
+        const fallbackCol = index % fixedCols;
         return {
           x: gridSize + (fallbackCol * gridSize * 2),
           y: gridSize + (fallbackRow * gridSize * 2),
@@ -2259,9 +2281,8 @@ export class FoundryDataAccess {
         };
 
       case 'grid':
-        const cols = Math.ceil(Math.sqrt(index + 1));
-        const row = Math.floor(index / cols);
-        const col = index % cols;
+        const row = Math.floor(index / fixedCols);
+        const col = index % fixedCols;
         return {
           x: gridSize + (col * gridSize * 2),
           y: gridSize + (row * gridSize * 2),
@@ -2365,7 +2386,8 @@ export class FoundryDataAccess {
 
       const messageData = {
         content: rollButtonHtml,
-        speaker: ChatMessage.getSpeaker({ actor: game.user }),
+        // BUG-267: game.user is a User, not an Actor; use the user's assigned character instead.
+        speaker: ChatMessage.getSpeaker({ actor: (game.user as any)?.character ?? null }),
         style: (CONST as any).CHAT_MESSAGE_STYLES?.OTHER || 0, // Use style instead of deprecated type
         whisper: whisperTargets,
         flags: {
@@ -2614,12 +2636,13 @@ export class FoundryDataAccess {
           break;
 
         case 'skill':
-          // WFRP skills use characteristic + advances
+          // BUG-271: wfrp4e skills are embedded Items, not system.skills entries.
+          // Read the computed total from the item's system.total.value.
           const skillName = rollTarget.toLowerCase();
-          const skill = Object.values((character as any).system?.skills || {}).find((s: any) =>
-            s.name?.toLowerCase() === skillName
+          const skillItem = (character as any).items?.find(
+            (i: any) => i.type === 'skill' && i.name?.toLowerCase() === skillName
           ) as any;
-          const skillValue = skill?.total ?? skill?.value ?? 50;
+          const skillValue = skillItem?.system?.total?.value ?? 50;
           baseFormula = `1d100<=${skillValue}`;
           break;
 
@@ -3011,13 +3034,14 @@ export class FoundryDataAccess {
 
         // Send socket request to GM
         if (game.socket) {
+          // BUG-274: game.user may be null; use optional access.
           game.socket.emit('module.warhammer-mcp', {
             type: 'requestMessageUpdate',
             buttonId: buttonId,
             userId: userId,
             rollLabel: rollLabel,
             messageId: messageId,
-            fromUserId: game.user.id,
+            fromUserId: game.user?.id,
             targetGM: onlineGM.id
           });
           return; // Exit early - GM will handle the update
@@ -3803,6 +3827,9 @@ export class FoundryDataAccess {
           const n = t.name ?? '';
           return n === appliedName || n.startsWith(`${appliedName} (`);
         }).length;
+        // BUG-055 contract (see apply-template-to-token.test.ts): always suffix,
+        // singleton → "(1)". BUG-277 proposed dropping the singleton suffix but was
+        // rejected — the (1) is a deliberate replication of create-time auto-numbering.
         const numberedName = `${appliedName} (${siblingCount + 1})`;
         if (numberedName !== tokenDoc.name) {
           await tokenDoc.update({ name: numberedName });
@@ -3847,7 +3874,15 @@ export class FoundryDataAccess {
     const post = (sys.alterName?.post ?? '').trim();
     const newName = `${pre} ${actor.name} ${post}`.trim().replace(/\s+/g, ' ');
 
-    const updateData: Record<string, any> = { name: newName, 'prototypeToken.name': newName };
+    const updateData: Record<string, any> = {};
+    // BUG-275: only write name fields when the template actually renames the actor, and
+    // never write prototypeToken.name on synthetic token-delta actors (causes DataModelValidationError).
+    if (newName !== actor.name) {
+      updateData['name'] = newName;
+      if (!actor.isToken) {
+        updateData['prototypeToken.name'] = newName;
+      }
+    }
     const characteristicDeltas: Record<string, number> = {};
     const chars = sys.characteristics ?? {};
     for (const key of ['ws', 'bs', 's', 't', 'i', 'ag', 'dex', 'int', 'wp', 'fel']) {
@@ -3885,7 +3920,15 @@ export class FoundryDataAccess {
           picks = overrides;
         } else {
           const allSkills: any[] = (await (globalThis as any).warhammer?.utility?.findAllItems?.('skill', 'Loading Skills')) ?? [];
-          const candidates = allSkills.filter((i: any) => i.baseName === s.name);
+          // BUG-278: dedupe candidates by name before the loop so used.size can reach
+          // candidates.length and the break fires, preventing an infinite spin on duplicates.
+          const seenNames = new Set<string>();
+          const candidates = allSkills.filter((i: any) => {
+            if (i.baseName !== s.name) return false;
+            if (seenNames.has(i.name)) return false;
+            seenNames.add(i.name);
+            return true;
+          });
           const used = new Set<string>();
           picks = [];
           while (picks.length < (s.specialisations ?? 1) && candidates.length > 0) {
@@ -4176,12 +4219,14 @@ export class FoundryDataAccess {
         return obj;
       }
       if (option.idType === 'relative') {
+        // BUG-264: relative documentId format is "Type.id" (e.g. "ActiveEffect.xyz456").
+        // split[0] is the doc type; split[1] is the id.
         const split = String(option.documentId ?? '').split('.');
-        if (split[1] === 'ActiveEffect') {
-          const eff = parent.effects?.get?.(split[2]);
+        if (split[0] === 'ActiveEffect') {
+          const eff = parent.effects?.get?.(split[1]);
           return eff?.toObject ? eff.toObject() : null;
         }
-        const it = parent.items?.get?.(split[2]);
+        const it = parent.items?.get?.(split[1]);
         return it?.toObject ? it.toObject() : null;
       }
       return null;
@@ -5204,9 +5249,12 @@ export class FoundryDataAccess {
           );
         }
       }
-      // Re-read via _findEffect (not game.actors — effect is on item.effects).
-      const freshEffect = this._findEffect(item, effect.id);
-      if (!freshEffect) {
+      // BUG-279: _findEffect throws when not found, so wrap in try/catch to make the
+      // UPDATE_ACTIVE_EFFECT_NOT_PERSISTED sentinel reachable.
+      let freshEffect: any;
+      try {
+        freshEffect = this._findEffect(item, effect.id);
+      } catch {
         throw new Error(`UPDATE_ACTIVE_EFFECT_NOT_PERSISTED: effect ${effect.id} disappeared after update`);
       }
       verifyDocWrite(freshEffect, flatUpdate, 'UPDATE_ACTIVE_EFFECT_NOT_PERSISTED');

@@ -103,12 +103,17 @@ async function handleTag(input: TagInput): Promise<Envelope<unknown>> {
     } else {
       await Tagger.addTags(docs, input.tags);
     }
-    // DP-16: re-read to verify write
-    const currentTags = readCurrentTags(docs[0]);
+    // BUG-308: verify every doc in the batch, not just docs[0]
+    const allCurrentTags = docs.map((d) => ({ uuid: d.uuid as string, tags: readCurrentTags(d) }));
+    const failures = allCurrentTags.filter((r) => input.tags.some((t) => !r.tags.includes(t)));
+    if (failures.length > 0) {
+      return { success: false, error: `TAGGER_VERIFY_FAILED: tag write not reflected on: ${failures.map((f) => f.uuid).join(', ')}` };
+    }
+    const currentTags = allCurrentTags[0].tags; // backward compat: first doc's tags
     notify.updated('tagger', `Tagged ${docs.length} doc(s): [${input.tags.join(', ')}]`, {});
     return {
       success: true,
-      data: { documentsTagged: docs.length, tags: input.tags, toggled: Boolean(input.toggle), currentTags },
+      data: { documentsTagged: docs.length, tags: input.tags, toggled: Boolean(input.toggle), currentTags, allCurrentTags },
     };
   } catch (e) {
     return { success: false, error: `TAGGER_TAG_ERROR: ${e instanceof Error ? e.message : String(e)}` };
@@ -123,11 +128,17 @@ async function handleUntag(input: UntagInput): Promise<Envelope<unknown>> {
     const Tagger = getTagger();
     const docs = normalizeDocs(input.uuids);
     await Tagger.removeTags(docs, input.tags);
-    const currentTags = readCurrentTags(docs[0]);
+    // BUG-308: verify every doc in the batch, not just docs[0]
+    const allCurrentTags = docs.map((d) => ({ uuid: d.uuid as string, tags: readCurrentTags(d) }));
+    const failures = allCurrentTags.filter((r) => input.tags.some((t) => r.tags.includes(t)));
+    if (failures.length > 0) {
+      return { success: false, error: `TAGGER_VERIFY_FAILED: untag write not reflected on: ${failures.map((f) => f.uuid).join(', ')}` };
+    }
+    const currentTags = allCurrentTags[0].tags; // backward compat: first doc's tags
     notify.updated('tagger', `Removed tags [${input.tags.join(', ')}] from ${docs.length} doc(s)`, {});
     return {
       success: true,
-      data: { documentsUntagged: docs.length, removedTags: input.tags, currentTags },
+      data: { documentsUntagged: docs.length, removedTags: input.tags, currentTags, allCurrentTags },
     };
   } catch (e) {
     return { success: false, error: `TAGGER_UNTAG_ERROR: ${e instanceof Error ? e.message : String(e)}` };
@@ -145,11 +156,17 @@ async function handleSetTags(input: SetTagsInput): Promise<Envelope<unknown>> {
     if (input.applyRules) {
       await Tagger.applyTagRules(docs);
     }
-    const currentTags = readCurrentTags(docs[0]);
+    // BUG-308: verify every doc in the batch, not just docs[0]
+    const allCurrentTags = docs.map((d) => ({ uuid: d.uuid as string, tags: readCurrentTags(d) }));
+    const failures = allCurrentTags.filter((r) => !input.tags.every((t) => r.tags.includes(t)) || r.tags.some((t) => !input.tags.includes(t)));
+    if (failures.length > 0) {
+      return { success: false, error: `TAGGER_VERIFY_FAILED: set-tags write not reflected on: ${failures.map((f) => f.uuid).join(', ')}` };
+    }
+    const currentTags = allCurrentTags[0].tags; // backward compat: first doc's tags
     notify.updated('tagger', `Set tags on ${docs.length} doc(s): [${input.tags.join(', ')}]`, {});
     return {
       success: true,
-      data: { documentsUpdated: docs.length, tags: input.tags, applyRules: Boolean(input.applyRules), currentTags },
+      data: { documentsUpdated: docs.length, tags: input.tags, applyRules: Boolean(input.applyRules), currentTags, allCurrentTags },
     };
   } catch (e) {
     return { success: false, error: `TAGGER_SET_TAGS_ERROR: ${e instanceof Error ? e.message : String(e)}` };
@@ -179,13 +196,21 @@ async function handleClearTags(input: ClearTagsInput): Promise<Envelope<unknown>
       await Tagger.clearAllTags(docs);
     }
 
-    // DP-16: post-verify flag is cleared
-    const currentTags = readCurrentTags(docs[0]);
+    // BUG-308: verify every doc in the batch, not just docs[0]
+    const allCurrentTags = docs.map((d) => ({ uuid: d.uuid as string, tags: readCurrentTags(d) }));
+    const expectedEmpty = !input.tags || input.tags.length === 0;
+    const failures = expectedEmpty
+      ? allCurrentTags.filter((r) => r.tags.length > 0)
+      : allCurrentTags.filter((r) => (input.tags as string[]).some((t) => r.tags.includes(t)));
+    if (failures.length > 0) {
+      return { success: false, error: `TAGGER_VERIFY_FAILED: clear-tags write not reflected on: ${failures.map((f) => f.uuid).join(', ')}` };
+    }
+    const currentTags = allCurrentTags[0].tags; // backward compat: first doc's tags
     const clearedDesc = input.tags ? `[${input.tags.join(', ')}]` : 'all tags';
     notify.updated('tagger', `Cleared ${clearedDesc} from ${docs.length} doc(s)`, {});
     return {
       success: true,
-      data: { documentsCleared: docs.length, clearedTags: input.tags ?? 'all', currentTags },
+      data: { documentsCleared: docs.length, clearedTags: input.tags ?? 'all', currentTags, allCurrentTags },
     };
   } catch (e) {
     return { success: false, error: `TAGGER_CLEAR_ERROR: ${e instanceof Error ? e.message : String(e)}` };

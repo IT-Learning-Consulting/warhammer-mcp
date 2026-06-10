@@ -471,9 +471,12 @@ async function handleScanBrokenUuids(
 
     let docHadBroken = false;
     for (const { field, text } of checks) {
-      UUID_LINK_RE.lastIndex = 0;
-      let m: RegExpExecArray | null;
-      while ((m = UUID_LINK_RE.exec(text)) !== null) {
+      // BUG-300: collect all matches synchronously BEFORE any await — the module-level
+      // /g regex has shared lastIndex state that gets corrupted when awaits interleave
+      // between exec() calls. Use matchAll on a fresh local regex copy instead.
+      const localRe = new RegExp(UUID_LINK_RE.source, UUID_LINK_RE.flags);
+      const matches = Array.from(text.matchAll(localRe));
+      for (const m of matches) {
         const uuid = m[1];
         if (!uuid) continue;
         // fromUuid returns null on miss (Risk 2.B REFUTED — does not throw).

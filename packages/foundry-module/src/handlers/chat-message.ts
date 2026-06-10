@@ -130,10 +130,14 @@ function isAnyChatMessageFilterApplied(input: any): boolean | string {
 const FOUNDRY_ID_RE = /^[a-zA-Z0-9]{16}$/;
 
 function resolveWhisperAndApplyRollMode(payload: any): any {
+  // BUG-293: operate on a shallow copy so the factory's requestedChanges snapshot
+  // (BUG-075 contract) is never mutated by whisper resolution or rollMode deletion.
+  const copy: any = { ...payload };
+
   // 1. Resolve whisper names → IDs (BEFORE applyRollMode so its "respect non-empty whisper" branch fires)
-  if (Array.isArray(payload.whisper) && payload.whisper.length > 0) {
+  if (Array.isArray(copy.whisper) && copy.whisper.length > 0) {
     const resolved: string[] = [];
-    for (const entry of payload.whisper as string[]) {
+    for (const entry of copy.whisper as string[]) {
       if (FOUNDRY_ID_RE.test(entry)) {
         resolved.push(entry);
       } else {
@@ -146,20 +150,20 @@ function resolveWhisperAndApplyRollMode(payload: any): any {
         resolved.push(...users.map((u: any) => u.id as string));
       }
     }
-    payload.whisper = resolved;
+    copy.whisper = resolved;
   }
 
   // 2. Apply rollMode via native static (mutates in place)
-  if (payload.rollMode) {
+  if (copy.rollMode) {
     const ChatMessageClass = (globalThis as any).ChatMessage;
     if (ChatMessageClass && typeof ChatMessageClass.applyRollMode === 'function') {
-      ChatMessageClass.applyRollMode(payload, payload.rollMode);
+      ChatMessageClass.applyRollMode(copy, copy.rollMode);
     }
     // Strip rollMode — not a schema field; must not be persisted
-    delete payload.rollMode;
+    delete copy.rollMode;
   }
 
-  return payload;
+  return copy;
 }
 
 // ── Factory configuration ─────────────────────────────────────────────────────

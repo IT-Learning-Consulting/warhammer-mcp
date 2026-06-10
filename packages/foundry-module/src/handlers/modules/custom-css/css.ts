@@ -97,8 +97,15 @@ async function writeUserCss(css: string): Promise<string> {
   const settings = getSettings();
   const value = normalizeCss(css);
   await settings.set(MODULE_ID, 'userStylesheet', value);
+  // BUG-309: mirror writeWorldCss — verify read-back matches before reapplying
+  const verify: string = settings.get(MODULE_ID, 'userStylesheet');
+  if (verify !== value) {
+    throw new Error(
+      `CSS_WRITE_NOT_PERSISTED: userStylesheet read-back mismatch (expected ${value.length} chars, got ${verify?.length ?? 'undefined'})`,
+    );
+  }
   reapplyAndBroadcast();
-  return settings.get(MODULE_ID, 'userStylesheet');
+  return verify;
 }
 
 const USER_SCOPE_CAVEAT =

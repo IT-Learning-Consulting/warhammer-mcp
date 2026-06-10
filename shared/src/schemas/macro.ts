@@ -206,7 +206,7 @@ export interface MacroExecuteResponse {
   macroType: 'chat' | 'script';
   chatMessageId: string | null;  // populated for chat-type macros
   scriptReturnValue: unknown;    // populated for script-type macros (sanitized for JSON)
-  errors: string[];              // non-fatal warnings
+  warnings: string[];            // BUG-304: renamed from `errors`; non-fatal scope-resolution notices
   threw: boolean;                // script-body throws DO propagate (probe-confirmed)
   thrownError: string | null;
   elapsedMs: number;             // HC6 — informational, no v1 timeout

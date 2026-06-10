@@ -180,7 +180,7 @@ export class TemplateTool extends BaseTool {
             filter: { type: 'string', description: '[list] Substring match on template type (t).' },
             page: { type: 'integer', minimum: 1, description: '[list] 1-based page number.' },
             pageSize: { type: 'integer', minimum: 1, maximum: 100, description: '[list] Items per page (default 20, max 100).' },
-            countOnly: { type: 'boolean', description: '[list] Return {total, countOnly} only.' },
+            countOnly: { type: 'boolean', description: '[list] Return {total} only.' }, // BUG-327: was incorrectly {total, countOnly}
           },
           required: ['action'],
         },

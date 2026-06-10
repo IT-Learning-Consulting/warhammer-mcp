@@ -580,8 +580,8 @@ Use for quick stat changes, character creation, testing, or corrections where yo
             compendiumId: compendiumUuid
         });
 
-        // If advances specified, update them
-        if (args.advances) {
+        // BUG-320: use !== undefined so advances=0 is not skipped
+        if (args.advances !== undefined) {
             // Get the newly added item
             const updatedCharacter = await this.query<CharacterInfoResult>("getCharacterInfo", {
                 characterName: args.characterName
@@ -621,9 +621,15 @@ Use for quick stat changes, character creation, testing, or corrections where yo
         const updateData: Record<string, any> = {};
 
         if (args.noteType === "gmnotes") {
-            const currentNotes = character.system?.gmnotes?.value || '';
+            // BUG-321: character actors use system.gmnotes.value;
+            // npc/creature actors use system.details.gmnotes.value — mirror handleUpdateStats branching
+            const isCharacterType = character.type === 'character';
+            const gmnotesPath = isCharacterType ? 'system.gmnotes.value' : 'system.details.gmnotes.value';
+            const currentNotes = isCharacterType
+                ? (character.system?.gmnotes?.value || '')
+                : (character.system?.details?.gmnotes?.value || '');
             const newContent = args.append ? currentNotes + '\n\n' + args.content : args.content;
-            updateData['system.gmnotes.value'] = newContent;
+            updateData[gmnotesPath] = newContent;
         } else {
             const currentBio = character.system?.details?.biography?.value || '';
             const newContent = args.append ? currentBio + '\n\n' + args.content : args.content;

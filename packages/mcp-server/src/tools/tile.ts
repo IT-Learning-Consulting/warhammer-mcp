@@ -29,28 +29,25 @@ type ArgsFor<A extends TileArgs['action']> = Extract<TileArgs, { action: A }>;
 
 // ── Inline response interfaces (mirror foundry-module handler data payloads) ──
 
+// BUG-326: removed `success: true` — BaseTool.query<T>() returns bare unwrapped data;
+// the success field never exists on the unwrapped object.
 interface TileCreateResponse {
-  success: true;
   tile: TileViewModel;
   requestedChanges: Record<string, unknown>;
 }
 interface TileUpdateResponse {
-  success: true;
   tile: TileViewModel;
   requestedChanges: Record<string, unknown>;
   changedFields: string[];
 }
 interface TileDeleteResponse {
-  success: true;
   deletedId: string;
   sceneId: string;
 }
 interface TileGetResponse {
-  success: true;
   tile: TileViewModel;
 }
 interface TileListResponse {
-  success: true;
   tiles: TileListItem[];
   total: number;
   page: number;

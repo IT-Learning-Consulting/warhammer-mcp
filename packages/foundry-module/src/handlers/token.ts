@@ -292,10 +292,14 @@ export async function updateToken(data: unknown): Promise<Envelope<TokenUpdateRe
     const payload = deepStripUndefined({ ...input.changes });
     await token.update(payload);
 
+    // BUG-303 (DP-16): re-fetch the token via getEmbeddedOrThrow so the verify loop
+    // reads the freshly-persisted _source instead of the in-memory pre-update object.
+    const fresh = getEmbeddedOrThrow<any>(scene, 'tokens', input.tokenId, 'Token');
+
     // DP-16: confirm scalar top-level fields persisted; nested fields and FK skip deep verify.
     for (const [field, requestedValue] of Object.entries(requestedChanges)) {
       if (field === 'actorId') {
-        const persistedId = token._source?.actorId ?? null;
+        const persistedId = fresh._source?.actorId ?? null;
         if (persistedId !== (requestedValue ?? null)) {
           throw new Error(
             `TOKEN_WRITE_NOT_PERSISTED: actorId expected ${JSON.stringify(requestedValue)} ` +
@@ -315,14 +319,14 @@ export async function updateToken(data: unknown): Promise<Envelope<TokenUpdateRe
         field === 'turnMarker' ||
         field === 'flags'
       ) {
-        const persisted = (token._source as any)?.[field];
+        const persisted = (fresh._source as any)?.[field];
         if (persisted === undefined || persisted === null) {
           throw new Error(`TOKEN_WRITE_NOT_PERSISTED: nested field "${field}" missing after update`);
         }
         continue;
       }
       // F08 fix (Phase 6.2.7 B1): compare against `_source` (raw stored data).
-      const persistedValue = (token._source as any)?.[field];
+      const persistedValue = (fresh._source as any)?.[field];
       if (persistedValue !== requestedValue) {
         throw new Error(
           `TOKEN_WRITE_NOT_PERSISTED: field "${field}" expected ${JSON.stringify(requestedValue)} ` +
@@ -331,7 +335,7 @@ export async function updateToken(data: unknown): Promise<Envelope<TokenUpdateRe
       }
     }
 
-    notify.updated('token', (token.name as string) ?? `Token ${input.tokenId}`, {
+    notify.updated('token', (fresh.name as string) ?? `Token ${input.tokenId}`, {
       summary: changedFields.join(', '),
     });
 
@@ -339,7 +343,7 @@ export async function updateToken(data: unknown): Promise<Envelope<TokenUpdateRe
       success: true as const,
       data: {
         success: true,
-        token: serializeTokenViewModel(scene, token),
+        token: serializeTokenViewModel(scene, fresh),
         requestedChanges,
         changedFields,
       } satisfies TokenUpdateResponse,

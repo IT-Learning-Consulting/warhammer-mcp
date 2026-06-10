@@ -32,16 +32,15 @@ function makeLogger(): any {
 function makeTool() {
   const calls: any[] = [];
   const foundryClient: any = {
+    // BUG-325: the real foundryClient.query unwraps the {success, data} envelope
+    // and returns the inner data — mock must model the post-unwrap shape.
     query: vi.fn(async (key: string, args: any) => {
       calls.push({ key, args });
       return {
-        success: true,
-        data: {
-          itemId: 'new-item-id',
-          itemName: args?.itemData?.name ?? 'item',
-          itemType: args?.itemData?.type ?? 'weapon',
-          scope: args?.destination?.type ?? 'actor',
-        },
+        itemId: 'new-item-id',
+        itemName: args?.itemData?.name ?? 'item',
+        itemType: args?.itemData?.type ?? 'weapon',
+        scope: args?.destination?.type ?? 'actor',
       };
     }),
   };
@@ -984,16 +983,14 @@ describe('handle() — TOOL-IDEA-010 structured response envelope', () => {
     const tool = (() => {
       const calls: any[] = [];
       const foundryClient: any = {
+        // BUG-325: mock models the post-unwrap shape returned by foundryClient.query
         query: vi.fn(async () => ({
-          success: true,
-          data: {
-            itemId: 'item-99',
-            itemName: 'Sword',
-            itemType: 'weapon',
-            scope: 'actor',
-            actorId: 'actor-7',
-            actorName: 'Hans',
-          },
+          itemId: 'item-99',
+          itemName: 'Sword',
+          itemType: 'weapon',
+          scope: 'actor',
+          actorId: 'actor-7',
+          actorName: 'Hans',
         })),
       };
       return new CreateCustomItemTool({ foundryClient, logger: makeLogger() });

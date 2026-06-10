@@ -39,15 +39,20 @@ export async function convertVideoToWebM(
     const chunks: Buffer[] = [];
     const errChunks: Buffer[] = [];
 
+    let settled = false;
+    const settle = (fn: () => void) => { if (!settled) { settled = true; fn(); } };
+
     proc.stdout.on('data', (chunk: Buffer) => chunks.push(chunk));
     proc.stderr.on('data', (chunk: Buffer) => errChunks.push(chunk));
-    proc.on('error', (err) => reject(new Error(`ffmpeg spawn error: ${err.message}`)));
+    proc.on('error', (err) => settle(() => reject(new Error(`ffmpeg spawn error: ${err.message}`))));
+    // BUG-316: catch stdin EPIPE so early ffmpeg exit doesn't become an unhandled stream error
+    proc.stdin.on('error', (err) => settle(() => reject(new Error(`ffmpeg stdin error: ${err.message}`))));
     proc.on('close', (code) => {
       if (code === 0) {
-        resolve(Buffer.concat(chunks));
+        settle(() => resolve(Buffer.concat(chunks)));
       } else {
         const stderr = Buffer.concat(errChunks).toString('utf8');
-        reject(new Error(`ffmpeg exit ${code}: ${stderr.slice(-500)}`));
+        settle(() => reject(new Error(`ffmpeg exit ${code}: ${stderr.slice(-500)}`)));
       }
     });
 

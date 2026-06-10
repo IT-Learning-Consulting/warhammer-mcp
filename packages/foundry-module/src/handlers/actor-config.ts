@@ -78,6 +78,13 @@ function verifyArtWrite(freshDoc: any, path: string, requestedSrc: string): stri
         `SET_ART_NOT_PERSISTED: art-clear left ${path} empty (expected Foundry to reset it to the default icon)`,
       );
     }
+    // BUG-294: for nullable texture paths the clear must have persisted — if the value is
+    // still a non-empty string the write did not take.
+    if (path !== 'img' && typeof actual === 'string' && actual !== '') {
+      throw new Error(
+        `SET_ART_NOT_PERSISTED: art-clear on ${path} did not persist — field still holds "${actual}"`,
+      );
+    }
     return actual ?? '';
   }
   if (JSON.stringify(actual) !== JSON.stringify(requestedSrc)) {

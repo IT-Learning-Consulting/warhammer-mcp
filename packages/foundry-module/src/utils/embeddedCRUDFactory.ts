@@ -229,9 +229,13 @@ export function createEmbeddedCRUDHandlers<
       // preCreateTransform is unused by all 4 families (template/light/tile/sound) —
       // safe to compare requestedChanges (pre-transform) against persisted._source.
       const createSkip = new Set<string>(['flags', ...dp16SkipFields]);
+      const source = (persisted._source as any) ?? {};
       for (const [field, requestedValue] of Object.entries(requestedChanges)) {
         if (createSkip.has(field)) continue;
-        const persistedValue = (persisted._source as any)?.[field];
+        // BUG-290: skip fields the document schema doesn't persist (absent from
+        // _source) — comparing against undefined would always be a false positive.
+        if (!(field in source)) continue;
+        const persistedValue = source[field];
         if (persistedValue !== requestedValue) {
           throw new Error(
             `${errorTag}_WRITE_NOT_PERSISTED: field "${field}" expected ${JSON.stringify(requestedValue)} ` +

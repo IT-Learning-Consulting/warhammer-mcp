@@ -52,7 +52,8 @@ export class ListActiveEffectsTool extends BaseTool {
     this.logger.info('list-active-effects', parsed);
     const result = await this.query<any>('listActiveEffects', parsed);
     if (Array.isArray(result)) {
-      const character = await this.query<any>('getCharacterInfo', { characterName: parsed.actorId }).catch(() => null);
+      // BUG-319: actorId is an ID, not a name — use characterId param
+      const character = await this.query<any>('getCharacterInfo', { characterId: parsed.actorId }).catch(() => null);
       return {
         actorId: parsed.actorId,
         actorName: character?.name ?? null,

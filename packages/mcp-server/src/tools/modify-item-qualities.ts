@@ -88,7 +88,8 @@ export class ModifyItemQualitiesTool extends BaseTool {
       'modifyItemQualities',
       parsed
     );
-    const data = result?.data ?? result ?? {};
+    // BUG-325: BaseTool.query() already unwraps the envelope; drop the dead ?.data operand
+    const data = result ?? {};
     const parts: string[] = [`Modified **${data.itemName ?? parsed.itemName ?? parsed.itemId}**.`];
     if (parsed.addQualities.length)
       parts.push(`Added qualities: ${parsed.addQualities.map((q) => q.name).join(', ')}`);

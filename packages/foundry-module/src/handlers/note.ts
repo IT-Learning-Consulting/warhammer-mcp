@@ -321,9 +321,13 @@ export async function updateNote(data: unknown): Promise<Envelope<NoteUpdateResp
     const payload = deepStripUndefined({ ...input.changes });
     await note.update(payload);
 
+    // BUG-303 (DP-16): re-fetch the note via getEmbeddedOrThrow so the verify loop
+    // reads the freshly-persisted _source instead of the in-memory pre-update object.
+    const fresh = getEmbeddedOrThrow<any>(scene, 'notes', input.noteId, 'Note');
+
     for (const [field, requestedValue] of Object.entries(requestedChanges)) {
       if (field === 'entryId' || field === 'pageId') {
-        const persistedId = note._source?.[field] ?? null;
+        const persistedId = fresh._source?.[field] ?? null;
         if (persistedId !== (requestedValue ?? null)) {
           throw new Error(
             `NOTE_WRITE_NOT_PERSISTED: ${field} expected ${JSON.stringify(requestedValue)} ` +
@@ -333,15 +337,14 @@ export async function updateNote(data: unknown): Promise<Envelope<NoteUpdateResp
         continue;
       }
       if (field === 'texture' || field === 'flags') {
-        const persisted = (note._source as any)?.[field];
+        const persisted = (fresh._source as any)?.[field];
         if (persisted === undefined || persisted === null) {
           throw new Error(`NOTE_WRITE_NOT_PERSISTED: nested field "${field}" missing after update`);
         }
         continue;
       }
-      // F08 fix (Phase 6.2.7 B1): compare against `_source` (raw stored data) — `note[field]`
-      // returns Foundry-derived getter values that `!== requestedString` on multi-field updates.
-      const persistedValue = (note._source as any)?.[field];
+      // F08 fix (Phase 6.2.7 B1): compare against `_source` (raw stored data).
+      const persistedValue = (fresh._source as any)?.[field];
       if (persistedValue !== requestedValue) {
         throw new Error(
           `NOTE_WRITE_NOT_PERSISTED: field "${field}" expected ${JSON.stringify(requestedValue)} ` +
@@ -352,7 +355,7 @@ export async function updateNote(data: unknown): Promise<Envelope<NoteUpdateResp
 
     notify.updated(
       'note',
-      (note.text as string | null) ?? `Note ${input.noteId}`,
+      (fresh.text as string | null) ?? `Note ${input.noteId}`,
       { summary: changedFields.join(', ') },
     );
 
@@ -360,7 +363,7 @@ export async function updateNote(data: unknown): Promise<Envelope<NoteUpdateResp
       success: true as const,
       data: {
         success: true,
-        note: serializeNoteViewModel(scene, note),
+        note: serializeNoteViewModel(scene, fresh),
         requestedChanges,
         changedFields,
       } satisfies NoteUpdateResponse,
