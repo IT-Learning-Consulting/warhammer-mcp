@@ -748,6 +748,22 @@ export async function drawManyFromTable(
   // BUG-305: drawMany() marks results drawn:true on non-replacement tables —
   // an unguarded world write before this fix.
   return wrappedWrite('rolltable.draw-many', async () => {
+    // BUG-305: on a fully-drained non-replacement pool Foundry's drawMany
+    // throws an opaque dice-formula parse error ("Expected \"(\"...") before
+    // ever returning 0 results — pre-check so callers get the structured
+    // envelope instead.
+    if (!table.replacement) {
+      const available = (table.results as any).filter((r: any) => !r.drawn).length;
+      if (available === 0) {
+        return {
+          success: false as const,
+          error:
+            `ROLLTABLE_POOL_EXHAUSTED: all results on non-replacement table ` +
+            `"${table.name}" are already drawn. Call resetRollTableResults first.`,
+        };
+      }
+    }
+
     const draw = await table.drawMany(input.number, options);
 
     const drawnResults: any[] = draw?.results ?? [];
