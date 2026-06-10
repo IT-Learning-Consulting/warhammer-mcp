@@ -30,6 +30,7 @@ import {
   type MattActionInput,
 } from './action-catalog.js';
 import { notify } from '../../../notify.js';
+import { verifyDocWrite } from '../../../utils/verifyWrite.js';
 
 const MATT_MODULE_ID = 'monks-active-tiles';
 const MATT_FLAG = 'monks-active-tiles';
@@ -598,11 +599,10 @@ async function handleCreateTriggerTile(input: CreateInput): Promise<Envelope<unk
     return { success: false, error: 'MATT_TILE_NOT_PERSISTED: createEmbeddedDocuments returned no doc' };
   }
   const persisted = scene.tiles.get(created[0].id);
-  // DP-16 — re-read _source flags and confirm trigger persisted.
+  // DP-16 — re-read _source flags and confirm trigger persisted (BUG-329: shared helper;
+  // throws MATT_TILE_NOT_PERSISTED on drift, surfaced via the dispatcher catch).
+  verifyDocWrite(persisted, { [`flags.${MATT_FLAG}.trigger`]: input.trigger }, 'MATT_TILE_NOT_PERSISTED');
   const persistedFlags = (persisted?._source?.flags?.[MATT_FLAG] ?? {}) as Record<string, any>;
-  if (!persistedFlags || JSON.stringify(persistedFlags.trigger) !== JSON.stringify(input.trigger)) {
-    return { success: false, error: 'MATT_TILE_NOT_PERSISTED: trigger flag not present after create' };
-  }
 
   const uuid = persisted.uuid ?? `Scene.${scene.id}.Tile.${persisted.id}`;
   notify.created('tile', (tileName as string) ?? `MATT tile ${persisted.id}`, { uuid });
@@ -636,25 +636,16 @@ async function handleUpdateTriggerConfig(input: UpdateConfigInput): Promise<Enve
 
   await tile.update(patch);
 
-  // DP-16 — re-read _source and verify each patched key.
-  const persistedFlags = (tile._source?.flags?.[MATT_FLAG] ?? {}) as Record<string, any>;
-  const verified: string[] = [];
-  if (input.trigger) {
-    if (JSON.stringify(persistedFlags.trigger) !== JSON.stringify(input.trigger)) {
-      return { success: false, error: 'MATT_CONFIG_NOT_PERSISTED: trigger did not persist' };
-    }
-    verified.push('trigger');
-  }
+  // DP-16 — re-read _source and verify each patched key (BUG-329: shared helper;
+  // throws MATT_CONFIG_NOT_PERSISTED on drift, surfaced via the dispatcher catch).
+  const expectedFields: Record<string, unknown> = {};
+  if (input.trigger) expectedFields[`flags.${MATT_FLAG}.trigger`] = input.trigger;
   for (const [k, v] of Object.entries(input.config ?? {})) {
-    if (v === undefined) continue;
-    // scalar compare; arrays (files) compared by JSON.
-    const got = persistedFlags[k];
-    const ok = Array.isArray(v) ? JSON.stringify(got) === JSON.stringify(v) : got === v;
-    if (!ok) {
-      return { success: false, error: `MATT_CONFIG_NOT_PERSISTED: "${k}" did not persist (got ${JSON.stringify(got)})` };
-    }
-    verified.push(k);
+    if (v !== undefined) expectedFields[`flags.${MATT_FLAG}.${k}`] = v;
   }
+  verifyDocWrite(tile, expectedFields, 'MATT_CONFIG_NOT_PERSISTED');
+  const verified = Object.keys(expectedFields).map((p) => p.split('.').pop() as string);
+  const persistedFlags = (tile._source?.flags?.[MATT_FLAG] ?? {}) as Record<string, any>;
 
   const uuid = tile.uuid ?? `Scene.${scene.id}.Tile.${tile.id}`;
   notify.updated('tile', (persistedFlags.name as string) ?? `MATT tile ${tile.id}`, {

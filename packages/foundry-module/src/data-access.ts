@@ -2680,10 +2680,19 @@ export class FoundryDataAccess {
       baseFormula = '1d100<=50';
     }
 
-    // Add modifier if provided
+    // BUG-331: for roll-under formulas the modifier adjusts the TARGET, not the roll —
+    // Foundry's v13 parser drops the `<=NN` clause and would fold an appended modifier
+    // into the d100 arithmetic (displayed total = die + modifier). Fold flat modifiers
+    // into the target number; non-d100 custom formulas keep the arithmetic append.
     if (rollModifier && rollModifier.trim()) {
       const modifier = rollModifier.startsWith('+') || rollModifier.startsWith('-') ? rollModifier : `+${rollModifier}`;
-      baseFormula += modifier;
+      const rollUnder = /^1d100<=(\d+)$/.exec(baseFormula);
+      const flat = parseInt(modifier, 10);
+      if (rollUnder && Number.isFinite(flat)) {
+        baseFormula = `1d100<=${Math.max(0, parseInt(rollUnder[1], 10) + flat)}`;
+      } else {
+        baseFormula += modifier;
+      }
     }
 
     return baseFormula;

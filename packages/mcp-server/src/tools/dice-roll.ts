@@ -5,6 +5,21 @@ import { BaseTool, BaseToolOptions } from '../base-tool.js';
 // Phase 2 mcp_coverage_expansion — dice-roll tool (roll/validate/simulate over Foundry Roll).
 import { DiceRollToolInput } from '@foundry-mcp/shared';
 
+// The MCP-side arg parser for request-player-rolls. Distinct from the shared
+// RequestPlayerRollsInput, which mirrors the Foundry-side payload and deliberately
+// lacks the MCP-only fields (userConfirmedVisibility, awaitResult). Exported so the
+// BUG-330 parity test can lock the published inputSchema against the ACTUAL parser.
+export const RequestPlayerRollsArgs = z.object({
+  rollType: z.enum(['ability', 'characteristic', 'skill', 'save', 'attack', 'initiative', 'custom']),
+  rollTarget: z.string(),
+  targetPlayer: z.string(),
+  isPublic: z.boolean(),
+  userConfirmedVisibility: z.literal(true),
+  rollModifier: z.string().default(''),
+  flavor: z.string().default(''),
+  awaitResult: z.boolean().optional().default(false),
+});
+
 // ── dice-roll response interfaces (CCR-1: concrete generics on this.query, never <any>) ──
 
 type DiceRollArgs = z.infer<typeof DiceRollToolInput>;
@@ -188,19 +203,8 @@ export class DiceRollTools extends BaseTool {
   }
 
   async handleRequestPlayerRolls(args: any) {
-    const schema = z.object({
-      rollType: z.enum(['ability', 'characteristic', 'skill', 'save', 'attack', 'initiative', 'custom']),
-      rollTarget: z.string(),
-      targetPlayer: z.string(),
-      isPublic: z.boolean(),
-      userConfirmedVisibility: z.literal(true),
-      rollModifier: z.string().default(''),
-      flavor: z.string().default(''),
-      awaitResult: z.boolean().optional().default(false),
-    });
-
     try {
-      const params = schema.parse(args);
+      const params = RequestPlayerRollsArgs.parse(args);
 
       // Validation should be handled by schema, but add extra safety checks
       if (typeof params.isPublic !== 'boolean') {

@@ -33,7 +33,8 @@ const configFields = {
 
 export const ModuleMattInput = z.discriminatedUnion('action', [
   z.object({ action: z.literal('get-capabilities') }),
-  z.object({ action: z.literal('get-trigger-tile'), tileUuid: z.string() }),
+  // BUG-254 full-payload flag; BUG-330 parity with the published inputSchema.
+  z.object({ action: z.literal('get-trigger-tile'), tileUuid: z.string(), returnFullPayload: z.boolean().optional() }),
   z.object({ action: z.literal('list-trigger-tiles'), sceneId: z.string().optional() }),
   z.object({ action: z.literal('validate-sequence'), actions: z.array(MattActionObj) }),
   z.object({
