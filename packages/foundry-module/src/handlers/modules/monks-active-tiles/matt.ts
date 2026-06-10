@@ -97,7 +97,7 @@ function readMattFlags(tile: any): Record<string, any> {
 }
 
 /** Fill source-observed MATT defaults and aliases before catalog validation/write. */
-function normalizeActionData(action: string, raw: Record<string, unknown> | undefined): Record<string, unknown> {
+function normalizeActionData(action: string, raw: Record<string, unknown> | undefined, sceneId?: string): Record<string, unknown> {
   const data = deepStripUndefined({ ...(raw ?? {}) }) as Record<string, unknown>;
 
   if (action === 'chatmessage' && data.language === undefined) {
@@ -143,17 +143,20 @@ function normalizeActionData(action: string, raw: Record<string, unknown> | unde
   }
 
   // BUG-259: MATT's runtime getEntities reads match/scene off the entity OBJECT — a bare
-  // "tagger:<tag>" string loses both options. Coerce to the canonical object form the
-  // MATT UI itself saves; fill missing fields when the object form is partial.
+  // "tagger:<tag>" string loses both options. Coerce to the canonical object form, and
+  // pin scene to the TILE's scene id, not "_active": MATT resolves "_active" against the
+  // user's currently-VIEWED scene at fire time, so a tile fired via MCP while the GM views
+  // another scene silently matches 0 documents (live-confirmed root cause of BUG-259).
+  const taggerScene = sceneId ?? '_active';
   for (const field of ['entity', 'location', 'target']) {
     const value = data[field];
     if (typeof value === 'string' && value.startsWith('tagger:')) {
-      data[field] = { id: value, match: 'any', scene: '_active' };
+      data[field] = { id: value, match: 'any', scene: taggerScene };
     } else if (value && typeof value === 'object' && !Array.isArray(value)) {
       const obj = value as Record<string, unknown>;
       if (typeof obj.id === 'string' && obj.id.startsWith('tagger:')) {
         if (obj.match === undefined) obj.match = 'any';
-        if (obj.scene === undefined) obj.scene = '_active';
+        if (obj.scene === undefined || obj.scene === '_active') obj.scene = taggerScene;
       }
     }
   }
@@ -173,11 +176,11 @@ function normalizeActionData(action: string, raw: Record<string, unknown> | unde
 }
 
 /** Mint ids for any action lacking one; coerce to {id, action, data}. */
-function normalizeActions(actions: MattActionObjType[] | MattActionInput[]): Array<{ id: string; action: string; data: Record<string, unknown> }> {
+function normalizeActions(actions: MattActionObjType[] | MattActionInput[], sceneId?: string): Array<{ id: string; action: string; data: Record<string, unknown> }> {
   return (actions ?? []).map((a) => ({
     id: a.id ?? makeMattId(),
     action: a.action,
-    data: normalizeActionData(a.action, a.data as Record<string, unknown> | undefined),
+    data: normalizeActionData(a.action, a.data as Record<string, unknown> | undefined, sceneId),
   }));
 }
 
@@ -531,7 +534,7 @@ type UpdateConfigInput = Extract<ModuleMattInputType, { action: 'update-trigger-
 async function handleCreateTriggerTile(input: CreateInput): Promise<Envelope<unknown>> {
   const scene = getSceneOrThrow(input.sceneId);
 
-  const actions = normalizeActions(input.actions ?? []);
+  const actions = normalizeActions(input.actions ?? [], scene.id);
 
   // Phase 5C.1 — author-time tagger selector resolution (replaces soft boolean)
   const taggerActive = Boolean((globalThis as any).game?.modules?.get?.('tagger')?.active);
@@ -757,14 +760,14 @@ async function writeActions(
 
 async function handleReplaceActionSequence(input: ReplaceSeqInput): Promise<Envelope<unknown>> {
   const { scene, tile } = getTileByUuidOrThrow(input.tileUuid);
-  const newActions = normalizeActions(input.actions);
+  const newActions = normalizeActions(input.actions, scene.id);
   return writeActions(scene, tile, newActions, input.confirm, `replaced sequence (${newActions.length} action(s))`);
 }
 
 async function handleAddAction(input: AddActionInput): Promise<Envelope<unknown>> {
   const { scene, tile } = getTileByUuidOrThrow(input.tileUuid);
   const current = readActions(tile);
-  const added = normalizeActions([input.mattAction])[0];
+  const added = normalizeActions([input.mattAction], scene.id)[0];
   return writeActions(scene, tile, [...current, added], input.confirm, `added action "${added.action}"`, { actionId: added.id });
 }
 
@@ -774,7 +777,7 @@ async function handleInsertAction(input: InsertActionInput): Promise<Envelope<un
   if (input.index > current.length) {
     return { success: false, error: `MATT_INDEX_OUT_OF_RANGE: index ${input.index} > length ${current.length}` };
   }
-  const inserted = normalizeActions([input.mattAction])[0];
+  const inserted = normalizeActions([input.mattAction], scene.id)[0];
   const next = [...current];
   next.splice(input.index, 0, inserted);
   return writeActions(scene, tile, next, input.confirm, `inserted action "${inserted.action}" at ${input.index}`, { actionId: inserted.id });
@@ -788,10 +791,12 @@ async function handleUpdateAction(input: UpdateActionInput): Promise<Envelope<un
     return { success: false, error: `MATT_ACTION_NOT_FOUND: no action with id "${input.actionId}"` };
   }
   const next = [...current];
+  const mergedKey = input.newActionKey ?? current[idx].action;
   next[idx] = {
     id: input.actionId,
-    action: input.newActionKey ?? current[idx].action,
-    data: { ...current[idx].data, ...input.data }, // BUG-310: merge so unspecified keys (entity refs, delays, etc.) are preserved
+    action: mergedKey,
+    // BUG-310: merge so unspecified keys (entity refs, delays, etc.) are preserved
+    data: normalizeActionData(mergedKey, { ...current[idx].data, ...input.data }, scene.id),
   };
   return writeActions(scene, tile, next, input.confirm, `updated action ${input.actionId}`, { actionId: input.actionId });
 }
