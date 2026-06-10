@@ -30,7 +30,7 @@ export function isKnownTrigger(key: string): boolean {
   return TRIGGER_SET.has(key);
 }
 
-// ── Action catalog (77 keys across 3 groups) — audit §4 ───────────────────────
+// ── Action catalog (77 native keys across 3 groups) — audit §4 ────────────────
 
 export interface ActionSpec {
   /** MATT action group. */
@@ -41,6 +41,8 @@ export interface ActionSpec {
   repairGated?: boolean;
   /** Best-effort required data field keys (audit §4); enforced by validateSequence. */
   required?: string[];
+  /** Alternative required fields for source-valid aliases (e.g. entity OR macroid). */
+  requiredAny?: string[];
 }
 
 // danger = audit §2 SUPPORTED_WITH_CONFIRMATION set (8) + attack (REPAIR_GATED, also dangerous).
@@ -62,7 +64,6 @@ export const ACTION_CATALOG: Record<string, ActionSpec> = {
   activate: { group: 'actions', danger: false, required: ['entity', 'activate'] },
   alter: { group: 'actions', danger: false, required: ['entity', 'attribute', 'value'] },
   tempimage: { group: 'actions', danger: false, required: ['entity', 'img'] },
-  animate: { group: 'actions', danger: false, required: ['entity'] },
   hurtheal: { group: 'actions', danger: false, required: ['entity', 'value'] },
   playsound: { group: 'actions', danger: false, required: ['src'] },
   playlist: { group: 'actions', danger: false, required: ['entity', 'action'] },
@@ -71,7 +72,7 @@ export const ACTION_CATALOG: Record<string, ActionSpec> = {
   changedoor: { group: 'actions', danger: false, required: ['entity', 'doorstate'] },
   notification: { group: 'actions', danger: false, required: ['text'] },
   chatmessage: { group: 'actions', danger: false, required: ['text'] },
-  runmacro: { group: 'actions', danger: true, required: ['entity'] },
+  runmacro: { group: 'actions', danger: true, requiredAny: ['entity', 'macroid', 'macroUuid'] },
   runcode: { group: 'actions', danger: true, required: ['code'] },
   rolltable: { group: 'actions', danger: false, required: ['rolltable'] },
   resetfog: { group: 'actions', danger: true },
@@ -81,10 +82,10 @@ export const ACTION_CATALOG: Record<string, ActionSpec> = {
   openactor: { group: 'actions', danger: false, required: ['entity'] },
   additem: { group: 'actions', danger: false, required: ['entity', 'item'] },
   removeitem: { group: 'actions', danger: false, required: ['entity', 'item'] },
-  permission: { group: 'actions', danger: true, required: ['entity', 'permission'] },
+  permissions: { group: 'actions', danger: true, required: ['entity', 'permission'] },
   attack: { group: 'actions', danger: true, repairGated: true, required: ['entity'] },
   trigger: { group: 'actions', danger: false, required: ['entity'] },
-  scene: { group: 'actions', danger: true, required: ['entity'] },
+  scene: { group: 'actions', danger: true, requiredAny: ['entity', 'sceneid'] },
   scenebackground: { group: 'actions', danger: false, required: ['entity', 'img'] },
   addtocombat: { group: 'actions', danger: false, required: ['entity'] },
   elevation: { group: 'actions', danger: false, required: ['entity', 'value'] },
@@ -95,12 +96,12 @@ export const ACTION_CATALOG: Record<string, ActionSpec> = {
   target: { group: 'actions', danger: false, required: ['entity'] },
   scenelighting: { group: 'actions', danger: false, required: ['darkness'] },
   globalvolume: { group: 'actions', danger: false, required: ['type', 'volume'] },
-  gametime: { group: 'actions', danger: true, required: ['value'] },
+  gametime: { group: 'actions', danger: true, required: ['time'] },
   dialog: { group: 'actions', danger: false, required: ['content'] },
   closedialog: { group: 'actions', danger: false },
   scrollingtext: { group: 'actions', danger: false, required: ['entity', 'content'] },
   preload: { group: 'actions', danger: false, required: ['entity'] },
-  writetojournal: { group: 'actions', danger: false, required: ['entity', 'content'] },
+  append: { group: 'actions', danger: false, required: ['entity', 'text'] },
   // group: logic
   runbatch: { group: 'logic', danger: false },
   checkdata: { group: 'logic', danger: false, required: ['attribute', 'value'] },
@@ -120,6 +121,7 @@ export const ACTION_CATALOG: Record<string, ActionSpec> = {
   visibility: { group: 'filters', danger: false, required: ['entity'] },
   exists: { group: 'filters', danger: false, required: ['entity'] },
   triggercount: { group: 'filters', danger: false, required: ['count'] },
+  tokencount: { group: 'filters', danger: false, required: ['count'] },
   first: { group: 'filters', danger: false, required: ['entity'] },
   attribute: { group: 'filters', danger: false, required: ['entity', 'attribute'] },
   inventory: { group: 'filters', danger: false, required: ['entity', 'item'] },
@@ -160,10 +162,24 @@ export const STRICT_ACTION_DATA: Record<string, z.ZodTypeAny> = {
   hurtheal: z.object({ entity: entityField, value: z.union([z.string(), z.number()]) }).passthrough(),
   alter: z.object({ entity: entityField, attribute: z.string(), value: z.union([z.string(), z.number()]) }).passthrough(),
   runcode: z.object({ code: z.string().min(1) }).passthrough(),
-  runmacro: z.object({ entity: entityField }).passthrough(),
+  runmacro: z
+    .object({
+      entity: entityField.optional(),
+      macroid: z.string().min(1).optional(),
+      macroUuid: z.string().min(1).optional(),
+    })
+    .passthrough()
+    .refine((d) => d.entity != null || d.macroid != null || d.macroUuid != null, {
+      message: 'runmacro requires one of entity, macroid, or macroUuid',
+    }),
   delete: z.object({ entity: entityField }).passthrough(),
-  scene: z.object({ entity: entityField }).passthrough(),
-  permission: z.object({ entity: entityField, permission: z.union([z.string(), z.number()]) }).passthrough(),
+  scene: z
+    .object({ entity: entityField.optional(), sceneid: z.string().min(1).optional() })
+    .passthrough()
+    .refine((d) => d.entity != null || d.sceneid != null, {
+      message: 'scene requires one of entity or sceneid',
+    }),
+  permissions: z.object({ entity: entityField, permission: z.union([z.string(), z.number()]) }).passthrough(),
   changedoor: z.object({ entity: entityField, doorstate: z.string() }).passthrough(),
   activeeffect: z.object({ entity: entityField, effect: z.union([z.string(), z.record(z.unknown())]), action: z.string() }).passthrough(),
 };
@@ -247,9 +263,14 @@ export function validateSequence(actions: MattActionInput[]): SequenceValidation
 
     // Required-field check.
     for (const req of spec.required ?? []) {
-      if (data[req] === undefined || data[req] === null || data[req] === '') {
+      if (!hasPresent(data, req)) {
         errors.push(`${where}: action "${key}" missing required data field "${req}".`);
       }
+    }
+    if (spec.requiredAny && !spec.requiredAny.some((req) => hasPresent(data, req))) {
+        errors.push(
+          `${where}: action "${key}" missing required data field alternative (${spec.requiredAny.join(' or ')}).`,
+        );
     }
 
     // Strict Zod for high-value actions.
@@ -280,4 +301,8 @@ export function validateSequence(actions: MattActionInput[]): SequenceValidation
   });
 
   return { valid: errors.length === 0, errors, warnings, dangerous, anchors };
+}
+
+function hasPresent(data: Record<string, unknown>, key: string): boolean {
+  return data[key] !== undefined && data[key] !== null && data[key] !== '';
 }

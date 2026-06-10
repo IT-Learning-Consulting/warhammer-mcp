@@ -2192,6 +2192,10 @@ export class FoundryDataAccess {
 
       // Apply customizations
       actorData.name = customName;
+      // Sync the prototype-token name. The clone keeps the compendium source's
+      // prototypeToken.name otherwise, so tokens dragged from this actor are
+      // mislabelled with the original creature/template name instead of customName.
+      if (actorData.prototypeToken) actorData.prototypeToken.name = customName;
 
       // Fix only token texture - leave portrait (actor.img) alone
       if (actorData.prototypeToken?.texture?.src?.startsWith('http')) {
@@ -3534,7 +3538,14 @@ export class FoundryDataAccess {
       delete actorData._id;
       delete actorData.folder;
       delete actorData.sort;
-      if (data.newName) actorData.name = data.newName;
+      if (data.newName) {
+        actorData.name = data.newName;
+        // Sync the prototype-token name too. toObject() copies the source's
+        // prototypeToken (including its name), and Foundry's Actor._preCreate
+        // will NOT override a non-default token name — so without this, tokens
+        // dragged to the canvas show the source actor's name (e.g. "Human").
+        if (actorData.prototypeToken) actorData.prototypeToken.name = data.newName;
+      }
 
       const actor = await (Actor as any).create(actorData);
       if (!actor) {

@@ -4,10 +4,10 @@
 // active; when inactive it returns MODULE_NOT_ACTIVE which BaseTool.query() converts to a throw →
 // errorContent(). Use module-probe.is-active to pre-flight.
 //
-// 17 actions: reads (get-capabilities/get-trigger-tile/list-trigger-tiles/validate-sequence),
+// 19 actions: reads (get-capabilities/get-trigger-tile/list-trigger-tiles/validate-sequence),
 // authoring (create-trigger-tile/update-trigger-config), sequence editing (replace/add/insert/
 // update/remove/reorder/duplicate-action), state (set-variables/reset-history), runtime
-// (fire-trigger), region bridge (link-region-trigger).
+// (fire-trigger/fire-trigger-as/find-trigger-tile), region bridge (link-region-trigger).
 //
 // Anchors:
 //   - DP-15: concrete this.query<T> per action — never <any>.
@@ -46,6 +46,20 @@ interface TriggerTileResponse {
   variables: Record<string, unknown>;
   history: Record<string, unknown>;
   config: Record<string, unknown>;
+  // BUG-254 — present on every get-trigger-tile response; tilepack export consumes these.
+  geometry?: {
+    x: number | null;
+    y: number | null;
+    width: number | null;
+    height: number | null;
+    rotation: number;
+    elevation: number;
+    sort: number;
+    hidden: boolean;
+  };
+  texture?: { src: string | null };
+  regionLinks?: Array<{ regionId: string; behaviorId: string; events: unknown }>;
+  returnFullPayload?: boolean;
 }
 
 interface ListTilesResponse {
@@ -62,6 +76,17 @@ interface ValidateSequenceResponse {
   anchors: string[];
 }
 
+// Phase 5C — author-time tagger selector resolution (foundry-module matt.ts:159-165).
+// Surfaced on create-trigger-tile + replace-action-sequence so the GM sees match counts +
+// ZERO_MATCH warnings at author time (DP-19 — handler computed these but the formatter dropped them).
+interface TaggerResolutionEntry {
+  actionIndex: number;
+  field: string;
+  tag: string;
+  matchedCount: number;
+  warn?: 'ZERO_MATCH';
+}
+
 interface CreateTileResponse {
   tileId: string;
   uuid: string;
@@ -69,6 +94,8 @@ interface CreateTileResponse {
   trigger: string[];
   actionCount: number;
   name: string | null;
+  taggerResolution?: TaggerResolutionEntry[];
+  taggerWarnings?: string[];
 }
 
 interface UpdateConfigResponse {
@@ -84,6 +111,8 @@ interface SequenceResponse {
   actionCount: number;
   actionId?: string;
   actions?: Array<{ id: string; action: string }>;
+  taggerResolution?: TaggerResolutionEntry[];
+  taggerWarnings?: string[];
 }
 
 interface SetVariablesResponse {
@@ -102,6 +131,42 @@ interface FireTriggerResponse {
   uuid: string;
   fired: boolean;
   tokensUsed?: number;
+}
+
+interface FireTriggerAsResponse {
+  uuid: string;
+  fired: boolean;
+  method: string;
+  tokenIds: string[];
+  tokensUsed: number;
+}
+
+interface FindTriggerTileResponse {
+  count: number;
+  match?: {
+    uuid: string;
+    sceneId: string;
+    sceneName: string;
+    tileId: string;
+    name: string | null;
+    active: boolean | null;
+    trigger: string[] | null;
+    actionCount: number;
+    tags: string[];
+    libraryId: string | null;
+  };
+  matches: Array<{
+    uuid: string;
+    sceneId: string;
+    sceneName: string;
+    tileId: string;
+    name: string | null;
+    active: boolean | null;
+    trigger: string[] | null;
+    actionCount: number;
+    tags: string[];
+    libraryId: string | null;
+  }>;
 }
 
 interface LinkRegionResponse {
@@ -133,6 +198,12 @@ Optional deps: ${deps}.${reg}`;
 }
 
 function formatTriggerTile(d: TriggerTileResponse): string {
+  // BUG-254 — full machine-readable bundle for tilepack export round-trips. Emits the entire
+  // envelope (geometry + texture + full actions[] with data + variables + regionLinks) as JSON
+  // so the export call plan can build a complete .tilepack.json without F12/source inspection.
+  if (d.returnFullPayload) {
+    return `MATT tile "${d.name ?? d.tileId}" (${d.uuid}) — full payload:\n\`\`\`json\n${JSON.stringify(d, null, 2)}\n\`\`\``;
+  }
   const actionsStr = d.actions.length
     ? d.actions.map((a, i) => `${i}: ${a.action} (${a.id})`).join('\n  ')
     : '(none)';
@@ -162,8 +233,18 @@ function formatValidate(d: ValidateSequenceResponse): string {
   return parts.join('\n');
 }
 
+// Phase 5C — render author-time tagger resolution (DP-19: handler returns these; surface them).
+function formatTaggerResolution(d: { taggerResolution?: TaggerResolutionEntry[]; taggerWarnings?: string[] }): string {
+  if (!d.taggerResolution?.length) return '';
+  const lines = d.taggerResolution.map((r) => {
+    const flag = r.warn === 'ZERO_MATCH' ? ' — ZERO_MATCH (tag may not exist yet; WARN only)' : '';
+    return `  - action[${r.actionIndex}].${r.field} tagger:"${r.tag}" → ${r.matchedCount} match${r.matchedCount === 1 ? '' : 'es'}${flag}`;
+  });
+  return `\nTagger resolution:\n${lines.join('\n')}`;
+}
+
 function formatCreate(d: CreateTileResponse): string {
-  return `Created MATT tile "${d.name ?? d.tileId}" (${d.uuid}) on scene ${d.sceneId} — trigger=[${d.trigger.join(', ')}], ${d.actionCount} action(s).`;
+  return `Created MATT tile "${d.name ?? d.tileId}" (${d.uuid}) on scene ${d.sceneId} — trigger=[${d.trigger.join(', ')}], ${d.actionCount} action(s).${formatTaggerResolution(d)}`;
 }
 
 function formatUpdateConfig(d: UpdateConfigResponse): string {
@@ -174,7 +255,7 @@ function formatSequence(d: SequenceResponse): string {
   const head = `MATT tile ${d.uuid} — ${d.actionCount} action(s)`;
   const seq = d.actions ? `\n  ${d.actions.map((a, i) => `${i}: ${a.action} (${a.id})`).join('\n  ')}` : '';
   const focus = d.actionId ? ` [action ${d.actionId}]` : '';
-  return `${head}${focus}.${seq}`;
+  return `${head}${focus}.${seq}${formatTaggerResolution(d)}`;
 }
 
 function formatSetVariables(d: SetVariablesResponse): string {
@@ -187,6 +268,18 @@ function formatResetHistory(d: ResetHistoryResponse): string {
 
 function formatFire(d: FireTriggerResponse): string {
   return `Fired MATT tile ${d.uuid} (fired=${d.fired}${d.tokensUsed != null ? `, tokens=${d.tokensUsed}` : ''}).`;
+}
+
+function formatFireAs(d: FireTriggerAsResponse): string {
+  return `Fired MATT tile ${d.uuid} as tokens [${d.tokenIds.join(', ')}] (method="${d.method}", fired=${d.fired}).`;
+}
+
+function formatFindTriggerTile(d: FindTriggerTileResponse): string {
+  if (d.count === 0) return 'No MATT tiles found matching that criterion.';
+  const lines = d.matches.map(
+    (m) => `- "${m.name ?? m.tileId}" (${m.uuid}) scene=${m.sceneName} active=${m.active} trigger=[${(m.trigger ?? []).join(', ')}] actions=${m.actionCount}`,
+  );
+  return `Found ${d.count} MATT tile(s):\n${lines.join('\n')}`;
 }
 
 function formatLinkRegion(d: LinkRegionResponse): string {
@@ -213,12 +306,13 @@ export class ModuleMattTool extends BaseTool {
         },
         description: `Author, inspect, edit, and fire Monk's Active Tile (MATT) automations (module ID: monks-active-tiles).
 REQUIRES monks-active-tiles installed + active — returns MODULE_NOT_ACTIVE otherwise. Pre-flight with module-probe.is-active.
-GM required for all writes. Destructive/elevated-risk MATT actions (delete/permission/resetfog/scene/gametime/runmacro/runcode/url + attack)
+GM required for all writes. Destructive/elevated-risk MATT actions (delete/permissions/resetfog/scene/gametime/runmacro/runcode/url + attack)
 must be confirmed: send confirm:true after reviewing the impact report. fire-trigger also requires confirm:true.
+fire-trigger-as also requires confirm:true after reviewing the explicit-token impact preview.
 
-17 actions:
-- get-capabilities                       — 24 trigger modes + 72-action catalog + registered/3rd-party actions + optional deps + MATT settings.
-- get-trigger-tile { tileUuid }          — full MATT config + ordered actions + variables + history for one tile.
+19 actions:
+- get-capabilities                       — 24 trigger modes + source-audited native 77-action catalog + registered/3rd-party actions + optional deps + MATT settings (including use-core-macro).
+- get-trigger-tile { tileUuid, returnFullPayload? } — full MATT config + ordered actions + variables + history for one tile. returnFullPayload:true emits a machine-readable JSON bundle (geometry + texture + full actions[] + regionLinks) for tilepack export.
 - list-trigger-tiles { sceneId? }        — MATT-armed tiles on a scene (defaults to active scene).
 - validate-sequence { actions }          — catalog-validate an ordered action array before write/fire.
 - create-trigger-tile { sceneId, x, y, trigger[], ... } — create a Tile + full MATT flag block + optional initial actions.
@@ -229,13 +323,17 @@ must be confirmed: send confirm:true after reviewing the impact report. fire-tri
 - reorder-actions { order[] } / duplicate-action { actionId }.
 - set-variables { tileUuid, variables }  — write tile variable store.
 - reset-history { tileUuid, tokenId? }   — clear trigger history (all or per-token).
-- fire-trigger { tileUuid, confirm }     — fire a tile via game.MonksActiveTiles.triggerTile().
+- fire-trigger { tileUuid, confirm }     — fire a tile via game.MonksActiveTiles.triggerTile() (uses controlled tokens).
+- fire-trigger-as { tileUuid, tokenIds[], method?, confirm } — fire a tile via TileDocument.prototype.trigger() with an explicit token array (bypasses controlled-token resolution — use for NPC-as-trigger, patrol sim, automated test).
+- find-trigger-tile { name|tileUuid|tag|libraryId, sceneId? }  — read-only exact lookup. Errors on no match or ambiguous multiple matches.
 - link-region-trigger { sceneId, regionId, tileUuid } — create the monks-active-tiles.triggerTile RegionBehavior bridge.
 
 Examples:
 - { action: "get-capabilities" }
 - { action: "create-trigger-tile", sceneId: "abc", x: 1000, y: 1000, trigger: ["enter"], actions: [{ action: "chatmessage", data: { text: "A trap!" } }] }
-- { action: "fire-trigger", tileUuid: "Scene.abc.Tile.xyz", confirm: true }`,
+- { action: "fire-trigger", tileUuid: "Scene.abc.Tile.xyz", confirm: true }
+- { action: "fire-trigger-as", tileUuid: "Scene.abc.Tile.xyz", tokenIds: ["tokenId1"], method: "enter", confirm: true }
+- { action: "find-trigger-tile", name: "Main Gate Trap" }`,
         inputSchema: {
           type: 'object',
           properties: {
@@ -245,12 +343,13 @@ Examples:
                 'get-capabilities', 'get-trigger-tile', 'list-trigger-tiles', 'validate-sequence',
                 'create-trigger-tile', 'update-trigger-config', 'replace-action-sequence', 'add-action',
                 'insert-action', 'update-action', 'remove-action', 'reorder-actions', 'duplicate-action',
-                'set-variables', 'reset-history', 'fire-trigger', 'link-region-trigger',
+                'set-variables', 'reset-history', 'fire-trigger', 'fire-trigger-as', 'find-trigger-tile',
+                'link-region-trigger',
               ],
               description: 'The module-matt action to run.',
             },
-            tileUuid: { type: 'string', description: '[get-trigger-tile/update-trigger-config/*-action/set-variables/reset-history/fire-trigger/link-region-trigger] Tile UUID (Scene.<id>.Tile.<id>).' },
-            sceneId: { type: 'string', description: '[create-trigger-tile/link-region-trigger required · list-trigger-tiles optional] Scene id.' },
+            tileUuid: { type: 'string', description: '[get-trigger-tile/update-trigger-config/*-action/set-variables/reset-history/fire-trigger/fire-trigger-as/link-region-trigger] Tile UUID (Scene.<id>.Tile.<id>).' },
+            sceneId: { type: 'string', description: '[create-trigger-tile/link-region-trigger required · list-trigger-tiles/find-trigger-tile optional] Scene id.' },
             x: { type: 'number', description: '[create-trigger-tile] Tile top-left X (canvas px).' },
             y: { type: 'number', description: '[create-trigger-tile] Tile top-left Y (canvas px).' },
             width: { type: 'number', description: '[create-trigger-tile] Tile width px (default 100).' },
@@ -270,8 +369,13 @@ Examples:
             events: { type: 'array', items: { type: 'string' }, description: '[link-region-trigger] Region event names (optional; defaults to standard token-enter/exit).' },
             usetiletrigger: { type: 'boolean', description: '[link-region-trigger] Map region events to tile trigger methods (default true).' },
             regionId: { type: 'string', description: '[link-region-trigger] Region document id on the scene.' },
-            name: { type: 'string', description: '[create-trigger-tile/update-trigger-config/link-region-trigger] Display name.' },
-            confirm: { type: 'boolean', description: 'Required (true) for dangerous action authoring AND for fire-trigger. Review the impact report first.' },
+            name: { type: 'string', description: '[create-trigger-tile/update-trigger-config/link-region-trigger] Display name. [find-trigger-tile] Exact MATT tile name to search for.' },
+            confirm: { type: 'boolean', description: 'Required (true) for dangerous action authoring, fire-trigger, and fire-trigger-as. Review the impact report first.' },
+            tokenIds: { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 10, description: '[fire-trigger-as] Canvas token ids (1–10) to use as the triggering token(s). Use scene.tokens ids, not actor ids.' },
+            method: { type: 'string', description: '[fire-trigger-as] Trigger method string passed to TileDocument.prototype.trigger (default "manual"; e.g. "enter", "click").' },
+            tag: { type: 'string', description: '[find-trigger-tile] Exact Tagger tag to search for on MATT tiles.' },
+            libraryId: { type: 'string', description: '[find-trigger-tile] Stable library identifier stored on MATT/warhammer-mcp tile flags.' },
+            returnFullPayload: { type: 'boolean', description: '[get-trigger-tile] When true, return the full machine-readable bundle (geometry + texture + full actions[] with data + variables + region-link metadata) as JSON for tilepack export round-trips, instead of the prose summary.' },
           },
           required: ['action'],
         },
@@ -316,6 +420,10 @@ Examples:
         return this.run<ResetHistoryResponse>('reset-history', args, formatResetHistory);
       case 'fire-trigger':
         return this.run<FireTriggerResponse>('fire-trigger', args, formatFire);
+      case 'fire-trigger-as':
+        return this.run<FireTriggerAsResponse>('fire-trigger-as', args, formatFireAs);
+      case 'find-trigger-tile':
+        return this.run<FindTriggerTileResponse>('find-trigger-tile', args, formatFindTriggerTile);
       case 'link-region-trigger':
         return this.run<LinkRegionResponse>('link-region-trigger', args, formatLinkRegion);
       default: {

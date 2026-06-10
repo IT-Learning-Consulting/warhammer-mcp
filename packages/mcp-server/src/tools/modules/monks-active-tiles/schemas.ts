@@ -116,6 +116,21 @@ export const ModuleMattInput = z.discriminatedUnion('action', [
     confirm: z.boolean().optional(),
   }),
   z.object({
+    action: z.literal('fire-trigger-as'),
+    tileUuid: z.string(),
+    tokenIds: z.array(z.string()).min(1).max(10),
+    method: z.string().optional(),
+    confirm: z.boolean().optional(),
+  }),
+  z.object({
+    action: z.literal('find-trigger-tile'),
+    name: z.string().optional(),
+    tileUuid: z.string().optional(),
+    tag: z.string().optional(),
+    libraryId: z.string().optional(),
+    sceneId: z.string().optional(),
+  }),
+  z.object({
     action: z.literal('link-region-trigger'),
     sceneId: z.string(),
     regionId: z.string(),

@@ -50,6 +50,8 @@ import { dispatchSound as dispatchSoundHandler } from './handlers/sound.js';
 import { dispatchRegion as dispatchRegionHandler } from './handlers/region.js';
 import { dispatchTile as dispatchTileHandler } from './handlers/tile.js';
 import { dispatchTemplate as dispatchTemplateHandler } from './handlers/template.js';
+// Phase 5 mcp_coverage_expansion — drawing umbrella (CRUD + list + duplicate over scene.drawings).
+import { dispatchDrawing as dispatchDrawingHandler } from './handlers/drawing.js';
 // Phase 7 mcp_crud_expansion — Playlist + PlaylistSound umbrella (10 actions:
 // create/update/delete/get/list-playlist, add/update/delete-sound, play/stop).
 // First world-level CRUD umbrella in the system (sibling of Phase 5 embedded
@@ -77,9 +79,16 @@ import { dispatchItemDirectory as dispatchItemDirectoryHandler } from './handler
 import { dispatchActorConfig as dispatchActorConfigHandler } from './handlers/actor-config.js';
 // Phase 2 mcp_coverage_expansion — dice-roll tool (roll/validate/simulate over Foundry Roll).
 import { dispatchDiceRoll as dispatchDiceRollHandler } from './handlers/dice-roll.js';
+// Phase 3 mcp_coverage_expansion — combatant umbrella (7 per-combatant actions).
+import { dispatchCombatant as dispatchCombatantHandler } from './handlers/combatant.js';
 // Phase 1 module_integration_v1 — module-probe umbrella (always-on, read-only) + module-matt stub.
 import { dispatchModuleProbe as dispatchModuleProbeHandler } from './handlers/modules/probe/probe.js';
 import { dispatchModuleMatt as dispatchModuleMattHandler } from './handlers/modules/monks-active-tiles/matt.js';
+// Phase 5 module_integration_v1 — module-tagger + module-sequencer umbrellas.
+import { dispatchModuleTagger as dispatchModuleTaggerHandler } from './handlers/modules/tagger/tagger.js';
+import { dispatchModuleSequencer as dispatchModuleSequencerHandler } from './handlers/modules/sequencer/sequencer.js';
+// Phase 13A module_integration_v1 — module-css umbrella.
+import { dispatchModuleCss as dispatchModuleCssHandler } from './handlers/modules/custom-css/css.js';
 // Phase 6.1 mcp_crud_expansion — FilePicker handlers (upload/list + notify.warn round-trip).
 import {
   uploadFile as uploadFileHandler,
@@ -219,6 +228,8 @@ export class QueryHandlers {
     CONFIG.queries[`${modulePrefix}.region`] = this.handleRegion.bind(this);
     CONFIG.queries[`${modulePrefix}.tile`] = this.handleTile.bind(this);
     CONFIG.queries[`${modulePrefix}.template`] = this.handleTemplate.bind(this);
+    // Phase 5 mcp_coverage_expansion — drawing umbrella.
+    CONFIG.queries[`${modulePrefix}.drawing`] = this.handleDrawing.bind(this);
     CONFIG.queries[`${modulePrefix}.deleteActor`] = this.handleDeleteActor.bind(this);
     CONFIG.queries[`${modulePrefix}.request-player-rolls`] = this.handleRequestPlayerRolls.bind(this);
     // Deprecation wrappers — old actor-only ownership keys (PRD R1.5).
@@ -307,6 +318,8 @@ export class QueryHandlers {
     CONFIG.queries[`${modulePrefix}.actor-config`] = this.handleActorConfig.bind(this);
     // Phase 2 mcp_coverage_expansion — dice-roll tool (roll/validate/simulate over Foundry Roll).
     CONFIG.queries[`${modulePrefix}.dice-roll`] = this.handleDiceRoll.bind(this);
+    // Phase 3 mcp_coverage_expansion — combatant umbrella (7 per-combatant actions).
+    CONFIG.queries[`${modulePrefix}.combatant`] = this.handleCombatant.bind(this);
     // Phase 1 module_integration_v1 — module-probe umbrella (always-on, read-only).
     // Does NOT call validateFoundryState() — game.modules is available before full init
     // (mirrors handleDiagnostic pattern, not handleSetting). No enableDiagnosticTools gate.
@@ -314,6 +327,11 @@ export class QueryHandlers {
     // Phase 1 module_integration_v1 — module-matt stub (monks-active-tiles conditional).
     // requireModuleActive guard in the dispatcher returns MODULE_NOT_ACTIVE when inactive.
     CONFIG.queries[`${modulePrefix}.module-matt`] = this.handleModuleMatt.bind(this);
+    // Phase 5 module_integration_v1 — module-tagger + module-sequencer (conditional).
+    CONFIG.queries[`${modulePrefix}.module-tagger`] = this.handleModuleTagger.bind(this);
+    CONFIG.queries[`${modulePrefix}.module-sequencer`] = this.handleModuleSequencer.bind(this);
+    // Phase 13A module_integration_v1 — module-css (conditional).
+    CONFIG.queries[`${modulePrefix}.module-css`] = this.handleModuleCss.bind(this);
   }
 
   unregisterHandlers(): void {
@@ -592,6 +610,39 @@ export class QueryHandlers {
     }
   }
 
+  // Phase 5 module_integration_v1 — module-tagger dispatcher.
+  // requireModuleActive('tagger') guard runs inside dispatchModuleTagger.
+  private async handleModuleTagger(data: unknown): Promise<any> {
+    try {
+      return await dispatchModuleTaggerHandler(data);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to dispatch module-tagger action: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  // Phase 5 module_integration_v1 — module-sequencer dispatcher.
+  // requireModuleActive('sequencer') guard runs inside dispatchModuleSequencer.
+  private async handleModuleSequencer(data: unknown): Promise<any> {
+    try {
+      return await dispatchModuleSequencerHandler(data);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to dispatch module-sequencer action: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  // Phase 13A module_integration_v1 — module-css dispatcher.
+  // requireModuleActive('custom-css') guard runs inside dispatchModuleCss.
+  private async handleModuleCss(data: unknown): Promise<any> {
+    try {
+      return await dispatchModuleCssHandler(data);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to dispatch module-css action: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
   // Phase 1 mcp_diagnostic_tool — Tier 1 read-only diagnostic dispatcher.
   // Tier 1 sub-actions (recent-errors / world-issues / support-snapshot) do
   // NOT call validateFoundryState() per plan Design Decisions row 10 —
@@ -724,6 +775,16 @@ export class QueryHandlers {
     } catch (error) {
       rethrowAsInvalidInput(error);
       throw new Error(`Failed to dispatch tile action: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  async handleDrawing(data: unknown): Promise<any> {
+    try {
+      this.dataAccess.validateFoundryState();
+      return await dispatchDrawingHandler(data);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to dispatch drawing action: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
@@ -1665,6 +1726,17 @@ export class QueryHandlers {
     } catch (error) {
       rethrowAsInvalidInput(error);
       throw new Error(`Failed to dispatch actor-config action: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  // Phase 3 mcp_coverage_expansion — combatant umbrella (7 per-combatant actions).
+  async handleCombatant(data: unknown): Promise<any> {
+    try {
+      this.dataAccess.validateFoundryState();
+      return await dispatchCombatantHandler(data);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to dispatch combatant action: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 }

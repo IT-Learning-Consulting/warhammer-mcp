@@ -86,6 +86,8 @@ import { CrossDocFkTool } from './tools/cross-doc-fk.js';
 import { RegionTool } from './tools/region.js';
 import { TileTool } from './tools/tile.js';
 import { TemplateTool } from './tools/template.js';
+// Phase 5 mcp_coverage_expansion — drawing umbrella (CRUD + list + duplicate).
+import { DrawingTool } from './tools/drawing.js';
 // Phase 6.1 mcp_crud_expansion — FilePicker umbrella tool with Node-side auto-conversion.
 import { FilePickerTool } from './tools/filepicker.js';
 import { NotifyTool } from './tools/notify.js';
@@ -101,9 +103,16 @@ import { ChatMessageTool } from './tools/chat-message.js';
 import { ItemDirectoryTool } from './tools/item-directory.js';
 // Phase 1 mcp_coverage_expansion — actor-config umbrella (4 actions: get/update-prototype-token + get/set-art).
 import { ActorConfigTool } from './tools/actor-config.js';
+// Phase 3 mcp_coverage_expansion — combatant umbrella (7 per-combatant actions).
+import { CombatantTool } from './tools/combatant.js';
 // Phase 1 module_integration_v1 — always-registered module-probe + conditional module-matt stub.
 import { ModuleProbeTool } from './tools/modules/probe/probe.js';
 import { ModuleMattTool } from './tools/modules/monks-active-tiles/matt.js';
+// Phase 5 module_integration_v1 — conditional module-tagger + module-sequencer umbrellas.
+import { ModuleTaggerTool } from './tools/modules/tagger/tagger.js';
+import { ModuleSequencerTool } from './tools/modules/sequencer/sequencer.js';
+// Phase 13A module_integration_v1 — conditional module-css umbrella.
+import { ModuleCssTool } from './tools/modules/custom-css/css.js';
 // BUG-107: extracted to side-effect-free module so test imports don't boot backend.
 import { coerceArgsBySchema } from './coerce-args.js';
 
@@ -304,6 +313,7 @@ async function startBackend(): Promise<void> {
   const regionTool = new RegionTool({ foundryClient, logger });
   const tileTool = new TileTool({ foundryClient, logger });
   const templateTool = new TemplateTool({ foundryClient, logger });
+  const drawingTool = new DrawingTool({ foundryClient, logger });
   // Phase 6.1 mcp_crud_expansion — FilePicker tool with Node-side auto-conversion.
   const filePickerTool = new FilePickerTool({ foundryClient, logger });
   // Phase 1 mcp_diagnostic_tool — read-only diagnostic umbrella (Tier 1).
@@ -320,9 +330,16 @@ async function startBackend(): Promise<void> {
   // Phase 1 mcp_coverage_expansion — item-directory + actor-config umbrellas.
   const itemDirectoryTool = new ItemDirectoryTool({ foundryClient, logger });
   const actorConfigTool = new ActorConfigTool({ foundryClient, logger });
+  // Phase 3 mcp_coverage_expansion — combatant umbrella (7 per-combatant actions).
+  const combatantTool = new CombatantTool({ foundryClient, logger });
   // Phase 1 module_integration_v1 — module-probe (always-on) + module-matt (conditional stub).
   const moduleProbeTool = new ModuleProbeTool({ foundryClient, logger });
   const moduleMattTool = new ModuleMattTool({ foundryClient, logger });
+  // Phase 5 module_integration_v1 — module-tagger + module-sequencer (conditional).
+  const moduleTaggerTool = new ModuleTaggerTool({ foundryClient, logger });
+  const moduleSequencerTool = new ModuleSequencerTool({ foundryClient, logger });
+  // Phase 13A module_integration_v1 — module-css (conditional).
+  const moduleCssTool = new ModuleCssTool({ foundryClient, logger });
 
   const registry = new ToolRegistry();
   registry.register('get-character', (args) => characterTools.handleGetCharacter(args));
@@ -396,6 +413,7 @@ async function startBackend(): Promise<void> {
   registry.register('region', (args) => regionTool.execute(args));
   registry.register('tile', (args) => tileTool.execute(args));
   registry.register('template', (args) => templateTool.execute(args));
+  registry.register('drawing', (args) => drawingTool.execute(args));
   // Phase 6.1 mcp_crud_expansion — FilePicker umbrella (upload / list / convert).
   registry.register('filepicker', (args) => filePickerTool.execute(args));
   // Phase 1 mcp_diagnostic_tool — read-only diagnostic umbrella. Foundry-side
@@ -414,9 +432,16 @@ async function startBackend(): Promise<void> {
   // Phase 1 mcp_coverage_expansion — item-directory + actor-config umbrellas.
   registry.register('item-directory', (args) => itemDirectoryTool.execute(args));
   registry.register('actor-config', (args) => actorConfigTool.execute(args));
+  // Phase 3 mcp_coverage_expansion — combatant umbrella (7 per-combatant actions).
+  registry.register('combatant', (args) => combatantTool.execute(args));
   // Phase 1 module_integration_v1 — module-probe (always-on) + module-matt (conditional stub).
   registry.register('module-probe', (args) => moduleProbeTool.execute(args as any));
   registry.register('module-matt', (args) => moduleMattTool.execute(args as any));
+  // Phase 5 module_integration_v1 — module-tagger + module-sequencer (conditional).
+  registry.register('module-tagger', (args) => moduleTaggerTool.execute(args as any));
+  registry.register('module-sequencer', (args) => moduleSequencerTool.execute(args as any));
+  // Phase 13A module_integration_v1 — module-css (conditional).
+  registry.register('module-css', (args) => moduleCssTool.execute(args as any));
   // Phase 4 mcp_crud_expansion — add-actors-to-scene + delete-token folded into scene umbrella.
   registry.register('delete-actor', (args) => worldDeleteTools.handleDeleteActor(args));
 
@@ -498,6 +523,7 @@ async function startBackend(): Promise<void> {
     ...regionTool.getToolDefinitions(),
     ...tileTool.getToolDefinitions(),
     ...templateTool.getToolDefinitions(),
+    ...drawingTool.getToolDefinitions(),
     // Phase 6.1 mcp_crud_expansion — FilePicker umbrella (upload / list / convert).
     ...filePickerTool.getToolDefinitions(),
     // Phase 1 mcp_diagnostic_tool — diagnostic umbrella (3 actions in v1).
@@ -514,10 +540,19 @@ async function startBackend(): Promise<void> {
     // Phase 1 mcp_coverage_expansion — item-directory + actor-config umbrellas.
     ...itemDirectoryTool.getToolDefinitions(),
     ...actorConfigTool.getToolDefinitions(),
+    // Phase 3 mcp_coverage_expansion — combatant umbrella (7 per-combatant actions).
+    ...combatantTool.getToolDefinitions(),
 
     // Phase 1 module_integration_v1 — module-probe (always-on) + module-matt (conditional stub).
     ...moduleProbeTool.getToolDefinitions(),
     ...moduleMattTool.getToolDefinitions(),
+
+    // Phase 5 module_integration_v1 — module-tagger + module-sequencer (conditional).
+    ...moduleTaggerTool.getToolDefinitions(),
+    ...moduleSequencerTool.getToolDefinitions(),
+
+    // Phase 13A module_integration_v1 — module-css (conditional).
+    ...moduleCssTool.getToolDefinitions(),
 
   ];
 

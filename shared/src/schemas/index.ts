@@ -61,6 +61,10 @@ export * from './item-directory.js';
 export * from './actor-config.js';
 // Phase 2 mcp_coverage_expansion — dice-roll tool (roll/validate/simulate over Foundry Roll).
 export * from './dice-roll.js';
+// Phase 3 mcp_coverage_expansion — combatant umbrella (7 per-combatant actions).
+export * from './combatant.js';
+// Phase 5 mcp_coverage_expansion — drawing umbrella (CRUD + list + duplicate over scene.drawings).
+export * from './drawing.js';
 // Phase 1 module_integration_v1 — module-probe umbrella (is-active / list-active).
 // Generic types only; module-specific schemas live in package-local tools/modules/<id>/schemas.ts.
 export * from './module-probe.js';

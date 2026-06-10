@@ -96,13 +96,128 @@ function readMattFlags(tile: any): Record<string, any> {
   return (tile._source?.flags?.[MATT_FLAG] ?? tile.flags?.[MATT_FLAG] ?? {}) as Record<string, any>;
 }
 
+/** Fill source-observed MATT defaults and aliases before catalog validation/write. */
+function normalizeActionData(action: string, raw: Record<string, unknown> | undefined): Record<string, unknown> {
+  const data = deepStripUndefined({ ...(raw ?? {}) }) as Record<string, unknown>;
+
+  if (action === 'chatmessage' && data.language === undefined) {
+    data.language = '';
+  }
+
+  if (action === 'scrollingtext') {
+    const content = typeof data.content === 'string' ? data.content : (typeof data.text === 'string' ? data.text : undefined);
+    if (content !== undefined) {
+      if (data.content === undefined) data.content = content;
+      if (data.text === undefined) data.text = content;
+    }
+    if (data.anchor === undefined) data.anchor = 0;
+    if (data.direction === undefined) data.direction = 2;
+    if (data.duration === undefined) data.duration = 5;
+  }
+
+  if (action === 'checkvariable' && data.type === undefined) {
+    data.type = 'all';
+  }
+
+  if (action === 'runmacro' && data.macroid === undefined && data.macroUuid !== undefined) {
+    data.macroid = data.macroUuid;
+  }
+
+  if (action === 'scene') {
+    const entity = typeof data.entity === 'string' ? data.entity : undefined;
+    const sceneid = typeof data.sceneid === 'string' ? data.sceneid : undefined;
+    if (data.sceneid === undefined && entity?.startsWith('Scene.')) {
+      data.sceneid = entity;
+    }
+    if (data.entity === undefined && sceneid !== undefined) {
+      data.entity = sceneid.startsWith('Scene.') ? sceneid : `Scene.${sceneid}`;
+    }
+  }
+
+  return data;
+}
+
 /** Mint ids for any action lacking one; coerce to {id, action, data}. */
 function normalizeActions(actions: MattActionObjType[] | MattActionInput[]): Array<{ id: string; action: string; data: Record<string, unknown> }> {
   return (actions ?? []).map((a) => ({
     id: a.id ?? makeMattId(),
     action: a.action,
-    data: (a.data ?? {}) as Record<string, unknown>,
+    data: normalizeActionData(a.action, a.data as Record<string, unknown> | undefined),
   }));
+}
+
+// ── Phase 5C.1: Tagger selector resolution ────────────────────────────────────
+//
+// Author-time validation of `tagger:<tag>` entity selectors in MATT action sequences.
+// Replaces the soft `optionalDeps.tagger` boolean with real resolution data.
+// Design (SA3): one shared helper called from writeActions + handleCreateTriggerTile.
+//   - Fail-open: when taggerActive=false, returns empty resolution (current handlers
+//     make ZERO Tagger calls, so this preserves the inherently-fail-open path).
+//   - Explicit sceneId: game.canvas.id may be null server-side; always pass sceneId.
+//   - ZERO_MATCH is a warning, not an error (tag may be applied shortly after author time).
+
+type TaggerResolutionEntry = {
+  actionIndex: number;
+  field: string;
+  tag: string;
+  matchedCount: number;
+  warn?: 'ZERO_MATCH';
+};
+
+type TaggerResolutionResult = {
+  taggerResolution: TaggerResolutionEntry[];
+  warnings: string[];
+};
+
+export async function resolveTaggerSelectorsInSequence(
+  actions: Array<{ action: string; data: Record<string, unknown> }>,
+  taggerActive: boolean,
+  sceneId: string | undefined,
+): Promise<TaggerResolutionResult> {
+  if (!taggerActive) return { taggerResolution: [], warnings: [] };
+
+  const Tagger = (globalThis as any).Tagger;
+  if (!Tagger) return { taggerResolution: [], warnings: [] };
+
+  const taggerResolution: TaggerResolutionEntry[] = [];
+  const warnings: string[] = [];
+
+  for (let i = 0; i < actions.length; i++) {
+    const data = actions[i].data ?? {};
+    for (const field of ['entity', 'location', 'target'] as const) {
+      const value = data[field as string];
+
+      // Check string value for `tagger:<tag>` prefix
+      let rawTag: string | undefined;
+      if (typeof value === 'string') {
+        const m = value.match(/^tagger:(.+)$/);
+        if (m) rawTag = m[1];
+      } else if (value && typeof value === 'object') {
+        const id = (value as Record<string, unknown>).id;
+        if (typeof id === 'string') {
+          const m = id.match(/^tagger:(.+)$/);
+          if (m) rawTag = m[1];
+        }
+      }
+      if (!rawTag) continue;
+
+      try {
+        const opts: Record<string, unknown> = sceneId ? { sceneId } : {};
+        const docs = await Tagger.getByTag([rawTag], opts);
+        const matchedCount = Array.isArray(docs) ? docs.length : 0;
+        const entry: TaggerResolutionEntry = { actionIndex: i, field, tag: rawTag, matchedCount };
+        if (matchedCount === 0) {
+          entry.warn = 'ZERO_MATCH';
+          warnings.push(`action[${i}].${field}: tagger:"${rawTag}" matched 0 documents (tag may not exist yet — WARN only).`);
+        }
+        taggerResolution.push(entry);
+      } catch {
+        warnings.push(`action[${i}].${field}: tagger:"${rawTag}" resolution failed — tagger may be loading.`);
+      }
+    }
+  }
+
+  return { taggerResolution, warnings };
 }
 
 /** Impact report for a payload containing dangerous actions (CCR-4). */
@@ -121,17 +236,21 @@ function buildImpactReport(actions: Array<{ action: string; data: Record<string,
     };
     // Surface the source-visible body for code/macro actions (dossier §4).
     if (a.action === 'runcode' && typeof a.data?.code === 'string') entry.body = a.data.code as string;
-    if (a.action === 'runmacro' && a.data?.entity != null) {
-      let body = `macro=${JSON.stringify(a.data.entity)}`;
+    if (a.action === 'runmacro' && (a.data?.entity != null || a.data?.macroid != null || a.data?.macroUuid != null)) {
+      const macroRef = a.data.entity ?? a.data.macroid ?? a.data.macroUuid;
+      let body = `macro=${JSON.stringify(macroRef)}`;
       // Resolve macro UUID and append source command (dossier §4 — surface source-visible body for safety preview).
-      const ent: any = a.data.entity;
+      const ent: any = macroRef;
       const uuid: string | null =
         typeof ent === 'string' ? ent : (typeof ent?.id === 'string' ? ent.id : null);
-      if (uuid && uuid.includes('Macro.')) {
+      const macroId = uuid?.startsWith('Macro.') ? uuid.slice('Macro.'.length) : uuid;
+      if (uuid && (uuid.includes('Macro.') || macroId)) {
         try {
           const resolver =
             (globalThis as any).fromUuidSync ?? (globalThis as any).foundry?.utils?.fromUuidSync;
-          const macro: any = resolver?.(uuid);
+          const macro: any =
+            (uuid.includes('Macro.') ? resolver?.(uuid) : null) ??
+            (macroId ? (globalThis as any).game?.macros?.get?.(macroId) : null);
           const command = macro?.command;
           if (typeof command === 'string' && command.length > 0) {
             body += `\ncommand=\n${command}`;
@@ -153,7 +272,7 @@ function buildImpactReport(actions: Array<{ action: string; data: Record<string,
  * Dispatch a `module-matt` umbrella request.
  *
  * Guard FIRST (returns MODULE_NOT_ACTIVE when monks-active-tiles is absent/inactive),
- * then strict-parse, then switch over all 17 actions with a compile-time exhaustiveness check.
+ * then strict-parse, then switch over all 19 actions with a compile-time exhaustiveness check.
  */
 export async function dispatchModuleMatt(data: unknown): Promise<Envelope<unknown>> {
   // Guard — requireModuleActive RETURNS {success:false,error}; never throws (carry-forward).
@@ -172,7 +291,7 @@ export async function dispatchModuleMatt(data: unknown): Promise<Envelope<unknow
   const WRITE_ACTIONS = new Set([
     'create-trigger-tile', 'update-trigger-config', 'replace-action-sequence', 'add-action',
     'insert-action', 'update-action', 'remove-action', 'reorder-actions', 'duplicate-action',
-    'set-variables', 'reset-history', 'fire-trigger', 'link-region-trigger',
+    'set-variables', 'reset-history', 'fire-trigger', 'fire-trigger-as', 'link-region-trigger',
   ]);
   if (WRITE_ACTIONS.has(input.action) && !isGM()) {
     return { success: false, error: `MATT_ACCESS_DENIED: ${input.action} requires GM` };
@@ -184,7 +303,7 @@ export async function dispatchModuleMatt(data: unknown): Promise<Envelope<unknow
       case 'get-capabilities':
         return handleGetCapabilities();
       case 'get-trigger-tile':
-        return handleGetTriggerTile(input.tileUuid);
+        return handleGetTriggerTile(input.tileUuid, input.returnFullPayload ?? false);
       case 'list-trigger-tiles':
         return handleListTriggerTiles(input.sceneId);
       case 'validate-sequence':
@@ -221,6 +340,10 @@ export async function dispatchModuleMatt(data: unknown): Promise<Envelope<unknow
       // — runtime + region (2C) —
       case 'fire-trigger':
         return handleFireTrigger(input);
+      case 'fire-trigger-as':
+        return handleFireTriggerAs(input);
+      case 'find-trigger-tile':
+        return handleFindTriggerTile(input);
       case 'link-region-trigger':
         return handleLinkRegionTrigger(input);
 
@@ -256,7 +379,7 @@ function handleGetCapabilities(): Envelope<unknown> {
 
   // MATT world settings (best-effort read; absent → omitted).
   const settingKeys = ['default-trigger', 'default-restricted', 'default-controlled', 'allow-player',
-    'allow-door', 'teleport-wash', 'prevent-when-paused'];
+    'allow-door', 'teleport-wash', 'prevent-when-paused', 'use-core-macro'];
   const settings: Record<string, unknown> = {};
   for (const k of settingKeys) {
     try {
@@ -281,9 +404,29 @@ function handleGetCapabilities(): Envelope<unknown> {
   };
 }
 
-function handleGetTriggerTile(tileUuid: string): Envelope<unknown> {
+/**
+ * BUG-254 — collect Region behaviors on the scene that link back to this tile (MATT
+ * triggerTile bridges). system.uuid may be a string or array per single:false.
+ */
+function findRegionLinks(scene: any, tileUuid: string): Array<{ regionId: string; behaviorId: string; events: unknown }> {
+  const links: Array<{ regionId: string; behaviorId: string; events: unknown }> = [];
+  for (const region of scene.regions?.values?.() ?? []) {
+    for (const behavior of region.behaviors?.values?.() ?? []) {
+      if (behavior.type !== 'monks-active-tiles.triggerTile') continue;
+      const sysUuid = behavior._source?.system?.uuid ?? behavior.system?.uuid;
+      const linked = Array.isArray(sysUuid) ? sysUuid.includes(tileUuid) : sysUuid === tileUuid;
+      if (linked) {
+        links.push({ regionId: region.id, behaviorId: behavior.id, events: behavior._source?.system?.events ?? behavior.system?.events ?? null });
+      }
+    }
+  }
+  return links;
+}
+
+function handleGetTriggerTile(tileUuid: string, returnFullPayload = false): Envelope<unknown> {
   const { scene, tile } = getTileByUuidOrThrow(tileUuid);
   const flags = readMattFlags(tile);
+  const src = tile._source ?? tile;
   return {
     success: true,
     data: {
@@ -302,6 +445,21 @@ function handleGetTriggerTile(tileUuid: string): Envelope<unknown> {
       variables: flags.variables ?? {},
       history: flags.history ?? {},
       config: flags,
+      // BUG-254 — geometry + texture + region-link metadata so tilepack export can rebuild
+      // the placement and bridge without F12/source inspection. Strictly additive.
+      geometry: {
+        x: src.x ?? null,
+        y: src.y ?? null,
+        width: src.width ?? null,
+        height: src.height ?? null,
+        rotation: src.rotation ?? 0,
+        elevation: src.elevation ?? 0,
+        sort: src.sort ?? 0,
+        hidden: src.hidden ?? false,
+      },
+      texture: { src: src.texture?.src ?? tile.texture?.src ?? null },
+      regionLinks: findRegionLinks(scene, tile.uuid ?? `Scene.${scene.id}.Tile.${tile.id}`),
+      returnFullPayload,
     },
   };
 }
@@ -339,6 +497,15 @@ async function handleCreateTriggerTile(input: CreateInput): Promise<Envelope<unk
   const scene = getSceneOrThrow(input.sceneId);
 
   const actions = normalizeActions(input.actions ?? []);
+
+  // Phase 5C.1 — author-time tagger selector resolution (replaces soft boolean)
+  const taggerActive = Boolean((globalThis as any).game?.modules?.get?.('tagger')?.active);
+  const { taggerResolution, warnings: taggerWarnings } = await resolveTaggerSelectorsInSequence(
+    actions,
+    taggerActive,
+    input.sceneId,
+  );
+
   if (actions.length > 0) {
     const v = validateSequence(actions);
     if (!v.valid) {
@@ -407,6 +574,8 @@ async function handleCreateTriggerTile(input: CreateInput): Promise<Envelope<unk
       trigger: persistedFlags.trigger,
       actionCount: Array.isArray(persistedFlags.actions) ? persistedFlags.actions.length : 0,
       name: input.name ?? null,
+      ...(taggerResolution.length > 0 ? { taggerResolution } : {}),
+      ...(taggerWarnings.length > 0 ? { taggerWarnings } : {}),
     },
   };
 }
@@ -467,8 +636,22 @@ type SetVariablesInput = Extract<ModuleMattInputType, { action: 'set-variables' 
 type ResetHistoryInput = Extract<ModuleMattInputType, { action: 'reset-history' }>;
 type FireTriggerInput = Extract<ModuleMattInputType, { action: 'fire-trigger' }>;
 type LinkRegionInput = Extract<ModuleMattInputType, { action: 'link-region-trigger' }>;
+type FireTriggerAsInput = Extract<ModuleMattInputType, { action: 'fire-trigger-as' }>;
+type FindTriggerTileInput = Extract<ModuleMattInputType, { action: 'find-trigger-tile' }>;
 
 type StoredAction = { id: string; action: string; data: Record<string, unknown> };
+type TileSummary = {
+  uuid: string;
+  sceneId: string;
+  sceneName: string;
+  tileId: string;
+  name: string | null;
+  active: boolean | null;
+  trigger: string[] | null;
+  actionCount: number;
+  tags: string[];
+  libraryId: string | null;
+};
 
 function readActions(tile: any): StoredAction[] {
   const flags = readMattFlags(tile);
@@ -499,6 +682,14 @@ async function writeActions(
     };
   }
 
+  // Phase 5C.1 — author-time tagger selector resolution on sequence writes
+  const taggerActive = Boolean((globalThis as any).game?.modules?.get?.('tagger')?.active);
+  const { taggerResolution, warnings: taggerWarnings } = await resolveTaggerSelectorsInSequence(
+    newActions,
+    taggerActive,
+    scene.id as string | undefined,
+  );
+
   await tile.update({ [`flags.${MATT_FLAG}.actions`]: newActions });
 
   // DP-16 — re-read _source and confirm the count persisted.
@@ -518,6 +709,8 @@ async function writeActions(
       tileId: tile.id,
       actionCount: persisted.length,
       actions: persisted.map((a) => ({ id: a.id, action: a.action })),
+      ...(taggerResolution.length > 0 ? { taggerResolution } : {}),
+      ...(taggerWarnings.length > 0 ? { taggerWarnings } : {}),
       ...(extra ?? {}),
     },
   };
@@ -727,6 +920,181 @@ async function handleLinkRegionTrigger(input: LinkRegionInput): Promise<Envelope
   return {
     success: true,
     data: { regionId: region.id, behaviorId: behavior.id, tileUuid: input.tileUuid, sceneId: scene.id },
+  };
+}
+
+async function handleFireTriggerAs(input: FireTriggerAsInput): Promise<Envelope<unknown>> {
+  // typeof-guard the prototype method (TileDocument.prototype.trigger is the direct invocation path;
+  // it accepts { tokens, method, pt, options } and bypasses the controlled-token resolution of
+  // game.MonksActiveTiles.triggerTile). Source: monks-active-tiles.js:180.
+  const { tile, scene } = getTileByUuidOrThrow(input.tileUuid);
+  if (typeof tile.trigger !== 'function') {
+    return { success: false, error: 'MATT_API_NOT_AVAILABLE: TileDocument.prototype.trigger is not callable' };
+  }
+  const flags = readMattFlags(tile);
+  if (flags.active === false) {
+    return { success: false, error: `MATT_TILE_INACTIVE: tile ${input.tileUuid} has active:false` };
+  }
+
+  // Resolve every tokenId to a TokenDocument on the tile's scene.
+  const tokenDocs: any[] = [];
+  for (const tokenId of input.tokenIds) {
+    const tokenDoc = scene.tokens?.get(tokenId);
+    if (!tokenDoc) {
+      return { success: false, error: `MATT_TOKEN_NOT_FOUND: no Token with id "${tokenId}" on scene "${scene.id}"` };
+    }
+    tokenDocs.push(tokenDoc);
+  }
+
+  // BUG-250 — mirror upstream MATT's per-token history guard. game.MonksActiveTiles.triggerTile
+  // filters out already-triggered tokens when flags.pertoken is true BEFORE calling trigger();
+  // the prototype trigger() this handler uses records history but does not reject a recorded
+  // token, so without this filter fire-trigger-as re-runs one-shot (pertoken+record) tiles.
+  const pertoken = flags.pertoken === true;
+  const eligibleTokenDocs =
+    pertoken && typeof tile.hasTriggered === 'function'
+      ? tokenDocs.filter((t) => !tile.hasTriggered(t.id))
+      : tokenDocs;
+  const skippedCount = tokenDocs.length - eligibleTokenDocs.length;
+
+  const actions = readActions(tile);
+  const method = input.method ?? 'manual';
+  const impact = buildImpactReport(actions);
+
+  // CCR-4 — explicit-token firing ALWAYS requires confirm:true; surface the full impact first.
+  if (input.confirm !== true) {
+    const seq = actions.map((a) => a.action).join(' → ') || '(no actions)';
+    const danger = impact.dangerous.length ? ` DANGEROUS: ${JSON.stringify(impact.dangerous)}.` : '';
+    const guard = pertoken
+      ? ` pertoken:true — ${eligibleTokenDocs.length} of ${tokenDocs.length} token(s) eligible (${skippedCount} already recorded).`
+      : '';
+    return {
+      success: false,
+      error:
+        `MATT_CONFIRM_REQUIRED: fire-trigger-as tile ${input.tileUuid} with method="${method}" ` +
+        `and token(s) [${input.tokenIds.join(', ')}] will run ${actions.length} action(s): ${seq}.${danger}${guard} ` +
+        'Re-send with confirm:true.',
+    };
+  }
+
+  // BUG-250 — pertoken tiles whose requested tokens have all already triggered must not re-fire.
+  if (pertoken && eligibleTokenDocs.length === 0) {
+    return {
+      success: true,
+      data: {
+        uuid: input.tileUuid,
+        fired: false,
+        method,
+        tokenIds: input.tokenIds,
+        tokensUsed: 0,
+        skipped: skippedCount,
+        message: `MATT_NO_ELIGIBLE_TOKENS: all ${tokenDocs.length} requested token(s) already triggered this pertoken tile`,
+      },
+    };
+  }
+
+  await tile.trigger({ tokens: eligibleTokenDocs, method });
+
+  notify.info(
+    `MATT fire-trigger-as: ${input.tileUuid} (${actions.length} action(s), method="${method}", tokens=[${eligibleTokenDocs.map((t) => t.id).join(', ')}]${skippedCount ? `, ${skippedCount} skipped (pertoken)` : ''})`,
+  );
+  return {
+    success: true,
+    data: {
+      uuid: input.tileUuid,
+      fired: true,
+      method,
+      tokenIds: input.tokenIds,
+      tokensUsed: eligibleTokenDocs.length,
+      skipped: skippedCount,
+    },
+  };
+}
+
+function handleFindTriggerTile(input: FindTriggerTileInput): Envelope<unknown> {
+  const criteria = [input.name, input.tileUuid, input.tag, input.libraryId].filter((v) => v != null && v !== '');
+  if (criteria.length !== 1) {
+    return { success: false, error: 'MATT_FIND_INVALID: provide exactly one of name, tileUuid, tag, or libraryId' };
+  }
+
+  const scenes: any[] = input.sceneId
+    ? [getSceneOrThrow(input.sceneId)]
+    : Array.from((globalThis as any).game?.scenes?.values?.() ?? []);
+
+  if (input.tileUuid) {
+    const { scene, tile } = getTileByUuidOrThrow(input.tileUuid);
+    if (input.sceneId && scene.id !== input.sceneId) {
+      return {
+        success: false,
+        error: `MATT_TILE_WRONG_SCENE: tile ${input.tileUuid} is on scene "${scene.id}", not "${input.sceneId}"`,
+      };
+    }
+    const flags = readMattFlags(tile);
+    if (!flags || Object.keys(flags).length === 0) {
+      return { success: false, error: `MATT_TILE_NOT_ARMED: tile ${input.tileUuid} has no ${MATT_FLAG} flags` };
+    }
+    return { success: true, data: { count: 1, match: summarizeTile(scene, tile), matches: [summarizeTile(scene, tile)] } };
+  }
+
+  const matches: TileSummary[] = [];
+
+  for (const scene of scenes) {
+    const tiles = Array.from(scene.tiles?.values?.() ?? []) as any[];
+    for (const t of tiles) {
+      const flags = readMattFlags(t);
+      if (!flags || Object.keys(flags).length === 0) continue;
+      const summary = summarizeTile(scene, t);
+      if (input.name && summary.name === input.name) matches.push(summary);
+      if (input.tag && summary.tags.includes(input.tag)) matches.push(summary);
+      if (input.libraryId && summary.libraryId === input.libraryId) matches.push(summary);
+    }
+  }
+
+  const deduped = Array.from(new Map(matches.map((m) => [m.uuid, m])).values());
+  if (deduped.length === 0) {
+    return { success: false, error: 'MATT_TILE_NOT_FOUND: no MATT tile matched the requested criterion' };
+  }
+  if (deduped.length > 1) {
+    return {
+      success: false,
+      error: `MATT_TILE_AMBIGUOUS: ${deduped.length} tiles matched; narrow by sceneId or tileUuid. matches=${JSON.stringify(deduped)}`,
+    };
+  }
+
+  return { success: true, data: { count: 1, match: deduped[0], matches: deduped } };
+}
+
+function readTaggerTags(tile: any): string[] {
+  const raw = tile._source?.flags?.tagger?.tags ?? tile.flags?.tagger?.tags ?? tile._source?.flags?.tagger?.tag ?? tile.flags?.tagger?.tag;
+  if (Array.isArray(raw)) return raw.filter((v) => typeof v === 'string');
+  if (typeof raw === 'string') return [raw];
+  return [];
+}
+
+function readLibraryId(flags: Record<string, any>, tile: any): string | null {
+  const wmcp = tile._source?.flags?.['warhammer-mcp'] ?? tile.flags?.['warhammer-mcp'] ?? {};
+  return (
+    flags.libraryId ??
+    flags.library_id ??
+    wmcp.moduleMatt?.libraryId ??
+    wmcp['module-matt']?.libraryId ??
+    null
+  ) as string | null;
+}
+
+function summarizeTile(scene: any, tile: any): TileSummary {
+  const flags = readMattFlags(tile);
+  return {
+    uuid: tile.uuid ?? `Scene.${scene.id}.Tile.${tile.id}`,
+    sceneId: scene.id,
+    sceneName: scene.name ?? scene.id,
+    tileId: tile.id,
+    name: (flags.name as string | undefined) ?? tile.name ?? null,
+    active: (flags.active as boolean | undefined) ?? null,
+    trigger: Array.isArray(flags.trigger) ? (flags.trigger as string[]) : null,
+    actionCount: Array.isArray(flags.actions) ? flags.actions.length : 0,
+    tags: readTaggerTags(tile),
+    libraryId: readLibraryId(flags, tile),
   };
 }
 

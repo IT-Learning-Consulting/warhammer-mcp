@@ -49,12 +49,21 @@ const configFields = {
   fileindex: z.number().int().min(0).optional(),
 };
 
-// ── 17 umbrella action variants ───────────────────────────────────────────────
+// ── 19 umbrella action variants ───────────────────────────────────────────────
 
 export const ModuleMattInput = z.discriminatedUnion('action', [
   // — reads —
   z.object({ action: z.literal('get-capabilities') }).strict(),
-  z.object({ action: z.literal('get-trigger-tile'), tileUuid: z.string().min(1) }).strict(),
+  z
+    .object({
+      action: z.literal('get-trigger-tile'),
+      tileUuid: z.string().min(1),
+      // BUG-254 — when true, the mcp-server formatter emits the full machine-readable bundle
+      // (geometry + texture + full actions[] + variables + region-link metadata) as JSON
+      // instead of the prose summary, so tilepack export can round-trip a complete tile.
+      returnFullPayload: z.boolean().optional(),
+    })
+    .strict(),
   z.object({ action: z.literal('list-trigger-tiles'), sceneId: z.string().optional() }).strict(),
   z.object({ action: z.literal('validate-sequence'), actions: z.array(MattActionObj) }).strict(),
 
@@ -166,6 +175,25 @@ export const ModuleMattInput = z.discriminatedUnion('action', [
       action: z.literal('fire-trigger'),
       tileUuid: z.string().min(1),
       confirm: z.boolean().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal('fire-trigger-as'),
+      tileUuid: z.string().min(1),
+      tokenIds: z.array(z.string().min(1)).min(1).max(10),
+      method: z.string().optional(),
+      confirm: z.boolean().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal('find-trigger-tile'),
+      name: z.string().min(1).max(200).optional(),
+      tileUuid: z.string().min(1).optional(),
+      tag: z.string().min(1).max(200).optional(),
+      libraryId: z.string().min(1).max(200).optional(),
+      sceneId: z.string().optional(),
     })
     .strict(),
   z

@@ -18,7 +18,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 const HANDLERS_DIR = 'packages/foundry-module/src/handlers';
-const TARGETS = ['light', 'sound', 'tile', 'template', 'note', 'token', 'region'];
+const TARGETS = ['light', 'sound', 'tile', 'template', 'note', 'token', 'region', 'drawing'];
 
 let fail = 0;
 const retrofitted = [];

@@ -191,13 +191,18 @@ function serializeTokenViewModel(scene: any, token: any): TokenViewModel {
       alphaThreshold: (token.texture?.alphaThreshold as number) ?? 0.75,
     },
     shape: (token.shape as number) ?? 4,
-    x: (token.x as number) ?? 0,
-    y: (token.y as number) ?? 0,
-    elevation: (token.elevation as number) ?? 0,
-    sort: (token.sort as number) ?? 0,
+    // BUG-253 — read placement scalars from _source (authoritative stored value), not the
+    // derived getters: immediately after token.update() the rendered/animated token.x/.y can
+    // still report the pre-update position even though _source (and the DB) hold the new value,
+    // producing a false-positive "changed fields: x,y" response showing the OLD coordinates.
+    // Matches the F08 _source convention used by the update post-verify below.
+    x: ((src.x ?? token.x) as number) ?? 0,
+    y: ((src.y ?? token.y) as number) ?? 0,
+    elevation: ((src.elevation ?? token.elevation) as number) ?? 0,
+    sort: ((src.sort ?? token.sort) as number) ?? 0,
     locked: Boolean(token.locked),
     lockRotation: Boolean(token.lockRotation),
-    rotation: (token.rotation as number) ?? 0,
+    rotation: ((src.rotation ?? token.rotation) as number) ?? 0,
     alpha: (token.alpha as number) ?? 1,
     hidden: Boolean(token.hidden),
     disposition: (token.disposition as number) ?? -1,

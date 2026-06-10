@@ -85,7 +85,9 @@ export type NotifyKind =
   | 'cross-doc-fk'
   | 'folder'
   | 'setting'
-  | 'chatMessage';
+  | 'chatMessage'
+  | 'tagger'
+  | 'sequencer';
 
 export type NotifySeverity =
   | 'created'

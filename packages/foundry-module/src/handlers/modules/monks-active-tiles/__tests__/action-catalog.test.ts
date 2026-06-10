@@ -16,11 +16,16 @@ import {
   validateSequence,
   makeMattId,
 } from '../action-catalog.js';
+import { normalizeActions } from '../matt.js';
 
 describe('MATT action catalog — completeness (parity target, dossier §8)', () => {
-  it('exposes at least the 72 source-verified built-in actions', () => {
+  it('exposes the 77 source-verified native built-in actions', () => {
     // Why: HC9 capability-complete — under-counting silently drops authorable actions.
-    expect(ACTION_KEYS.length).toBeGreaterThanOrEqual(72);
+    expect(ACTION_KEYS.length).toBe(77);
+    expect(isKnownAction('append')).toBe(true);
+    expect(isKnownAction('permissions')).toBe(true);
+    expect(isKnownAction('tokencount')).toBe(true);
+    expect(isKnownAction('animate')).toBe(false);
   });
 
   it('exposes all 24 trigger modes (zero missing — audit §3)', () => {
@@ -39,7 +44,7 @@ describe('MATT action catalog — completeness (parity target, dossier §8)', ()
 
   it('flags the audit §13 dangerous actions as confirm-gated', () => {
     // Why: these author/fire destructive or arbitrary-code effects; missing the flag = no confirm gate.
-    for (const k of ['runcode', 'runmacro', 'delete', 'permission', 'resetfog', 'scene', 'gametime', 'url']) {
+    for (const k of ['runcode', 'runmacro', 'delete', 'permissions', 'resetfog', 'scene', 'gametime', 'url']) {
       expect(isDangerousAction(k)).toBe(true);
     }
     // attack is REPAIR_GATED — also dangerous.
@@ -107,6 +112,53 @@ describe('validateSequence — the write/fire gate', () => {
     expect(r.valid).toBe(false);
     // Either the required-field check or the strict Zod parse fires — both name `code`.
     expect(r.errors.some((e) => e.includes('runcode') && e.toLowerCase().includes('code'))).toBe(true);
+  });
+
+  it('accepts source-valid runmacro and scene alias shapes', () => {
+    const runmacro = validateSequence([{ action: 'runmacro', data: { macroid: 'Macro.abc123' } }]);
+    expect(runmacro.valid).toBe(true);
+    expect(runmacro.dangerous).toContain('runmacro');
+
+    const scene = validateSequence([{ action: 'scene', data: { sceneid: 'Scene.scene123' } }]);
+    expect(scene.valid).toBe(true);
+    expect(scene.dangerous).toContain('scene');
+  });
+
+  it('still rejects runmacro and scene when every source-valid target field is absent', () => {
+    const runmacro = validateSequence([{ action: 'runmacro', data: {} }]);
+    expect(runmacro.valid).toBe(false);
+    expect(runmacro.errors.some((e) => e.includes('entity or macroid or macroUuid'))).toBe(true);
+
+    const scene = validateSequence([{ action: 'scene', data: {} }]);
+    expect(scene.valid).toBe(false);
+    expect(scene.errors.some((e) => e.includes('entity or sceneid'))).toBe(true);
+  });
+});
+
+describe('normalizeActions — MATT source defaults and aliases', () => {
+  it('fills known action defaults before write validation', () => {
+    const [chat, scroll, check] = normalizeActions([
+      { action: 'chatmessage', data: { text: 'Hello' } },
+      { action: 'scrollingtext', data: { entity: 'token', text: 'Click!' } },
+      { action: 'checkvariable', data: { name: 'phase', value: '== 1' } },
+    ]);
+
+    expect(chat.data.language).toBe('');
+    expect(scroll.data.content).toBe('Click!');
+    expect(scroll.data.anchor).toBe(0);
+    expect(scroll.data.direction).toBe(2);
+    expect(scroll.data.duration).toBe(5);
+    expect(check.data.type).toBe('all');
+  });
+
+  it('normalizes source-valid runmacro and scene aliases to the runtime fields MATT reads', () => {
+    const [macro, scene] = normalizeActions([
+      { action: 'runmacro', data: { macroUuid: 'Macro.abc123' } },
+      { action: 'scene', data: { sceneid: 'scene123' } },
+    ]);
+
+    expect(macro.data.macroid).toBe('Macro.abc123');
+    expect(scene.data.entity).toBe('Scene.scene123');
   });
 });
 
