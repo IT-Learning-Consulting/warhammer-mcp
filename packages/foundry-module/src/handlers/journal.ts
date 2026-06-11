@@ -34,6 +34,8 @@ import {
   type JournalUpdateCategoryInputType,
   type JournalDeleteCategoryInputType,
   type JournalAssignPageToCategoryInputType,
+  type JournalShowToPlayersInputType,
+  type JournalDuplicateEntryInputType,
   type PageInputType,
   type JournalPagePayload,
   type JournalCategoryPayload,
@@ -53,6 +55,8 @@ import {
   type JournalUpdateCategoryResponse,
   type JournalDeleteCategoryResponse,
   type JournalAssignPageToCategoryResponse,
+  type JournalShowToPlayersResponse,
+  type JournalDuplicateEntryResponse,
 } from '@foundry-mcp/shared';
 import { wrappedWrite } from '../transaction-manager.js';
 import { notify } from '../notify.js';
@@ -1099,6 +1103,73 @@ export async function assignPageToCategory(
   });
 }
 
+// ── Phase 9B — show-to-players (transient) + duplicate-entry (persisted) ──────
+
+// R9B.1 — JournalEntry#show(true): socket broadcast to players. CCR-2b transient.
+export async function showToPlayers(
+  data: unknown,
+): Promise<Envelope<JournalShowToPlayersResponse>> {
+  const gate = validateGMAccess();
+  if (!gate.allowed) return { success: false, error: 'Access denied: showToPlayers requires GM' };
+
+  const input: JournalShowToPlayersInputType = JournalShowToPlayersInput_strict_parse(data);
+  const entry = getEntryOrThrow(input.entryId);
+
+  // CCR-2b transient: force=true shows to every connected player; no DB write.
+  await entry.show(true);
+
+  notify.info(`Showed journal "${entry.name}" to players`);
+
+  return {
+    success: true as const,
+    data: {
+      entryId: entry.id as string,
+      name: entry.name as string,
+      shown: true,
+    },
+  };
+}
+
+// R9B.2 — duplicate-entry: clone the JournalEntry (entry.clone({}, {save:true})). CCR-2a.
+export async function duplicateEntry(
+  data: unknown,
+): Promise<Envelope<JournalDuplicateEntryResponse>> {
+  const gate = validateGMAccess();
+  if (!gate.allowed) return { success: false, error: 'Access denied: duplicateEntry requires GM' };
+
+  const input: JournalDuplicateEntryInputType = JournalDuplicateEntryInput_strict_parse(data);
+  const source = getEntryOrThrow(input.entryId);
+  const sourceId = source.id as string;
+
+  return wrappedWrite('journal.duplicateEntry', async () => {
+    const clone = await source.clone({ name: `${source.name} (Copy)` }, { save: true });
+    if (!clone) {
+      throw new Error('JOURNAL_DUPLICATE_FAILED: JournalEntry.clone returned null');
+    }
+
+    // CCR-2a: re-read the new entry from game.journal.
+    const persisted = (game as any).journal?.get(clone.id);
+    if (!persisted || persisted.id === sourceId) {
+      throw new Error(
+        `JOURNAL_DUPLICATE_FAILED: cloned entry "${clone.id}" missing or equals source id`,
+      );
+    }
+
+    notify.created('journal', persisted.name as string, {
+      summary: `duplicated from ${source.name}`,
+    });
+
+    return {
+      success: true as const,
+      data: {
+        sourceId,
+        newId: persisted.id as string,
+        name: persisted.name as string,
+      },
+    };
+  });
+}
+
 // ── Dispatch entry point (single registration in queries.ts) ────────────────
 
 /**
@@ -1148,6 +1219,10 @@ export async function dispatchJournal(data: unknown): Promise<Envelope<unknown>>
       return deleteCategory(input);
     case 'assign-page-to-category':
       return assignPageToCategory(input);
+    case 'show-to-players':
+      return showToPlayers(input);
+    case 'duplicate-entry':
+      return duplicateEntry(input);
   }
 }
 
@@ -1172,6 +1247,8 @@ import {
   JournalUpdateCategoryInput,
   JournalDeleteCategoryInput,
   JournalAssignPageToCategoryInput,
+  JournalShowToPlayersInput,
+  JournalDuplicateEntryInput,
 } from '@foundry-mcp/shared';
 
 function JournalCreateEntryInput_strict_parse(data: unknown): JournalCreateEntryInputType {
@@ -1214,4 +1291,10 @@ function JournalAssignPageToCategoryInput_strict_parse(
   data: unknown,
 ): JournalAssignPageToCategoryInputType {
   return JournalAssignPageToCategoryInput.strict().parse(data ?? {});
+}
+function JournalShowToPlayersInput_strict_parse(data: unknown): JournalShowToPlayersInputType {
+  return JournalShowToPlayersInput.strict().parse(data ?? {});
+}
+function JournalDuplicateEntryInput_strict_parse(data: unknown): JournalDuplicateEntryInputType {
+  return JournalDuplicateEntryInput.strict().parse(data ?? {});
 }

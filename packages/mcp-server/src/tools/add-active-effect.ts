@@ -1,4 +1,4 @@
-import { AddActiveEffectInput, ITEM_TARGET_JSON_SCHEMA } from '@foundry-mcp/shared';
+import { AddActiveEffectInput, ACTIVE_EFFECT_TARGET_JSON_SCHEMA } from '@foundry-mcp/shared';
 import { FoundryClient } from '../foundry-client.js';
 import { Logger } from '../logger.js';
 import { BaseTool, BaseToolOptions } from '../base-tool.js';
@@ -25,14 +25,14 @@ export class AddActiveEffectTool extends BaseTool {
           openWorldHint: true,
         },
         description:
-          'Attach an ActiveEffect to an existing item on an actor or in the world. Uses the same flat {name, trigger, script, ...} effect shape as create-custom-item\'s effects[] field — buildEffectPayload (shared) transforms it into the Foundry nested shape. Target is an ItemTarget: `{scope:"actor", actorId?|actorName?, itemId?|itemName?}` or `{scope:"world", itemId?|itemName?}`. name + trigger are the required fields on effect; script defaults to "" and is optional.\n\nArgs:\n  - target (ItemTarget): scope=actor (actorId/actorName + itemId/itemName) or scope=world (itemId/itemName).\n  - effect (object): flat ActiveEffect — name (required), trigger (required, e.g. "prePrepareData"), script (optional, defaults to ""), and optional label/transfer/disabled/changes/statuses/duration/flags/equipTransfer/enableScript/preApplyScript/testIndependent.\n  - returnFullPayload (boolean, optional): if true, response includes the full created effect document.\n\nReturns:\n  - On success: created effect ID (and full document if returnFullPayload=true).\n  - On error: throws with an actionable message.\n\nUse when: adding a rule-modifying script effect to a specific item. Don\'t use when: adding a WFRP4e condition — use apply-condition instead.\n\nSecurity: script / preApplyScript / enableScript fields are executed by Foundry under GM authority. MCP does not sandbox script content. Only invoke with scripts you wrote or audited.',
+          'Attach an ActiveEffect to an existing item on an actor or in the world, or place a one-off effect directly on an actor (no carrier item needed). Uses the same flat {name, trigger, script, ...} effect shape as create-custom-item\'s effects[] field — buildEffectPayload (shared) transforms it into the Foundry nested shape.\n\nTarget scopes:\n  - scope="actor" — effect on a specific item owned by an actor (actorId/actorName + itemId/itemName).\n  - scope="world" — effect on a world-scope item (itemId/itemName).\n  - scope="actor-direct" — effect placed directly on the actor itself (actorId or actorName; no item fields). Use this for one-off modifiers such as a −10 WS debuff on an NPC.\n\nname + trigger are the required fields on effect; script defaults to "" and is optional.\n\nReturns:\n  - On success: created effect ID (and full document if returnFullPayload=true). parentType:"Actor" when scope="actor-direct".\n  - On error: throws with an actionable message.\n\nUse when: adding a rule-modifying effect to an item or directly to an actor. Don\'t use when: adding a WFRP4e condition — use apply-condition instead.\n\nSecurity: script / preApplyScript / enableScript fields are executed by Foundry under GM authority. MCP does not sandbox script content. Only invoke with scripts you wrote or audited.',
         inputSchema: {
           type: 'object',
           properties: {
             target: {
-              ...(ITEM_TARGET_JSON_SCHEMA as any),
+              ...(ACTIVE_EFFECT_TARGET_JSON_SCHEMA as any),
               description:
-                'Item target discriminator. scope="actor" needs one of actorId/actorName plus one of itemId/itemName. scope="world" needs one of itemId/itemName.',
+                'ActiveEffect target. scope="actor": item on an actor (actorId/actorName + itemId/itemName). scope="world": world item (itemId/itemName). scope="actor-direct": effect directly on the actor (actorId or actorName; no item fields).',
             },
             effect: {
               type: 'object',
@@ -45,6 +45,11 @@ export class AddActiveEffectTool extends BaseTool {
                   description: 'WFRP4e ActiveEffect trigger key (required). E.g. "prePrepareData", "applyDamage", "rollTest".',
                 },
                 script: { type: 'string', description: 'JS body executed under GM authority. Defaults to "".' },
+                description: {
+                  type: 'string',
+                  description:
+                    'User-facing effect description (HTML ok) shown when the effect is expanded on the sheet. ALWAYS set it — effects without a description are opaque to players/GMs (BUG-334).',
+                },
                 label: { type: 'string' },
                 transfer: {
                   type: 'object',

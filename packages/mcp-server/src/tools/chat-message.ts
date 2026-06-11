@@ -31,6 +31,8 @@ import {
     ChatMessageToolInput,
     type ChatMessageViewModel,
     type ChatMessageListItem,
+    type ChatMessageExportLogResponse,
+    type ChatMessageClearLogResponse,
 } from '@foundry-mcp/shared';
 import { BaseTool, BaseToolOptions } from '../base-tool.js';
 
@@ -147,6 +149,8 @@ Key rules:
 - delete: requires confirm:true. Returns CHATMESSAGE_DELETE_NOT_CONFIRMED otherwise.
 - list: always paginated (default pageSize:20, sortOrder:desc). Use filters to narrow by author/speaker/type/style.
 - get: returns full ChatMessageViewModel including speaker sub-object, whisper array, rolls, flags.
+- export-chat-log (Phase 9C): read-only render of the whole chat log as text/markdown. Optional format ('text'|'markdown'). Returns {format, messageCount, content}.
+- clear-chat-log (Phase 9C): ⚠️ bulk-delete the chat log. confirm:true REQUIRED. Pass dryRun:true first for a {totalCount, byVisibility:{public,gmOnly,whispered}, oldest, newest} preview. Optional olderThanDays filter to delete only old messages.
 
 Examples:
 - {action:"create", content:"The bray-shaman raises its staff.", speaker:{alias:"Narrator"}, rollMode:"publicroll"}
@@ -162,7 +166,7 @@ Examples:
                     properties: {
                         action: {
                             type: 'string',
-                            enum: ['create', 'update', 'delete', 'get', 'list'],
+                            enum: ['create', 'update', 'delete', 'get', 'list', 'export-chat-log', 'clear-chat-log'],
                             description: 'The chat message action to perform.',
                         },
                         // ── create / update (via changes) ────────────────────
@@ -275,7 +279,7 @@ Examples:
                         // ── delete ───────────────────────────────────────────
                         confirm: {
                             type: 'boolean',
-                            description: '[delete] Must be true to proceed with deletion (CCR-Delete-Safety). Returns CHATMESSAGE_DELETE_NOT_CONFIRMED if false or omitted.',
+                            description: '[delete/clear-chat-log] Must be true to proceed (CCR-Delete-Safety). delete returns CHATMESSAGE_DELETE_NOT_CONFIRMED if false/omitted; clear-chat-log requires literal true.',
                         },
                         // ── list ─────────────────────────────────────────────
                         page: {
@@ -306,6 +310,10 @@ Examples:
                             },
                             additionalProperties: false,
                         },
+                        // Phase 9C export/clear fields.
+                        format: { type: 'string', enum: ['text', 'markdown'], description: '[export-chat-log] Output format (default text).' },
+                        olderThanDays: { type: 'number', minimum: 0, description: '[clear-chat-log] Only delete messages older than N days (omit = all).' },
+                        dryRun: { type: 'boolean', description: '[clear-chat-log] Preview only — returns the visibility breakdown without deleting.' },
                     },
                     required: ['action'],
                 },
@@ -326,6 +334,34 @@ Examples:
                 return this.handleGet(args);
             case 'list':
                 return this.handleList(args);
+            case 'export-chat-log':
+                return this.handleExportChatLog(args);
+            case 'clear-chat-log':
+                return this.handleClearChatLog(args);
+        }
+    }
+
+    private async handleExportChatLog(args: ArgsFor<'export-chat-log'>) {
+        try {
+            const data = await this.query<ChatMessageExportLogResponse>('chat-message', args);
+            const text = `📜 **Chat Log Export** (${data.format}, ${data.messageCount} messages)\n\n${data.content || '_(no messages)_'}`;
+            return { content: [{ type: 'text' as const, text }] };
+        } catch (e) {
+            return errorContent('export-chat-log', e instanceof Error ? e.message : String(e));
+        }
+    }
+
+    private async handleClearChatLog(args: ArgsFor<'clear-chat-log'>) {
+        try {
+            const data = await this.query<ChatMessageClearLogResponse>('chat-message', args);
+            if (data.dryRun) {
+                const text = `🔎 **Clear chat-log preview**\n\n**Would delete ${data.totalCount}** message(s):\n- public: ${data.byVisibility.public}\n- GM-only: ${data.byVisibility.gmOnly}\n- whispered: ${data.byVisibility.whispered}\n\nOldest: ${data.oldest ? new Date(data.oldest).toISOString() : '—'} · Newest: ${data.newest ? new Date(data.newest).toISOString() : '—'}\n\n_Re-run with confirm:true (dryRun omitted) to delete._`;
+                return { content: [{ type: 'text' as const, text }] };
+            }
+            const text = `🧹 **Chat log cleared**\n\nDeleted **${data.deletedCount}** message(s) (public ${data.byVisibility.public} / GM ${data.byVisibility.gmOnly} / whisper ${data.byVisibility.whispered}).`;
+            return { content: [{ type: 'text' as const, text }] };
+        } catch (e) {
+            return errorContent('clear-chat-log', e instanceof Error ? e.message : String(e));
         }
     }
 

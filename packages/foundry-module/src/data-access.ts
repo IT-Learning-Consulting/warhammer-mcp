@@ -4705,6 +4705,23 @@ export class FoundryDataAccess {
   }
 
   /**
+   * Phase 4 mcp_coverage_expansion: resolve an actor by id or name.
+   * Used by actor-direct AE branches (add/update/delete/getByName).
+   */
+  private _resolveActor(actorId?: string, actorName?: string): any {
+    let actor: any = null;
+    if (actorId) actor = (game.actors as any)?.get(actorId) ?? null;
+    if (!actor && actorName) {
+      const wanted = actorName.toLowerCase();
+      actor = (game.actors as any)?.find((a: any) => a.name?.toLowerCase() === wanted) ?? null;
+    }
+    if (!actor) {
+      throw new Error(`Actor not found: ${actorId ?? actorName ?? '(no identifier)'}`);
+    }
+    return actor;
+  }
+
+  /**
    * Phase 5 follow-up: resolve an item to its doc + (optional) owning actor.
    * Unifies actor-embedded and world-scope lookup across updateItem / deleteItem
    * / addActiveEffect / updateActiveEffect / deleteActiveEffect.
@@ -5151,10 +5168,11 @@ export class FoundryDataAccess {
   }
 
   /**
-   * Phase 5 follow-up B: resolve an ActiveEffect on an item by id or name.
+   * Phase 5 follow-up B: resolve an ActiveEffect on a document (item or actor) by id or name.
+   * doc-agnostic — iterates doc.effects, works for both item-parented and actor-direct AEs.
    */
-  private _findEffect(item: any, effectId?: string, effectName?: string): any {
-    const effects: any[] = (item.effects as any)?.contents ?? Array.from(item.effects ?? []);
+  private _findEffect(doc: any, effectId?: string, effectName?: string): any {
+    const effects: any[] = (doc.effects as any)?.contents ?? Array.from(doc.effects ?? []);
     let found: any = null;
     if (effectId) found = effects.find((e: any) => e.id === effectId) ?? null;
     if (!found && effectName) {
@@ -5163,7 +5181,7 @@ export class FoundryDataAccess {
     }
     if (!found) {
       throw new Error(
-        `Effect "${effectName ?? effectId ?? '(no identifier)'}" not found on item "${item.name}"`
+        `Effect "${effectName ?? effectId ?? '(no identifier)'}" not found on "${doc.name}"`
       );
     }
     return found;
@@ -5171,13 +5189,15 @@ export class FoundryDataAccess {
 
   /**
    * Phase 5 follow-up B — add ActiveEffect to an existing item.
-   * Target is an ItemTarget (actor-embedded or world item); effect is the flat
-   * ergonomic shape shared with create-custom-item's effects[] field.
+   * Phase 4 mcp_coverage_expansion — also handles scope:'actor-direct' (effect on the actor itself).
+   * Target is an ActiveEffectTarget (actor-embedded, world item, or actor-direct).
+   * effect is the flat ergonomic shape shared with create-custom-item's effects[] field.
    */
   async addActiveEffect(data: {
     target:
     | { scope: 'actor'; actorId?: string | undefined; actorName?: string | undefined; itemId?: string | undefined; itemName?: string | undefined }
-    | { scope: 'world'; itemId?: string | undefined; itemName?: string | undefined };
+    | { scope: 'world'; itemId?: string | undefined; itemName?: string | undefined }
+    | { scope: 'actor-direct'; actorId?: string | undefined; actorName?: string | undefined };
     effect: any;
     returnFullPayload?: boolean | undefined;
   }): Promise<any> {
@@ -5185,7 +5205,46 @@ export class FoundryDataAccess {
     try {
       // buildEffectPayload is imported lazily to avoid a top-of-file shuffle.
       const { buildEffectPayload } = await import('@foundry-mcp/shared');
-      const { item, owner, scope } = this._resolveItem(this._targetToResolverInput(data.target));
+
+      // --- actor-direct branch: effect lives directly on the actor ---
+      if (data.target.scope === 'actor-direct') {
+        const actorDirect = data.target as { scope: 'actor-direct'; actorId?: string; actorName?: string };
+        const actor = this._resolveActor(actorDirect.actorId, actorDirect.actorName);
+        const effectPayload = buildEffectPayload(data.effect);
+        const created: any[] = await actor.createEmbeddedDocuments('ActiveEffect', [effectPayload]);
+        if (!created || created.length === 0) throw new Error('Failed to create ActiveEffect on actor');
+
+        const createdEffect: any = created[0];
+        // CCR-2a re-read: verify the AE was persisted
+        const fresh: any = actor.effects.get(createdEffect.id);
+        if (!fresh) {
+          throw new Error(`ADD_ACTIVE_EFFECT_NOT_PERSISTED: effect ${createdEffect.id} absent after create`);
+        }
+
+        notify.created('active-effect', createdEffect.name, {
+          summary: `on ${actor.name}`,
+          uuid: (createdEffect as any).uuid,
+        });
+
+        const base: any = {
+          success: true,
+          scope: 'actor-direct',
+          actorId: actor.id,
+          actorName: actor.name,
+          itemId: null,
+          itemName: null,
+          effectId: createdEffect.id,
+          effectName: createdEffect.name,
+          parentType: 'Actor' as const,
+        };
+        if (data.returnFullPayload === true) {
+          base.effectData = createdEffect.toObject?.() ?? null;
+        }
+        return base;
+      }
+
+      // --- item path (scope:'actor' or scope:'world') — unchanged ---
+      const { item, owner, scope } = this._resolveItem(this._targetToResolverInput(data.target as any));
       const effectPayload = buildEffectPayload(data.effect);
       const created: any[] = await item.createEmbeddedDocuments('ActiveEffect', [effectPayload]);
       if (!created || created.length === 0) throw new Error('Failed to create ActiveEffect');
@@ -5227,13 +5286,15 @@ export class FoundryDataAccess {
 
   /**
    * Phase 5 follow-up B — partial update an existing ActiveEffect.
+   * Phase 4 mcp_coverage_expansion — also handles scope:'actor-direct' (effect on the actor itself).
    * Flat input is inflated via buildEffectPayload; merge semantics preserve
    * unlisted fields on the effect.
    */
   async updateActiveEffect(data: {
     target:
     | { scope: 'actor'; actorId?: string | undefined; actorName?: string | undefined; itemId?: string | undefined; itemName?: string | undefined }
-    | { scope: 'world'; itemId?: string | undefined; itemName?: string | undefined };
+    | { scope: 'world'; itemId?: string | undefined; itemName?: string | undefined }
+    | { scope: 'actor-direct'; actorId?: string | undefined; actorName?: string | undefined };
     effectId?: string | undefined;
     effectName?: string | undefined;
     updates: any;
@@ -5245,7 +5306,89 @@ export class FoundryDataAccess {
     }
     try {
       const { buildEffectPayload } = await import('@foundry-mcp/shared');
-      const { item, owner, scope } = this._resolveItem(this._targetToResolverInput(data.target));
+
+      // --- actor-direct branch ---
+      if (data.target.scope === 'actor-direct') {
+        const actorDirect = data.target as { scope: 'actor-direct'; actorId?: string; actorName?: string };
+        const actor = this._resolveActor(actorDirect.actorId, actorDirect.actorName);
+        const effect: any = this._findEffect(actor, data.effectId, data.effectName);
+
+        const mergedFlat: any = {
+          name: data.updates.name ?? effect.name,
+          trigger: data.updates.trigger ?? effect.system?.scriptData?.[0]?.trigger ?? 'manual',
+          script: data.updates.script ?? effect.system?.scriptData?.[0]?.script ?? '',
+          ...data.updates,
+        };
+        const fullInflated = buildEffectPayload(mergedFlat);
+
+        const updatePayload: Record<string, unknown> = {};
+        const touchedScript = 'trigger' in data.updates || 'script' in data.updates || 'label' in data.updates;
+        const touchedTransfer = 'transfer' in data.updates;
+        for (const key of Object.keys(data.updates)) {
+          if (key === 'trigger' || key === 'script' || key === 'label') continue;
+          if (key === 'transfer') continue;
+          updatePayload[key] = (fullInflated as any)[key] ?? data.updates[key];
+        }
+        if (touchedScript) updatePayload['system.scriptData'] = (fullInflated as any).system.scriptData;
+        if (touchedTransfer) updatePayload['system.transferData'] = (fullInflated as any).system.transferData;
+
+        const flatUpdate = (foundry as any).utils.flattenObject(updatePayload) as Record<string, unknown>;
+        const beforeValues: Record<string, unknown> = {};
+        for (const path of Object.keys(flatUpdate)) {
+          if (path.includes('.-=')) continue;
+          beforeValues[path] = (foundry as any).utils.getProperty(effect, path);
+        }
+
+        const updateResult = await effect.update(updatePayload);
+
+        if (updateResult === undefined) {
+          const cancelled = Object.entries(flatUpdate)
+            .filter(([path]) => !path.includes('.-='))
+            .filter(([path, expected]) => JSON.stringify(beforeValues[path]) !== JSON.stringify(expected));
+          if (cancelled.length > 0) {
+            const preview = cancelled.slice(0, 3).map(([path, expected]) =>
+              `${path}: expected ${JSON.stringify(expected)}, before ${JSON.stringify(beforeValues[path])}`
+            ).join('; ');
+            throw new Error(
+              `UPDATE_ACTIVE_EFFECT_NOT_PERSISTED: effect.update() returned undefined. ${preview}`,
+            );
+          }
+        }
+
+        // CCR-2a re-read
+        let freshEffect: any;
+        try {
+          freshEffect = this._findEffect(actor, effect.id);
+        } catch {
+          throw new Error(`UPDATE_ACTIVE_EFFECT_NOT_PERSISTED: effect ${effect.id} disappeared after update`);
+        }
+        verifyDocWrite(freshEffect, flatUpdate, 'UPDATE_ACTIVE_EFFECT_NOT_PERSISTED');
+
+        notify.updated('active-effect', effect.name, {
+          summary: `on ${actor.name}`,
+          uuid: (effect as any).uuid,
+        });
+
+        const base: any = {
+          success: true,
+          scope: 'actor-direct',
+          actorId: actor.id,
+          actorName: actor.name,
+          itemId: null,
+          itemName: null,
+          effectId: effect.id,
+          effectName: effect.name,
+          updated: Object.keys(updatePayload),
+          parentType: 'Actor' as const,
+        };
+        if (data.returnFullPayload === true) {
+          base.effectData = freshEffect.toObject?.() ?? null;
+        }
+        return base;
+      }
+
+      // --- item path (scope:'actor' or scope:'world') — unchanged ---
+      const { item, owner, scope } = this._resolveItem(this._targetToResolverInput(data.target as any));
       const effect: any = this._findEffect(item, data.effectId, data.effectName);
 
       // If updates contains flat keys that map through buildEffectPayload
@@ -5349,11 +5492,13 @@ export class FoundryDataAccess {
 
   /**
    * Phase 5 follow-up B — remove an ActiveEffect from an item.
+   * Phase 4 mcp_coverage_expansion — also handles scope:'actor-direct' (effect on the actor itself).
    */
   async deleteActiveEffect(data: {
     target:
     | { scope: 'actor'; actorId?: string | undefined; actorName?: string | undefined; itemId?: string | undefined; itemName?: string | undefined }
-    | { scope: 'world'; itemId?: string | undefined; itemName?: string | undefined };
+    | { scope: 'world'; itemId?: string | undefined; itemName?: string | undefined }
+    | { scope: 'actor-direct'; actorId?: string | undefined; actorName?: string | undefined };
     effectId?: string | undefined;
     effectName?: string | undefined;
   }): Promise<any> {
@@ -5362,7 +5507,33 @@ export class FoundryDataAccess {
       throw new Error('deleteActiveEffect requires one of effectId or effectName');
     }
     try {
-      const { item, owner, scope } = this._resolveItem(this._targetToResolverInput(data.target));
+      // --- actor-direct branch ---
+      if (data.target.scope === 'actor-direct') {
+        const actorDirect = data.target as { scope: 'actor-direct'; actorId?: string; actorName?: string };
+        const actor = this._resolveActor(actorDirect.actorId, actorDirect.actorName);
+        const effect: any = this._findEffect(actor, data.effectId, data.effectName);
+        const effectId: string = effect.id;
+        const effectName: string = effect.name;
+        await actor.deleteEmbeddedDocuments('ActiveEffect', [effectId]);
+        // CCR-2a verify gone
+        if (actor.effects.get(effectId)) {
+          throw new Error(`DELETE_ACTIVE_EFFECT_NOT_PERSISTED: effect ${effectId} still present after delete`);
+        }
+        notify.deleted('active-effect', effectName, { summary: `from ${actor.name}` });
+        return {
+          success: true,
+          scope: 'actor-direct',
+          actorId: actor.id,
+          actorName: actor.name,
+          itemId: null,
+          effectId,
+          effectName,
+          parentType: 'Actor' as const,
+        };
+      }
+
+      // --- item path (scope:'actor' or scope:'world') — unchanged ---
+      const { item, owner, scope } = this._resolveItem(this._targetToResolverInput(data.target as any));
       const effect: any = this._findEffect(item, data.effectId, data.effectName);
       const effectId: string = effect.id;
       const effectName: string = effect.name;
@@ -5902,16 +6073,17 @@ export class FoundryDataAccess {
 
   /**
    * TOOL-IDEA-003 (2026-05-14): read-only AE-by-name resolver.
-   * Replaces the update-active-effect+returnFullPayload=true discovery workaround
-   * (a write tool pretending to be a read). Reuses _resolveItem → _findEffect so
-   * the resolution rules match the mutation tools' behavior exactly: effectId
-   * authoritative, effectName case-insensitive exact match. Pure read — no .update(),
+   * Phase 4 mcp_coverage_expansion — also handles scope:'actor-direct': resolves
+   * actor.effects directly and returns parentType:'Actor' (R4.4).
+   * Replaces the update-active-effect+returnFullPayload=true discovery workaround.
+   * effectId authoritative, effectName case-insensitive exact match. Pure read — no .update(),
    * no deleteEmbeddedDocuments calls.
    */
   async getActiveEffectByName(data: {
     target:
     | { scope: 'actor'; actorId?: string | undefined; actorName?: string | undefined; itemId?: string | undefined; itemName?: string | undefined }
-    | { scope: 'world'; itemId?: string | undefined; itemName?: string | undefined };
+    | { scope: 'world'; itemId?: string | undefined; itemName?: string | undefined }
+    | { scope: 'actor-direct'; actorId?: string | undefined; actorName?: string | undefined };
     effectId?: string | undefined;
     effectName?: string | undefined;
   }): Promise<any> {
@@ -5920,7 +6092,49 @@ export class FoundryDataAccess {
       throw new Error('getActiveEffectByName requires one of effectId or effectName');
     }
     try {
-      const { item, owner, scope } = this._resolveItem(this._targetToResolverInput(data.target));
+      // Helper to project an AE's public fields
+      const projectAE = (effect: any) => ({
+        id: effect.id,
+        name: effect.name,
+        img: effect.img ?? effect.icon ?? null,
+        statuses: Array.from(effect.statuses ?? []),
+        disabled: !!effect.disabled,
+        duration: {
+          rounds: effect.duration?.rounds ?? null,
+          turns: effect.duration?.turns ?? null,
+          seconds: effect.duration?.seconds ?? null,
+        },
+        origin: effect.origin ?? null,
+        changes: (effect.changes ?? []).map((c: any) => ({
+          key: c.key,
+          mode: c.mode,
+          value: c.value,
+          priority: c.priority ?? null,
+        })),
+      });
+
+      // --- actor-direct branch: search actor.effects directly (R4.4) ---
+      if (data.target.scope === 'actor-direct') {
+        const actorDirect = data.target as { scope: 'actor-direct'; actorId?: string; actorName?: string };
+        const actor = this._resolveActor(actorDirect.actorId, actorDirect.actorName);
+        const effect: any = this._findEffect(actor, data.effectId, data.effectName);
+        return {
+          success: true,
+          scope: 'actor-direct',
+          actorId: actor.id,
+          itemId: null,
+          itemName: null,
+          effectId: effect.id,
+          effectName: effect.name,
+          parentType: 'Actor' as const,
+          parentId: actor.id,
+          parentName: actor.name,
+          effect: projectAE(effect),
+        };
+      }
+
+      // --- item path (scope:'actor' or scope:'world') — parentType:'Item' ---
+      const { item, owner, scope } = this._resolveItem(this._targetToResolverInput(data.target as any));
       const effect: any = this._findEffect(item, data.effectId, data.effectName);
       return {
         success: true,
@@ -5933,25 +6147,7 @@ export class FoundryDataAccess {
         parentType: 'Item' as const,
         parentId: item.id,
         parentName: item.name,
-        effect: {
-          id: effect.id,
-          name: effect.name,
-          img: effect.img ?? effect.icon ?? null,
-          statuses: Array.from(effect.statuses ?? []),
-          disabled: !!effect.disabled,
-          duration: {
-            rounds: effect.duration?.rounds ?? null,
-            turns: effect.duration?.turns ?? null,
-            seconds: effect.duration?.seconds ?? null,
-          },
-          origin: effect.origin ?? null,
-          changes: (effect.changes ?? []).map((c: any) => ({
-            key: c.key,
-            mode: c.mode,
-            value: c.value,
-            priority: c.priority ?? null,
-          })),
-        },
+        effect: projectAE(effect),
       };
     } catch (error) {
       throw new Error(

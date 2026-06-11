@@ -93,12 +93,22 @@ export const TemplateListInput = z
   })
   .strict();
 
+// Phase 9C — duplicate a MeasuredTemplate (toObject minus _id → create). CCR-2a.
+export const TemplateDuplicateInput = z
+  .object({
+    action: z.literal('duplicate'),
+    sceneId: FOUNDRY_ID,
+    templateId: FOUNDRY_ID,
+  })
+  .strict();
+
 export const TemplateToolInput = z.discriminatedUnion('action', [
   TemplateCreateInput,
   TemplateUpdateInput,
   TemplateDeleteInput,
   TemplateGetInput,
   TemplateListInput,
+  TemplateDuplicateInput,
 ]);
 
 export type TemplateToolInputType = z.infer<typeof TemplateToolInput>;
@@ -107,6 +117,7 @@ export type TemplateUpdateInputType = z.infer<typeof TemplateUpdateInput>;
 export type TemplateDeleteInputType = z.infer<typeof TemplateDeleteInput>;
 export type TemplateGetInputType = z.infer<typeof TemplateGetInput>;
 export type TemplateListInputType = z.infer<typeof TemplateListInput>;
+export type TemplateDuplicateInputType = z.infer<typeof TemplateDuplicateInput>;
 
 export interface TemplateViewModel {
   id: string;

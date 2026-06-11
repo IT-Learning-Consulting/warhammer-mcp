@@ -105,6 +105,23 @@ export const ChatMessageListInput = z.object({
   }).optional(),
 }).strict();
 
+// ── Phase 9C — export / clear chat log ──────────────────────────────────────
+
+// R9C.1 — export-chat-log: read-only render of the chat log. CCR-2b (read-only).
+export const ChatMessageExportLogInput = z.object({
+  action: z.literal('export-chat-log'),
+  format: z.enum(['text', 'markdown']).optional(),
+}).strict();
+
+// R9C.2 — clear-chat-log: bulk delete with CCR-4 dryRun preview + confirm.
+export const ChatMessageClearLogInput = z.object({
+  action: z.literal('clear-chat-log'),
+  // Optional filter: only delete messages older than N days.
+  olderThanDays: z.number().nonnegative().optional(),
+  dryRun: z.boolean().optional(),
+  confirm: z.literal(true),
+}).strict();
+
 // ── Discriminated union ───────────────────────────────────────────────────────
 
 export const ChatMessageToolInput = z.discriminatedUnion('action', [
@@ -113,6 +130,8 @@ export const ChatMessageToolInput = z.discriminatedUnion('action', [
   ChatMessageDeleteInput,
   ChatMessageGetInput,
   ChatMessageListInput,
+  ChatMessageExportLogInput,
+  ChatMessageClearLogInput,
 ]);
 
 // ── Inferred types ────────────────────────────────────────────────────────────
@@ -122,6 +141,8 @@ export type ChatMessageUpdateInputType = z.infer<typeof ChatMessageUpdateInput>;
 export type ChatMessageDeleteInputType = z.infer<typeof ChatMessageDeleteInput>;
 export type ChatMessageGetInputType = z.infer<typeof ChatMessageGetInput>;
 export type ChatMessageListInputType = z.infer<typeof ChatMessageListInput>;
+export type ChatMessageExportLogInputType = z.infer<typeof ChatMessageExportLogInput>;
+export type ChatMessageClearLogInputType = z.infer<typeof ChatMessageClearLogInput>;
 export type ChatMessageToolInputType = z.infer<typeof ChatMessageToolInput>;
 
 // ── Response interfaces ───────────────────────────────────────────────────────
@@ -157,4 +178,22 @@ export interface ChatMessageListItem {
   style: number;
   timestamp: number;
   whisper: string[];
+}
+
+// Phase 9C — export-chat-log response (read-only render).
+export interface ChatMessageExportLogResponse {
+  format: 'text' | 'markdown';
+  messageCount: number;
+  content: string;
+}
+
+// Phase 9C — clear-chat-log response. dryRun returns the visibility breakdown
+// (CCR-4 preview); confirm returns the deletedCount.
+export interface ChatMessageClearLogResponse {
+  dryRun: boolean;
+  totalCount: number;
+  byVisibility: { public: number; gmOnly: number; whispered: number };
+  oldest: number | null;
+  newest: number | null;
+  deletedCount: number;
 }

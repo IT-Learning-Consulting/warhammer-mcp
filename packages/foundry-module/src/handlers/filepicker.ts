@@ -271,6 +271,60 @@ export async function listFiles(
   }
 }
 
+// ── createDirectory handler (Phase 9C R9C.6 — Option A named export) ─────────
+// MCP-server invokes this via game.user.query('warhammer-mcp.filepickerCreateDirectory', {source, path}).
+// Surfaces an EEXIST as a clear error (unlike the private ensureDirectoryExists which swallows it).
+// CCR-2a: verify via re-browse of the parent dir.
+interface CreateDirectoryPayload {
+  source: 'data' | 'public' | 's3';
+  path: string;
+}
+
+export async function createDirectory(
+  data: unknown,
+): Promise<EnvelopeOK<{ source: string; path: string; created: true }> | EnvelopeErr> {
+  try {
+    const gmCheck = validateGMAccess();
+    if (!gmCheck.allowed) return { success: false, error: 'Access denied (GM-only)' };
+
+    const payload = data as CreateDirectoryPayload;
+    if (!payload?.source || typeof payload?.path !== 'string' || payload.path.length === 0) {
+      return { success: false, error: 'createDirectory: missing required fields (source, path)' };
+    }
+
+    const FilePicker: any = (foundry as any)?.applications?.apps?.FilePicker?.implementation;
+    if (!FilePicker?.createDirectory || !FilePicker?.browse) {
+      return { success: false, error: 'FilePicker.createDirectory/browse unavailable in this Foundry version' };
+    }
+
+    const normalized = payload.path.replace(/\/+$/, '');
+    try {
+      await FilePicker.createDirectory(payload.source, normalized);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      // Surface EEXIST clearly rather than swallowing (unlike ensureDirectoryExists).
+      return { success: false, error: `FILEPICKER_CREATE_DIRECTORY_FAILED: ${msg}` };
+    }
+
+    // CCR-2a: re-browse the parent and confirm the new dir is listed.
+    const slash = normalized.lastIndexOf('/');
+    const parent = slash >= 0 ? normalized.slice(0, slash) : '';
+    const browseResult = await FilePicker.browse(payload.source, parent);
+    const dirs: string[] = browseResult?.dirs ?? [];
+    if (!dirs.includes(normalized)) {
+      return {
+        success: false,
+        error: `FILEPICKER_CREATE_DIRECTORY_NOT_PERSISTED: "${normalized}" not listed under "${parent}" after create`,
+      };
+    }
+
+    notify.info(`Created directory "${normalized}" (${payload.source})`);
+    return { success: true, data: { source: payload.source, path: normalized, created: true } };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : 'Unknown createDirectory error' };
+  }
+}
+
 // ── notify.warn round-trip handler (design (d)) ─────────────────────────────
 // MCP-server invokes this via game.user.query('warhammer-mcp.filepickerNotifyWarn', {message}).
 // Required for the conversion-failure UX even when no upload occurs (filepicker.convert).

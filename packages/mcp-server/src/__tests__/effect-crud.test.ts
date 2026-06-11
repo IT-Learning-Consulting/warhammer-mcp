@@ -1,15 +1,19 @@
 // Phase 5 follow-up B — add/update/delete-active-effect schema + tool-dispatch tests.
+// Phase 4 mcp_coverage_expansion — extended with ActiveEffectTarget actor-direct cases.
 
 import { describe, it, expect, vi } from 'vitest';
 import {
   AddActiveEffectInput,
   UpdateActiveEffectInput,
   DeleteActiveEffectInput,
+  GetActiveEffectByNameInput,
   ItemTarget,
+  ActiveEffectTarget,
 } from '@foundry-mcp/shared';
 import { AddActiveEffectTool } from '../tools/add-active-effect.js';
 import { UpdateActiveEffectTool } from '../tools/update-active-effect.js';
 import { DeleteActiveEffectTool } from '../tools/delete-active-effect.js';
+import { GetActiveEffectByNameTool } from '../tools/get-active-effect-by-name.js';
 
 function makeLogger(): any {
   const noop = () => undefined;
@@ -193,5 +197,100 @@ describe('DeleteActiveEffectTool — dispatch', () => {
   it('throws when both effectId and effectName are missing', async () => {
     const { tool } = makeTool(DeleteActiveEffectTool);
     await expect(tool.handle({ target: worldTarget })).rejects.toThrow(/effectId or effectName/);
+  });
+});
+
+// ─── Phase 4 mcp_coverage_expansion — ActiveEffectTarget actor-direct branch ───
+
+const actorDirectTarget = { scope: 'actor-direct', actorId: 'A1' } as const;
+const actorDirectTargetByName = { scope: 'actor-direct', actorName: 'Grimgor' } as const;
+
+describe('ActiveEffectTarget schema', () => {
+  it('accepts actor-direct with actorId', () => {
+    const r = ActiveEffectTarget.safeParse({ scope: 'actor-direct', actorId: 'A1' });
+    expect(r.success).toBe(true);
+  });
+  it('accepts actor-direct with actorName', () => {
+    const r = ActiveEffectTarget.safeParse({ scope: 'actor-direct', actorName: 'Grimgor' });
+    expect(r.success).toBe(true);
+  });
+  it('rejects actor-direct with neither actorId nor actorName (refine)', () => {
+    const r = ActiveEffectTarget.safeParse({ scope: 'actor-direct' });
+    expect(r.success).toBe(false);
+  });
+  it('rejects actor-direct with unknown key (strict)', () => {
+    const r = ActiveEffectTarget.safeParse({ scope: 'actor-direct', actorId: 'A1', itemId: 'I1' });
+    expect(r.success).toBe(false);
+  });
+  it('rejects unknown scope', () => {
+    const r = ActiveEffectTarget.safeParse({ scope: 'compendium', actorId: 'A1' });
+    expect(r.success).toBe(false);
+  });
+  it('regression: existing scope:actor + itemId still accepted', () => {
+    const r = ActiveEffectTarget.safeParse({ scope: 'actor', actorId: 'A1', itemId: 'I1' });
+    expect(r.success).toBe(true);
+  });
+  it('regression: existing scope:world still accepted', () => {
+    const r = ActiveEffectTarget.safeParse({ scope: 'world', itemId: 'W1' });
+    expect(r.success).toBe(true);
+  });
+});
+
+describe('AddActiveEffectInput — actor-direct target', () => {
+  it('accepts actor-direct target', () => {
+    const r = AddActiveEffectInput.safeParse({ target: actorDirectTarget, effect: baseEffect });
+    expect(r.success).toBe(true);
+  });
+  it('accepts actor-direct target with actorName', () => {
+    const r = AddActiveEffectInput.safeParse({ target: actorDirectTargetByName, effect: baseEffect });
+    expect(r.success).toBe(true);
+  });
+});
+
+describe('AddActiveEffectTool — actor-direct dispatch', () => {
+  it('passes actor-direct scope through to query', async () => {
+    const { tool, calls } = makeTool(AddActiveEffectTool);
+    await tool.handle({ target: actorDirectTarget, effect: baseEffect });
+    expect(calls[0].key).toBe('warhammer-mcp.addActiveEffect');
+    expect(calls[0].args.target.scope).toBe('actor-direct');
+    expect(calls[0].args.target.actorId).toBe('A1');
+  });
+});
+
+describe('UpdateActiveEffectTool — actor-direct dispatch', () => {
+  it('passes actor-direct scope through to query', async () => {
+    const { tool, calls } = makeTool(UpdateActiveEffectTool);
+    await tool.handle({ target: actorDirectTarget, effectName: 'Burning', updates: { disabled: true } });
+    expect(calls[0].key).toBe('warhammer-mcp.updateActiveEffect');
+    expect(calls[0].args.target.scope).toBe('actor-direct');
+  });
+});
+
+describe('DeleteActiveEffectTool — actor-direct dispatch', () => {
+  it('passes actor-direct scope through to query', async () => {
+    const { tool, calls } = makeTool(DeleteActiveEffectTool);
+    await tool.handle({ target: actorDirectTarget, effectName: 'Burning' });
+    expect(calls[0].key).toBe('warhammer-mcp.deleteActiveEffect');
+    expect(calls[0].args.target.scope).toBe('actor-direct');
+  });
+});
+
+describe('GetActiveEffectByNameInput — actor-direct target', () => {
+  it('accepts actor-direct target', () => {
+    const r = GetActiveEffectByNameInput.safeParse({ target: actorDirectTarget, effectName: 'Burning' });
+    expect(r.success).toBe(true);
+  });
+  it('rejects actor-direct with neither actorId nor actorName', () => {
+    const r = GetActiveEffectByNameInput.safeParse({ target: { scope: 'actor-direct' }, effectName: 'Burning' });
+    expect(r.success).toBe(false);
+  });
+});
+
+describe('GetActiveEffectByNameTool — actor-direct dispatch', () => {
+  it('passes actor-direct scope through to query', async () => {
+    const { tool, calls } = makeTool(GetActiveEffectByNameTool);
+    await tool.handle({ target: actorDirectTarget, effectName: 'Burning' });
+    expect(calls[0].key).toBe('warhammer-mcp.getActiveEffectByName');
+    expect(calls[0].args.target.scope).toBe('actor-direct');
   });
 });

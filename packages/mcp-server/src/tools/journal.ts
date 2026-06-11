@@ -28,6 +28,8 @@ import {
   type JournalUpdateCategoryResponse,
   type JournalDeleteCategoryResponse,
   type JournalAssignPageToCategoryResponse,
+  type JournalShowToPlayersResponse,
+  type JournalDuplicateEntryResponse,
 } from '@foundry-mcp/shared';
 import { sanitizeHtml } from '../utils/sanitize-html.js';
 import { BaseTool, BaseToolOptions } from '../base-tool.js';
@@ -56,7 +58,7 @@ export class JournalTool extends BaseTool {
           openWorldHint: true,
         },
         description:
-          `Manage Foundry VTT JournalEntries with multi-page + multi-type CRUD via 13 actions.
+          `Manage Foundry VTT JournalEntries with multi-page + multi-type CRUD via 15 actions.
 
 **Actions:**
 - **create-entry**: Create a JournalEntry with optional inline pages (text/image/pdf/video) + categories. Returns {id, name, pageIds, categoryIds}.
@@ -72,6 +74,8 @@ export class JournalTool extends BaseTool {
 - **update-category**: Update a category's name/sort/flags.
 - **delete-category**: Remove a category. Previously assigned pages become uncategorised.
 - **assign-page-to-category**: Set or clear (categoryId:null) a page's category FK.
+- **show-to-players** (Phase 9B): Display the entry to all connected players (JournalEntry#show(true) socket broadcast). Required: entryId. Transient — no persisted state, no per-user targeting.
+- **duplicate-entry** (Phase 9B): Clone the entire JournalEntry (pages + categories) as a new world entry named "<name> (Copy)". Required: entryId. Returns {sourceId, newId, name}.
 
 **Page types** (input on create-entry / add-page):
 - text: {type:"text", name, text:{content, format?:1|2}, title?:{show,level}, sort?, category?}
@@ -108,13 +112,15 @@ export class JournalTool extends BaseTool {
                 'update-category',
                 'delete-category',
                 'assign-page-to-category',
+                'show-to-players',
+                'duplicate-entry',
               ],
               description: 'The journal action to perform.',
             },
             entryId: {
               type: 'string',
               description:
-                '[update-entry/delete-entry/get-entry/add-page/update-page/delete-page/reorder-pages/add-category/update-category/delete-category/assign-page-to-category] JournalEntry document ID.',
+                '[update-entry/delete-entry/get-entry/add-page/update-page/delete-page/reorder-pages/add-category/update-category/delete-category/assign-page-to-category/show-to-players/duplicate-entry] JournalEntry document ID.',
             },
             pageId: {
               type: 'string',
@@ -236,10 +242,46 @@ export class JournalTool extends BaseTool {
         return this.handleDeleteCategory(args);
       case 'assign-page-to-category':
         return this.handleAssignPageToCategory(args);
+      case 'show-to-players':
+        return this.handleShowToPlayers(args);
+      case 'duplicate-entry':
+        return this.handleDuplicateEntry(args);
     }
   }
 
   // ── Handlers (concrete typed per CCR-Envelope-Consumer rule 3) ───────────
+
+  private async handleShowToPlayers(args: ArgsFor<'show-to-players'>) {
+    try {
+      const data = await this.query<JournalShowToPlayersResponse>('journal', args);
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: `📢 **Shown to Players**\n\n**Entry:** ${data.name} (\`${data.entryId}\`)\n\n_(Transient — socket broadcast, no persisted state.)_`,
+          },
+        ],
+      };
+    } catch (e) {
+      return { content: [{ type: 'text' as const, text: `❌ **journal/show-to-players failed**\n\n${e instanceof Error ? e.message : String(e)}` }], isError: true };
+    }
+  }
+
+  private async handleDuplicateEntry(args: ArgsFor<'duplicate-entry'>) {
+    try {
+      const data = await this.query<JournalDuplicateEntryResponse>('journal', args);
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: `📑 **Journal Duplicated**\n\n**New:** ${data.name} (\`${data.newId}\`)\n**Source:** \`${data.sourceId}\``,
+          },
+        ],
+      };
+    } catch (e) {
+      return { content: [{ type: 'text' as const, text: `❌ **journal/duplicate-entry failed**\n\n${e instanceof Error ? e.message : String(e)}` }], isError: true };
+    }
+  }
 
   private async handleCreateEntry(args: ArgsFor<'create-entry'>) {
     try {

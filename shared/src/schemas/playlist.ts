@@ -202,6 +202,37 @@ export const PlaylistStopInput = z.object({
   playlistId: FOUNDRY_ID,
 }).strict();
 
+// ── Phase 9C — duplicate-playlist + pause-sound + bulk-import-sounds + preload-sound ──
+
+// R9C.3 — duplicate a whole Playlist (toObject minus _id/sort/folder → create). CCR-2a.
+export const PlaylistDuplicateInput = z.object({
+  action: z.literal('duplicate-playlist'),
+  playlistId: FOUNDRY_ID,
+}).strict();
+
+// R9C.5 — pause-sound: dedicated wrapper enforcing {playing:false, pausedTime}. CCR-2a.
+export const PlaylistPauseSoundInput = z.object({
+  action: z.literal('pause-sound'),
+  playlistId: FOUNDRY_ID,
+  soundId: FOUNDRY_ID,
+  // Position (seconds) to resume from; defaults to the sound's current playback time.
+  pausedTime: z.number().nonnegative().optional(),
+}).strict();
+
+// R9C.5 — bulk-import-sounds: create one PlaylistSound per audio file in a folder. CCR-2a.
+export const PlaylistBulkImportSoundsInput = z.object({
+  action: z.literal('bulk-import-sounds'),
+  playlistId: FOUNDRY_ID,
+  folder: z.string().min(1),
+  source: z.enum(['data', 'public', 's3']).optional(),
+}).strict();
+
+// R9C.5 — preload-sound: game.audio.preload(src) cross-client broadcast. CCR-2b transient.
+export const PlaylistPreloadSoundInput = z.object({
+  action: z.literal('preload-sound'),
+  src: z.string().min(1),
+}).strict();
+
 // ── Discriminated-union umbrella ────────────────────────────────────────────
 
 export const PlaylistToolInput = z.discriminatedUnion('action', [
@@ -215,6 +246,10 @@ export const PlaylistToolInput = z.discriminatedUnion('action', [
   PlaylistDeleteSoundInput,
   PlaylistPlayInput,
   PlaylistStopInput,
+  PlaylistDuplicateInput,
+  PlaylistPauseSoundInput,
+  PlaylistBulkImportSoundsInput,
+  PlaylistPreloadSoundInput,
 ]);
 
 export type PlaylistToolInputType = z.infer<typeof PlaylistToolInput>;
@@ -228,6 +263,10 @@ export type PlaylistUpdateSoundInputType = z.infer<typeof PlaylistUpdateSoundInp
 export type PlaylistDeleteSoundInputType = z.infer<typeof PlaylistDeleteSoundInput>;
 export type PlaylistPlayInputType = z.infer<typeof PlaylistPlayInput>;
 export type PlaylistStopInputType = z.infer<typeof PlaylistStopInput>;
+export type PlaylistDuplicateInputType = z.infer<typeof PlaylistDuplicateInput>;
+export type PlaylistPauseSoundInputType = z.infer<typeof PlaylistPauseSoundInput>;
+export type PlaylistBulkImportSoundsInputType = z.infer<typeof PlaylistBulkImportSoundsInput>;
+export type PlaylistPreloadSoundInputType = z.infer<typeof PlaylistPreloadSoundInput>;
 export type PlaylistSoundInlineCreateType = z.infer<typeof PlaylistSoundInlineCreate>;
 
 // ── Response shapes (concrete typed; CCR-Envelope-Consumer rule 3) ─────────

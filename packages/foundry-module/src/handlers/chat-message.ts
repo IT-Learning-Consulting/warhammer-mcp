@@ -25,9 +25,15 @@ import {
   ChatMessageDeleteInput,
   ChatMessageGetInput,
   ChatMessageListInput,
+  ChatMessageExportLogInput,
+  ChatMessageClearLogInput,
   ChatMessageToolInput,
   type ChatMessageViewModel,
   type ChatMessageListItem,
+  type ChatMessageExportLogInputType,
+  type ChatMessageClearLogInputType,
+  type ChatMessageExportLogResponse,
+  type ChatMessageClearLogResponse,
 } from '@foundry-mcp/shared';
 import { wrappedWrite } from '../transaction-manager.js';
 import { notify } from '../notify.js';
@@ -298,6 +304,134 @@ export async function deleteChatMessage(data: unknown): Promise<Envelope<any>> {
   });
 }
 
+// ── Phase 9C — export-chat-log (read-only) + clear-chat-log (destructive) ─────
+
+// Classify a message's visibility from its stored fields (plan D9, deterministic):
+//   public = no whisper + not blind; gmOnly = blind; whispered = whisper.length>0 && !blind.
+function classifyVisibility(src: any): 'public' | 'gmOnly' | 'whispered' {
+  const whisper: string[] = Array.isArray(src?.whisper) ? src.whisper : [];
+  const blind = Boolean(src?.blind);
+  if (blind) return 'gmOnly';
+  if (whisper.length > 0) return 'whispered';
+  return 'public';
+}
+
+// R9C.1 — export-chat-log: render the chat log as text/markdown. Read-only (CCR-2b).
+export async function exportChatLog(data: unknown): Promise<Envelope<ChatMessageExportLogResponse>> {
+  const gate = validateGMAccess();
+  if (!gate.allowed) return { success: false, error: 'Access denied: exportChatLog requires GM' };
+
+  const input: ChatMessageExportLogInputType = ChatMessageExportLogInput.strict().parse(data ?? {});
+  const format = input.format ?? 'text';
+
+  const messages = (game as any).messages;
+  if (!messages?.contents) {
+    return { success: false, error: 'CHATMESSAGE_COLLECTION_NOT_FOUND: game.messages is unavailable' };
+  }
+
+  const sorted = [...messages.contents].sort(
+    (a: any, b: any) => (a._source?.timestamp ?? 0) - (b._source?.timestamp ?? 0),
+  );
+
+  const lines = sorted.map((m: any) => {
+    const src = m._source ?? {};
+    const alias = src.speaker?.alias || src.author || 'Unknown';
+    const when = src.timestamp ? new Date(src.timestamp).toISOString() : '';
+    // Strip HTML tags for a plain-text-ish render (content is HTML).
+    const text = String(src.content ?? '').replace(/<[^>]+>/g, '').trim();
+    return format === 'markdown'
+      ? `**${alias}** _(${when})_: ${text}`
+      : `[${when}] ${alias}: ${text}`;
+  });
+
+  return {
+    success: true as const,
+    data: {
+      format,
+      messageCount: sorted.length,
+      content: lines.join('\n'),
+    },
+  };
+}
+
+// R9C.2 — clear-chat-log: bulk delete with CCR-4 dryRun preview + confirm.
+export async function clearChatLog(data: unknown): Promise<Envelope<ChatMessageClearLogResponse>> {
+  const gate = validateGMAccess();
+  if (!gate.allowed) return { success: false, error: 'Access denied: clearChatLog requires GM' };
+
+  const input: ChatMessageClearLogInputType = ChatMessageClearLogInput.strict().parse(data ?? {});
+
+  const messages = (game as any).messages;
+  if (!messages?.contents) {
+    return { success: false, error: 'CHATMESSAGE_COLLECTION_NOT_FOUND: game.messages is unavailable' };
+  }
+
+  // Determine the target set (optionally filtered by age).
+  const cutoff =
+    input.olderThanDays !== undefined ? Date.now() - input.olderThanDays * 86_400_000 : null;
+  const targets: any[] = [...messages.contents].filter((m: any) => {
+    if (cutoff === null) return true;
+    return (m._source?.timestamp ?? 0) < cutoff;
+  });
+
+  const byVisibility = { public: 0, gmOnly: 0, whispered: 0 };
+  let oldest: number | null = null;
+  let newest: number | null = null;
+  for (const m of targets) {
+    const src = m._source ?? {};
+    byVisibility[classifyVisibility(src)] += 1;
+    const ts = src.timestamp ?? 0;
+    if (oldest === null || ts < oldest) oldest = ts;
+    if (newest === null || ts > newest) newest = ts;
+  }
+
+  // CCR-4 preview — no mutation.
+  if (input.dryRun) {
+    return {
+      success: true as const,
+      data: {
+        dryRun: true,
+        totalCount: targets.length,
+        byVisibility,
+        oldest,
+        newest,
+        deletedCount: 0,
+      },
+    };
+  }
+
+  return wrappedWrite('chatMessage.clearChatLog', async () => {
+    const ids = targets.map((m: any) => m.id as string);
+    if (ids.length > 0) {
+      await (globalThis as any).ChatMessage.deleteDocuments(ids);
+    }
+
+    // CCR-2a: assert the targeted ids are gone.
+    const stillPresent = ids.filter((id) => messages.get(id));
+    if (stillPresent.length > 0) {
+      throw new Error(
+        `CHATMESSAGE_CLEAR_NOT_PERSISTED: ${stillPresent.length} targeted messages still present after clear`,
+      );
+    }
+
+    notify.deleted('chatMessage', `${ids.length} chat messages`, {
+      summary: cutoff !== null ? `older than ${input.olderThanDays}d` : 'all',
+    });
+
+    return {
+      success: true as const,
+      data: {
+        dryRun: false,
+        totalCount: targets.length,
+        byVisibility,
+        oldest,
+        newest,
+        deletedCount: ids.length,
+      },
+    };
+  });
+}
+
 // ── Umbrella dispatcher ───────────────────────────────────────────────────────
 
 export async function dispatchChatMessage(data: unknown): Promise<any> {
@@ -320,6 +454,10 @@ export async function dispatchChatMessage(data: unknown): Promise<any> {
       return getChatMessage(input);
     case 'list':
       return listChatMessages(input);
+    case 'export-chat-log':
+      return exportChatLog(input);
+    case 'clear-chat-log':
+      return clearChatLog(input);
     default:
       throw new Error(`Unknown chat message action: ${(input as any).action}`);
   }

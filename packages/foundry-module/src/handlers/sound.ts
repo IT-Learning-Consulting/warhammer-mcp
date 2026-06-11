@@ -15,10 +15,19 @@ import {
   SoundDeleteInput,
   SoundGetInput,
   SoundListInput,
+  type SoundToolInputType,
   type SoundViewModel,
   type SoundListItem,
 } from '@foundry-mcp/shared';
-import { createEmbeddedCRUDHandlers } from '../utils/embeddedCRUDFactory.js';
+import {
+  createEmbeddedCRUDHandlers,
+  validateGMAccess,
+  getSceneOrThrow,
+  type Envelope,
+} from '../utils/embeddedCRUDFactory.js';
+import { getEmbeddedOrThrow } from '../utils/getEmbeddedOrThrow.js';
+import { wrappedWrite } from '../transaction-manager.js';
+import { notify } from '../notify.js';
 
 // ── Serializers ──────────────────────────────────────────────────────────────
 function serializeSoundViewModel(scene: any, sound: any): SoundViewModel {
@@ -118,4 +127,62 @@ export const updateSound = handlers.update;
 export const deleteSound = handlers.delete;
 export const getSound = handlers.get;
 export const listSounds = handlers.list;
-export const dispatchSound = handlers.dispatch;
+
+// ── Phase 9C bespoke duplicate ─────────────────────────────────────────────────
+async function duplicateSound(
+  input: Extract<SoundToolInputType, { action: 'duplicate' }>,
+): Promise<Envelope<any>> {
+  const gate = validateGMAccess();
+  if (!gate.allowed) return { success: false, error: 'Access denied: duplicateSound requires GM' };
+
+  const scene = getSceneOrThrow(input.sceneId);
+  const source = getEmbeddedOrThrow<any>(scene, 'sounds', input.soundId, 'AmbientSound');
+  const sourceId = source.id as string;
+
+  return wrappedWrite('sound.duplicate', async () => {
+    const data: any = source.toObject();
+    delete data._id;
+
+    const created = await scene.createEmbeddedDocuments('AmbientSound', [data]);
+    const doc = Array.isArray(created) ? created[0] : created;
+    if (!doc) throw new Error('SOUND_DUPLICATE_FAILED: createEmbeddedDocuments returned empty');
+
+    const persisted = getEmbeddedOrThrow<any>(scene, 'sounds', doc.id, 'AmbientSound');
+    if (persisted.id === sourceId) {
+      throw new Error(`SOUND_DUPLICATE_FAILED: duplicate id equals source id "${sourceId}"`);
+    }
+
+    notify.created('sound', `AmbientSound ${persisted.id}`, { summary: `duplicated from ${sourceId}` });
+
+    return {
+      success: true as const,
+      data: { sound: serializeSoundViewModel(scene, persisted), sourceId },
+    };
+  }, { sceneId: input.sceneId });
+}
+
+export const dispatchSound = async (data: unknown): Promise<Envelope<any>> => {
+  let input: SoundToolInputType;
+  try {
+    input = SoundToolInput.parse(data ?? {}) as SoundToolInputType;
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'Invalid input';
+    throw new Error(`Invalid input: ${message}`);
+  }
+  switch (input.action) {
+    case 'create':
+      return handlers.create(input);
+    case 'update':
+      return handlers.update(input);
+    case 'delete':
+      return handlers.delete(input);
+    case 'get':
+      return handlers.get(input);
+    case 'list':
+      return handlers.list(input);
+    case 'duplicate':
+      return duplicateSound(input);
+    default:
+      throw new Error(`Unknown sound action: ${(input as any).action}`);
+  }
+};

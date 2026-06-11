@@ -300,6 +300,70 @@ export const SceneListInput = z
 // Phase 5: SceneAddTokensInput / SceneDeleteTokenInput retired — those actions
 // now live on the dedicated `token` umbrella (shared/src/schemas/token.ts).
 
+// ── Phase 9A — Scene reset & presentation actions ────────────────────────────
+
+// Embedded layers clear-layer can bulk-delete (tokens excluded — own umbrella).
+export const SCENE_CLEARABLE_LAYERS = [
+  'lights',
+  'sounds',
+  'tiles',
+  'templates',
+  'regions',
+  'drawings',
+  'notes',
+] as const;
+
+// R9A.1 — bulk-clear one embedded collection. CCR-4 destructive: dryRun preview
+// + confirm:z.literal(true). dryRun returns {count, items:[{id,name}]} without mutating.
+export const SceneClearLayerInput = z
+  .object({
+    action: z.literal('clear-layer'),
+    sceneId: FOUNDRY_ID,
+    layer: z.enum(SCENE_CLEARABLE_LAYERS),
+    dryRun: z.boolean().optional(),
+    confirm: z.literal(true),
+  })
+  .strict();
+
+// R9A.2 — reset fog of war (deletes FogExploration docs for the scene). CCR-2a.
+export const SceneResetFogInput = z
+  .object({
+    action: z.literal('reset-fog'),
+    sceneId: FOUNDRY_ID,
+    confirm: z.literal(true),
+  })
+  .strict();
+
+// R9A.3 — animate a darkness transition + persist. Hybrid (animate canvas-only,
+// then scene.update so the persisted environment.darknessLevel re-read is meaningful).
+// target: 'day'→0, 'dark'→1, or an explicit 0-1 number.
+export const SceneLightingTransitionInput = z
+  .object({
+    action: z.literal('lighting-transition'),
+    sceneId: FOUNDRY_ID,
+    target: z.union([z.enum(['day', 'dark']), z.number().min(0).max(1)]),
+    confirm: z.literal(true),
+  })
+  .strict();
+
+// R9A.4 — preload a scene to all clients (game.scenes.preload(id, true)). CCR-2b transient.
+export const ScenePreloadInput = z
+  .object({
+    action: z.literal('preload'),
+    sceneId: FOUNDRY_ID,
+  })
+  .strict();
+
+// R9B.5 — import a Scene from a compendium pack into the world. CCR-2a.
+// {packId, documentId} per plan D1 (NOT {uuid}).
+export const SceneImportFromCompendiumInput = z
+  .object({
+    action: z.literal('import-from-compendium'),
+    packId: z.string().min(1),
+    documentId: FOUNDRY_ID,
+  })
+  .strict();
+
 // ── Discriminated-union umbrella ─────────────────────────────────────────────
 
 export const SceneToolInput = z.discriminatedUnion('action', [
@@ -312,9 +376,19 @@ export const SceneToolInput = z.discriminatedUnion('action', [
   SceneThumbnailInput,
   SceneGetInput,
   SceneListInput,
+  SceneClearLayerInput,
+  SceneResetFogInput,
+  SceneLightingTransitionInput,
+  ScenePreloadInput,
+  SceneImportFromCompendiumInput,
 ]);
 
 export type SceneToolInputType = z.infer<typeof SceneToolInput>;
+export type SceneClearLayerInputType = z.infer<typeof SceneClearLayerInput>;
+export type SceneResetFogInputType = z.infer<typeof SceneResetFogInput>;
+export type SceneLightingTransitionInputType = z.infer<typeof SceneLightingTransitionInput>;
+export type ScenePreloadInputType = z.infer<typeof ScenePreloadInput>;
+export type SceneImportFromCompendiumInputType = z.infer<typeof SceneImportFromCompendiumInput>;
 export type SceneCreateInputType = z.infer<typeof SceneCreateInput>;
 export type SceneUpdateInputType = z.infer<typeof SceneUpdateInput>;
 export type SceneDeleteInputType = z.infer<typeof SceneDeleteInput>;
@@ -546,6 +620,48 @@ export type SceneListResponse =
   | SceneListBareResponse
   | SceneListPaginatedResponse
   | SceneListCountOnlyResponse;
+
+// ── Phase 9A response interfaces ─────────────────────────────────────────────
+
+// clear-layer: `items` are the docs that were (confirm) or would be (dryRun)
+// deleted. `dryRun` distinguishes; on confirm `count === items.length` deleted.
+export interface SceneClearLayerResponse {
+  success: true;
+  sceneId: string;
+  layer: string;
+  dryRun: boolean;
+  count: number;
+  items: Array<{ id: string; name: string }>;
+}
+
+export interface SceneResetFogResponse {
+  success: true;
+  sceneId: string;
+  // CCR-2a: count of FogExploration docs remaining for the scene after reset (asserted 0).
+  fogDocsRemaining: number;
+}
+
+export interface SceneLightingTransitionResponse {
+  success: true;
+  sceneId: string;
+  target: number;
+  // Persisted darkness after animate + scene.update (re-read of environment.darknessLevel).
+  darknessLevel: number;
+}
+
+export interface ScenePreloadResponse {
+  success: true;
+  sceneId: string;
+  sceneName: string;
+  // CCR-2b transient: the preload Promise resolved; no persisted state to re-read.
+  preloaded: true;
+}
+
+export interface SceneImportFromCompendiumResponse {
+  success: true;
+  scene: SceneViewModel;
+  sourcePack: string;
+}
 
 // ── Legacy / unrelated schemas retained ──────────────────────────────────────
 //

@@ -47,6 +47,13 @@ interface TileDeleteResponse {
 interface TileGetResponse {
   tile: TileViewModel;
 }
+interface TileDuplicateResponse {
+  tile: TileViewModel;
+  sourceId: string;
+}
+interface TileZOrderResponse {
+  tile: TileViewModel;
+}
 interface TileListResponse {
   tiles: TileListItem[];
   total: number;
@@ -122,7 +129,7 @@ export class TileTool extends BaseTool {
           openWorldHint: true,
         },
         description:
-          `Manage Foundry VTT TileDocument objects via 5 actions (embedded-doc CRUD + list). Tiles live on scenes (scene.tiles collection).
+          `Manage Foundry VTT TileDocument objects via 8 actions (embedded-doc CRUD + list + Phase 9C duplicate/z-order). Tiles live on scenes (scene.tiles collection).
 
 **Actions:**
 - **create**: Place a new tile on a scene. Required: sceneId, width, height. Optional: x, y, elevation, sort, rotation, alpha, hidden, locked, texture (TextureData), restrictions, occlusion, video, flags. Returns full TileViewModel.
@@ -130,6 +137,8 @@ export class TileTool extends BaseTool {
 - **delete**: Permanently remove a single tile from the scene. ⚠️ Irreversible.
 - **get**: Fetch a single tile by sceneId + tileId. Returns full TileViewModel.
 - **list**: List tiles on a scene. sceneId optional (defaults to active scene). Filters: hidden, locked, overheadOnly (elevation>0 or occlusion.mode=4), filter (substring on texture src). Pagination: page/pageSize (1-100). countOnly=true for cheap inventory probe.
+- **duplicate** (Phase 9C): Copy a tile (toObject minus _id/sort → create). Required: sceneId, tileId. Returns the new tile + sourceId.
+- **bring-to-front** / **send-to-back** (Phase 9C): Set the tile's sort to max+1 / min−1 across the scene's tiles. Required: sceneId, tileId.
 
 **B3 — video.volume silent-overwrite trap:** Foundry's AlphaField initialises video.volume to 0. When passing a partial \`video\` object in create or update, always include \`video.volume\` explicitly; omitting it from a partial update is safe (the handler strips undefined via deepStripUndefined) but including it makes intent unambiguous.
 
@@ -148,7 +157,7 @@ export class TileTool extends BaseTool {
           properties: {
             action: {
               type: 'string',
-              enum: ['create', 'update', 'delete', 'get', 'list'],
+              enum: ['create', 'update', 'delete', 'get', 'list', 'duplicate', 'bring-to-front', 'send-to-back'],
               description: 'The tile action to perform.',
             },
             sceneId: {
@@ -158,7 +167,7 @@ export class TileTool extends BaseTool {
             },
             tileId: {
               type: 'string',
-              description: '[update/delete/get] TileDocument ID.',
+              description: '[update/delete/get/duplicate/bring-to-front/send-to-back] TileDocument ID.',
             },
             // create required fields
             width: { type: 'number', description: '[create] Required tile width in pixels (positive).' },
@@ -224,10 +233,36 @@ export class TileTool extends BaseTool {
         return this.handleGet(args);
       case 'list':
         return this.handleList(args);
+      case 'duplicate':
+        return this.handleDuplicate(args);
+      case 'bring-to-front':
+        return this.handleZOrder(args, 'bring-to-front');
+      case 'send-to-back':
+        return this.handleZOrder(args, 'send-to-back');
     }
   }
 
   // ── Handlers (concrete typed per CCR-Envelope-Consumer rule 3) ───────────
+
+  private async handleDuplicate(args: ArgsFor<'duplicate'>) {
+    try {
+      const data = await this.query<TileDuplicateResponse>('tile', args);
+      const text = `🧬 **Tile Duplicated**\n\n_From \`${data.sourceId}\`_\n\n${formatTileView(data.tile)}`;
+      return { content: [{ type: 'text' as const, text }] };
+    } catch (e) {
+      return errorContent('duplicate', e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  private async handleZOrder(args: ArgsFor<'bring-to-front'> | ArgsFor<'send-to-back'>, action: string) {
+    try {
+      const data = await this.query<TileZOrderResponse>('tile', args);
+      const text = `🔀 **Tile ${action}**\n\nsort now ${data.tile.sort}\n\n${formatTileView(data.tile)}`;
+      return { content: [{ type: 'text' as const, text }] };
+    } catch (e) {
+      return errorContent(action, e instanceof Error ? e.message : String(e));
+    }
+  }
 
   private async handleCreate(args: ArgsFor<'create'>) {
     try {

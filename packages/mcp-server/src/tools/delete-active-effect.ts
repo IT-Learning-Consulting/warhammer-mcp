@@ -1,4 +1,4 @@
-import { DeleteActiveEffectInput, ITEM_TARGET_JSON_SCHEMA } from '@foundry-mcp/shared';
+import { DeleteActiveEffectInput, ACTIVE_EFFECT_TARGET_JSON_SCHEMA } from '@foundry-mcp/shared';
 import { FoundryClient } from '../foundry-client.js';
 import { Logger } from '../logger.js';
 import { BaseTool, BaseToolOptions } from '../base-tool.js';
@@ -25,13 +25,13 @@ export class DeleteActiveEffectTool extends BaseTool {
           openWorldHint: true,
         },
         description:
-          'Remove an ActiveEffect from an item. effectId is authoritative; effectName is the ergonomic fallback. Supply one.\n\nArgs:\n  - target (ItemTarget): scope=actor (needs actorId/actorName + itemId/itemName) or scope=world (needs itemId/itemName).\n  - effectId (string, optional): Effect UUID — use when available (authoritative).\n  - effectName (string, optional): Effect name — first match wins. Use when effectId is unknown.\n\nReturns:\n  - On success: deletion confirmation with the removed effectId.\n  - On error: throws with an actionable message.\n\nUse when: removing a script-injected or condition-linked effect from a specific item. Don\'t use when: removing a WFRP4e condition (use remove-condition instead).',
+          'Remove an ActiveEffect from an item or directly from an actor. effectId is authoritative; effectName is the ergonomic fallback. Supply one.\n\nArgs:\n  - target (ActiveEffectTarget): scope=actor (actorId/actorName + itemId/itemName), scope=world (itemId/itemName), or scope=actor-direct (actorId or actorName; no item fields).\n  - effectId (string, optional): Effect ID — use when available (authoritative).\n  - effectName (string, optional): Effect name — first match wins. Use when effectId is unknown.\n\nReturns:\n  - On success: deletion confirmation with the removed effectId. parentType:"Actor" when scope="actor-direct".\n  - On error: throws with an actionable message.\n\nUse when: removing a script-injected or one-off effect from an item or actor. Don\'t use when: removing a WFRP4e condition (use remove-condition instead).',
         inputSchema: {
           type: 'object',
           properties: {
             target: {
-              ...(ITEM_TARGET_JSON_SCHEMA as any),
-              description: 'ItemTarget (same shape as add-active-effect).',
+              ...(ACTIVE_EFFECT_TARGET_JSON_SCHEMA as any),
+              description: 'ActiveEffectTarget: scope="actor" (item on actor), scope="world" (world item), or scope="actor-direct" (effect directly on actor — actorId/actorName, no item fields).',
             },
             effectId: {
               type: 'string',

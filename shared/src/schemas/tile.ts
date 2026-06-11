@@ -111,12 +111,40 @@ export const TileListInput = z
   })
   .strict();
 
+// ── Phase 9C — duplicate + z-order ──────────────────────────────────────────
+export const TileDuplicateInput = z
+  .object({
+    action: z.literal('duplicate'),
+    sceneId: FOUNDRY_ID,
+    tileId: FOUNDRY_ID,
+  })
+  .strict();
+
+export const TileBringToFrontInput = z
+  .object({
+    action: z.literal('bring-to-front'),
+    sceneId: FOUNDRY_ID,
+    tileId: FOUNDRY_ID,
+  })
+  .strict();
+
+export const TileSendToBackInput = z
+  .object({
+    action: z.literal('send-to-back'),
+    sceneId: FOUNDRY_ID,
+    tileId: FOUNDRY_ID,
+  })
+  .strict();
+
 export const TileToolInput = z.discriminatedUnion('action', [
   TileCreateInput,
   TileUpdateInput,
   TileDeleteInput,
   TileGetInput,
   TileListInput,
+  TileDuplicateInput,
+  TileBringToFrontInput,
+  TileSendToBackInput,
 ]);
 
 export type TileToolInputType = z.infer<typeof TileToolInput>;
@@ -125,6 +153,9 @@ export type TileUpdateInputType = z.infer<typeof TileUpdateInput>;
 export type TileDeleteInputType = z.infer<typeof TileDeleteInput>;
 export type TileGetInputType = z.infer<typeof TileGetInput>;
 export type TileListInputType = z.infer<typeof TileListInput>;
+export type TileDuplicateInputType = z.infer<typeof TileDuplicateInput>;
+export type TileBringToFrontInputType = z.infer<typeof TileBringToFrontInput>;
+export type TileSendToBackInputType = z.infer<typeof TileSendToBackInput>;
 
 export interface TileViewModel {
   id: string;

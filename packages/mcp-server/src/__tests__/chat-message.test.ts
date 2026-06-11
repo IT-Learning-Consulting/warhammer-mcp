@@ -48,9 +48,9 @@ function makeTool(mockReturn: any = null, mockThrow: string | null = null) {
 // ── Schema tests ──────────────────────────────────────────────────────────────
 
 describe('ChatMessageToolInput schema', () => {
-  it('action enum contains exactly 5 values', () => {
+  it('action enum contains exactly 7 values (5 CRUD + Phase 9C export/clear)', () => {
     const actions = ChatMessageToolInput.options.map((o) => o.shape.action.value);
-    expect(actions.sort()).toEqual(['create', 'delete', 'get', 'list', 'update']);
+    expect(actions.sort()).toEqual(['clear-chat-log', 'create', 'delete', 'export-chat-log', 'get', 'list', 'update']);
   });
 
   it('create has no required fields beyond action', () => {

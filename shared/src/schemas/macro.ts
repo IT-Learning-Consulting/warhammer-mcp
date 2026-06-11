@@ -94,6 +94,27 @@ export const ExecuteMacroInput = z.object({
   speakerId: FOUNDRY_ID.optional(),
 });
 
+// ── Phase 9B — execute-by-name + import-from-compendium ─────────────────────
+
+// R9B.3 — resolve name→id then execute. Carries the SAME confirmedExecution gate
+// as `execute`. Name collisions (>1 match) are rejected by the handler (no guessing).
+export const ExecuteMacroByNameInput = z.object({
+  action: z.literal('execute-by-name'),
+  name: z.string().min(1),
+  confirmedExecution: z.literal(true),
+  actorId: FOUNDRY_ID.optional(),
+  tokenId: FOUNDRY_ID.optional(),
+  speakerId: FOUNDRY_ID.optional(),
+}).strict();
+
+// R9B.4 — import a Macro from a compendium pack into the world. CCR-2a.
+// {packId, documentId} per plan D1 (matches item-directory / rolltable convention; NOT {uuid}).
+export const ImportMacroFromCompendiumInput = z.object({
+  action: z.literal('import-from-compendium'),
+  packId: z.string().min(1),
+  documentId: FOUNDRY_ID,
+}).strict();
+
 export const MacroToolInput = z.discriminatedUnion('action', [
   CreateMacroInput,
   UpdateMacroInput,
@@ -101,6 +122,8 @@ export const MacroToolInput = z.discriminatedUnion('action', [
   GetMacroInput,
   ListMacrosInput,
   ExecuteMacroInput,
+  ExecuteMacroByNameInput,
+  ImportMacroFromCompendiumInput,
 ]);
 
 // ── Type exports (z.infer for each input + the union) ──────────────────────
@@ -111,6 +134,8 @@ export type DeleteMacroInputType = z.infer<typeof DeleteMacroInput>;
 export type GetMacroInputType = z.infer<typeof GetMacroInput>;
 export type ListMacrosInputType = z.infer<typeof ListMacrosInput>;
 export type ExecuteMacroInputType = z.infer<typeof ExecuteMacroInput>;
+export type ExecuteMacroByNameInputType = z.infer<typeof ExecuteMacroByNameInput>;
+export type ImportMacroFromCompendiumInputType = z.infer<typeof ImportMacroFromCompendiumInput>;
 export type MacroToolInputType = z.infer<typeof MacroToolInput>;
 
 // ── Response shapes (concrete typed; CCR-Envelope-Consumer rule 3) ─────────
@@ -210,4 +235,11 @@ export interface MacroExecuteResponse {
   threw: boolean;                // script-body throws DO propagate (probe-confirmed)
   thrownError: string | null;
   elapsedMs: number;             // HC6 — informational, no v1 timeout
+}
+
+// Phase 9B — import-from-compendium returns the new world macro (CCR-2a re-read).
+export interface MacroImportResponse {
+  macroId: string;
+  macro: MacroViewModel;
+  sourcePack: string;
 }

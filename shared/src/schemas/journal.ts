@@ -282,6 +282,22 @@ export const JournalAssignPageToCategoryInput = z.object({
   categoryId: FOUNDRY_ID.nullable(),
 }).strict();
 
+// ── Phase 9B — document presentation ────────────────────────────────────────
+
+// R9B.1 — show-to-players: JournalEntry#show(true) socket broadcast. CCR-2b transient.
+// NOTE: v13 .show() takes only a `force` boolean — NO per-user targeting (the PRD's
+// `users?` param has no API backing, so it is intentionally omitted — plan D2).
+export const JournalShowToPlayersInput = z.object({
+  action: z.literal('show-to-players'),
+  entryId: FOUNDRY_ID,
+}).strict();
+
+// R9B.2 — duplicate-entry: clone the JournalEntry (entry.clone({}, {save:true})). CCR-2a.
+export const JournalDuplicateEntryInput = z.object({
+  action: z.literal('duplicate-entry'),
+  entryId: FOUNDRY_ID,
+}).strict();
+
 // ── Discriminated-union umbrella ────────────────────────────────────────────
 
 export const JournalToolInput = z.discriminatedUnion('action', [
@@ -298,9 +314,13 @@ export const JournalToolInput = z.discriminatedUnion('action', [
   JournalUpdateCategoryInput,
   JournalDeleteCategoryInput,
   JournalAssignPageToCategoryInput,
+  JournalShowToPlayersInput,
+  JournalDuplicateEntryInput,
 ]);
 
 export type JournalToolInputType = z.infer<typeof JournalToolInput>;
+export type JournalShowToPlayersInputType = z.infer<typeof JournalShowToPlayersInput>;
+export type JournalDuplicateEntryInputType = z.infer<typeof JournalDuplicateEntryInput>;
 export type JournalCreateEntryInputType = z.infer<typeof JournalCreateEntryInput>;
 export type JournalUpdateEntryInputType = z.infer<typeof JournalUpdateEntryInput>;
 export type JournalDeleteEntryInputType = z.infer<typeof JournalDeleteEntryInput>;
@@ -446,6 +466,20 @@ export interface JournalAssignPageToCategoryResponse {
   entryId: string;
   pageId: string;
   categoryId: string | null;
+}
+
+// Phase 9B response shapes.
+export interface JournalShowToPlayersResponse {
+  entryId: string;
+  name: string;
+  // CCR-2b transient: the show() socket broadcast fired; no persisted state.
+  shown: true;
+}
+
+export interface JournalDuplicateEntryResponse {
+  sourceId: string;
+  newId: string;
+  name: string;
 }
 
 // Export the core page-type constant so callers can introspect what CRUD covers.

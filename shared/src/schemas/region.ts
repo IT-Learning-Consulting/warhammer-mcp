@@ -229,7 +229,18 @@ export const RegionDeleteBehaviorInput = z
   })
   .strict();
 
-// ── Discriminated-union umbrella (8 actions) ─────────────────────────────────
+// ── Phase 9A — append a single shape (no whole-array clobber) ─────────────────
+// R9A.5 — appends one RegionShape to region.shapes. CCR-2a (shapes.length +1).
+export const RegionAddShapeInput = z
+  .object({
+    action: z.literal('add-shape'),
+    sceneId: FOUNDRY_ID,
+    regionId: FOUNDRY_ID,
+    shape: RegionShapeSchema,
+  })
+  .strict();
+
+// ── Discriminated-union umbrella (9 actions) ─────────────────────────────────
 
 export const RegionToolInput = z.discriminatedUnion('action', [
   RegionCreateInput,
@@ -240,9 +251,11 @@ export const RegionToolInput = z.discriminatedUnion('action', [
   RegionCreateBehaviorInput,
   RegionUpdateBehaviorInput,
   RegionDeleteBehaviorInput,
+  RegionAddShapeInput,
 ]);
 
 export type RegionToolInputType = z.infer<typeof RegionToolInput>;
+export type RegionAddShapeInputType = z.infer<typeof RegionAddShapeInput>;
 export type RegionCreateInputType = z.infer<typeof RegionCreateInput>;
 export type RegionUpdateInputType = z.infer<typeof RegionUpdateInput>;
 export type RegionDeleteInputType = z.infer<typeof RegionDeleteInput>;

@@ -46,6 +46,10 @@ interface TemplateDeleteResponse {
 interface TemplateGetResponse {
   template: TemplateViewModel;
 }
+interface TemplateDuplicateResponse {
+  template: TemplateViewModel;
+  sourceId: string;
+}
 interface TemplateListResponse {
   templates: TemplateListItem[];
   total: number;
@@ -111,7 +115,7 @@ export class TemplateTool extends BaseTool {
           openWorldHint: true,
         },
         description:
-          `Manage Foundry VTT MeasuredTemplate documents via 5 actions (embedded-doc CRUD + list). Templates live on scenes (scene.templates collection).
+          `Manage Foundry VTT MeasuredTemplate documents via 6 actions (embedded-doc CRUD + list + Phase 9C duplicate). Templates live on scenes (scene.templates collection).
 
 **GM-only:** All write actions (create/update/delete) require GM access. Non-GM callers are refused by the Foundry-side handler. Read actions (get/list) are unrestricted.
 
@@ -121,6 +125,7 @@ export class TemplateTool extends BaseTool {
 - **delete**: Permanently remove a single MeasuredTemplate from the scene. ⚠️ Irreversible.
 - **get**: Fetch a single template by sceneId + templateId. Returns full TemplateViewModel including author (read-only user id).
 - **list**: List templates on a scene. sceneId optional (defaults to active scene). Filters: hidden (boolean), filter (substring on type). Pagination: page/pageSize (1-100). countOnly=true for cheap inventory probe.
+- **duplicate** (Phase 9C): Copy a MeasuredTemplate (toObject minus _id → create). Required: sceneId, templateId. Returns the new template + sourceId.
 
 **Template types (t):** circle | cone | rect | ray — note "rect" not "rectangle".
 
@@ -139,17 +144,17 @@ export class TemplateTool extends BaseTool {
           properties: {
             action: {
               type: 'string',
-              enum: ['create', 'update', 'delete', 'get', 'list'],
+              enum: ['create', 'update', 'delete', 'get', 'list', 'duplicate'],
               description: 'The template action to perform.',
             },
             sceneId: {
               type: 'string',
               description:
-                '[create/update/delete/get] Required scene document ID. [list] Optional — defaults to active scene.',
+                '[create/update/delete/get/duplicate] Required scene document ID. [list] Optional — defaults to active scene.',
             },
             templateId: {
               type: 'string',
-              description: '[update/delete/get] MeasuredTemplate document ID.',
+              description: '[update/delete/get/duplicate] MeasuredTemplate document ID.',
             },
             // create writable fields
             x: { type: 'number', description: '[create] Required x-coordinate.' },
@@ -201,10 +206,22 @@ export class TemplateTool extends BaseTool {
         return this.handleGet(args);
       case 'list':
         return this.handleList(args);
+      case 'duplicate':
+        return this.handleDuplicate(args);
     }
   }
 
   // ── Handlers (concrete typed per CCR-Envelope-Consumer rule 3) ───────────
+
+  private async handleDuplicate(args: ArgsFor<'duplicate'>) {
+    try {
+      const data = await this.query<TemplateDuplicateResponse>('template', args);
+      const text = `🧬 **MeasuredTemplate Duplicated**\n\n_From \`${data.sourceId}\`_\n\n${formatTemplateView(data.template)}`;
+      return { content: [{ type: 'text' as const, text }] };
+    } catch (e) {
+      return errorContent('duplicate', e instanceof Error ? e.message : String(e));
+    }
+  }
 
   private async handleCreate(args: ArgsFor<'create'>) {
     try {

@@ -129,7 +129,7 @@ weapon, armour, trapping, ammunition, container, spell, prayer, talent, career, 
 - \`wfrp4e-helf.technique\` (The High Elves — UI label "Sword Dance")
 - \`wfrp4e-archives3.cant\`, \`wfrp4e-archives3.armour\` (Archives of the Empire III)
 
-**Active Effects at creation time:** pass \`effects: [{ name, trigger, script, ... }]\`. Trigger keys are the 53 WFRP4e/warhammer-lib trigger slugs (e.g. \`rollWeaponTest\`, \`prePrepareData\`, \`immediate\`, \`endTurn\`). Scripts run in Foundry context — caller trust required.
+**Active Effects at creation time:** pass \`effects: [{ name, trigger, script, description?, ... }]\`. Trigger keys are the 53 WFRP4e/warhammer-lib trigger slugs (e.g. \`rollWeaponTest\`, \`prePrepareData\`, \`immediate\`, \`endTurn\`). ALWAYS set \`description\` (HTML ok) — it is the user-facing text players/GMs see when expanding the effect on the sheet; without it the effect is opaque (BUG-334). Scripts run in Foundry context — caller trust required.
 
 **Compendium seeding:** \`fromCompendium: "Compendium.<pack>.Item.<id>"\` clones the source (preserving its effects), strips source IDs, then merges your overrides on top.
 
@@ -162,7 +162,7 @@ Security: script / preApplyScript / enableScript fields are executed by Foundry 
             effects: {
               type: 'array',
               description:
-                'Optional Active Effects to attach. Each entry: { name, trigger (one of 53 keys), script, ...optional system fields }.',
+                'Optional Active Effects to attach. Each entry: { name, trigger (one of 53 keys), script, description (user-facing sheet text — always set it), ...optional system fields }.',
               items: { type: 'object', additionalProperties: true },
             },
             destination: {

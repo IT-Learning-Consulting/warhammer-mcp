@@ -69,17 +69,36 @@ export const FilePickerConvertInput = z
   })
   .strict();
 
+// ── create-directory (Phase 9C R9C.6) ──────────────────────────────────────
+// Standalone directory creation (the private ensureDirectoryExists swallows EEXIST;
+// this surfaces it). CCR-2a verified via re-browse on the foundry side.
+export const FilePickerCreateDirectoryInput = z
+  .object({
+    action: z.literal('create-directory'),
+    source: FilePickerSource,
+    path: z.string().min(1),
+  })
+  .strict();
+
 // ── Umbrella discriminated union ────────────────────────────────────────────
 export const FilePickerToolInput = z.discriminatedUnion('action', [
   FilePickerUploadInput,
   FilePickerListInput,
   FilePickerConvertInput,
+  FilePickerCreateDirectoryInput,
 ]);
 
 export type FilePickerToolInputType = z.infer<typeof FilePickerToolInput>;
 export type FilePickerUploadInputType = z.infer<typeof FilePickerUploadInput>;
 export type FilePickerListInputType = z.infer<typeof FilePickerListInput>;
 export type FilePickerConvertInputType = z.infer<typeof FilePickerConvertInput>;
+export type FilePickerCreateDirectoryInputType = z.infer<typeof FilePickerCreateDirectoryInput>;
+
+export interface FilePickerCreateDirectoryResponse {
+  source: string;
+  path: string;
+  created: true;
+}
 
 // ── Response shapes ─────────────────────────────────────────────────────────
 // FilePickerUploadResponse follows the producer-side envelope-extension pattern

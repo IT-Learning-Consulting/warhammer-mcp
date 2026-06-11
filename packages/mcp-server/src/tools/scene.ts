@@ -30,6 +30,11 @@ import {
   type SceneThumbnailResponse,
   type SceneGetResponse,
   type SceneListResponse,
+  type SceneClearLayerResponse,
+  type SceneResetFogResponse,
+  type SceneLightingTransitionResponse,
+  type ScenePreloadResponse,
+  type SceneImportFromCompendiumResponse,
   type SceneViewModel,
   type SceneTokenView,
 } from '@foundry-mcp/shared';
@@ -132,7 +137,7 @@ export class SceneTool extends BaseTool {
           openWorldHint: true,
         },
         description:
-          `Manage Foundry VTT Scenes via 9 actions (entity-level CRUD + activation + view + thumbnail + list). Token placement lives on the dedicated \`token\` umbrella.
+          `Manage Foundry VTT Scenes via 13 actions (entity-level CRUD + activation + view + thumbnail + list + Phase 9A reset/presentation). Token placement lives on the dedicated \`token\` umbrella.
 
 **Actions:**
 - **create**: Create a Scene. Required: name. Optional: full SceneConfig surface (background, grid, fog, environment, foreground, dimensions, padding, FK fields journal/playlist/folder, ownership, flags, navigation). Returns full SceneView. **Dimension auto-fit (BUG-080 fix):** when \`background.src\` is set and both \`width\` and \`height\` are omitted (or null), the handler probes the texture and sets scene dimensions to the image's natural width/height. Pass explicit \`width\`/\`height\` to override.
@@ -144,6 +149,11 @@ export class SceneTool extends BaseTool {
 - **thumbnail**: Regenerate scene thumbnail via createThumbnail({width, height, format, quality}). All four optional (defaults: 300×100 webp @ 0.8).
 - **get**: Fetch a single scene (defaults to active when sceneId omitted). includeTokens=true adds token list; includeHidden=true includes hidden tokens.
 - **list**: List world scenes. filter=substring (case-insensitive), include_active_only=true, page/pageSize (1-100), countOnly=true for cheap inventory probe.
+- **clear-layer** (Phase 9A): Bulk-delete one embedded collection. Required: sceneId, layer ∈ lights/sounds/tiles/templates/regions/drawings/notes, confirm:true. ⚠️ Destructive — pass dryRun:true first to preview {count, items}. (Tokens are NOT a layer here — use the \`token\` umbrella.)
+- **reset-fog** (Phase 9A): Reset fog of war for the scene (deletes FogExploration docs). Required: sceneId, confirm:true. Only meaningful when the scene is the rendered canvas.
+- **lighting-transition** (Phase 9A): Animate + persist a darkness transition. Required: sceneId, target ('day'→0, 'dark'→1, or 0-1 number), confirm:true. Animates the canvas when this scene is rendered, then persists environment.darknessLevel.
+- **preload** (Phase 9A): Push a scene to all clients for preloading (game.scenes.preload). Required: sceneId. Transient — no persisted state.
+- **import-from-compendium** (Phase 9B): Import a Scene from a compendium pack into the world. Required: packId, documentId (NOT a UUID). Returns the new world scene.
 
 **FK fields:** journal, journalEntryPage, playlist, playlistSound, folder are ForeignDocumentFields that Foundry does NOT auto-NULL on referent delete. get's formatter flags stale FKs via \`journalLinked: false\`.
 
@@ -168,6 +178,11 @@ export class SceneTool extends BaseTool {
                 'thumbnail',
                 'get',
                 'list',
+                'clear-layer',
+                'reset-fog',
+                'lighting-transition',
+                'preload',
+                'import-from-compendium',
               ],
               description: 'The scene action to perform.',
             },
@@ -246,6 +261,14 @@ export class SceneTool extends BaseTool {
             format: { type: 'string', description: '[thumbnail] Image format (default "webp").' },
             // Phase 10 cross-doc-fk cascade flag (delete action only).
             cascade: { type: 'boolean', description: '[delete] When true, clears cross-doc FK references (Note.entryId, etc.) pointing AT this scene before deletion. Default false.' },
+            // Phase 9A reset/presentation fields.
+            layer: { type: 'string', enum: ['lights', 'sounds', 'tiles', 'templates', 'regions', 'drawings', 'notes'], description: '[clear-layer] Which embedded collection to bulk-delete.' },
+            dryRun: { type: 'boolean', description: '[clear-layer] Preview only — returns {count, items} without deleting.' },
+            confirm: { type: 'boolean', description: '[clear-layer/reset-fog/lighting-transition] Must be true to execute (destructive/stateful guard).' },
+            target: { description: '[lighting-transition] Darkness target: "day" (→0), "dark" (→1), or a number 0-1.' },
+            // Phase 9B import-from-compendium fields.
+            packId: { type: 'string', description: '[import-from-compendium] Compendium pack id holding the Scene (e.g. "wfrp4e-core.scenes").' },
+            documentId: { type: 'string', description: '[import-from-compendium] Scene document id within the pack.' },
           },
           required: ['action'],
         },
@@ -274,6 +297,16 @@ export class SceneTool extends BaseTool {
         return this.handleGet(args);
       case 'list':
         return this.handleList(args);
+      case 'clear-layer':
+        return this.handleClearLayer(args);
+      case 'reset-fog':
+        return this.handleResetFog(args);
+      case 'lighting-transition':
+        return this.handleLightingTransition(args);
+      case 'preload':
+        return this.handlePreload(args);
+      case 'import-from-compendium':
+        return this.handleImportFromCompendium(args);
     }
   }
 
@@ -407,6 +440,67 @@ export class SceneTool extends BaseTool {
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
       return errorContent('list', e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  // ── Phase 9A handlers ─────────────────────────────────────────────────────
+
+  private async handleClearLayer(args: ArgsFor<'clear-layer'>) {
+    try {
+      const data = await this.query<SceneClearLayerResponse>('scene', args);
+      if (data.dryRun) {
+        const preview = data.items
+          .slice(0, 25)
+          .map((i) => `- \`${i.id}\` ${i.name || '_(unnamed)_'}`)
+          .join('\n');
+        const more = data.items.length > 25 ? `\n_…and ${data.items.length - 25} more_` : '';
+        const text = `🔎 **Clear-layer preview — ${data.layer}**\n\n**Would delete ${data.count} doc(s)** on scene \`${data.sceneId}\`:\n${preview || '_(layer already empty)_'}${more}\n\n_Re-run with \`dryRun:false\` + \`confirm:true\` to delete._`;
+        return { content: [{ type: 'text' as const, text }] };
+      }
+      const text = `🧹 **Layer cleared — ${data.layer}**\n\nDeleted **${data.count}** doc(s) on scene \`${data.sceneId}\`.`;
+      return { content: [{ type: 'text' as const, text }] };
+    } catch (e) {
+      return errorContent('clear-layer', e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  private async handleResetFog(args: ArgsFor<'reset-fog'>) {
+    try {
+      const data = await this.query<SceneResetFogResponse>('scene', args);
+      const text = `🌫️ **Fog reset**\n\nScene \`${data.sceneId}\` — FogExploration docs remaining: **${data.fogDocsRemaining}**.`;
+      return { content: [{ type: 'text' as const, text }] };
+    } catch (e) {
+      return errorContent('reset-fog', e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  private async handleLightingTransition(args: ArgsFor<'lighting-transition'>) {
+    try {
+      const data = await this.query<SceneLightingTransitionResponse>('scene', args);
+      const text = `🌗 **Lighting transition**\n\nScene \`${data.sceneId}\` — darknessLevel now **${data.darknessLevel}** (target ${data.target}).`;
+      return { content: [{ type: 'text' as const, text }] };
+    } catch (e) {
+      return errorContent('lighting-transition', e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  private async handlePreload(args: ArgsFor<'preload'>) {
+    try {
+      const data = await this.query<ScenePreloadResponse>('scene', args);
+      const text = `⏬ **Scene preloaded**\n\n**${data.sceneName}** (\`${data.sceneId}\`) pushed to all clients. _(Transient — no persisted state.)_`;
+      return { content: [{ type: 'text' as const, text }] };
+    } catch (e) {
+      return errorContent('preload', e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  private async handleImportFromCompendium(args: ArgsFor<'import-from-compendium'>) {
+    try {
+      const data = await this.query<SceneImportFromCompendiumResponse>('scene', args);
+      const text = `📥 **Scene Imported**\n\nFrom pack \`${data.sourcePack}\`\n\n${formatSceneView(data.scene)}`;
+      return { content: [{ type: 'text' as const, text }] };
+    } catch (e) {
+      return errorContent('import-from-compendium', e instanceof Error ? e.message : String(e));
     }
   }
 

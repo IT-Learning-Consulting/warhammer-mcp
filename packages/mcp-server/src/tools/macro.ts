@@ -55,6 +55,11 @@ interface MacroDeleteResponse {
 interface MacroGetResponse {
   macro: MacroViewModel;
 }
+interface MacroImportResponse {
+  macroId: string;
+  macro: MacroViewModel;
+  sourcePack: string;
+}
 
 interface MacroListBareResponse {
   items: MacroListItem[];
@@ -192,7 +197,7 @@ export class MacroTool extends BaseTool {
           openWorldHint: true,
         },
         description:
-          `Manage Foundry VTT Macro documents and execute them with explicit consent gating. 6 actions span CRUD + safe execution.
+          `Manage Foundry VTT Macro documents and execute them with explicit consent gating. 8 actions span CRUD + safe execution + Phase 9B name-execute/import.
 
 **Actions:**
 - **create**: Create a new Macro. Required: name, type (chat or script). Optional: scope (global/actors/actor, default global), command, img, folder, flags. Returns macroId + macro view + requestedChanges.
@@ -201,6 +206,8 @@ export class MacroTool extends BaseTool {
 - **get**: Fetch a Macro by id. Returns MacroViewModel (id, name, type, scope, command, img, folder, ownership, flags, author).
 - **list**: List world macros. Optional filter (substring on name+command), folderId, type (chat/script), page/pageSize (1-100), countOnly. Items: id, name, type, scope, folder, commandPreview.
 - **execute**: Run a Macro with explicit consent. macroId + confirmedExecution: true (REQUIRED — false or missing rejects at parse-time with MACRO_EXECUTE_NOT_CONFIRMED). Optional scope injection: actorId, tokenId, speakerId resolve to Foundry objects passed to macro.execute(scope). Returns macroType, chatMessageId (chat), scriptReturnValue (script), warnings[], threw, thrownError, elapsedMs, executedAt.
+- **execute-by-name** (Phase 9B): Resolve a macro by name then execute it. Required: name, confirmedExecution: true. Optional scope: actorId/tokenId/speakerId. Rejects with MACRO_EXECUTE_NAME_AMBIGUOUS (listing matches) when >1 macro shares the name, or MACRO_NOT_FOUND when none match — never guesses.
+- **import-from-compendium** (Phase 9B): Import a Macro from a compendium pack into the world. Required: packId, documentId (NOT a UUID). Returns the new world macro {macroId, macro, sourcePack}.
 
 **Scope enum:** global / actors / actor (per CONST.MACRO_SCOPES; live-confirmed Phase 0 probe — NO "world" value).
 
@@ -220,7 +227,7 @@ export class MacroTool extends BaseTool {
           properties: {
             action: {
               type: 'string',
-              enum: ['create', 'update', 'delete', 'get', 'list', 'execute'],
+              enum: ['create', 'update', 'delete', 'get', 'list', 'execute', 'execute-by-name', 'import-from-compendium'],
               description: 'The macro action to perform.',
             },
             macroId: {
@@ -231,7 +238,15 @@ export class MacroTool extends BaseTool {
             name: {
               type: 'string',
               minLength: 1,
-              description: '[create] Required macro name. [update.changes] Optional new name.',
+              description: '[create] Required macro name. [update.changes] Optional new name. [execute-by-name] Required — resolves to a single macro (rejects on name collision).',
+            },
+            packId: {
+              type: 'string',
+              description: '[import-from-compendium] Compendium pack id (e.g. "wfrp4e-core.macros").',
+            },
+            documentId: {
+              type: 'string',
+              description: '[import-from-compendium] Macro document id within the pack.',
             },
             type: {
               type: 'string',
@@ -334,10 +349,33 @@ export class MacroTool extends BaseTool {
         return this.handleList(args);
       case 'execute':
         return this.handleExecute(args);
+      case 'execute-by-name':
+        return this.handleExecuteByName(args);
+      case 'import-from-compendium':
+        return this.handleImportFromCompendium(args);
     }
   }
 
   // ── Handlers (concrete typed per CCR-Envelope-Consumer rule 3) ────────────
+
+  private async handleExecuteByName(args: ArgsFor<'execute-by-name'>) {
+    try {
+      const data = await this.query<MacroExecuteResponse>('macro', args);
+      return { content: [{ type: 'text' as const, text: formatExecuteResult(data) }] };
+    } catch (e) {
+      return errorContent('execute-by-name', e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  private async handleImportFromCompendium(args: ArgsFor<'import-from-compendium'>) {
+    try {
+      const data = await this.query<MacroImportResponse>('macro', args);
+      const text = `📥 **Macro Imported**\n\nFrom pack \`${data.sourcePack}\`\n\n${formatMacroView(data.macro)}`;
+      return { content: [{ type: 'text' as const, text }] };
+    } catch (e) {
+      return errorContent('import-from-compendium', e instanceof Error ? e.message : String(e));
+    }
+  }
 
   private async handleCreate(args: ArgsFor<'create'>) {
     try {

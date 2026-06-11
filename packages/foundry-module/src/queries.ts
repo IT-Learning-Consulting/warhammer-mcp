@@ -52,6 +52,10 @@ import { dispatchTile as dispatchTileHandler } from './handlers/tile.js';
 import { dispatchTemplate as dispatchTemplateHandler } from './handlers/template.js';
 // Phase 5 mcp_coverage_expansion — drawing umbrella (CRUD + list + duplicate over scene.drawings).
 import { dispatchDrawing as dispatchDrawingHandler } from './handlers/drawing.js';
+// Phase 7 mcp_coverage_expansion — cards umbrella (stack + embedded-card CRUD + gameplay verbs over game.cards).
+import { dispatchCards as dispatchCardsHandler } from './handlers/cards.js';
+// Phase 8 mcp_coverage_expansion — document-io umbrella (export/import-as-new/preview over 8 world doc types).
+import { dispatchDocumentIo as dispatchDocumentIoHandler } from './handlers/document-io.js';
 // Phase 7 mcp_crud_expansion — Playlist + PlaylistSound umbrella (10 actions:
 // create/update/delete/get/list-playlist, add/update/delete-sound, play/stop).
 // First world-level CRUD umbrella in the system (sibling of Phase 5 embedded
@@ -87,6 +91,10 @@ import { dispatchModuleMatt as dispatchModuleMattHandler } from './handlers/modu
 // Phase 5 module_integration_v1 — module-tagger + module-sequencer umbrellas.
 import { dispatchModuleTagger as dispatchModuleTaggerHandler } from './handlers/modules/tagger/tagger.js';
 import { dispatchModuleSequencer as dispatchModuleSequencerHandler } from './handlers/modules/sequencer/sequencer.js';
+// Phase 8 module_integration_v1 — module-autoanimations umbrella.
+import { dispatchModuleAutoAnimations as dispatchModuleAutoAnimationsHandler } from './handlers/modules/autoanimations/autoanimations.js';
+// Phase 6 module_integration_v1 — module-scene-atmosphere umbrella (6-member bundle: fxmaster/tokenmagic/scenery/scene-transitions/multiface-tiles/dynamic-soundscapes).
+import { dispatchModuleSceneAtmosphere as dispatchModuleSceneAtmosphereHandler } from './handlers/modules/scene-atmosphere/scene-atmosphere.js';
 // Phase 13A module_integration_v1 — module-css umbrella.
 import { dispatchModuleCss as dispatchModuleCssHandler } from './handlers/modules/custom-css/css.js';
 // Phase 6.1 mcp_crud_expansion — FilePicker handlers (upload/list + notify.warn round-trip).
@@ -94,6 +102,7 @@ import {
   uploadFile as uploadFileHandler,
   listFiles as listFilesHandler,
   notifyWarn as notifyWarnHandler,
+  createDirectory as createDirectoryHandler,
 } from './handlers/filepicker.js';
 import {
   // actor domain
@@ -230,6 +239,10 @@ export class QueryHandlers {
     CONFIG.queries[`${modulePrefix}.template`] = this.handleTemplate.bind(this);
     // Phase 5 mcp_coverage_expansion — drawing umbrella.
     CONFIG.queries[`${modulePrefix}.drawing`] = this.handleDrawing.bind(this);
+    // Phase 7 mcp_coverage_expansion — cards umbrella.
+    CONFIG.queries[`${modulePrefix}.cards`] = this.handleCards.bind(this);
+    // Phase 8 mcp_coverage_expansion — document-io umbrella (export/import-as-new/preview).
+    CONFIG.queries[`${modulePrefix}.document-io`] = this.handleDocumentIo.bind(this);
     CONFIG.queries[`${modulePrefix}.deleteActor`] = this.handleDeleteActor.bind(this);
     CONFIG.queries[`${modulePrefix}.request-player-rolls`] = this.handleRequestPlayerRolls.bind(this);
     // Deprecation wrappers — old actor-only ownership keys (PRD R1.5).
@@ -301,6 +314,8 @@ export class QueryHandlers {
     CONFIG.queries[`${modulePrefix}.uploadFile`] = (data: unknown) => uploadFileHandler(data);
     CONFIG.queries[`${modulePrefix}.listFiles`] = (data: unknown) => listFilesHandler(data);
     CONFIG.queries[`${modulePrefix}.filepickerNotifyWarn`] = (data: unknown) => notifyWarnHandler(data);
+    // Phase 9C R9C.6 — create-directory (named query key, Option A).
+    CONFIG.queries[`${modulePrefix}.filepickerCreateDirectory`] = (data: unknown) => createDirectoryHandler(data);
     // Phase 4 mcp_notify_coverage — `notify` umbrella surfaces notify.* to MCP
     // skills as workflow bookends + ad-hoc GM-visible events. GM-gated.
     CONFIG.queries[`${modulePrefix}.notify`] = this.handleNotify.bind(this);
@@ -330,6 +345,10 @@ export class QueryHandlers {
     // Phase 5 module_integration_v1 — module-tagger + module-sequencer (conditional).
     CONFIG.queries[`${modulePrefix}.module-tagger`] = this.handleModuleTagger.bind(this);
     CONFIG.queries[`${modulePrefix}.module-sequencer`] = this.handleModuleSequencer.bind(this);
+    // Phase 8 module_integration_v1 — module-autoanimations (conditional).
+    CONFIG.queries[`${modulePrefix}.module-autoanimations`] = this.handleModuleAutoAnimations.bind(this);
+    // Phase 6 module_integration_v1 — module-scene-atmosphere bundle (conditional, per-member guard).
+    CONFIG.queries[`${modulePrefix}.module-scene-atmosphere`] = this.handleModuleSceneAtmosphere.bind(this);
     // Phase 13A module_integration_v1 — module-css (conditional).
     CONFIG.queries[`${modulePrefix}.module-css`] = this.handleModuleCss.bind(this);
   }
@@ -632,6 +651,29 @@ export class QueryHandlers {
     }
   }
 
+  // Phase 8 module_integration_v1 — module-autoanimations dispatcher.
+  // requireModuleActive('autoanimations', ['sequencer','socketlib']) guard runs inside.
+  private async handleModuleAutoAnimations(data: unknown): Promise<any> {
+    try {
+      return await dispatchModuleAutoAnimationsHandler(data);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to dispatch module-autoanimations action: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  // Phase 6 module_integration_v1 — module-scene-atmosphere dispatcher.
+  // Per-action guard via ACTION_MEMBER_MAP + requireModuleActive runs inside
+  // dispatchModuleSceneAtmosphere. get-bundle-status is always unguarded.
+  private async handleModuleSceneAtmosphere(data: unknown): Promise<any> {
+    try {
+      return await dispatchModuleSceneAtmosphereHandler(data);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to dispatch module-scene-atmosphere action: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
   // Phase 13A module_integration_v1 — module-css dispatcher.
   // requireModuleActive('custom-css') guard runs inside dispatchModuleCss.
   private async handleModuleCss(data: unknown): Promise<any> {
@@ -785,6 +827,26 @@ export class QueryHandlers {
     } catch (error) {
       rethrowAsInvalidInput(error);
       throw new Error(`Failed to dispatch drawing action: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  async handleCards(data: unknown): Promise<any> {
+    try {
+      this.dataAccess.validateFoundryState();
+      return await dispatchCardsHandler(data);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to dispatch cards action: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  async handleDocumentIo(data: unknown): Promise<any> {
+    try {
+      this.dataAccess.validateFoundryState();
+      return await dispatchDocumentIoHandler(data);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to dispatch document-io action: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 

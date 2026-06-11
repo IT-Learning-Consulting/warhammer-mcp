@@ -22,10 +22,19 @@ import {
   TemplateDeleteInput,
   TemplateGetInput,
   TemplateListInput,
+  type TemplateToolInputType,
   type TemplateViewModel,
   type TemplateListItem,
 } from '@foundry-mcp/shared';
-import { createEmbeddedCRUDHandlers } from '../utils/embeddedCRUDFactory.js';
+import {
+  createEmbeddedCRUDHandlers,
+  validateGMAccess,
+  getSceneOrThrow,
+  type Envelope,
+} from '../utils/embeddedCRUDFactory.js';
+import { getEmbeddedOrThrow } from '../utils/getEmbeddedOrThrow.js';
+import { wrappedWrite } from '../transaction-manager.js';
+import { notify } from '../notify.js';
 
 // ── Serializers ──────────────────────────────────────────────────────────────
 function serializeTemplateViewModel(scene: any, template: any): TemplateViewModel {
@@ -133,4 +142,62 @@ export const updateTemplate = handlers.update;
 export const deleteTemplate = handlers.delete;
 export const getTemplate = handlers.get;
 export const listTemplates = handlers.list;
-export const dispatchTemplate = handlers.dispatch;
+
+// ── Phase 9C bespoke duplicate ─────────────────────────────────────────────────
+async function duplicateTemplate(
+  input: Extract<TemplateToolInputType, { action: 'duplicate' }>,
+): Promise<Envelope<any>> {
+  const gate = validateGMAccess();
+  if (!gate.allowed) return { success: false, error: 'Access denied: duplicateTemplate requires GM' };
+
+  const scene = getSceneOrThrow(input.sceneId);
+  const source = getEmbeddedOrThrow<any>(scene, 'templates', input.templateId, 'MeasuredTemplate');
+  const sourceId = source.id as string;
+
+  return wrappedWrite('template.duplicate', async () => {
+    const data: any = source.toObject();
+    delete data._id;
+
+    const created = await scene.createEmbeddedDocuments('MeasuredTemplate', [data]);
+    const doc = Array.isArray(created) ? created[0] : created;
+    if (!doc) throw new Error('TEMPLATE_DUPLICATE_FAILED: createEmbeddedDocuments returned empty');
+
+    const persisted = getEmbeddedOrThrow<any>(scene, 'templates', doc.id, 'MeasuredTemplate');
+    if (persisted.id === sourceId) {
+      throw new Error(`TEMPLATE_DUPLICATE_FAILED: duplicate id equals source id "${sourceId}"`);
+    }
+
+    notify.created('template', `MeasuredTemplate ${persisted.id}`, { summary: `duplicated from ${sourceId}` });
+
+    return {
+      success: true as const,
+      data: { template: serializeTemplateViewModel(scene, persisted), sourceId },
+    };
+  }, { sceneId: input.sceneId });
+}
+
+export const dispatchTemplate = async (data: unknown): Promise<Envelope<any>> => {
+  let input: TemplateToolInputType;
+  try {
+    input = TemplateToolInput.parse(data ?? {}) as TemplateToolInputType;
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'Invalid input';
+    throw new Error(`Invalid input: ${message}`);
+  }
+  switch (input.action) {
+    case 'create':
+      return handlers.create(input);
+    case 'update':
+      return handlers.update(input);
+    case 'delete':
+      return handlers.delete(input);
+    case 'get':
+      return handlers.get(input);
+    case 'list':
+      return handlers.list(input);
+    case 'duplicate':
+      return duplicateTemplate(input);
+    default:
+      throw new Error(`Unknown template action: ${(input as any).action}`);
+  }
+};

@@ -1,9 +1,17 @@
-// Phase 9 mcp_crud_expansion — Compendium pack + document CRU (NO DELETE per HC3).
+// Phase 9 mcp_crud_expansion — Compendium pack + document CRU (NO pack/document
+// DELETE per HC3) + in-pack folder management (2026-06-11).
 //
 // Architecture (per pre-plan §Design Decisions D1 — hand-rolled umbrella):
-//   - 6 handlers (create-pack / update-pack / read-pack /
+//   - 10 handlers: 6 pack/document CRU (create-pack / update-pack / read-pack /
 //                 add-document-to-pack / update-document-in-pack /
-//                 read-document-from-pack), all bespoke.
+//                 read-document-from-pack) + 4 in-pack folder
+//                 (create/list/update/delete-folder-in-pack), all bespoke.
+//   - delete-folder-in-pack is HC3-compliant: a folder is organizational
+//     metadata, NOT a pack (LevelDB dir) or document (content). deleteContents
+//     defaults false (un-parent docs to root). CCR-Delete-Safety confirm required.
+//   - In-pack folders use pack.folders (CompendiumFolderCollection); depth cap is
+//     CONST.FOLDER_MAX_DEPTH-1 (=3). Folder#getSubfolders/#ancestors resolve
+//     against game.folders (broken for pack folders) — we walk pack.folders.
 //   - `flatWorldCRUDFactory` does NOT fit compendium API surface
 //     (game.packs is Map, not WorldCollection; pack creation is
 //     CompendiumCollection.createCompendium static; HC3 forbids delete
@@ -79,6 +87,17 @@ interface PackEntrySummary {
   type: string;
   img: string | null;
   uuid: string;
+  folder: string | null;
+}
+
+// In-pack folder (an entry of pack.folders / CompendiumFolderCollection).
+interface PackFolderSummary {
+  id: string;
+  name: string;
+  color: string | null;
+  sort: number;
+  folder: string | null; // parent in-pack folder id
+  depth: number;         // 1 = root-level, manually computed (not Folder#depth)
 }
 
 interface ReadPackResponse {
@@ -89,6 +108,34 @@ interface ReadPackResponse {
   pageSize: number;
   pageCount: number;
   entries: PackEntrySummary[];
+  folders: PackFolderSummary[];
+}
+
+interface CreateFolderInPackResponse {
+  packId: string;
+  folderId: string;
+  name: string;
+  uuid: string;
+  depth: number;
+}
+
+interface ListFoldersInPackResponse {
+  packId: string;
+  folders: PackFolderSummary[];
+}
+
+interface UpdateFolderInPackResponse {
+  packId: string;
+  folderId: string;
+  changedFields: string[];
+}
+
+interface DeleteFolderInPackResponse {
+  packId: string;
+  folderId: string;
+  deletedFolderIds: string[]; // root + descendants removed
+  unParentedDocs: number;     // docs moved to root (deleteContents=false)
+  deletedDocs: number;        // docs deleted (deleteContents=true)
 }
 
 interface AddDocumentResponse {
@@ -160,6 +207,74 @@ function serializePackEntry(entry: any, packId: string): PackEntrySummary {
     // 5-segment v13 UUID: Compendium.<packageType>.<packageName>.<DocType>.<docId>
     // packId is already "<packageType>.<packageName>"; build the canonical form.
     uuid: `Compendium.${packId}.${String(entry.type ?? '')}.${String(entry.id ?? entry._id ?? '')}`,
+    // Foundry stores the in-pack folder id on each index entry (null = pack root).
+    folder: (entry.folder as string | undefined) ?? null,
+  };
+}
+
+// ── In-pack folder helpers ─────────────────────────────────────────────────
+//
+// CRITICAL: Folder#getSubfolders() and Folder#ancestors resolve against
+// game.folders, NOT pack.folders — so they return wrong results for pack-resident
+// folders (research §4 fact 5). We walk pack.folders manually instead.
+
+function getFolderClass(): any {
+  const f: any = (globalThis as any).foundry;
+  const cls = f?.documents?.Folder ?? (globalThis as any).Folder;
+  return cls?.implementation ?? cls;
+}
+
+// Pack folder cap is CONST.FOLDER_MAX_DEPTH - 1 (=3), one less than world folders.
+function packFolderMaxDepth(): number {
+  return ((globalThis as any).CONST?.FOLDER_MAX_DEPTH ?? 4) - 1;
+}
+
+function parentOf(folder: any): string | null {
+  return (folder?._source?.folder ?? folder?.folder?.id ?? folder?.folder ?? null) as string | null;
+}
+
+// Depth = count of folders in the chain from this folder up to root (inclusive).
+// Root-level folder → 1. Manual walk over pack.folders (getSubfolders/ancestors broken).
+function packFolderDepth(pack: any, folderId: string | null | undefined): number {
+  let depth = 0;
+  let current = folderId ? pack.folders?.get?.(String(folderId)) : null;
+  const seen = new Set<string>();
+  while (current) {
+    if (seen.has(current.id)) break; // cycle guard
+    seen.add(current.id);
+    depth += 1;
+    const pid = parentOf(current);
+    current = pid ? pack.folders?.get?.(String(pid)) : null;
+  }
+  return depth;
+}
+
+// Descendant folders of rootId (NOT including root), deepest-first.
+function collectPackSubfolders(pack: any, rootId: string): any[] {
+  const all = (pack.folders?.contents ?? []) as any[];
+  const result: any[] = [];
+  const seen = new Set<string>();
+  const walk = (pid: string) => {
+    for (const child of all.filter((f) => parentOf(f) === pid)) {
+      if (seen.has(child.id)) continue; // cycle guard
+      seen.add(child.id);
+      walk(child.id);       // descend first
+      result.push(child);   // push after children → deepest-first
+    }
+  };
+  walk(rootId);
+  return result;
+}
+
+function serializePackFolder(pack: any, folder: any): PackFolderSummary {
+  const src = folder?._source ?? folder ?? {};
+  return {
+    id: String(folder?.id ?? src.id ?? ''),
+    name: String(src.name ?? folder?.name ?? ''),
+    color: (src.color as string | undefined) ?? null,
+    sort: Number(src.sort ?? folder?.sort ?? 0),
+    folder: parentOf(folder),
+    depth: packFolderDepth(pack, String(folder?.id ?? src.id ?? '')),
   };
 }
 
@@ -334,6 +449,11 @@ async function readCompendiumPack(input: any): Promise<Envelope<ReadPackResponse
   const slice = allEntries.slice(start, start + pageSize);
   const entries = slice.map((e) => serializePackEntry(e, input.packId));
 
+  // In-pack folder tree (not paginated — folder counts are small). Empty array
+  // if the pack has no folders or the collection is unavailable.
+  const folderDocs = (pack.folders?.contents ?? []) as any[];
+  const folders = folderDocs.map((f) => serializePackFolder(pack, f));
+
   return {
     success: true,
     data: {
@@ -344,6 +464,7 @@ async function readCompendiumPack(input: any): Promise<Envelope<ReadPackResponse
       pageSize,
       pageCount,
       entries,
+      folders,
     },
   };
 }
@@ -425,6 +546,26 @@ async function addDocumentToPack(input: any): Promise<Envelope<AddDocumentRespon
 
     if (!newDoc?.id) {
       return { success: false as const, error: 'COMPENDIUM_ADD_NO_RESULT: write returned no document' };
+    }
+
+    // Optional placement into an in-pack folder. importDocument keeps the source's
+    // WORLD folder id (toCompendium clearFolder defaults false), which doesn't
+    // resolve in this pack → root. To place, set the in-pack folder id explicitly
+    // AFTER create (research §4 fact 6). The folder must already exist.
+    if (input.folder) {
+      const targetFolder = pack.folders?.get?.(String(input.folder));
+      if (!targetFolder) {
+        return {
+          success: false as const,
+          error: `COMPENDIUM_FOLDER_NOT_FOUND: pack "${input.packId}" has no folder with id "${input.folder}" (create it first via create-folder-in-pack)`,
+        };
+      }
+      try {
+        await newDoc.update({ folder: String(input.folder) });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        warnings.push(`COMPENDIUM_FOLDER_PLACEMENT_FAILED: document added but not placed in folder — ${msg}`);
+      }
     }
 
     // Post-verify registry hit.
@@ -593,6 +734,316 @@ async function readDocumentFromPack(input: any): Promise<Envelope<ReadDocumentRe
   };
 }
 
+// ── In-pack folder handlers ────────────────────────────────────────────────
+
+async function createFolderInPack(input: any): Promise<Envelope<CreateFolderInPackResponse>> {
+  const gate = validateGMAccess();
+  if (!gate.allowed) return { success: false, error: COMPENDIUM_DENY('create-folder-in-pack') };
+
+  let pack: any;
+  try { pack = getPackOrThrow(input.packId); }
+  catch (e) { return { success: false, error: e instanceof Error ? e.message : String(e) }; }
+
+  if (pack.locked) {
+    return { success: false, error: `COMPENDIUM_PACK_LOCKED: pack "${input.packId}" is locked` };
+  }
+
+  return wrappedWrite('compendium.create-folder-in-pack', async () => {
+    // Validate parent exists in THIS pack + depth pre-check (cap 3 for packs).
+    if (input.parentFolderId) {
+      const parent = pack.folders?.get?.(String(input.parentFolderId));
+      if (!parent) {
+        return {
+          success: false as const,
+          error: `COMPENDIUM_FOLDER_NOT_FOUND: pack "${input.packId}" has no parent folder with id "${input.parentFolderId}"`,
+        };
+      }
+      const newDepth = packFolderDepth(pack, String(input.parentFolderId)) + 1;
+      if (newDepth > packFolderMaxDepth()) {
+        return {
+          success: false as const,
+          error: `COMPENDIUM_FOLDER_MAX_DEPTH_EXCEEDED: creating under "${input.parentFolderId}" would put this folder at depth ${newDepth}, exceeding the pack folder cap (${packFolderMaxDepth()})`,
+        };
+      }
+    }
+
+    const FolderImpl = getFolderClass();
+    if (!FolderImpl || typeof FolderImpl.create !== 'function') {
+      return { success: false as const, error: 'COMPENDIUM_API_UNAVAILABLE: foundry.documents.Folder.implementation.create not found' };
+    }
+
+    const data: any = {
+      name: String(input.folderName),
+      type: String(pack.metadata?.type ?? ''), // MUST match the pack's document type
+    };
+    if (input.parentFolderId) data.folder = String(input.parentFolderId);
+    if (input.color != null) data.color = String(input.color);
+    if (typeof input.sort === 'number') data.sort = input.sort;
+
+    let newFolder: any;
+    try {
+      newFolder = await FolderImpl.create(data, { pack: pack.collection ?? pack.metadata?.id });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return { success: false as const, error: `COMPENDIUM_FOLDER_CREATE_FAILED: ${msg}` };
+    }
+
+    if (!newFolder?.id || !pack.folders?.get?.(newFolder.id)) {
+      return { success: false as const, error: 'COMPENDIUM_FOLDER_WRITE_NOT_PERSISTED: folder create returned but is not present in pack.folders' };
+    }
+
+    notify.created('folder', `Folder "${newFolder.name ?? input.folderName}"`, {
+      summary: `in pack ${input.packId}`,
+    });
+
+    const uuid: string = newFolder.uuid
+      ?? `Compendium.${input.packId}.Folder.${newFolder.id}`;
+
+    return {
+      success: true as const,
+      data: {
+        packId: String(input.packId),
+        folderId: String(newFolder.id),
+        name: String(newFolder.name ?? input.folderName),
+        uuid,
+        depth: packFolderDepth(pack, String(newFolder.id)),
+      },
+    };
+  });
+}
+
+async function listFoldersInPack(input: any): Promise<Envelope<ListFoldersInPackResponse>> {
+  // PARITY-001: per-handler gate (reads are GM-gated to match sibling handlers).
+  const gate = validateGMAccess();
+  if (!gate.allowed) return { success: false, error: COMPENDIUM_DENY('list-folders-in-pack') };
+
+  let pack: any;
+  try { pack = getPackOrThrow(input.packId); }
+  catch (e) { return { success: false, error: e instanceof Error ? e.message : String(e) }; }
+
+  const folderDocs = (pack.folders?.contents ?? []) as any[];
+  const folders = folderDocs.map((f) => serializePackFolder(pack, f));
+
+  return {
+    success: true,
+    data: {
+      packId: String(input.packId),
+      folders,
+    },
+  };
+}
+
+async function updateFolderInPack(input: any): Promise<Envelope<UpdateFolderInPackResponse>> {
+  const gate = validateGMAccess();
+  if (!gate.allowed) return { success: false, error: COMPENDIUM_DENY('update-folder-in-pack') };
+
+  let pack: any;
+  try { pack = getPackOrThrow(input.packId); }
+  catch (e) { return { success: false, error: e instanceof Error ? e.message : String(e) }; }
+
+  if (pack.locked) {
+    return { success: false, error: `COMPENDIUM_PACK_LOCKED: pack "${input.packId}" is locked` };
+  }
+
+  // Defense in depth: type is immutable (Zod schema already omits it).
+  if ('type' in (input.changes ?? {})) {
+    return { success: false, error: 'COMPENDIUM_FOLDER_TYPE_IMMUTABLE: folder type cannot be changed after creation' };
+  }
+
+  return wrappedWrite('compendium.update-folder-in-pack', async () => {
+    const folder = pack.folders?.get?.(String(input.folderId));
+    if (!folder) {
+      return { success: false as const, error: `COMPENDIUM_FOLDER_NOT_FOUND: pack "${input.packId}" has no folder with id "${input.folderId}"` };
+    }
+
+    const changes = input.changes ?? {};
+
+    // Build the Foundry update payload (map skill-facing names → schema fields).
+    const payload: any = {};
+    if (changes.folderName !== undefined) payload.name = String(changes.folderName);
+    if (changes.color !== undefined) payload.color = changes.color === null ? null : String(changes.color);
+    if (changes.sort !== undefined) payload.sort = changes.sort;
+
+    if (changes.parentFolderId !== undefined) {
+      const newParent = changes.parentFolderId;
+      if (newParent !== null) {
+        // reparent target must exist, not be self, not be a descendant (cycle), and respect depth cap.
+        if (String(newParent) === String(input.folderId)) {
+          return { success: false as const, error: 'COMPENDIUM_FOLDER_CYCLE: cannot reparent a folder under itself' };
+        }
+        const descendantIds = new Set(collectPackSubfolders(pack, String(input.folderId)).map((f) => String(f.id)));
+        if (descendantIds.has(String(newParent))) {
+          return { success: false as const, error: 'COMPENDIUM_FOLDER_CYCLE: cannot reparent a folder under one of its own descendants' };
+        }
+        if (!pack.folders?.get?.(String(newParent))) {
+          return { success: false as const, error: `COMPENDIUM_FOLDER_NOT_FOUND: pack "${input.packId}" has no parent folder with id "${newParent}"` };
+        }
+        const newDepth = packFolderDepth(pack, String(newParent)) + 1;
+        if (newDepth > packFolderMaxDepth()) {
+          return { success: false as const, error: `COMPENDIUM_FOLDER_MAX_DEPTH_EXCEEDED: re-parenting would put this folder at depth ${newDepth}, exceeding the pack folder cap (${packFolderMaxDepth()})` };
+        }
+      }
+      payload.folder = newParent === null ? null : String(newParent);
+    }
+
+    if (Object.keys(payload).length === 0) {
+      return { success: false as const, error: 'COMPENDIUM_FOLDER_NO_CHANGES: update-folder-in-pack requires at least one field in changes' };
+    }
+
+    const before: Record<string, any> = {
+      name: folder._source?.name ?? folder.name,
+      color: folder._source?.color ?? null,
+      sort: folder._source?.sort ?? folder.sort,
+      folder: parentOf(folder),
+    };
+
+    try {
+      await folder.update(payload);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return { success: false as const, error: `COMPENDIUM_FOLDER_UPDATE_FAILED: ${msg}` };
+    }
+
+    const after = pack.folders?.get?.(String(input.folderId));
+    if (!after) {
+      return { success: false as const, error: 'COMPENDIUM_FOLDER_VANISHED: folder missing after update' };
+    }
+
+    // DP-16 post-verify: which requested fields actually changed on _source.
+    const changedFields: string[] = [];
+    const afterVals: Record<string, any> = {
+      name: after._source?.name ?? after.name,
+      color: after._source?.color ?? null,
+      sort: after._source?.sort ?? after.sort,
+      folder: parentOf(after),
+    };
+    for (const [key, want] of Object.entries(payload)) {
+      const got = (afterVals as any)[key];
+      if (got === want || (want === null && (got === null || got === undefined)) || JSON.stringify(got) !== JSON.stringify((before as any)[key])) {
+        changedFields.push(key);
+      }
+    }
+
+    notify.updated('folder', `Folder "${after.name ?? input.folderId}"`, {
+      summary: `in ${input.packId} (${changedFields.length} field(s))`,
+    });
+
+    return {
+      success: true as const,
+      data: {
+        packId: String(input.packId),
+        folderId: String(input.folderId),
+        changedFields,
+      },
+    };
+  });
+}
+
+async function deleteFolderInPack(input: any): Promise<Envelope<DeleteFolderInPackResponse>> {
+  const gate = validateGMAccess();
+  if (!gate.allowed) return { success: false, error: COMPENDIUM_DENY('delete-folder-in-pack') };
+
+  let pack: any;
+  try { pack = getPackOrThrow(input.packId); }
+  catch (e) { return { success: false, error: e instanceof Error ? e.message : String(e) }; }
+
+  if (pack.locked) {
+    return { success: false, error: `COMPENDIUM_PACK_LOCKED: pack "${input.packId}" is locked` };
+  }
+
+  // CCR-Delete-Safety: explicit confirm required.
+  if (!input.confirm) {
+    return { success: false, error: 'COMPENDIUM_FOLDER_DELETE_NOT_CONFIRMED: pass confirm:true to proceed with folder deletion' };
+  }
+
+  return wrappedWrite('compendium.delete-folder-in-pack', async () => {
+    const folder = pack.folders?.get?.(String(input.folderId));
+    if (!folder) {
+      return { success: false as const, error: `COMPENDIUM_FOLDER_NOT_FOUND: pack "${input.packId}" has no folder with id "${input.folderId}"` };
+    }
+
+    // Pack-aware recursion (getSubfolders is broken for pack folders — research §4 fact 5).
+    const subfolders = collectPackSubfolders(pack, String(input.folderId)); // deepest-first, excludes root
+    const allFolders = [...subfolders, folder];                              // deepest-first, root last
+    const allFolderIds = allFolders.map((f) => String(f.id));
+    const folderIdSet = new Set(allFolderIds);
+
+    // Documents living in any of these folders (from the index).
+    const containedDocIds = (Array.from(pack.index?.values?.() ?? []) as any[])
+      .filter((e) => folderIdSet.has(String(e.folder ?? '')))
+      .map((e) => String(e.id ?? e._id ?? ''))
+      .filter(Boolean);
+
+    const docType = pack.metadata?.type;
+    const DocClass = (globalThis as any).CONFIG?.[docType]?.documentClass;
+
+    let unParentedDocs = 0;
+    let deletedDocs = 0;
+
+    if (containedDocIds.length > 0) {
+      // BUG-297: validate the DocClass method BEFORE any side effect (atomic-before-effects).
+      if (input.deleteContents) {
+        if (!DocClass || typeof DocClass.deleteDocuments !== 'function') {
+          return { success: false as const, error: `COMPENDIUM_FOLDER_DELETE_CONTENTS_FAILED: CONFIG[${docType}].documentClass.deleteDocuments not found` };
+        }
+        try {
+          await DocClass.deleteDocuments(containedDocIds, { pack: pack.metadata?.id });
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          return { success: false as const, error: `COMPENDIUM_FOLDER_DELETE_CONTENTS_FAILED: ${msg}` };
+        }
+        deletedDocs = containedDocIds.length;
+      } else {
+        // Un-parent contained docs to pack root BEFORE deleting folders, so we never
+        // rely on Foundry's (unconfirmed) native pack-folder cascade.
+        if (!DocClass || typeof DocClass.updateDocuments !== 'function') {
+          return { success: false as const, error: `COMPENDIUM_FOLDER_DELETE_CONTENTS_FAILED: CONFIG[${docType}].documentClass.updateDocuments not found` };
+        }
+        try {
+          await DocClass.updateDocuments(
+            containedDocIds.map((id) => ({ _id: id, folder: null })),
+            { pack: pack.metadata?.id },
+          );
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          return { success: false as const, error: `COMPENDIUM_FOLDER_DELETE_CONTENTS_FAILED: un-parent failed — ${msg}` };
+        }
+        unParentedDocs = containedDocIds.length;
+      }
+    }
+
+    // Delete folders deepest-first (children before parents).
+    try {
+      for (const f of allFolders) {
+        await f.delete();
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return { success: false as const, error: `COMPENDIUM_FOLDER_DELETE_FAILED: ${msg}` };
+    }
+
+    // DP-16 post-verify: root folder must be gone.
+    if (pack.folders?.get?.(String(input.folderId))) {
+      return { success: false as const, error: `COMPENDIUM_FOLDER_WRITE_NOT_PERSISTED: folder "${input.folderId}" still present after delete` };
+    }
+
+    notify.deleted('folder', `Folder "${folder.name ?? input.folderId}"`, {
+      summary: `from pack ${input.packId}`,
+    });
+
+    return {
+      success: true as const,
+      data: {
+        packId: String(input.packId),
+        folderId: String(input.folderId),
+        deletedFolderIds: allFolderIds,
+        unParentedDocs,
+        deletedDocs,
+      },
+    };
+  });
+}
+
 // ── Umbrella dispatcher ───────────────────────────────────────────────────
 
 export async function dispatchCompendium(data: unknown): Promise<any> {
@@ -622,6 +1073,14 @@ export async function dispatchCompendium(data: unknown): Promise<any> {
       return updateDocumentInPack(input);
     case 'read-document-from-pack':
       return readDocumentFromPack(input);
+    case 'create-folder-in-pack':
+      return createFolderInPack(input);
+    case 'list-folders-in-pack':
+      return listFoldersInPack(input);
+    case 'update-folder-in-pack':
+      return updateFolderInPack(input);
+    case 'delete-folder-in-pack':
+      return deleteFolderInPack(input);
     default:
       throw new Error(`Unknown compendium action: ${(input as any).action}`);
   }

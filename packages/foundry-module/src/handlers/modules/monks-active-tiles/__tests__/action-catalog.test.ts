@@ -19,13 +19,14 @@ import {
 import { normalizeActions } from '../matt.js';
 
 describe('MATT action catalog — completeness (parity target, dossier §8)', () => {
-  it('exposes the 77 source-verified native built-in actions', () => {
+  it('exposes the 78 source-verified native built-in actions', () => {
     // Why: HC9 capability-complete — under-counting silently drops authorable actions.
-    expect(ACTION_KEYS.length).toBe(77);
+    // animate (actions.js:1955) re-verified live in MATT v13.06 — 2026-06-10 audit (BUG-333).
+    expect(ACTION_KEYS.length).toBe(78);
     expect(isKnownAction('append')).toBe(true);
     expect(isKnownAction('permissions')).toBe(true);
     expect(isKnownAction('tokencount')).toBe(true);
-    expect(isKnownAction('animate')).toBe(false);
+    expect(isKnownAction('animate')).toBe(true);
   });
 
   it('exposes all 24 trigger modes (zero missing — audit §3)', () => {

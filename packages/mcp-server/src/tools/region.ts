@@ -69,6 +69,10 @@ interface RegionBehaviorDeleteResponse {
   deletedBehaviorId: string;
   remainingBehaviors: number;
 }
+interface RegionAddShapeResponse {
+  region: RegionViewModel;
+  shapeCount: number;
+}
 
 // ── Utilities ────────────────────────────────────────────────────────────────
 
@@ -149,7 +153,7 @@ export class RegionTool extends BaseTool {
           openWorldHint: true,
         },
         description:
-          `Manage Foundry v13 Region documents and their embedded RegionBehaviors via 8 actions.
+          `Manage Foundry v13 Region documents and their embedded RegionBehaviors via 9 actions.
 
 **Base Region (5 actions):**
 - **create**: New Region on a scene. Required: sceneId, name. Optional: color, shapes (4 variants — rectangle/circle/ellipse/polygon, all share hole:boolean), elevation:{bottom,top} (nested SchemaField — NOT flat), visibility (0=LAYER 1=GAMEMASTER 2=ALWAYS), locked, flags. Returns RegionViewModel.
@@ -157,6 +161,7 @@ export class RegionTool extends BaseTool {
 - **delete**: Permanently remove Region. Required: sceneId, regionId. ⚠️ Also deletes all embedded behaviors.
 - **get**: Fetch single region. Required: sceneId, regionId. Optional: includeBehaviors (bool) to embed full behavior list.
 - **list**: List regions on a scene. sceneId optional (defaults to active). Filters: locked, filter (name substring). Pagination: page/pageSize. countOnly=true for cheap count.
+- **add-shape** (Phase 9A): Append ONE shape to a region without clobbering existing shapes. Required: sceneId, regionId, shape ({type, ...} — see Shapes below). Returns the updated region + new shapeCount.
 
 **RegionBehavior (3 actions — embedded on RegionDocument, NOT on Scene):**
 - **createBehavior**: Add a behavior to a region. Required: sceneId, regionId, behavior:{type, system}. Optional: name, disabled. Type must be one of 7 v13-core subtypes (see below).
@@ -180,7 +185,7 @@ export class RegionTool extends BaseTool {
           properties: {
             action: {
               type: 'string',
-              enum: ['create', 'update', 'delete', 'get', 'list', 'createBehavior', 'updateBehavior', 'deleteBehavior'],
+              enum: ['create', 'update', 'delete', 'get', 'list', 'createBehavior', 'updateBehavior', 'deleteBehavior', 'add-shape'],
               description: 'The region action to perform.',
             },
             sceneId: {
@@ -206,6 +211,10 @@ export class RegionTool extends BaseTool {
               type: 'array',
               description: '[create/update.changes] Array of shape objects. Each shape has type (rectangle/circle/ellipse/polygon) + hole:bool + type-specific fields.',
               items: { type: 'object' },
+            },
+            shape: {
+              type: 'object',
+              description: '[add-shape] A single shape object {type:rectangle|circle|ellipse|polygon, hole?, ...type-specific fields} appended to the region without clobbering existing shapes.',
             },
             elevation: {
               type: 'object',
@@ -265,6 +274,8 @@ export class RegionTool extends BaseTool {
         return this.handleUpdateBehavior(args);
       case 'deleteBehavior':
         return this.handleDeleteBehavior(args);
+      case 'add-shape':
+        return this.handleAddShape(args);
     }
   }
 
@@ -365,6 +376,17 @@ export class RegionTool extends BaseTool {
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
       return errorContent('deleteBehavior', e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  private async handleAddShape(args: ArgsFor<'add-shape'>) {
+    try {
+      const data = await this.query<RegionAddShapeResponse>('region', args);
+      const text =
+        `➕ **Shape Added**\n\n**Shapes now:** ${data.shapeCount}\n\n${formatRegionView(data.region)}`;
+      return { content: [{ type: 'text' as const, text }] };
+    } catch (e) {
+      return errorContent('add-shape', e instanceof Error ? e.message : String(e));
     }
   }
 }

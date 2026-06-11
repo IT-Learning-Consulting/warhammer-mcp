@@ -311,7 +311,7 @@ must be confirmed: send confirm:true after reviewing the impact report. fire-tri
 fire-trigger-as also requires confirm:true after reviewing the explicit-token impact preview.
 
 19 actions:
-- get-capabilities                       — 24 trigger modes + source-audited native 77-action catalog + registered/3rd-party actions + optional deps + MATT settings (including use-core-macro).
+- get-capabilities                       — 24 trigger modes + source-audited native 78-action catalog + registered/3rd-party actions + optional deps + MATT settings (including use-core-macro).
 - get-trigger-tile { tileUuid, returnFullPayload? } — full MATT config + ordered actions + variables + history for one tile. returnFullPayload:true emits a machine-readable JSON bundle (geometry + texture + full actions[] + regionLinks) for tilepack export.
 - list-trigger-tiles { sceneId? }        — MATT-armed tiles on a scene (defaults to active scene).
 - validate-sequence { actions }          — catalog-validate an ordered action array before write/fire.

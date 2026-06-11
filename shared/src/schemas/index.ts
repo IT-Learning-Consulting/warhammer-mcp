@@ -11,6 +11,8 @@ export * from './create-custom/index.js';
 export * from './trade-item.js';
 export * from './modify-item-qualities.js';
 export * from './item-target.js';
+// Phase 4 mcp_coverage_expansion — AE-only discriminated-union target (adds actor-direct scope).
+export * from './active-effect-target.js';
 export * from './add-active-effect.js';
 export * from './update-active-effect.js';
 export * from './delete-active-effect.js';
@@ -65,6 +67,10 @@ export * from './dice-roll.js';
 export * from './combatant.js';
 // Phase 5 mcp_coverage_expansion — drawing umbrella (CRUD + list + duplicate over scene.drawings).
 export * from './drawing.js';
+// Phase 7 mcp_coverage_expansion — cards umbrella (stack + embedded-card CRUD + gameplay verbs over game.cards).
+export * from './cards.js';
+// Phase 8 mcp_coverage_expansion — document-io umbrella (export/import-as-new/preview over 8 world doc types).
+export * from './document-io.js';
 // Phase 1 module_integration_v1 — module-probe umbrella (is-active / list-active).
 // Generic types only; module-specific schemas live in package-local tools/modules/<id>/schemas.ts.
 export * from './module-probe.js';

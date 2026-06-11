@@ -97,12 +97,22 @@ export const SoundListInput = z
   })
   .strict();
 
+// Phase 9C — duplicate an AmbientSound (toObject minus _id → create). CCR-2a.
+export const SoundDuplicateInput = z
+  .object({
+    action: z.literal('duplicate'),
+    sceneId: FOUNDRY_ID,
+    soundId: FOUNDRY_ID,
+  })
+  .strict();
+
 export const SoundToolInput = z.discriminatedUnion('action', [
   SoundCreateInput,
   SoundUpdateInput,
   SoundDeleteInput,
   SoundGetInput,
   SoundListInput,
+  SoundDuplicateInput,
 ]);
 
 export type SoundToolInputType = z.infer<typeof SoundToolInput>;
@@ -111,6 +121,7 @@ export type SoundUpdateInputType = z.infer<typeof SoundUpdateInput>;
 export type SoundDeleteInputType = z.infer<typeof SoundDeleteInput>;
 export type SoundGetInputType = z.infer<typeof SoundGetInput>;
 export type SoundListInputType = z.infer<typeof SoundListInput>;
+export type SoundDuplicateInputType = z.infer<typeof SoundDuplicateInput>;
 
 export interface SoundViewModel {
   id: string;

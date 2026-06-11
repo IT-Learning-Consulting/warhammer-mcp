@@ -17,6 +17,7 @@ import {
   FilePickerToolInput,
   type FilePickerUploadResponse,
   type FilePickerListResponse,
+  type FilePickerCreateDirectoryResponse,
 } from '@foundry-mcp/shared';
 import { BaseTool, BaseToolOptions } from '../base-tool.js';
 import {
@@ -55,12 +56,13 @@ export class FilePickerTool extends BaseTool {
           idempotentHint: false,
           openWorldHint: true,
         },
-        description: `Manage Foundry asset uploads and listing via 3 actions. Auto-converts PNG/JPG→WebP (sharp), MP4/MOV→WebM/VP9 (ffmpeg-static), MP3/WAV/FLAC→OGG/Vorbis (ffmpeg-static). Conversion runs Node-side in mcp-server before posting to Foundry /upload. Already-optimized formats (image/webp, video/webm, audio/ogg) pass through unchanged.
+        description: `Manage Foundry asset uploads, listing, and directory creation via 4 actions. Auto-converts PNG/JPG→WebP (sharp), MP4/MOV→WebM/VP9 (ffmpeg-static), MP3/WAV/FLAC→OGG/Vorbis (ffmpeg-static). Conversion runs Node-side in mcp-server before posting to Foundry /upload. Already-optimized formats (image/webp, video/webm, audio/ogg) pass through unchanged.
 
 **Actions:**
 - **upload**: Convert (if applicable) + POST to Foundry /upload. Required: source, file. Optional: target (default: 'default-converted-folder' world-setting OR worlds/<id>/assets/converted/), filename, skipConversion. Returns {path, original_size, converted_size, format, conversionWarnings: []}.
 - **list**: Browse Foundry asset paths. Required: source, target. Optional options: {bucket, extensions[], recursive}. Recursive flattens subdirs via Promise.all fan-out. Returns Foundry FilePicker.browse shape {target, dirs[], files[], private, gridSize, privateDirs[], extensions[]}.
 - **convert**: Run conversion pipeline without uploading. Returns base64 of converted buffer. Useful for preview / dry-run flows.
+- **create-directory** (Phase 9C): Create a subdirectory (FilePicker.createDirectory). Required: source, path. Surfaces EEXIST as a clear error; verifies via re-browse. Returns {source, path, created}.
 
 **Sources** (Foundry v13 enum): "data" (writable, default; userData/Data/), "public" (read-only; install/public/), "s3" (writable; requires awsConfig).
 
@@ -79,18 +81,22 @@ export class FilePickerTool extends BaseTool {
           properties: {
             action: {
               type: 'string',
-              enum: ['upload', 'list', 'convert'],
+              enum: ['upload', 'list', 'convert', 'create-directory'],
               description: 'The filepicker action to perform.',
             },
             source: {
               type: 'string',
               enum: ['data', 'public', 's3'],
-              description: '[upload/list] Foundry v13 source enum.',
+              description: '[upload/list/create-directory] Foundry v13 source enum.',
             },
             target: {
               type: 'string',
               description:
                 '[upload/list] Destination/browse directory. On upload, falls back to default-converted-folder world-setting OR worlds/<id>/assets/converted/.',
+            },
+            path: {
+              type: 'string',
+              description: '[create-directory] Directory path to create (must not already exist).',
             },
             file: {
               type: 'string',
@@ -131,6 +137,22 @@ export class FilePickerTool extends BaseTool {
         return this.handleList(args);
       case 'convert':
         return this.handleConvert(args);
+      case 'create-directory':
+        return this.handleCreateDirectory(args);
+    }
+  }
+
+  // ── create-directory (Phase 9C) ────────────────────────────────────────────
+  private async handleCreateDirectory(args: ArgsFor<'create-directory'>) {
+    try {
+      const data = await this.query<FilePickerCreateDirectoryResponse>('filepickerCreateDirectory', {
+        source: args.source,
+        path: args.path,
+      });
+      const text = `📂 **Directory Created**\n\n- Source: \`${data.source}\`\n- Path: \`${data.path}\``;
+      return { content: [{ type: 'text' as const, text }] };
+    } catch (e) {
+      return errorContent('create-directory', e instanceof Error ? e.message : String(e));
     }
   }
 

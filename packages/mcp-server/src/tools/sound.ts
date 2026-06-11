@@ -40,6 +40,10 @@ interface SoundDeleteResponse {
 interface SoundGetResponse {
   sound: SoundViewModel;
 }
+interface SoundDuplicateResponse {
+  sound: SoundViewModel;
+  sourceId: string;
+}
 interface SoundListBareResponse {
   sounds: SoundListItem[];
 }
@@ -119,7 +123,7 @@ export class SoundTool extends BaseTool {
           openWorldHint: true,
         },
         description:
-          `Manage Foundry VTT AmbientSound documents via 5 actions (embedded-doc CRUD + list). Sounds live on scenes (scene.sounds collection).
+          `Manage Foundry VTT AmbientSound documents via 6 actions (embedded-doc CRUD + list + Phase 9C duplicate). Sounds live on scenes (scene.sounds collection).
 
 **Actions:**
 - **create**: Place a new AmbientSound on a scene. Required: sceneId, x, y. Optional: elevation, radius, path, repeat, volume, walls, easing, hidden, darkness.{min,max}, effects.{base,muffled}.{type,intensity}, flags. Returns full SoundViewModel.
@@ -127,6 +131,7 @@ export class SoundTool extends BaseTool {
 - **delete**: Permanently remove a single AmbientSound from the scene. ⚠️ Irreversible.
 - **get**: Fetch a single sound by sceneId + soundId. Returns full SoundViewModel.
 - **list**: List sounds on a scene. sceneId optional (defaults to active scene). Filters: hidden (boolean), filter (substring on path). Pagination: page/pageSize (1-100). countOnly=true for cheap inventory probe.
+- **duplicate** (Phase 9C): Copy an AmbientSound (toObject minus _id → create). Required: sceneId, soundId. Returns the new sound + sourceId.
 
 **effects:** Each AmbientSound has base and muffled effect variants: {type: string|null, intensity: 0-10}. Controls reverb/muffling through walls.
 
@@ -143,17 +148,17 @@ export class SoundTool extends BaseTool {
           properties: {
             action: {
               type: 'string',
-              enum: ['create', 'update', 'delete', 'get', 'list'],
+              enum: ['create', 'update', 'delete', 'get', 'list', 'duplicate'],
               description: 'The sound action to perform.',
             },
             sceneId: {
               type: 'string',
               description:
-                '[create/update/delete/get] Required scene document ID. [list] Optional — defaults to active scene.',
+                '[create/update/delete/get/duplicate] Required scene document ID. [list] Optional — defaults to active scene.',
             },
             soundId: {
               type: 'string',
-              description: '[update/delete/get] AmbientSound document ID.',
+              description: '[update/delete/get/duplicate] AmbientSound document ID.',
             },
             // create writable fields (flat)
             x: { type: 'number', description: '[create] Required x-coordinate.' },
@@ -207,10 +212,22 @@ export class SoundTool extends BaseTool {
         return this.handleGet(args);
       case 'list':
         return this.handleList(args);
+      case 'duplicate':
+        return this.handleDuplicate(args);
     }
   }
 
   // ── Handlers (concrete typed per CCR-Envelope-Consumer rule 3) ────────────
+
+  private async handleDuplicate(args: ArgsFor<'duplicate'>) {
+    try {
+      const data = await this.query<SoundDuplicateResponse>('sound', args);
+      const text = `🧬 **AmbientSound Duplicated**\n\n_From \`${data.sourceId}\`_\n\n${formatSoundView(data.sound)}`;
+      return { content: [{ type: 'text' as const, text }] };
+    } catch (e) {
+      return errorContent('duplicate', e instanceof Error ? e.message : String(e));
+    }
+  }
 
   private async handleCreate(args: ArgsFor<'create'>) {
     try {

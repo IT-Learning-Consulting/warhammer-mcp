@@ -30,7 +30,7 @@ export function isKnownTrigger(key: string): boolean {
   return TRIGGER_SET.has(key);
 }
 
-// ── Action catalog (77 native keys across 3 groups) — audit §4 ────────────────
+// ── Action catalog (78 native keys across 3 groups) — audit §4 + BUG-333 ──────
 
 export interface ActionSpec {
   /** MATT action group. */
@@ -69,7 +69,7 @@ export const ACTION_CATALOG: Record<string, ActionSpec> = {
   playlist: { group: 'actions', danger: false, required: ['entity', 'action'] },
   stopsound: { group: 'actions', danger: false },
   showimage: { group: 'actions', danger: false, required: ['img'] },
-  changedoor: { group: 'actions', danger: false, required: ['entity', 'doorstate'] },
+  changedoor: { group: 'actions', danger: false, required: ['entity', 'state'] },
   notification: { group: 'actions', danger: false, required: ['text'] },
   chatmessage: { group: 'actions', danger: false, required: ['text'] },
   runmacro: { group: 'actions', danger: true, requiredAny: ['entity', 'macroid', 'macroUuid'] },
@@ -102,6 +102,7 @@ export const ACTION_CATALOG: Record<string, ActionSpec> = {
   scrollingtext: { group: 'actions', danger: false, required: ['entity', 'content'] },
   preload: { group: 'actions', danger: false, required: ['entity'] },
   append: { group: 'actions', danger: false, required: ['entity', 'text'] },
+  animate: { group: 'actions', danger: false, required: ['entity'] },
   // group: logic
   runbatch: { group: 'logic', danger: false },
   checkdata: { group: 'logic', danger: false, required: ['attribute', 'value'] },
@@ -180,7 +181,7 @@ export const STRICT_ACTION_DATA: Record<string, z.ZodTypeAny> = {
       message: 'scene requires one of entity or sceneid',
     }),
   permissions: z.object({ entity: entityField, permission: z.union([z.string(), z.number()]) }).passthrough(),
-  changedoor: z.object({ entity: entityField, doorstate: z.string() }).passthrough(),
+  changedoor: z.object({ entity: entityField, state: z.string() }).passthrough(),
   activeeffect: z.object({ entity: entityField, effect: z.union([z.string(), z.record(z.unknown())]), action: z.string() }).passthrough(),
 };
 

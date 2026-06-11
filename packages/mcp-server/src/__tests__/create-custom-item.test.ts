@@ -762,6 +762,29 @@ describe('buildEffectPayload — compendium clone regression', () => {
     } as any);
     expect(out.system.scriptData[0]._id).toBeUndefined();
   });
+  // BUG-334: description is the Foundry-core user-facing text shown on sheet
+  // expansion — effects without it are opaque to players. It must survive both
+  // the Zod parse (the schema strips unknown keys) and the payload build.
+  it('passes description through to the Foundry payload (BUG-334)', () => {
+    const out: any = buildEffectPayload({
+      name: 'Glowing Blade',
+      trigger: 'prePrepareData',
+      script: '',
+      description: '<p>+10 WS while drawn.</p>',
+    } as any);
+    expect(out.description).toBe('<p>+10 WS while drawn.</p>');
+    const parsed: any = CreateCustomItemInputSchema.parse({
+      itemType: 'talent',
+      name: 'T',
+      effects: [{ name: 'e', trigger: 'endRound', script: '', description: 'visible text' }],
+      ...actorDest(),
+    });
+    expect(parsed.effects[0].description).toBe('visible text');
+  });
+  it('defaults description to empty string when omitted (BUG-334)', () => {
+    const out: any = buildEffectPayload({ name: 'NoDesc', trigger: 'endTurn', script: '' } as any);
+    expect(out.description).toBe('');
+  });
   it('includes all 53 triggers in enum (spot-check)', () => {
     expect(() =>
       CreateCustomItemInputSchema.parse({

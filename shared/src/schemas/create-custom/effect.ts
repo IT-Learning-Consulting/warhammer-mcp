@@ -92,6 +92,9 @@ export const ActiveEffectDataSchema = z.object({
   trigger: ActiveEffectTrigger,
   script: z.string().default(''),
   label: z.string().optional(),
+  // BUG-334: Foundry core ActiveEffect.description (HTMLField) — the user-facing
+  // text shown on sheet expansion / tooltips. Without it effects are opaque to players.
+  description: z.string().optional(),
   transfer: TransferData.optional(),
   disabled: z.boolean().optional(),
   transferDocument: z.boolean().optional(),
@@ -151,6 +154,7 @@ export function buildEffectPayload(input: ActiveEffectInput): Record<string, unk
   const effect: Record<string, unknown> = {
     name: input.name,
     img: input.img ?? 'icons/svg/aura.svg',
+    description: input.description ?? '',
     transfer: false,
     disabled: input.disabled ?? false,
     statuses: input.statuses ?? [],

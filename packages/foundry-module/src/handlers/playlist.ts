@@ -33,11 +33,19 @@ import {
   PlaylistDeleteSoundInput,
   PlaylistPlayInput,
   PlaylistStopInput,
+  PlaylistDuplicateInput,
+  PlaylistPauseSoundInput,
+  PlaylistBulkImportSoundsInput,
+  PlaylistPreloadSoundInput,
   PLAYLIST_PLAY_MODE_ALIASES,
   type PlaylistViewModel,
   type PlaylistSoundViewModel,
   type PlaylistListItem,
   type PlaylistPlayModeAlias,
+  type PlaylistDuplicateInputType,
+  type PlaylistPauseSoundInputType,
+  type PlaylistBulkImportSoundsInputType,
+  type PlaylistPreloadSoundInputType,
 } from '@foundry-mcp/shared';
 import { z } from 'zod';
 import { wrappedWrite } from '../transaction-manager.js';
@@ -607,6 +615,129 @@ export async function deletePlaylistSound(data: unknown): Promise<Envelope<any>>
   };
 }
 
+// ── Phase 9C — duplicate / pause-sound / bulk-import / preload ─────────────────
+
+// R9C.3 — duplicate a whole Playlist (toObject minus _id/sort/folder → create). CCR-2a.
+export async function duplicatePlaylist(data: unknown): Promise<Envelope<any>> {
+  const gate = validateGMAccess();
+  if (!gate.allowed) return { success: false, error: PLAYLIST_DENY('duplicate') };
+
+  const input: PlaylistDuplicateInputType = PlaylistDuplicateInput.strict().parse(data ?? {});
+  const source = getParentOrThrow('playlists', input.playlistId);
+  const sourceId = source.id as string;
+
+  return wrappedWrite('playlist.duplicatePlaylist', async () => {
+    const payload: any = source.toObject();
+    delete payload._id;
+    delete payload.sort;
+    delete payload.folder;
+    payload.name = `${source._source?.name ?? source.name} (Copy)`;
+
+    const created: any = await (Playlist as any).create(payload);
+    if (!created) throw new Error('PLAYLIST_DUPLICATE_FAILED: Playlist.create returned empty');
+
+    const persisted = (game as any).playlists?.get(created.id);
+    if (!persisted || persisted.id === sourceId) {
+      throw new Error(`PLAYLIST_DUPLICATE_FAILED: cloned playlist missing or equals source id`);
+    }
+
+    notify.created('playlist', `Playlist "${persisted._source?.name}"`, {
+      summary: `duplicated from ${sourceId}`,
+    });
+
+    return {
+      success: true as const,
+      data: { id: persisted.id, name: persisted._source?.name, playlist: serializePlaylistViewModel(persisted) },
+    };
+  });
+}
+
+// R9C.5 — pause-sound: thin wrapper enforcing {playing:false, pausedTime?}. CCR-2a.
+export async function pausePlaylistSound(data: unknown): Promise<Envelope<any>> {
+  const input: PlaylistPauseSoundInputType = PlaylistPauseSoundInput.strict().parse(data ?? {});
+  const changes: Record<string, unknown> = { playing: false };
+  if (input.pausedTime !== undefined) changes.pausedTime = input.pausedTime;
+  // Delegate to the factory update path (re-uses CCR-2a verify + notify).
+  return updatePlaylistSound({
+    action: 'update-sound',
+    playlistId: input.playlistId,
+    soundId: input.soundId,
+    changes,
+  });
+}
+
+// R9C.5 — bulk-import-sounds: create one PlaylistSound per audio file in a folder. CCR-2a.
+export async function bulkImportSounds(data: unknown): Promise<Envelope<any>> {
+  const gate = validateGMAccess();
+  if (!gate.allowed) return { success: false, error: PLAYLIST_DENY('bulk-import') };
+
+  const input: PlaylistBulkImportSoundsInputType = PlaylistBulkImportSoundsInput.strict().parse(data ?? {});
+  const playlist = getParentOrThrow('playlists', input.playlistId);
+  const source = input.source ?? 'data';
+
+  const FilePicker: any =
+    (foundry as any)?.applications?.apps?.FilePicker?.implementation ?? (globalThis as any).FilePicker;
+  if (!FilePicker?.browse) {
+    return { success: false, error: 'FILEPICKER_UNAVAILABLE: FilePicker.browse is not available' };
+  }
+
+  const AUDIO_EXT = /\.(ogg|mp3|wav|flac|m4a|opus|webm)$/i;
+
+  return wrappedWrite('playlist.bulkImportSounds', async () => {
+    const result = await FilePicker.browse(source, input.folder);
+    const files: string[] = (result?.files ?? []).filter((f: string) => AUDIO_EXT.test(f));
+    if (files.length === 0) {
+      throw new Error(`PLAYLIST_BULK_IMPORT_EMPTY: no audio files found in "${input.folder}"`);
+    }
+
+    const payloads = files.map((path) => {
+      const name = path.split('/').pop()?.replace(AUDIO_EXT, '') ?? path;
+      return { name, path };
+    });
+    const before = playlist.sounds?.size ?? 0;
+    await playlist.createEmbeddedDocuments('PlaylistSound', payloads);
+
+    // CCR-2a: re-read — sound count grew by the number imported.
+    const after = playlist.sounds?.size ?? 0;
+    if (after !== before + payloads.length) {
+      throw new Error(
+        `PLAYLIST_BULK_IMPORT_NOT_PERSISTED: expected ${before + payloads.length} sounds, found ${after}`,
+      );
+    }
+
+    notify.created('playlist', `Playlist "${playlist._source?.name}"`, {
+      summary: `bulk-imported ${payloads.length} sound(s) from ${input.folder}`,
+    });
+
+    return {
+      success: true as const,
+      data: { playlistId: input.playlistId, imported: payloads.length, files },
+    };
+  });
+}
+
+// R9C.5 — preload-sound: game.audio.preload(src) cross-client broadcast. CCR-2b transient.
+export async function preloadPlaylistSound(data: unknown): Promise<Envelope<any>> {
+  const gate = validateGMAccess();
+  if (!gate.allowed) return { success: false, error: PLAYLIST_DENY('preload') };
+
+  const input: PlaylistPreloadSoundInputType = PlaylistPreloadSoundInput.strict().parse(data ?? {});
+
+  // CCR-2b transient: confirm the preload Promise resolved; nothing persisted.
+  const audio = (game as any).audio;
+  if (typeof audio?.preload !== 'function') {
+    return { success: false, error: 'AUDIO_PRELOAD_UNAVAILABLE: game.audio.preload is not available' };
+  }
+  await audio.preload(input.src);
+
+  notify.info(`Preloaded sound "${input.src}" to all clients`);
+
+  return {
+    success: true as const,
+    data: { src: input.src, preloaded: true },
+  };
+}
+
 // ── Umbrella dispatcher ──────────────────────────────────────────────────────
 
 export async function dispatchPlaylist(data: unknown): Promise<any> {
@@ -639,6 +770,14 @@ export async function dispatchPlaylist(data: unknown): Promise<any> {
       return playPlaylist(input);
     case 'stop':
       return stopPlaylist(input);
+    case 'duplicate-playlist':
+      return duplicatePlaylist(input);
+    case 'pause-sound':
+      return pausePlaylistSound(input);
+    case 'bulk-import-sounds':
+      return bulkImportSounds(input);
+    case 'preload-sound':
+      return preloadPlaylistSound(input);
     default:
       throw new Error(`Unknown playlist action: ${(input as any).action}`);
   }

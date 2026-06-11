@@ -20,13 +20,20 @@ import {
   TileDeleteInput,
   TileGetInput,
   TileListInput,
+  type TileToolInputType,
   type TileViewModel,
   type TileListItem,
 } from '@foundry-mcp/shared';
 import {
   createEmbeddedCRUDHandlers,
   deepStripUndefined,
+  validateGMAccess,
+  getSceneOrThrow,
+  type Envelope,
 } from '../utils/embeddedCRUDFactory.js';
+import { getEmbeddedOrThrow } from '../utils/getEmbeddedOrThrow.js';
+import { wrappedWrite } from '../transaction-manager.js';
+import { notify } from '../notify.js';
 
 // ── Serializers ──────────────────────────────────────────────────────────────
 function serializeTileViewModel(scene: any, tile: any): TileViewModel {
@@ -157,4 +164,111 @@ export const updateTile = handlers.update;
 export const deleteTile = handlers.delete;
 export const getTile = handlers.get;
 export const listTiles = handlers.list;
-export const dispatchTile = handlers.dispatch;
+
+// ── Phase 9C bespoke actions (duplicate + z-order) ─────────────────────────────
+
+// duplicate: toObject → strip _id/sort → createEmbeddedDocuments → CCR-2a re-read.
+async function duplicateTile(
+  input: Extract<TileToolInputType, { action: 'duplicate' }>,
+): Promise<Envelope<any>> {
+  const gate = validateGMAccess();
+  if (!gate.allowed) return { success: false, error: 'Access denied: duplicateTile requires GM' };
+
+  const scene = getSceneOrThrow(input.sceneId);
+  const source = getEmbeddedOrThrow<any>(scene, 'tiles', input.tileId, 'Tile');
+  const sourceId = source.id as string;
+
+  return wrappedWrite('tile.duplicate', async () => {
+    const data: any = source.toObject();
+    delete data._id;
+    delete data.sort;
+
+    const created = await scene.createEmbeddedDocuments('Tile', [data]);
+    const doc = Array.isArray(created) ? created[0] : created;
+    if (!doc) throw new Error('TILE_DUPLICATE_FAILED: createEmbeddedDocuments returned empty');
+
+    const persisted = getEmbeddedOrThrow<any>(scene, 'tiles', doc.id, 'Tile');
+    if (persisted.id === sourceId) {
+      throw new Error(`TILE_DUPLICATE_FAILED: duplicate id equals source id "${sourceId}"`);
+    }
+
+    notify.created('tile', `Tile ${persisted.id}`, { summary: `duplicated from ${sourceId}` });
+
+    return {
+      success: true as const,
+      data: { tile: serializeTileViewModel(scene, persisted), sourceId },
+    };
+  }, { sceneId: input.sceneId });
+}
+
+// z-order: compute max+1 (front) / min-1 (back) across scene.tiles, then update sort.
+async function setTileZOrder(
+  input: Extract<TileToolInputType, { action: 'bring-to-front' | 'send-to-back' }>,
+  mode: 'front' | 'back',
+): Promise<Envelope<any>> {
+  const gate = validateGMAccess();
+  if (!gate.allowed) return { success: false, error: 'Access denied: setTileZOrder requires GM' };
+
+  const scene = getSceneOrThrow(input.sceneId);
+  const tile = getEmbeddedOrThrow<any>(scene, 'tiles', input.tileId, 'Tile');
+
+  const sorts: number[] = (Array.from(scene.tiles?.values?.() ?? []) as any[]).map(
+    (t: any) => (typeof t.sort === 'number' ? t.sort : 0),
+  );
+  const targetSort =
+    mode === 'front'
+      ? (sorts.length ? Math.max(...sorts) : 0) + 1
+      : (sorts.length ? Math.min(...sorts) : 0) - 1;
+
+  return wrappedWrite(`tile.${mode === 'front' ? 'bringToFront' : 'sendToBack'}`, async () => {
+    await tile.update({ sort: targetSort });
+
+    // CCR-2a: re-read the persisted sort.
+    const persisted = getEmbeddedOrThrow<any>(scene, 'tiles', input.tileId, 'Tile');
+    const persistedSort = (persisted._source?.sort ?? persisted.sort) as number;
+    if (persistedSort !== targetSort) {
+      throw new Error(
+        `TILE_ZORDER_NOT_PERSISTED: sort is ${persistedSort}, expected ${targetSort}`,
+      );
+    }
+
+    notify.updated('tile', `Tile ${persisted.id}`, { summary: `${mode} (sort ${targetSort})` });
+
+    return {
+      success: true as const,
+      data: { tile: serializeTileViewModel(scene, persisted) },
+    };
+  }, { sceneId: input.sceneId });
+}
+
+// ── Custom dispatch (factory 5 + duplicate + 2 z-order) ────────────────────────
+export const dispatchTile = async (data: unknown): Promise<Envelope<any>> => {
+  let input: TileToolInputType;
+  try {
+    input = TileToolInput.parse(data ?? {}) as TileToolInputType;
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'Invalid input';
+    throw new Error(`Invalid input: ${message}`);
+  }
+
+  switch (input.action) {
+    case 'create':
+      return handlers.create(input);
+    case 'update':
+      return handlers.update(input);
+    case 'delete':
+      return handlers.delete(input);
+    case 'get':
+      return handlers.get(input);
+    case 'list':
+      return handlers.list(input);
+    case 'duplicate':
+      return duplicateTile(input);
+    case 'bring-to-front':
+      return setTileZOrder(input, 'front');
+    case 'send-to-back':
+      return setTileZOrder(input, 'back');
+    default:
+      throw new Error(`Unknown tile action: ${(input as any).action}`);
+  }
+};

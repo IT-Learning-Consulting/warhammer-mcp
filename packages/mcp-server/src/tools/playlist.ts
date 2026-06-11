@@ -97,6 +97,20 @@ interface PlaylistPlayResponse {
   mode: number;
   suppressed?: boolean;
 }
+interface PlaylistDuplicateResponse {
+  id: string;
+  name: string;
+  playlist: PlaylistViewModel;
+}
+interface PlaylistBulkImportResponse {
+  playlistId: string;
+  imported: number;
+  files: string[];
+}
+interface PlaylistPreloadResponse {
+  src: string;
+  preloaded: boolean;
+}
 interface PlaylistStopResponse {
   playlistId: string;
   playing: boolean;
@@ -191,7 +205,7 @@ export class PlaylistTool extends BaseTool {
           openWorldHint: true,
         },
         description:
-          `Manage Foundry VTT Playlist + embedded PlaylistSound documents. 10 actions span world-level Playlist CRUD, embedded sound CRUD, and playback control.
+          `Manage Foundry VTT Playlist + embedded PlaylistSound documents. 14 actions span world-level Playlist CRUD, embedded sound CRUD, playback control, and Phase 9C convenience (duplicate / pause-sound / bulk-import / preload).
 
 **Actions:**
 - **create-playlist**: Create a new Playlist. Required: name. Optional: description, channel (environment/interface/music), mode (-1 disabled / 0 sequential / 1 shuffle / 2 simultaneous), playing, fade (ms), seed, sorting (a/m), sort, folder, ownership, flags, and inline sounds array (each sound: name, path required + description, channel, repeat, fade, sort, volume 0-1, playing, pausedTime, flags). Returns id, name, soundIds, requestedChanges, playlist view.
@@ -204,6 +218,10 @@ export class PlaylistTool extends BaseTool {
 - **delete-sound**: Remove a PlaylistSound from a Playlist. playlistId + soundId. Returns remainingSoundCount.
 - **play**: Play a Playlist via playAll(). playlistId + optional mode override (sequential/shuffle/simultaneous/disabled). Returns persisted playing + mode.
 - **stop**: Stop a Playlist via stopAll(). playlistId. Returns persisted playing.
+- **duplicate-playlist** (Phase 9C): Clone a whole Playlist (sounds included) as "<name> (Copy)". Required: playlistId. Returns the new playlist.
+- **pause-sound** (Phase 9C): Pause a PlaylistSound (sets playing:false + optional pausedTime). Required: playlistId, soundId. Optional pausedTime (seconds). Dedicated wrapper over update-sound.
+- **bulk-import-sounds** (Phase 9C): Create one PlaylistSound per audio file in a folder (FilePicker.browse). Required: playlistId, folder. Optional source (data/public/s3, default data). Returns imported count + file list.
+- **preload-sound** (Phase 9C): Preload an audio path to all clients (game.audio.preload). Required: src. Transient — no persisted state.
 
 **Examples:**
 - create: {action:"create-playlist", name:"Tavern", channel:"environment", mode:1, sounds:[{path:"music/tavern.ogg", volume:0.4}]}
@@ -227,6 +245,10 @@ export class PlaylistTool extends BaseTool {
                 'delete-sound',
                 'play',
                 'stop',
+                'duplicate-playlist',
+                'pause-sound',
+                'bulk-import-sounds',
+                'preload-sound',
               ],
               description: 'The playlist action to perform.',
             },
@@ -309,6 +331,9 @@ export class PlaylistTool extends BaseTool {
             countOnly: { type: 'boolean', description: '[list-playlists] Return {total, filterApplied} only.' },
             // Phase 10 cross-doc-fk cascade flag (delete-playlist / delete-sound only).
             cascade: { type: 'boolean', description: '[delete-playlist/delete-sound] When true, clears Scene.playlist / Scene.playlistSound FKs targeting this playlist or sound before deletion. Default false.' },
+            // Phase 9C fields.
+            src: { type: 'string', description: '[preload-sound] Audio file path to preload to all clients (game.audio.preload).' },
+            source: { type: 'string', enum: ['data', 'public', 's3'], description: '[bulk-import-sounds] FilePicker source bucket (default data).' },
           },
           required: ['action'],
         },
@@ -339,10 +364,58 @@ export class PlaylistTool extends BaseTool {
         return this.handlePlay(args);
       case 'stop':
         return this.handleStop(args);
+      case 'duplicate-playlist':
+        return this.handleDuplicatePlaylist(args);
+      case 'pause-sound':
+        return this.handlePauseSound(args);
+      case 'bulk-import-sounds':
+        return this.handleBulkImportSounds(args);
+      case 'preload-sound':
+        return this.handlePreloadSound(args);
     }
   }
 
   // ── Handlers (concrete typed per CCR-Envelope-Consumer rule 3) ────────────
+
+  private async handleDuplicatePlaylist(args: ArgsFor<'duplicate-playlist'>) {
+    try {
+      const data = await this.query<PlaylistDuplicateResponse>('playlist', args);
+      const text = `🧬 **Playlist Duplicated**\n\n**New:** ${data.name} (\`${data.id}\`)\n\n${formatPlaylistView(data.playlist)}`;
+      return { content: [{ type: 'text' as const, text }] };
+    } catch (e) {
+      return errorContent('duplicate-playlist', e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  private async handlePauseSound(args: ArgsFor<'pause-sound'>) {
+    try {
+      const data = await this.query<PlaylistUpdateSoundResponse>('playlist', args);
+      const text = `⏸️ **Sound Paused**\n\n${formatPlaylistSoundView(data.sound)}`;
+      return { content: [{ type: 'text' as const, text }] };
+    } catch (e) {
+      return errorContent('pause-sound', e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  private async handleBulkImportSounds(args: ArgsFor<'bulk-import-sounds'>) {
+    try {
+      const data = await this.query<PlaylistBulkImportResponse>('playlist', args);
+      const text = `📦 **Bulk Import**\n\nImported **${data.imported}** sound(s) into playlist \`${data.playlistId}\`:\n${data.files.map((f) => `- \`${f}\``).join('\n')}`;
+      return { content: [{ type: 'text' as const, text }] };
+    } catch (e) {
+      return errorContent('bulk-import-sounds', e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  private async handlePreloadSound(args: ArgsFor<'preload-sound'>) {
+    try {
+      const data = await this.query<PlaylistPreloadResponse>('playlist', args);
+      const text = `⏬ **Sound Preloaded**\n\n\`${data.src}\` pushed to all clients. _(Transient — no persisted state.)_`;
+      return { content: [{ type: 'text' as const, text }] };
+    } catch (e) {
+      return errorContent('preload-sound', e instanceof Error ? e.message : String(e));
+    }
+  }
 
   private async handleCreatePlaylist(args: ArgsFor<'create-playlist'>) {
     try {

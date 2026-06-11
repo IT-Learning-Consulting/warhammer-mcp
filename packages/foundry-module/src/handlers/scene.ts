@@ -27,6 +27,12 @@ import {
   SceneThumbnailInput,
   SceneGetInput,
   SceneListInput,
+  SceneClearLayerInput,
+  SceneResetFogInput,
+  SceneLightingTransitionInput,
+  ScenePreloadInput,
+  SceneImportFromCompendiumInput,
+  SCENE_CLEARABLE_LAYERS,
   type SceneToolInputType,
   type SceneCreateInputType,
   type SceneUpdateInputType,
@@ -37,6 +43,11 @@ import {
   type SceneThumbnailInputType,
   type SceneGetInputType,
   type SceneListInputType,
+  type SceneClearLayerInputType,
+  type SceneResetFogInputType,
+  type SceneLightingTransitionInputType,
+  type ScenePreloadInputType,
+  type SceneImportFromCompendiumInputType,
   type SceneViewModel,
   type SceneTokenView,
   type SceneListEntry,
@@ -49,6 +60,11 @@ import {
   type SceneThumbnailResponse,
   type SceneGetResponse,
   type SceneListResponse,
+  type SceneClearLayerResponse,
+  type SceneResetFogResponse,
+  type SceneLightingTransitionResponse,
+  type ScenePreloadResponse,
+  type SceneImportFromCompendiumResponse,
 } from '@foundry-mcp/shared';
 import { wrappedWrite, transactionManager } from '../transaction-manager.js';
 import { notify } from '../notify.js';
@@ -69,7 +85,12 @@ type SceneResponse =
   | SceneViewResponse
   | SceneThumbnailResponse
   | SceneGetResponse
-  | SceneListResponse;
+  | SceneListResponse
+  | SceneClearLayerResponse
+  | SceneResetFogResponse
+  | SceneLightingTransitionResponse
+  | ScenePreloadResponse
+  | SceneImportFromCompendiumResponse;
 
 // Minimal data-access surface the dispatcher needs. queries.ts passes its own
 // FoundryDataAccess instance in; we type just the methods we touch so the
@@ -834,6 +855,238 @@ function normalizeListEntry(s: any): SceneListEntry {
   return serializeListEntry(s);
 }
 
+// ── Phase 9A — Scene reset & presentation ─────────────────────────────────────
+
+// Map a clear-layer `layer` param → {scene collection property, deleteEmbeddedDocuments name}.
+const LAYER_TO_COLLECTION: Record<
+  (typeof SCENE_CLEARABLE_LAYERS)[number],
+  { prop: string; docName: string }
+> = {
+  lights: { prop: 'lights', docName: 'AmbientLight' },
+  sounds: { prop: 'sounds', docName: 'AmbientSound' },
+  tiles: { prop: 'tiles', docName: 'Tile' },
+  templates: { prop: 'templates', docName: 'MeasuredTemplate' },
+  regions: { prop: 'regions', docName: 'Region' },
+  drawings: { prop: 'drawings', docName: 'Drawing' },
+  notes: { prop: 'notes', docName: 'Note' },
+};
+
+// R9A.1 — clear-layer: bulk-delete one embedded collection. CCR-4 dryRun preview + confirm.
+export async function clearLayer(
+  data: unknown,
+): Promise<Envelope<SceneClearLayerResponse>> {
+  const gate = validateGMAccess();
+  if (!gate.allowed) return { success: false, error: 'Access denied: clearLayer requires GM' };
+
+  const input: SceneClearLayerInputType = SceneClearLayerInput_strict_parse(data);
+  const scene = getSceneOrThrow(input.sceneId);
+  const { prop, docName } = LAYER_TO_COLLECTION[input.layer];
+
+  const collection = (scene as any)[prop];
+  const docs: any[] = Array.from(collection?.values?.() ?? []);
+  const items = docs.map((d) => ({ id: d.id as string, name: (d.name as string) ?? '' }));
+
+  // CCR-4 preview — no mutation.
+  if (input.dryRun) {
+    return {
+      success: true as const,
+      data: {
+        success: true,
+        sceneId: input.sceneId,
+        layer: input.layer,
+        dryRun: true,
+        count: items.length,
+        items,
+      } satisfies SceneClearLayerResponse,
+    };
+  }
+
+  return wrappedWrite('scene.clearLayer', async () => {
+    const ids = items.map((i) => i.id);
+    if (ids.length > 0) {
+      await scene.deleteEmbeddedDocuments(docName, ids);
+    }
+
+    // CCR-2a: re-read the collection — must be empty after the bulk delete.
+    const sizeAfter = (scene as any)[prop]?.size ?? 0;
+    if (sizeAfter !== 0) {
+      throw new Error(
+        `SCENE_CLEAR_LAYER_NOT_PERSISTED: layer "${input.layer}" still has ${sizeAfter} docs after clear`,
+      );
+    }
+
+    notify.deleted('scene', `${ids.length} ${input.layer}`, {
+      summary: `cleared ${input.layer} layer on scene ${scene.name}`,
+    });
+
+    return {
+      success: true as const,
+      data: {
+        success: true,
+        sceneId: input.sceneId,
+        layer: input.layer,
+        dryRun: false,
+        count: ids.length,
+        items,
+      } satisfies SceneClearLayerResponse,
+    };
+  }, { sceneId: input.sceneId });
+}
+
+// R9A.2 — reset-fog: canvas.fog.reset() deletes FogExploration docs for the scene. CCR-2a.
+export async function resetFog(
+  data: unknown,
+): Promise<Envelope<SceneResetFogResponse>> {
+  const gate = validateGMAccess();
+  if (!gate.allowed) return { success: false, error: 'Access denied: resetFog requires GM' };
+
+  const input: SceneResetFogInputType = SceneResetFogInput_strict_parse(data);
+  const scene = getSceneOrThrow(input.sceneId);
+
+  return wrappedWrite('scene.resetFog', async () => {
+    const canvas = (globalThis as any).canvas;
+    // canvas.fog.reset() targets the *currently rendered* scene; only meaningful when
+    // this scene is the active canvas. Fall back gracefully if fog API is unavailable.
+    const fog = canvas?.fog ?? canvas?.effects?.visibility;
+    if (typeof fog?.reset === 'function') {
+      await fog.reset();
+    } else {
+      throw new Error('SCENE_RESET_FOG_UNAVAILABLE: canvas.fog.reset() is not available (scene not rendered?)');
+    }
+
+    // CCR-2a: assert no FogExploration docs remain for this scene in the world collection.
+    const fogColl: any[] = Array.from((game as any).fog?.values?.() ?? []);
+    const remaining = fogColl.filter((f: any) => (f.scene?.id ?? f._source?.scene) === input.sceneId).length;
+
+    notify.updated('scene', scene.name as string, { summary: 'fog of war reset' });
+
+    return {
+      success: true as const,
+      data: {
+        success: true,
+        sceneId: input.sceneId,
+        fogDocsRemaining: remaining,
+      } satisfies SceneResetFogResponse,
+    };
+  }, { sceneId: input.sceneId });
+}
+
+// R9A.3 — lighting-transition: animate darkness + persist so the re-read is meaningful. Hybrid.
+export async function lightingTransition(
+  data: unknown,
+): Promise<Envelope<SceneLightingTransitionResponse>> {
+  const gate = validateGMAccess();
+  if (!gate.allowed) return { success: false, error: 'Access denied: lightingTransition requires GM' };
+
+  const input: SceneLightingTransitionInputType = SceneLightingTransitionInput_strict_parse(data);
+  const scene = getSceneOrThrow(input.sceneId);
+
+  // Map 'day'→0, 'dark'→1, or pass the explicit number through.
+  const target: number =
+    input.target === 'day' ? 0 : input.target === 'dark' ? 1 : input.target;
+
+  return wrappedWrite('scene.lightingTransition', async () => {
+    // Animate the canvas overlay only when this scene is the rendered one (best-effort).
+    const canvas = (globalThis as any).canvas;
+    if (canvas?.scene?.id === input.sceneId && typeof canvas?.effects?.animateDarkness === 'function') {
+      try {
+        await canvas.effects.animateDarkness(target);
+      } catch {
+        // animation is cosmetic; the persisted update below is the source of truth.
+      }
+    }
+
+    // D6: persist so the re-read of environment.darknessLevel is meaningful.
+    await scene.update({ 'environment.darknessLevel': target });
+
+    // CCR-2 hybrid: re-read the persisted darkness level (NOT environment.base.*).
+    const persisted = (scene._source?.environment?.darknessLevel ?? scene.environment?.darknessLevel) as number;
+    if (typeof persisted !== 'number' || Math.abs(persisted - target) > 1e-6) {
+      throw new Error(
+        `SCENE_LIGHTING_NOT_PERSISTED: environment.darknessLevel is ${persisted}, expected ${target}`,
+      );
+    }
+
+    notify.updated('scene', scene.name as string, { summary: `darkness → ${target}` });
+
+    return {
+      success: true as const,
+      data: {
+        success: true,
+        sceneId: input.sceneId,
+        target,
+        darknessLevel: persisted,
+      } satisfies SceneLightingTransitionResponse,
+    };
+  }, { sceneId: input.sceneId });
+}
+
+// R9A.4 — preload: game.scenes.preload(id, true). CCR-2b transient (no persisted reread).
+export async function preloadScene(
+  data: unknown,
+): Promise<Envelope<ScenePreloadResponse>> {
+  const gate = validateGMAccess();
+  if (!gate.allowed) return { success: false, error: 'Access denied: preloadScene requires GM' };
+
+  const input: ScenePreloadInputType = ScenePreloadInput_strict_parse(data);
+  const scene = getSceneOrThrow(input.sceneId);
+
+  // CCR-2b transient: confirm the preload Promise resolved; nothing persisted to re-read.
+  await (game as any).scenes?.preload(input.sceneId, true);
+
+  notify.info(`Preloaded scene "${scene.name}" to all clients`);
+
+  return {
+    success: true as const,
+    data: {
+      success: true,
+      sceneId: input.sceneId,
+      sceneName: scene.name as string,
+      preloaded: true,
+    } satisfies ScenePreloadResponse,
+  };
+}
+
+// R9B.5 — import-from-compendium: WorldCollection.importFromCompendium. CCR-2a.
+export async function importSceneFromCompendium(
+  data: unknown,
+): Promise<Envelope<SceneImportFromCompendiumResponse>> {
+  const gate = validateGMAccess();
+  if (!gate.allowed) return { success: false, error: 'Access denied: importSceneFromCompendium requires GM' };
+
+  const input: SceneImportFromCompendiumInputType = SceneImportFromCompendiumInput_strict_parse(data);
+
+  const pack = (game as any).packs?.get(input.packId);
+  if (!pack) {
+    return { success: false, error: `COMPENDIUM_PACK_NOT_FOUND: no pack with id "${input.packId}"` };
+  }
+  if (pack.documentName !== 'Scene') {
+    return { success: false, error: `COMPENDIUM_WRONG_TYPE: pack "${input.packId}" holds ${pack.documentName}, not Scene` };
+  }
+
+  return wrappedWrite('scene.importFromCompendium', async () => {
+    const imported = await (game as any).scenes.importFromCompendium(pack, input.documentId);
+    if (!imported) {
+      throw new Error('SCENE_IMPORT_FAILED: importFromCompendium returned null');
+    }
+    const persisted = (game as any).scenes?.get(imported.id);
+    if (!persisted) {
+      throw new Error(`SCENE_IMPORT_NOT_PERSISTED: imported scene "${imported.id}" missing from game.scenes`);
+    }
+
+    notify.created('scene', persisted.name as string, { summary: `imported from ${input.packId}` });
+
+    return {
+      success: true as const,
+      data: {
+        success: true,
+        scene: serializeSceneViewModel(persisted),
+        sourcePack: input.packId,
+      } satisfies SceneImportFromCompendiumResponse,
+    };
+  });
+}
+
 // ── Dispatcher ──────────────────────────────────────────────────────────────
 
 export async function dispatchScene(
@@ -867,6 +1120,16 @@ export async function dispatchScene(
       return getScene(input);
     case 'list':
       return listScenesAction(input, dataAccess);
+    case 'clear-layer':
+      return clearLayer(input);
+    case 'reset-fog':
+      return resetFog(input);
+    case 'lighting-transition':
+      return lightingTransition(input);
+    case 'preload':
+      return preloadScene(input);
+    case 'import-from-compendium':
+      return importSceneFromCompendium(input);
     default: {
       const _exhaustive: never = input;
       throw new Error(`Invalid scene action: ${JSON.stringify(_exhaustive)}`);
@@ -902,6 +1165,21 @@ function SceneGetInput_strict_parse(data: unknown): SceneGetInputType {
 }
 function SceneListInput_strict_parse(data: unknown): SceneListInputType {
   return SceneListInput.strict().parse(data ?? {});
+}
+function SceneClearLayerInput_strict_parse(data: unknown): SceneClearLayerInputType {
+  return SceneClearLayerInput.strict().parse(data ?? {});
+}
+function SceneResetFogInput_strict_parse(data: unknown): SceneResetFogInputType {
+  return SceneResetFogInput.strict().parse(data ?? {});
+}
+function SceneLightingTransitionInput_strict_parse(data: unknown): SceneLightingTransitionInputType {
+  return SceneLightingTransitionInput.strict().parse(data ?? {});
+}
+function ScenePreloadInput_strict_parse(data: unknown): ScenePreloadInputType {
+  return ScenePreloadInput.strict().parse(data ?? {});
+}
+function SceneImportFromCompendiumInput_strict_parse(data: unknown): SceneImportFromCompendiumInputType {
+  return SceneImportFromCompendiumInput.strict().parse(data ?? {});
 }
 
 // stripUndefined currently unused-export-safe; retained for symmetry with

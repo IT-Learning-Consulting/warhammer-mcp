@@ -78,7 +78,7 @@ import { SoundTool } from './tools/sound.js';
 import { PlaylistTool } from './tools/playlist.js';
 import { MacroTool } from './tools/macro.js';
 import { UserTool } from './tools/user.js';
-// Phase 9 mcp_crud_expansion — Compendium umbrella (6 actions; NO DELETE per HC3).
+// Phase 9 mcp_crud_expansion — Compendium umbrella (10 actions: 6 pack/doc CRU + 4 in-pack folder; NO pack/document DELETE per HC3).
 // Coexists with the existing flat read-only CompendiumTools (D10 — back-compat).
 import { CompendiumUmbrellaTools } from './tools/compendium-umbrella.js';
 // Phase 10 mcp_crud_expansion — Cross-doc FK audit + repair umbrella (3 actions; closes PRD).
@@ -88,6 +88,10 @@ import { TileTool } from './tools/tile.js';
 import { TemplateTool } from './tools/template.js';
 // Phase 5 mcp_coverage_expansion — drawing umbrella (CRUD + list + duplicate).
 import { DrawingTool } from './tools/drawing.js';
+// Phase 7 mcp_coverage_expansion — cards umbrella (stack + embedded-card CRUD + gameplay verbs).
+import { CardsTool } from './tools/cards.js';
+// Phase 8 mcp_coverage_expansion — document-io umbrella (export/import-as-new/preview over 8 world doc types).
+import { DocumentIoTool } from './tools/document-io.js';
 // Phase 6.1 mcp_crud_expansion — FilePicker umbrella tool with Node-side auto-conversion.
 import { FilePickerTool } from './tools/filepicker.js';
 import { NotifyTool } from './tools/notify.js';
@@ -111,6 +115,10 @@ import { ModuleMattTool } from './tools/modules/monks-active-tiles/matt.js';
 // Phase 5 module_integration_v1 — conditional module-tagger + module-sequencer umbrellas.
 import { ModuleTaggerTool } from './tools/modules/tagger/tagger.js';
 import { ModuleSequencerTool } from './tools/modules/sequencer/sequencer.js';
+// Phase 8 module_integration_v1 — conditional module-autoanimations umbrella.
+import { ModuleAutoAnimationsTool } from './tools/modules/autoanimations/autoanimations.js';
+// Phase 6 module_integration_v1 — conditional module-scene-atmosphere bundle umbrella.
+import { ModuleSceneAtmosphereTool } from './tools/modules/scene-atmosphere/scene-atmosphere.js';
 // Phase 13A module_integration_v1 — conditional module-css umbrella.
 import { ModuleCssTool } from './tools/modules/custom-css/css.js';
 // BUG-107: extracted to side-effect-free module so test imports don't boot backend.
@@ -314,6 +322,9 @@ async function startBackend(): Promise<void> {
   const tileTool = new TileTool({ foundryClient, logger });
   const templateTool = new TemplateTool({ foundryClient, logger });
   const drawingTool = new DrawingTool({ foundryClient, logger });
+  const cardsTool = new CardsTool({ foundryClient, logger });
+  // Phase 8 mcp_coverage_expansion — document-io umbrella (export/import-as-new/preview).
+  const documentIoTool = new DocumentIoTool({ foundryClient, logger });
   // Phase 6.1 mcp_crud_expansion — FilePicker tool with Node-side auto-conversion.
   const filePickerTool = new FilePickerTool({ foundryClient, logger });
   // Phase 1 mcp_diagnostic_tool — read-only diagnostic umbrella (Tier 1).
@@ -338,6 +349,10 @@ async function startBackend(): Promise<void> {
   // Phase 5 module_integration_v1 — module-tagger + module-sequencer (conditional).
   const moduleTaggerTool = new ModuleTaggerTool({ foundryClient, logger });
   const moduleSequencerTool = new ModuleSequencerTool({ foundryClient, logger });
+  // Phase 8 module_integration_v1 — module-autoanimations (conditional).
+  const moduleAutoAnimationsTool = new ModuleAutoAnimationsTool({ foundryClient, logger });
+  // Phase 6 module_integration_v1 — module-scene-atmosphere bundle (conditional, per-member guard).
+  const moduleSceneAtmosphereTool = new ModuleSceneAtmosphereTool({ foundryClient, logger });
   // Phase 13A module_integration_v1 — module-css (conditional).
   const moduleCssTool = new ModuleCssTool({ foundryClient, logger });
 
@@ -406,7 +421,7 @@ async function startBackend(): Promise<void> {
   registry.register('playlist', (args) => playlistTool.execute(args));
   registry.register('macro', (args) => macroTool.execute(args));
   registry.register('user', (args) => userTool.execute(args));
-  // Phase 9 mcp_crud_expansion — Compendium umbrella (6 actions; NO DELETE per HC3).
+  // Phase 9 mcp_crud_expansion — Compendium umbrella (10 actions: 6 pack/doc CRU + 4 in-pack folder; NO pack/document DELETE per HC3).
   registry.register('compendium', (args) => compendiumUmbrellaTools.execute(args));
   // Phase 10 mcp_crud_expansion — Cross-doc FK umbrella (3 actions; closes PRD).
   registry.register('cross-doc-fk', (args) => crossDocFkTool.execute(args));
@@ -414,6 +429,9 @@ async function startBackend(): Promise<void> {
   registry.register('tile', (args) => tileTool.execute(args));
   registry.register('template', (args) => templateTool.execute(args));
   registry.register('drawing', (args) => drawingTool.execute(args));
+  registry.register('cards', (args) => cardsTool.execute(args));
+  // Phase 8 mcp_coverage_expansion — document-io umbrella (export/import-as-new/preview).
+  registry.register('document-io', (args) => documentIoTool.execute(args));
   // Phase 6.1 mcp_crud_expansion — FilePicker umbrella (upload / list / convert).
   registry.register('filepicker', (args) => filePickerTool.execute(args));
   // Phase 1 mcp_diagnostic_tool — read-only diagnostic umbrella. Foundry-side
@@ -440,6 +458,10 @@ async function startBackend(): Promise<void> {
   // Phase 5 module_integration_v1 — module-tagger + module-sequencer (conditional).
   registry.register('module-tagger', (args) => moduleTaggerTool.execute(args as any));
   registry.register('module-sequencer', (args) => moduleSequencerTool.execute(args as any));
+  // Phase 8 module_integration_v1 — module-autoanimations (conditional).
+  registry.register('module-autoanimations', (args) => moduleAutoAnimationsTool.execute(args as any));
+  // Phase 6 module_integration_v1 — module-scene-atmosphere bundle (conditional, per-member guard).
+  registry.register('module-scene-atmosphere', (args) => moduleSceneAtmosphereTool.execute(args as any));
   // Phase 13A module_integration_v1 — module-css (conditional).
   registry.register('module-css', (args) => moduleCssTool.execute(args as any));
   // Phase 4 mcp_crud_expansion — add-actors-to-scene + delete-token folded into scene umbrella.
@@ -524,6 +546,9 @@ async function startBackend(): Promise<void> {
     ...tileTool.getToolDefinitions(),
     ...templateTool.getToolDefinitions(),
     ...drawingTool.getToolDefinitions(),
+    ...cardsTool.getToolDefinitions(),
+    // Phase 8 mcp_coverage_expansion — document-io umbrella.
+    ...documentIoTool.getToolDefinitions(),
     // Phase 6.1 mcp_crud_expansion — FilePicker umbrella (upload / list / convert).
     ...filePickerTool.getToolDefinitions(),
     // Phase 1 mcp_diagnostic_tool — diagnostic umbrella (3 actions in v1).
@@ -550,6 +575,11 @@ async function startBackend(): Promise<void> {
     // Phase 5 module_integration_v1 — module-tagger + module-sequencer (conditional).
     ...moduleTaggerTool.getToolDefinitions(),
     ...moduleSequencerTool.getToolDefinitions(),
+    // Phase 8 module_integration_v1 — module-autoanimations (conditional).
+    ...moduleAutoAnimationsTool.getToolDefinitions(),
+
+    // Phase 6 module_integration_v1 — module-scene-atmosphere bundle (conditional, per-member guard).
+    ...moduleSceneAtmosphereTool.getToolDefinitions(),
 
     // Phase 13A module_integration_v1 — module-css (conditional).
     ...moduleCssTool.getToolDefinitions(),

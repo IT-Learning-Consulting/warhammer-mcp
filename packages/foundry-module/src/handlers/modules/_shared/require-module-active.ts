@@ -70,3 +70,28 @@ export function requireModuleActive(
 
   return null; // primary + all hard deps are present and active
 }
+
+/**
+ * Guard for optional companion modules (e.g. tokenmagic-automatic-wounds).
+ *
+ * Distinct from requireModuleActive: a companion is an *optional* add-on that
+ * extends a primary module's functionality. Its absence returns COMPANION_NOT_ACTIVE
+ * (not MODULE_NOT_ACTIVE) so callers can surface the distinction to the user.
+ *
+ * @param companionId - The Foundry module ID of the companion (e.g. 'tokenmagic-automatic-wounds').
+ * @returns null when the companion is present and active; a ModuleGuardError otherwise.
+ *
+ * Usage:
+ *   const g = requireCompanionActive('tokenmagic-automatic-wounds');
+ *   if (g) return g;
+ */
+export function requireCompanionActive(companionId: string): ModuleGuardError | null {
+  const mod = (globalThis as any).game?.modules?.get?.(companionId);
+  if (!mod || !mod.active) {
+    return {
+      success: false,
+      error: `COMPANION_NOT_ACTIVE: Optional companion module "${companionId}" is not installed or not active. Install and enable it to use this action.`,
+    };
+  }
+  return null;
+}

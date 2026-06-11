@@ -78,6 +78,8 @@ export type NotifyKind =
   | 'drawing'
   | 'playlist'
   | 'playlist-sound'
+  | 'cards'
+  | 'card'
   | 'macro'
   | 'user'
   | 'compendium-pack'
@@ -87,7 +89,8 @@ export type NotifyKind =
   | 'setting'
   | 'chatMessage'
   | 'tagger'
-  | 'sequencer';
+  | 'sequencer'
+  | 'autoanimations';
 
 export type NotifySeverity =
   | 'created'

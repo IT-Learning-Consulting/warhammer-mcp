@@ -36,12 +36,17 @@ import {
   GetMacroInput,
   ListMacrosInput,
   ExecuteMacroInput,
+  ExecuteMacroByNameInput,
+  ImportMacroFromCompendiumInput,
   MacroToolInput,
   type MacroViewModel,
   type MacroListItem,
   type MacroHotbarRef,
   type MacroRegionBehaviorRef,
   type MacroExecuteResponse,
+  type ExecuteMacroByNameInputType,
+  type ImportMacroFromCompendiumInputType,
+  type MacroImportResponse,
 } from '@foundry-mcp/shared';
 import { wrappedWrite } from '../transaction-manager.js';
 import { notify } from '../notify.js';
@@ -400,6 +405,100 @@ export async function executeMacro(rawInput: unknown): Promise<Envelope<MacroExe
   });
 }
 
+// ── Phase 9B — execute-by-name + import-from-compendium ─────────────────────
+
+// R9B.3 — resolve name→id (rejecting collisions), then delegate to executeMacro.
+export async function executeMacroByName(rawInput: unknown): Promise<Envelope<MacroExecuteResponse>> {
+  const gate = validateGMAccess();
+  if (!gate.allowed) return { success: false, error: MACRO_DENY('execute') };
+
+  let input: ExecuteMacroByNameInputType;
+  try {
+    input = ExecuteMacroByNameInput.strict().parse(rawInput ?? {});
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Invalid input';
+    if (/confirmedExecution/.test(msg)) {
+      return {
+        success: false,
+        error: 'MACRO_EXECUTE_NOT_CONFIRMED: execute-by-name requires confirmedExecution: true (CCR-Trust)',
+      };
+    }
+    return { success: false, error: `Invalid input: ${msg}` };
+  }
+
+  // Resolve name → macro(s). Match on _source.name (raw stored) for DP-16 parity.
+  const matches: any[] = (Array.from((game as any).macros?.values?.() ?? []) as any[]).filter(
+    (m: any) => (m._source?.name ?? m.name) === input.name,
+  );
+  if (matches.length === 0) {
+    return { success: false, error: `MACRO_NOT_FOUND: no macro named "${input.name}"` };
+  }
+  if (matches.length > 1) {
+    const list = matches.map((m: any) => `${m.id} ("${m._source?.name ?? m.name}")`).join(', ');
+    return {
+      success: false,
+      error: `MACRO_EXECUTE_NAME_AMBIGUOUS: ${matches.length} macros named "${input.name}" — pass an explicit macroId via execute. Matches: ${list}`,
+    };
+  }
+
+  // Delegate to the existing executeMacro path (re-uses scope injection + verify).
+  return executeMacro({
+    action: 'execute',
+    macroId: matches[0].id as string,
+    confirmedExecution: true,
+    ...(input.actorId !== undefined ? { actorId: input.actorId } : {}),
+    ...(input.tokenId !== undefined ? { tokenId: input.tokenId } : {}),
+    ...(input.speakerId !== undefined ? { speakerId: input.speakerId } : {}),
+  });
+}
+
+// R9B.4 — import a Macro from a compendium pack into the world. CCR-2a.
+export async function importMacroFromCompendium(
+  rawInput: unknown,
+): Promise<Envelope<MacroImportResponse>> {
+  const gate = validateGMAccess();
+  if (!gate.allowed) return { success: false, error: MACRO_DENY('import') };
+
+  const input: ImportMacroFromCompendiumInputType =
+    ImportMacroFromCompendiumInput.strict().parse(rawInput ?? {});
+
+  const pack = (game as any).packs?.get(input.packId);
+  if (!pack) {
+    return { success: false, error: `COMPENDIUM_PACK_NOT_FOUND: no pack with id "${input.packId}"` };
+  }
+  if (pack.documentName !== 'Macro') {
+    return {
+      success: false,
+      error: `COMPENDIUM_WRONG_TYPE: pack "${input.packId}" holds ${pack.documentName}, not Macro`,
+    };
+  }
+
+  return wrappedWrite('macro.importFromCompendium', async () => {
+    const imported = await (game as any).macros.importFromCompendium(pack, input.documentId);
+    if (!imported) {
+      throw new Error('MACRO_IMPORT_FAILED: importFromCompendium returned null');
+    }
+    // CCR-2a: re-read the new world macro.
+    const persisted = (game as any).macros?.get(imported.id);
+    if (!persisted) {
+      throw new Error(`MACRO_IMPORT_NOT_PERSISTED: imported macro "${imported.id}" missing from game.macros`);
+    }
+
+    notify.created('macro', persisted._source?.name ?? persisted.name ?? imported.id, {
+      summary: `imported from ${input.packId}`,
+    });
+
+    return {
+      success: true as const,
+      data: {
+        macroId: persisted.id as string,
+        macro: serializeMacroViewModel(persisted),
+        sourcePack: input.packId,
+      },
+    };
+  });
+}
+
 // ── Umbrella dispatcher ───────────────────────────────────────────────────
 
 export async function dispatchMacro(data: unknown): Promise<any> {
@@ -424,6 +523,10 @@ export async function dispatchMacro(data: unknown): Promise<any> {
       return listMacros(input);
     case 'execute':
       return executeMacro(input);
+    case 'execute-by-name':
+      return executeMacroByName(input);
+    case 'import-from-compendium':
+      return importMacroFromCompendium(input);
     default:
       throw new Error(`Unknown macro action: ${(input as any).action}`);
   }

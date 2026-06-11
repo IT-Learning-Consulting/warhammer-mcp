@@ -41,6 +41,7 @@ import {
   RegionCreateBehaviorInput,
   RegionUpdateBehaviorInput,
   RegionDeleteBehaviorInput,
+  RegionAddShapeInput,
   type RegionToolInputType,
   type RegionCreateInputType,
   type RegionUpdateInputType,
@@ -50,6 +51,7 @@ import {
   type RegionCreateBehaviorInputType,
   type RegionUpdateBehaviorInputType,
   type RegionDeleteBehaviorInputType,
+  type RegionAddShapeInputType,
   type RegionViewModel,
   type RegionListItem,
   type RegionBehaviorSummary,
@@ -111,11 +113,17 @@ export interface RegionBehaviorDeleteResponse {
   deletedBehaviorId: string;
   remainingBehaviors: number;
 }
+export interface RegionAddShapeResponse {
+  success: true;
+  region: RegionViewModel;
+  shapeCount: number;
+}
 
 export type RegionResponse =
   | RegionCreateResponse
   | RegionUpdateResponse
   | RegionDeleteResponse
+  | RegionAddShapeResponse
   | RegionGetResponse
   | RegionListResponse
   | RegionBehaviorCreateResponse
@@ -566,6 +574,48 @@ export async function deleteBehavior(
   }, { sceneId: input.sceneId });
 }
 
+// ── Phase 9A — addShape (append one shape, no whole-array clobber) ────────────
+
+export async function addShape(data: unknown): Promise<Envelope<RegionAddShapeResponse>> {
+  const gate = validateGMAccess();
+  if (!gate.allowed) return { success: false, error: 'Access denied: addShape requires GM' };
+
+  const input: RegionAddShapeInputType = RegionAddShapeInput_strict_parse(data);
+  const scene = getSceneOrThrow(input.sceneId);
+  const region = getEmbeddedOrThrow<any>(scene, 'regions', input.regionId, 'Region');
+
+  const existing = (region._source?.shapes ?? region.shapes ?? []) as any[];
+  const prevCount = Array.isArray(existing) ? existing.length : 0;
+
+  return wrappedWrite('region.addShape', async () => {
+    // Append-not-clobber: rewrite the full array with the new shape pushed on the end.
+    const next = [...existing.map((s) => ({ ...s })), { ...input.shape }];
+    await region.update({ shapes: next });
+
+    // CCR-2a: re-read — shape count must be prev + 1.
+    const after = (region._source?.shapes ?? region.shapes ?? []) as any[];
+    const afterCount = Array.isArray(after) ? after.length : 0;
+    if (afterCount !== prevCount + 1) {
+      throw new Error(
+        `REGION_ADD_SHAPE_NOT_PERSISTED: shape count is ${afterCount}, expected ${prevCount + 1}`,
+      );
+    }
+
+    notify.updated('region', (region.name as string) ?? `Region ${region.id}`, {
+      summary: `added ${input.shape.type} shape (now ${afterCount})`,
+    });
+
+    return {
+      success: true as const,
+      data: {
+        success: true,
+        region: serializeRegionViewModel(scene, region, false),
+        shapeCount: afterCount,
+      } satisfies RegionAddShapeResponse,
+    };
+  }, { sceneId: input.sceneId });
+}
+
 // ── Dispatcher ──────────────────────────────────────────────────────────────
 
 export async function dispatchRegion(data: unknown): Promise<Envelope<RegionResponse>> {
@@ -593,6 +643,8 @@ export async function dispatchRegion(data: unknown): Promise<Envelope<RegionResp
       return updateBehavior(input);
     case 'deleteBehavior':
       return deleteBehavior(input);
+    case 'add-shape':
+      return addShape(input);
   }
 }
 
@@ -621,4 +673,7 @@ function RegionUpdateBehaviorInput_strict_parse(data: unknown): RegionUpdateBeha
 }
 function RegionDeleteBehaviorInput_strict_parse(data: unknown): RegionDeleteBehaviorInputType {
   return RegionDeleteBehaviorInput.parse(data ?? {});
+}
+function RegionAddShapeInput_strict_parse(data: unknown): RegionAddShapeInputType {
+  return RegionAddShapeInput.parse(data ?? {});
 }

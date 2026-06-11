@@ -73,10 +73,13 @@ export const GetEnhancedCreatureIndexInput = z.object({}).strict();
 // Phase 9 — Compendium umbrella tool (CRU only; HC3 forbids any delete action)
 // ────────────────────────────────────────────────────────────────────────────
 //
-// 6 actions on a single discriminated union. NO delete-pack and NO
+// 10 actions on a single discriminated union (6 pack/document CRU + 4 in-pack
+// folder management, added 2026-06-11). NO delete-pack and NO
 // delete-document-from-pack — those literals are grep-enforced absent
-// (mcp_crud_expansion PRD §7 HC3). Validate Step 4 + executor smoke gates
-// scan this file and the umbrella tool file for any introduction.
+// (mcp_crud_expansion PRD §7 HC3). delete-folder-in-pack IS present and HC3-OK
+// (folder = organizational metadata, not a pack or document — see the in-pack
+// folder block below). Validate Step 4 + executor smoke gates scan this file
+// and the umbrella tool file for any delete-pack/delete-document introduction.
 //
 // Pack-creation handler uses `foundry.documents.collections.CompendiumCollection`
 // (v13-canonical; bare global deprecated since v13, removed v15 — see
@@ -124,6 +127,11 @@ export const AddDocumentToPackInput = z.object({
     z.object({ kind: z.literal('uuid'), uuid: z.string() }).strict(),
     z.object({ kind: z.literal('inline'), data: z.record(z.string(), z.unknown()) }).strict(),
   ]),
+  // Optional in-pack folder id to place the imported document into. The handler
+  // sets it via newDoc.update({folder}) AFTER importDocument (toCompendium keeps
+  // the source's WORLD folder id, which doesn't resolve in the pack → root). The
+  // folder must already exist in pack.folders.
+  folder: z.string().optional(),
 }).strict();
 
 export const UpdateDocumentInPackInput = z.object({
@@ -139,6 +147,56 @@ export const ReadDocumentFromPackInput = z.object({
   documentId: z.string(),
 }).strict();
 
+// ────────────────────────────────────────────────────────────────────────────
+// In-pack folder management (2026-06-11) — 4 actions on pack.folders.
+// ────────────────────────────────────────────────────────────────────────────
+//
+// These operate on folders INSIDE a pack (pack.folders / CompendiumFolderCollection),
+// distinct from the pack's own sidebar folder (UpdatePackInput.changes.folder).
+//
+// HC3 reconciliation: delete-folder-in-pack IS a delete, but HC3 forbids only
+// pack deletion (LevelDB dirs, orphan risk) and document deletion (content loss).
+// A folder is organizational metadata — deleting it does not lose documents
+// (deleteContents:false un-parents them to root). So delete-folder-in-pack does
+// NOT violate HC3. It still requires CCR-Delete-Safety confirm:true.
+//
+// Pack folder depth cap is 3 (CONST.FOLDER_MAX_DEPTH - 1), enforced Foundry-side
+// in Folder._preCreate — distinct from the world folder cap of 4.
+
+export const CreateFolderInPackInput = z.object({
+  action: z.literal('create-folder-in-pack'),
+  packId: z.string(),
+  folderName: z.string().min(1),
+  parentFolderId: z.string().optional(),
+  color: z.string().optional(),
+  sort: z.number().int().optional(),
+}).strict();
+
+export const ListFoldersInPackInput = z.object({
+  action: z.literal('list-folders-in-pack'),
+  packId: z.string(),
+}).strict();
+
+export const UpdateFolderInPackInput = z.object({
+  action: z.literal('update-folder-in-pack'),
+  packId: z.string(),
+  folderId: z.string(),
+  changes: z.object({
+    folderName: z.string().min(1).optional(),
+    color: z.string().nullable().optional(),
+    sort: z.number().int().optional(),
+    parentFolderId: z.string().nullable().optional(),
+  }).strict(),
+}).strict();
+
+export const DeleteFolderInPackInput = z.object({
+  action: z.literal('delete-folder-in-pack'),
+  packId: z.string(),
+  folderId: z.string(),
+  confirm: z.boolean(),
+  deleteContents: z.boolean().default(false),
+}).strict();
+
 export const CompendiumToolInput = z.discriminatedUnion('action', [
   CreatePackInput,
   UpdatePackInput,
@@ -146,6 +204,10 @@ export const CompendiumToolInput = z.discriminatedUnion('action', [
   AddDocumentToPackInput,
   UpdateDocumentInPackInput,
   ReadDocumentFromPackInput,
+  CreateFolderInPackInput,
+  ListFoldersInPackInput,
+  UpdateFolderInPackInput,
+  DeleteFolderInPackInput,
 ]);
 
 export type CompendiumToolInputType = z.infer<typeof CompendiumToolInput>;
