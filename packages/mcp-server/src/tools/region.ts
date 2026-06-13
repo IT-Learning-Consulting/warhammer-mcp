@@ -169,7 +169,7 @@ export class RegionTool extends BaseTool {
 - **deleteBehavior**: Remove a behavior. Required: sceneId, regionId, behaviorId. ⚠️ Irreversible.
 
 **RegionBehavior subtypes (behavior.type + system fields):**
-- teleportToken: {destination?: string|null, choice?: bool}
+- teleportToken: {destination?: string|null, choice?: bool} — destination MUST be a full Region UUID ("Scene.<sceneId>.Region.<regionId>"), NOT a bare id or "Scene.<id>"; Foundry silently nulls a non-Region-UUID value at write time
 - executeMacro: {uuid?: string|null, everyone?: bool, events?: regionEvent[]}
 - adjustDarknessLevel: {mode?: 0|1|2, modifier?: 0–1}
 - suppressWeather: {} (no system fields)

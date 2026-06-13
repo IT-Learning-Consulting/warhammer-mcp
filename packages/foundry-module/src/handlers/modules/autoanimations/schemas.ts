@@ -137,7 +137,10 @@ export const ModuleAutoAnimationsInput = z.discriminatedUnion('action', [
     itemUuid: z.string().optional(),
     itemName: z.string().optional(),
     targetUuids: z.array(z.string()).optional(),
-    confirm: z.boolean(),
+    // BUG-366: optional so an omitted confirm parses and hits the runtime gate
+    // (handlePlayAnimation → clean CONFIRM_REQUIRED) instead of surfacing a raw Zod
+    // missing-field error. confirm:false and omit both route to the same clean token.
+    confirm: z.boolean().optional(),
   }).strict(),
 ]);
 

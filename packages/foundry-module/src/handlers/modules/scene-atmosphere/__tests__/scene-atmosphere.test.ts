@@ -208,10 +208,10 @@ describe('Guard routing', () => {
     (globalThis as any).game = {
       modules: makeModulesMap(['scene-transitions']), // socketlib absent
     };
-    // play-transition requires `options` (all fields optional in transitionOptionsSchema)
+    // play-transition requires `transitionOptions` (all fields optional in transitionOptionsSchema)
     const result = await dispatchModuleSceneAtmosphere({
       action: 'play-transition',
-      options: {},
+      transitionOptions: {},
     });
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/MODULE_NOT_ACTIVE/);
@@ -226,7 +226,7 @@ describe('Guard routing', () => {
     };
     const result = await dispatchModuleSceneAtmosphere({
       action: 'play-transition',
-      options: {},
+      transitionOptions: {},
     });
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/MODULE_NOT_ACTIVE/);

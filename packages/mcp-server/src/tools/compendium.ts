@@ -168,6 +168,11 @@ export class CompendiumTools extends BaseTool {
               minimum: 1,
               maximum: 1000,
               default: 100
+            },
+            compact: {
+              type: 'boolean',
+              description: 'BUG-365: when true, each entry is id/name/type/pack only (omits threatLevel, creatureType, size, flags). Cuts payload ~80% at high limits — a full limit=500 list otherwise runs ~167k chars and can overflow context. Use to survey names, then call get-compendium-item for details on the final picks. Default: false.',
+              default: false
             }
           },
           required: []
@@ -418,6 +423,7 @@ export class CompendiumTools extends BaseTool {
           message: 'Limit must be a number between 1 and 1000'
         }).transform(val => parseInt(val, 10))
       ]).optional().default(100), // Reduced default for better Claude Desktop exploration
+      compact: z.boolean().optional().default(false), // BUG-365: trim per-entry payload at high limits
     });
 
     let params;
@@ -434,10 +440,13 @@ export class CompendiumTools extends BaseTool {
     }
 
     try {
-      const results = await this.query<any>('listCreaturesByCriteria', params);
+      // BUG-365: compact is a response-shaping flag only — strip it before the query so it
+      // never contaminates the foundry-module criteria object.
+      const { compact, ...queryParams } = params;
+      const results = await this.query<any>('listCreaturesByCriteria', queryParams);
 
       this.logger.debug('Creature criteria search completed', {
-        criteriaCount: Object.keys(params).length,
+        criteriaCount: Object.keys(queryParams).length,
         totalFound: results?.creatures?.length || 0,
         limit: params.limit,
         packsSearched: results?.searchSummary?.packsSearched || 0
@@ -454,10 +463,15 @@ export class CompendiumTools extends BaseTool {
 
       return {
         creatures: Array.isArray(results?.creatures)
-          ? results.creatures.map((creature: any) => this.formatCreatureListItem(creature))
+          ? results.creatures.map((creature: any) =>
+              compact
+                // BUG-365: compact entry — id/name/type/pack only (~40 bytes vs ~334). Survey
+                // names at high limits, then get-compendium-item for details on the final picks.
+                ? { id: creature.id, name: creature.name, type: creature.type, pack: creature.pack }
+                : this.formatCreatureListItem(creature))
           : [],
         totalCount: Array.isArray(results?.creatures) ? results.creatures.length : 0,
-        criteria: params,
+        criteria: queryParams,
         searchSummary: {
           ...searchSummary,
           searchStrategy: 'Prioritized pack search - WFRP 4e core content first, then modules, then campaign-specific',

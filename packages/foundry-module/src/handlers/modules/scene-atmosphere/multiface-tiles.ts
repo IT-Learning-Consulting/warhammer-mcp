@@ -73,6 +73,14 @@ function resolveTile(tileId: string): any {
   );
   if (byFind) return byFind;
 
+  // BUG-356: final fallback — resolve the TileDocument straight from the scene collection.
+  // canvas.tiles.get()/.placeables only cover tiles currently in the RENDERED layer; a tile
+  // that exists in canvas.scene.tiles (persisted) but whose PlaceableObject isn't in the live
+  // layer (foreground sublayer inactive, canvas mid-render) would 404 above even though sibling
+  // reads succeeded a moment earlier. getTileDoc() unwraps the {document} shape transparently.
+  const bySceneTiles = c.scene?.tiles?.get?.(tileId);
+  if (bySceneTiles) return { document: bySceneTiles };
+
   throw new Error(`TILE_NOT_FOUND: No Tile with id "${tileId}" on the current scene "${c.scene?.name ?? c.scene?.id}"`);
 }
 
@@ -114,6 +122,7 @@ export async function handleSwitchTileFace(input: SwitchTileFaceInput): Promise<
 
     // No-op guard: skip if already on this face
     if (currentSrc === input.facePath) {
+      notify.info(`tile: ${tileName} — switch-tile-face: already on this face, no change`);
       return {
         success: true,
         data: {
@@ -286,6 +295,7 @@ export async function handleResetToOriginalFace(input: ResetToOriginalFaceInput)
     const currentSrc = tileDoc.texture?.src ?? null;
 
     if (currentSrc === originalImage) {
+      notify.info(`tile: ${tileName} — reset-to-original-face: already on original face, no change`);
       return {
         success: true,
         data: {

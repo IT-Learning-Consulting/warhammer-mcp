@@ -198,15 +198,18 @@ function serializePackMetadata(pack: any): PackMetadataView {
   };
 }
 
-function serializePackEntry(entry: any, packId: string): PackEntrySummary {
+function serializePackEntry(entry: any, packId: string, documentName: string): PackEntrySummary {
   return {
     id: String(entry.id ?? entry._id ?? ''),
     name: String(entry.name ?? ''),
     type: String(entry.type ?? ''),
     img: (entry.img as string | undefined) ?? null,
-    // 5-segment v13 UUID: Compendium.<packageType>.<packageName>.<DocType>.<docId>
-    // packId is already "<packageType>.<packageName>"; build the canonical form.
-    uuid: `Compendium.${packId}.${String(entry.type ?? '')}.${String(entry.id ?? entry._id ?? '')}`,
+    // 5-segment v13 UUID: Compendium.<packageType>.<packageName>.<DocClass>.<docId>
+    // packId is already "<packageType>.<packageName>". BUG-358: the 4th segment is the
+    // document CLASS name (e.g. "Item"/"Actor" from pack.documentName), NOT the document
+    // SUBTYPE (entry.type, e.g. "trapping") — the `.trapping.` form does NOT resolve via
+    // fromUuid(). This matches the form add-document-to-pack already emits.
+    uuid: `Compendium.${packId}.${documentName}.${String(entry.id ?? entry._id ?? '')}`,
     // Foundry stores the in-pack folder id on each index entry (null = pack root).
     folder: (entry.folder as string | undefined) ?? null,
   };
@@ -447,7 +450,8 @@ async function readCompendiumPack(input: any): Promise<Envelope<ReadPackResponse
   const allEntries = Array.from(index.values()) as any[];
   const start = (page - 1) * pageSize;
   const slice = allEntries.slice(start, start + pageSize);
-  const entries = slice.map((e) => serializePackEntry(e, input.packId));
+  const packDocumentName = String(pack.documentName ?? pack.metadata?.type ?? 'Item');
+  const entries = slice.map((e) => serializePackEntry(e, input.packId, packDocumentName));
 
   // In-pack folder tree (not paginated — folder counts are small). Empty array
   // if the pack has no folders or the collection is unavailable.
@@ -1056,8 +1060,10 @@ export async function dispatchCompendium(data: unknown): Promise<any> {
   try {
     input = CompendiumToolInput.parse(data ?? {}) as CompendiumToolInputType;
   } catch (e) {
+    // BUG-366: surface a clean typed token instead of a raw Zod invalid_union /
+    // unrecognized_keys dump (covers out-of-enum action + update-pack {label}).
     const message = e instanceof Error ? e.message : 'Invalid input';
-    throw new Error(`Invalid input: ${message}`);
+    return { success: false, error: `COMPENDIUM_INVALID_INPUT: ${message}` };
   }
 
   switch (input.action) {

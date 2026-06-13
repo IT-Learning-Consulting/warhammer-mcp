@@ -61,9 +61,10 @@ const QUERY_KEY_ALLOWLIST = new Set([
   'setActorOwnership',
   'getActorOwnership',
 
-  // ── FilePicker: 3 lambda registrations → 1 registry.register('filepicker'). ──
+  // ── FilePicker: 4 lambda registrations → 1 registry.register('filepicker'). ──
   'uploadFile',
   'listFiles',
+  'filepickerCreateDirectory',
   'filepickerNotifyWarn',
 
   // ── Flat tools: camelCase query key → kebab Set B name (1:1 but non-trivially derivable). ──

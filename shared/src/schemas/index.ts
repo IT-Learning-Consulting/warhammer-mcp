@@ -71,6 +71,8 @@ export * from './drawing.js';
 export * from './cards.js';
 // Phase 8 mcp_coverage_expansion — document-io umbrella (export/import-as-new/preview over 8 world doc types).
 export * from './document-io.js';
+// Phase 10 mcp_coverage_expansion — keybinding tool (list/get/set/reset-action/reset-all/find-conflicts over game.keybindings).
+export * from './keybinding.js';
 // Phase 1 module_integration_v1 — module-probe umbrella (is-active / list-active).
 // Generic types only; module-specific schemas live in package-local tools/modules/<id>/schemas.ts.
 export * from './module-probe.js';

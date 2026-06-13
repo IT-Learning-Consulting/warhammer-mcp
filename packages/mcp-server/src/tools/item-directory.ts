@@ -236,12 +236,25 @@ export class ItemDirectoryTool extends BaseTool {
   private async handleGet(args: ArgsFor<'get'>) {
     try {
       const data = await this.query<ItemDirectoryGetResponse>('item-directory', args);
+      // BUG-338: "Returns full serialized item" — the handler returns the full
+      // system + flags trees, so render them (not just the 4-field header) so
+      // callers can read back created-item data (e.g. DP-16 post-write verify).
+      const fullDoc = {
+        id: data.id,
+        name: data.name,
+        type: data.type,
+        img: data.img ?? null,
+        folderId: data.folderId ?? null,
+        system: data.system ?? {},
+        flags: data.flags ?? {},
+      };
       const text =
         `📦 **World Item** \`${data.id}\`\n\n` +
         `- **Name:** ${data.name}\n` +
         `- **Type:** ${data.type}\n` +
         `- **img:** ${data.img ?? '_(none)_'}\n` +
-        `- **folderId:** ${data.folderId ?? '_(root)_'}`;
+        `- **folderId:** ${data.folderId ?? '_(root)_'}\n\n` +
+        `**Full serialized item:**\n\`\`\`json\n${JSON.stringify(fullDoc, null, 2)}\n\`\`\``;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
       return errorContent('get', e instanceof Error ? e.message : String(e));

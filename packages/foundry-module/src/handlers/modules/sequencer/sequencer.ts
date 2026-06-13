@@ -259,13 +259,14 @@ async function handleEndSounds(input: EndSoundsInput): Promise<Envelope<unknown>
 async function handleEndAllSounds(input: EndAllSoundsInput): Promise<Envelope<unknown>> {
   if (!isGM()) return { success: false, error: 'GM_REQUIRED' };
   if (input.confirm !== true) {
-    return { success: false, error: 'CONFIRM_REQUIRED: end-all-sounds clears all sounds on the scene. Re-send with confirm:true.' };
+    return { success: false, error: 'CONFIRM_REQUIRED: end-all-sounds clears all running Sequencer sounds (all scenes). Re-send with confirm:true.' };
   }
   try {
     const Sequencer = getSequencer();
-    await Sequencer.SoundManager.endAllSounds(input.sceneId, true);
-    notify.updated('sequencer', 'Ended all sounds', { summary: input.sceneId ?? 'current scene' });
-    return { success: true, data: { ended: true, sceneId: input.sceneId ?? null } };
+    // Sequencer 4.2.x signature: endAllSounds(push2 = true) — sceneId param removed; ends all sounds globally + broadcasts.
+    await Sequencer.SoundManager.endAllSounds(true);
+    notify.updated('sequencer', 'Ended all sounds', { summary: 'all scenes' });
+    return { success: true, data: { ended: true } };
   } catch (e) {
     return { success: false, error: `SEQUENCER_END_ALL_SOUNDS_ERROR: ${e instanceof Error ? e.message : String(e)}` };
   }

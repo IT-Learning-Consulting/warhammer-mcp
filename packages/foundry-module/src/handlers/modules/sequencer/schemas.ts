@@ -51,7 +51,8 @@ export const ModuleSequencerInput = z.discriminatedUnion('action', [
   // SoundManager actions
   z.object({ action: z.literal('play-sound'), file: z.string().min(1), options: z.record(z.unknown()).optional() }).strict(),
   z.object({ action: z.literal('end-sounds'), filter: SoundFilter.optional() }).strict(),
-  z.object({ action: z.literal('end-all-sounds'), sceneId: z.string().optional(), confirm: z.boolean() }).strict(),
+  // Sequencer 4.2.x dropped the sceneId param from SoundManager.endAllSounds — it now ends all sounds globally.
+  z.object({ action: z.literal('end-all-sounds'), confirm: z.boolean() }).strict(),
   z.object({ action: z.literal('get-sounds'), filter: SoundFilter.optional() }).strict(),
 
   // Database actions (read-only)

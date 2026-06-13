@@ -140,6 +140,31 @@ function validatePayloadMatchesType(documentType: DocumentTypeType, data: Record
     }
   }
 
+  // BUG-367: Actor/Item mutual exclusion. Both carry `system` + `type`, so the anti-markers
+  // above can't tell them apart. wfrp4e Actor types are character/npc/creature/vehicle; if the
+  // payload declares one of those but documentType is Item (or vice-versa for known Item
+  // subtypes), reject at pre-flight with a precise TYPE_MISMATCH instead of failing late at the
+  // DB layer with a generic *_WRITE_NOT_PERSISTED. Lists are disjoint, so this never rejects a
+  // valid import — an unknown type just falls through and is handled downstream.
+  const ACTOR_TYPES = new Set(['character', 'npc', 'creature', 'vehicle']);
+  const ITEM_TYPES = new Set([
+    'weapon', 'armour', 'ammunition', 'trapping', 'container', 'money', 'cargo',
+    'skill', 'career', 'talent', 'trait', 'prayer', 'spell', 'mutation',
+    'critical', 'disease', 'psychology', 'injury', 'vehicleMod', 'vehicleRole', 'extendedTest',
+  ]);
+  if (typeof data.type === 'string') {
+    if (documentType === 'Item' && ACTOR_TYPES.has(data.type)) {
+      throw new Error(
+        `DOCUMENT_IO_TYPE_MISMATCH: documentType "Item" but payload.type="${data.type}" is a WFRP4e Actor type. Re-export with documentType "Actor".`,
+      );
+    }
+    if (documentType === 'Actor' && ITEM_TYPES.has(data.type)) {
+      throw new Error(
+        `DOCUMENT_IO_TYPE_MISMATCH: documentType "Actor" but payload.type="${data.type}" is a WFRP4e Item subtype. Re-export with documentType "Item".`,
+      );
+    }
+  }
+
   // Scene anti-marker: if both width and height are numbers and there is no
   // system field, it looks like a Scene — reject if declared as something else.
   if (
@@ -336,11 +361,14 @@ async function handlePreview(
     }
   }
 
-  // Also check the raw data for embedded arrays (fallback for types where
-  // instance.constructor.metadata.embedded may not be populated in the test env).
+  // BUG-368: raw-data counts are authoritative for preview. In-memory construction
+  // (new DocClass(data) without full game context) does NOT populate EmbeddedCollections
+  // from a plain-object payload — `.size` stays 0 — so the metadata-driven loop above can
+  // report items:0 for an Actor whose payload carries a full items[] array. Always overwrite
+  // with the raw array length so the preview-before-import guard reports the real content.
   const EMBEDDED_KEYS = ['items', 'effects', 'sounds', 'cards', 'pages', 'results'];
   for (const key of EMBEDDED_KEYS) {
-    if (!(key in embeddedCounts) && Array.isArray(input.data[key])) {
+    if (Array.isArray(input.data[key])) {
       embeddedCounts[key] = (input.data[key] as unknown[]).length;
     }
   }

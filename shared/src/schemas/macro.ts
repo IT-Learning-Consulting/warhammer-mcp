@@ -115,6 +115,33 @@ export const ImportMacroFromCompendiumInput = z.object({
   documentId: FOUNDRY_ID,
 }).strict();
 
+// ── Phase 12 module_integration_v1 — Advanced Macros execution-routing actions ──
+// advanced-macros (v2.3.0) augments the Macro document with one flag:
+// flags.advanced-macros.runForSpecificUser. These 3 actions read/write that flag on existing Macro
+// docs. Each is guarded by requireModuleActive('advanced-macros') in the handler; the 8 core actions
+// above stay UNGUARDED. `target` is z.string() (NOT z.enum) because "" is a valid clear-flag value
+// and a raw User._id is also accepted; the handler enforces enum semantics + the canRunAsGM
+// pre-flight (dossier §2.5).
+
+export const SetExecutionTargetInput = z.object({
+  action: z.literal('set-execution-target'),
+  macroId: FOUNDRY_ID,
+  // "GM" | "runForEveryone" | "runForEveryoneElse" | "runAsWorldScript" | "runAsWorldScriptSetup" | <User._id> | "" (clear)
+  target: z.string(),
+  // Handler-enforced confirm gate for target "GM" / "runForEveryone" (arbitrary JS, elevated scope).
+  confirm: z.boolean().optional(),
+}).strict();
+
+export const ListWorldScriptsInput = z.object({
+  action: z.literal('list-world-scripts'),
+  hook: z.enum(['setup', 'ready', 'all']).optional(),  // default 'all' server-side
+}).strict();
+
+export const GetExecutionTargetInput = z.object({
+  action: z.literal('get-execution-target'),
+  macroId: FOUNDRY_ID,
+}).strict();
+
 export const MacroToolInput = z.discriminatedUnion('action', [
   CreateMacroInput,
   UpdateMacroInput,
@@ -124,6 +151,10 @@ export const MacroToolInput = z.discriminatedUnion('action', [
   ExecuteMacroInput,
   ExecuteMacroByNameInput,
   ImportMacroFromCompendiumInput,
+  // Phase 12 — advanced-macros execution-routing (conditional; handler-guarded).
+  SetExecutionTargetInput,
+  ListWorldScriptsInput,
+  GetExecutionTargetInput,
 ]);
 
 // ── Type exports (z.infer for each input + the union) ──────────────────────
@@ -136,7 +167,16 @@ export type ListMacrosInputType = z.infer<typeof ListMacrosInput>;
 export type ExecuteMacroInputType = z.infer<typeof ExecuteMacroInput>;
 export type ExecuteMacroByNameInputType = z.infer<typeof ExecuteMacroByNameInput>;
 export type ImportMacroFromCompendiumInputType = z.infer<typeof ImportMacroFromCompendiumInput>;
+// Phase 12 — advanced-macros execution-routing input types.
+export type SetExecutionTargetInputType = z.infer<typeof SetExecutionTargetInput>;
+export type ListWorldScriptsInputType = z.infer<typeof ListWorldScriptsInput>;
+export type GetExecutionTargetInputType = z.infer<typeof GetExecutionTargetInput>;
 export type MacroToolInputType = z.infer<typeof MacroToolInput>;
+
+// Phase 12 — the advanced-macros runForSpecificUser flag value space.
+// "GM" | "runForEveryone" | "runForEveryoneElse" | "runAsWorldScript" | "runAsWorldScriptSetup"
+// | <User._id string> | "" (clear). Modeled as string (the handler enforces the semantics).
+export type RunForValue = string;
 
 // ── Response shapes (concrete typed; CCR-Envelope-Consumer rule 3) ─────────
 
@@ -242,4 +282,33 @@ export interface MacroImportResponse {
   macroId: string;
   macro: MacroViewModel;
   sourcePack: string;
+}
+
+// ── Phase 12 — advanced-macros execution-routing response shapes ───────────
+export interface SetExecutionTargetResponse {
+  macroId: string;
+  name: string;
+  target: string;               // verified flag value (post-write read-back); '' when cleared
+  canRunAsGM: boolean | null;   // evaluated only for target 'GM'; null otherwise
+  warning?: string;             // e.g. 'canRunAsGM_false' — flag was NOT written
+  reason?: string;              // human-readable explanation when warning present
+  note?: string;                // world-script timing note (effect on next reload)
+}
+
+export interface WorldScriptItem {
+  id: string;
+  name: string;
+  command: string;
+  hook: 'setup' | 'ready';      // ready→runAsWorldScript, setup→runAsWorldScriptSetup
+}
+
+export interface ListWorldScriptsResponse {
+  items: WorldScriptItem[];
+}
+
+export interface GetExecutionTargetResponse {
+  macroId: string;
+  name: string;
+  target: string | null;        // RunForValue, or null when the flag is unset (vanilla execution)
+  canRunAsGM: boolean;
 }

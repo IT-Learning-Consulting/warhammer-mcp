@@ -83,6 +83,8 @@ import { dispatchItemDirectory as dispatchItemDirectoryHandler } from './handler
 import { dispatchActorConfig as dispatchActorConfigHandler } from './handlers/actor-config.js';
 // Phase 2 mcp_coverage_expansion — dice-roll tool (roll/validate/simulate over Foundry Roll).
 import { dispatchDiceRoll as dispatchDiceRollHandler } from './handlers/dice-roll.js';
+// Phase 10 mcp_coverage_expansion — keybinding tool (list/get/set/reset-action/reset-all/find-conflicts).
+import { dispatchKeybinding as dispatchKeybindingHandler } from './handlers/keybinding.js';
 // Phase 3 mcp_coverage_expansion — combatant umbrella (7 per-combatant actions).
 import { dispatchCombatant as dispatchCombatantHandler } from './handlers/combatant.js';
 // Phase 1 module_integration_v1 — module-probe umbrella (always-on, read-only) + module-matt stub.
@@ -91,12 +93,36 @@ import { dispatchModuleMatt as dispatchModuleMattHandler } from './handlers/modu
 // Phase 5 module_integration_v1 — module-tagger + module-sequencer umbrellas.
 import { dispatchModuleTagger as dispatchModuleTaggerHandler } from './handlers/modules/tagger/tagger.js';
 import { dispatchModuleSequencer as dispatchModuleSequencerHandler } from './handlers/modules/sequencer/sequencer.js';
+// Phase 4 module_integration_v1 — module-levels umbrella.
+import { dispatchModuleLevels as dispatchModuleLevelsHandler } from './handlers/modules/levels/levels.js';
 // Phase 8 module_integration_v1 — module-autoanimations umbrella.
 import { dispatchModuleAutoAnimations as dispatchModuleAutoAnimationsHandler } from './handlers/modules/autoanimations/autoanimations.js';
 // Phase 6 module_integration_v1 — module-scene-atmosphere umbrella (6-member bundle: fxmaster/tokenmagic/scenery/scene-transitions/multiface-tiles/dynamic-soundscapes).
 import { dispatchModuleSceneAtmosphere as dispatchModuleSceneAtmosphereHandler } from './handlers/modules/scene-atmosphere/scene-atmosphere.js';
+// Phase 7 module_integration_v1 — module-access-control umbrella (2-member bundle: LocknKey + LockView).
+import { dispatchModuleAccessControl as dispatchModuleAccessControlHandler } from './handlers/modules/access-control/access-control.js';
 // Phase 13A module_integration_v1 — module-css umbrella.
 import { dispatchModuleCss as dispatchModuleCssHandler } from './handlers/modules/custom-css/css.js';
+// Phase 15 module_integration_v1 — module-lighting umbrella (CommunityLighting, conditional).
+import { dispatchModuleLighting as dispatchModuleLightingHandler } from './handlers/modules/community-lighting/lighting.js';
+// Phase 9 module_integration_v1 — WFRP mechanic delegates: module-robak + module-tokenbar (conditional).
+import { dispatchModuleRobak as dispatchModuleRobakHandler } from './handlers/modules/robak/robak.js';
+import { dispatchModuleTokenbar as dispatchModuleTokenbarHandler } from './handlers/modules/tokenbar/tokenbar.js';
+// Phase 10 module_integration_v1 — module-armoury (Forien's Armoury, conditional).
+import { dispatchModuleArmoury as dispatchModuleArmouryHandler } from './handlers/modules/forien-armoury/armoury.js';
+// Phase 11 module_integration_v1 — module-party-resources (Party Resources, conditional).
+import { dispatchModulePartyResources as dispatchModulePartyResourcesHandler } from './handlers/modules/fvtt-party-resources/party-resources.js';
+// Phase 11 module_integration_v1 — module-gmtoolkit (GM Toolkit, conditional).
+import { dispatchModuleGmtoolkit as dispatchModuleGmtoolkitHandler } from './handlers/modules/wfrp4e-gm-toolkit/gmtoolkit.js';
+// Phase 12 module_integration_v1 — module-chat-commander (_chatcommands, conditional).
+import { dispatchModuleChatCommander as dispatchModuleChatCommanderHandler } from './handlers/modules/_chatcommands/chat-commander.js';
+// Phase 14 module_integration_v1 — thin-session modules (conditional).
+import { dispatchModuleTimekeeping as dispatchModuleTimekeepingHandler } from './handlers/modules/simple-timekeeping/timekeeping.js';
+import { dispatchModulePatrol as dispatchModulePatrolHandler } from './handlers/modules/patrol/patrol.js';
+import { dispatchModuleGatherer as dispatchModuleGathererHandler } from './handlers/modules/gatherer/gatherer.js';
+import { dispatchModuleMastercrafted as dispatchModuleMastercraftedHandler } from './handlers/modules/mastercrafted/mastercrafted.js';
+// Phase 3 module_integration_v1 — item-piles economy surface (conditional).
+import { dispatchModuleItempiles as dispatchModuleItempilesHandler } from './handlers/modules/item-piles/item-piles.js';
 // Phase 6.1 mcp_crud_expansion — FilePicker handlers (upload/list + notify.warn round-trip).
 import {
   uploadFile as uploadFileHandler,
@@ -333,6 +359,8 @@ export class QueryHandlers {
     CONFIG.queries[`${modulePrefix}.actor-config`] = this.handleActorConfig.bind(this);
     // Phase 2 mcp_coverage_expansion — dice-roll tool (roll/validate/simulate over Foundry Roll).
     CONFIG.queries[`${modulePrefix}.dice-roll`] = this.handleDiceRoll.bind(this);
+    // Phase 10 mcp_coverage_expansion — keybinding tool (GM-client scope over game.keybindings).
+    CONFIG.queries[`${modulePrefix}.keybinding`] = this.handleKeybinding.bind(this);
     // Phase 3 mcp_coverage_expansion — combatant umbrella (7 per-combatant actions).
     CONFIG.queries[`${modulePrefix}.combatant`] = this.handleCombatant.bind(this);
     // Phase 1 module_integration_v1 — module-probe umbrella (always-on, read-only).
@@ -345,12 +373,35 @@ export class QueryHandlers {
     // Phase 5 module_integration_v1 — module-tagger + module-sequencer (conditional).
     CONFIG.queries[`${modulePrefix}.module-tagger`] = this.handleModuleTagger.bind(this);
     CONFIG.queries[`${modulePrefix}.module-sequencer`] = this.handleModuleSequencer.bind(this);
+    // Phase 4 module_integration_v1 — module-levels (conditional).
+    CONFIG.queries[`${modulePrefix}.module-levels`] = this.handleModuleLevels.bind(this);
     // Phase 8 module_integration_v1 — module-autoanimations (conditional).
     CONFIG.queries[`${modulePrefix}.module-autoanimations`] = this.handleModuleAutoAnimations.bind(this);
     // Phase 6 module_integration_v1 — module-scene-atmosphere bundle (conditional, per-member guard).
     CONFIG.queries[`${modulePrefix}.module-scene-atmosphere`] = this.handleModuleSceneAtmosphere.bind(this);
+    // Phase 7 module_integration_v1 — module-access-control bundle (conditional, per-member guard).
+    CONFIG.queries[`${modulePrefix}.module-access-control`] = this.handleModuleAccessControl.bind(this);
     // Phase 13A module_integration_v1 — module-css (conditional).
     CONFIG.queries[`${modulePrefix}.module-css`] = this.handleModuleCss.bind(this);
+    // Phase 15 module_integration_v1 — module-lighting (CommunityLighting, conditional).
+    CONFIG.queries[`${modulePrefix}.module-lighting`] = this.handleModuleLighting.bind(this);
+    // Phase 9 module_integration_v1 — WFRP mechanic delegates: module-robak + module-tokenbar (conditional).
+    CONFIG.queries[`${modulePrefix}.module-robak`] = this.handleModuleRobak.bind(this);
+    CONFIG.queries[`${modulePrefix}.module-tokenbar`] = this.handleModuleTokenbar.bind(this);
+    // Phase 10 module_integration_v1 — module-armoury (forien-armoury conditional).
+    CONFIG.queries[`${modulePrefix}.module-armoury`] = this.handleModuleArmoury.bind(this);
+    // Phase 11 module_integration_v1 — module-party-resources + module-gmtoolkit (conditional).
+    CONFIG.queries[`${modulePrefix}.module-party-resources`] = this.handleModulePartyResources.bind(this);
+    CONFIG.queries[`${modulePrefix}.module-gmtoolkit`] = this.handleModuleGmtoolkit.bind(this);
+    // Phase 12 module_integration_v1 — module-chat-commander (conditional).
+    CONFIG.queries[`${modulePrefix}.module-chat-commander`] = this.handleModuleChatCommander.bind(this);
+    // Phase 14 module_integration_v1 — thin-session modules (conditional).
+    CONFIG.queries[`${modulePrefix}.module-timekeeping`] = this.handleModuleTimekeeping.bind(this);
+    CONFIG.queries[`${modulePrefix}.module-patrol`] = this.handleModulePatrol.bind(this);
+    CONFIG.queries[`${modulePrefix}.module-gatherer`] = this.handleModuleGatherer.bind(this);
+    CONFIG.queries[`${modulePrefix}.module-mastercrafted`] = this.handleModuleMastercrafted.bind(this);
+    // Phase 3 module_integration_v1 — item-piles economy surface (conditional).
+    CONFIG.queries[`${modulePrefix}.module-itempiles`] = this.handleModuleItempiles.bind(this);
   }
 
   unregisterHandlers(): void {
@@ -640,6 +691,17 @@ export class QueryHandlers {
     }
   }
 
+  // Phase 4 module_integration_v1 — module-levels dispatcher.
+  // requireModuleActive('levels', ['wall-height']) guard runs inside dispatchModuleLevels.
+  private async handleModuleLevels(data: unknown): Promise<any> {
+    try {
+      return await dispatchModuleLevelsHandler(data);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to dispatch module-levels action: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
   // Phase 5 module_integration_v1 — module-sequencer dispatcher.
   // requireModuleActive('sequencer') guard runs inside dispatchModuleSequencer.
   private async handleModuleSequencer(data: unknown): Promise<any> {
@@ -674,6 +736,134 @@ export class QueryHandlers {
     }
   }
 
+  // Phase 7 module_integration_v1 — module-access-control dispatcher (LocknKey + LockView).
+  // Per-action guard via ACTION_MEMBER_MAP + requireModuleActive runs inside
+  // dispatchModuleAccessControl. get-bundle-status is always unguarded; get-lock-state
+  // routes to the LnK or LockView member by input shape.
+  private async handleModuleAccessControl(data: unknown): Promise<any> {
+    try {
+      return await dispatchModuleAccessControlHandler(data);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to dispatch module-access-control action: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  // Phase 9 module_integration_v1 — module-robak dispatcher.
+  // requireModuleActive('wfrp4e-macros-and-more') guard runs inside dispatchModuleRobak.
+  private async handleModuleRobak(data: unknown): Promise<any> {
+    try {
+      return await dispatchModuleRobakHandler(data);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to dispatch module-robak action: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  // Phase 9 module_integration_v1 — module-tokenbar dispatcher.
+  // requireModuleActive('monks-tokenbar') guard runs inside dispatchModuleTokenbar.
+  private async handleModuleTokenbar(data: unknown): Promise<any> {
+    try {
+      return await dispatchModuleTokenbarHandler(data);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to dispatch module-tokenbar action: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  // Phase 10 module_integration_v1 — module-armoury dispatcher.
+  // requireModuleActive('forien-armoury') guard runs inside dispatchModuleArmoury.
+  private async handleModuleArmoury(data: unknown): Promise<any> {
+    try {
+      return await dispatchModuleArmouryHandler(data);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to dispatch module-armoury action: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  // Phase 11 module_integration_v1 — module-party-resources dispatcher.
+  // requireModuleActive('fvtt-party-resources') guard runs inside dispatchModulePartyResources.
+  private async handleModulePartyResources(data: unknown): Promise<any> {
+    try {
+      return await dispatchModulePartyResourcesHandler(data);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to dispatch module-party-resources action: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  // Phase 11 module_integration_v1 — module-gmtoolkit dispatcher.
+  // requireModuleActive('wfrp4e-gm-toolkit') guard runs inside dispatchModuleGmtoolkit.
+  private async handleModuleGmtoolkit(data: unknown): Promise<any> {
+    try {
+      return await dispatchModuleGmtoolkitHandler(data);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to dispatch module-gmtoolkit action: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  // Phase 12 module_integration_v1 — module-chat-commander dispatcher.
+  // requireModuleActive('_chatcommands') guard runs inside dispatchModuleChatCommander.
+  private async handleModuleChatCommander(data: unknown): Promise<any> {
+    try {
+      return await dispatchModuleChatCommanderHandler(data);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to dispatch module-chat-commander action: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  // Phase 14 module_integration_v1 — thin-session dispatchers.
+  // requireModuleActive(<id>) guards run inside each dispatcher.
+  private async handleModuleTimekeeping(data: unknown): Promise<any> {
+    try {
+      return await dispatchModuleTimekeepingHandler(data);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to dispatch module-timekeeping action: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  private async handleModulePatrol(data: unknown): Promise<any> {
+    try {
+      return await dispatchModulePatrolHandler(data);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to dispatch module-patrol action: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  private async handleModuleGatherer(data: unknown): Promise<any> {
+    try {
+      return await dispatchModuleGathererHandler(data);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to dispatch module-gatherer action: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  private async handleModuleMastercrafted(data: unknown): Promise<any> {
+    try {
+      return await dispatchModuleMastercraftedHandler(data);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to dispatch module-mastercrafted action: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  // Phase 3 module_integration_v1 — module-itempiles dispatcher.
+  // requireModuleActive('item-piles') guard runs inside dispatchModuleItempiles.
+  private async handleModuleItempiles(data: unknown): Promise<any> {
+    try {
+      return await dispatchModuleItempilesHandler(data);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to dispatch module-itempiles action: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
   // Phase 13A module_integration_v1 — module-css dispatcher.
   // requireModuleActive('custom-css') guard runs inside dispatchModuleCss.
   private async handleModuleCss(data: unknown): Promise<any> {
@@ -682,6 +872,17 @@ export class QueryHandlers {
     } catch (error) {
       rethrowAsInvalidInput(error);
       throw new Error(`Failed to dispatch module-css action: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  // Phase 15 module_integration_v1 — module-lighting dispatcher.
+  // requireModuleActive('CommunityLighting') guard runs inside dispatchModuleLighting.
+  private async handleModuleLighting(data: unknown): Promise<any> {
+    try {
+      return await dispatchModuleLightingHandler(data);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to dispatch module-lighting action: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
@@ -1782,6 +1983,17 @@ export class QueryHandlers {
     } catch (error) {
       rethrowAsInvalidInput(error);
       throw new Error(`Failed to dispatch dice-roll action: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  // Phase 10 mcp_coverage_expansion — keybinding tool (list/get/set/reset-action/reset-all/find-conflicts).
+  async handleKeybinding(data: unknown): Promise<any> {
+    try {
+      this.dataAccess.validateFoundryState();
+      return await dispatchKeybindingHandler(data);
+    } catch (error) {
+      rethrowAsInvalidInput(error);
+      throw new Error(`Failed to dispatch keybinding action: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 

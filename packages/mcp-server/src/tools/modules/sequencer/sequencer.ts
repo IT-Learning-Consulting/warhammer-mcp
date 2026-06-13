@@ -94,7 +94,7 @@ function formatEffects(r: SequencerEffectsResult, action: string): string {
   }
   if (action === 'update-effects') return `module-sequencer.update-effects: updated ${r.updatedCount ?? 0} effect(s).`;
   if (action === 'end-all-effects') return `module-sequencer.end-all-effects: ended all effects (scene: ${r.sceneId ?? 'current'}).`;
-  if (action === 'end-all-sounds') return `module-sequencer.end-all-sounds: ended all sounds (scene: ${r.sceneId ?? 'current'}).`;
+  if (action === 'end-all-sounds') return `module-sequencer.end-all-sounds: ended all running sounds (all scenes).`;
   return `module-sequencer.${action}: done. Filter: ${JSON.stringify(r.filter ?? {})}`;
 }
 
@@ -144,7 +144,7 @@ EFFECTS:
 SOUNDS:
 - play-sound          { file, options? }              — new Sequence().sound(file).play()
 - end-sounds          { filter? }                     — SoundManager.endSounds
-- end-all-sounds      { sceneId?, confirm:true }      — clears all sounds (confirm required)
+- end-all-sounds      { confirm:true }                — ends ALL running sounds (all scenes; Sequencer 4.2.x dropped per-scene scoping)
 - get-sounds          { filter? }                     — returns serialized sound state
 DATABASE (read-only):
 - database-search     { path }                        — Database.searchFor(path)
@@ -188,7 +188,7 @@ Examples:
             options: { type: 'object', description: '[play-sequence-json/play-sound] Play options passed to .play().' },
             filter: { type: 'object', description: '[end-effects/get-effects/update-effects/end-sounds/get-sounds] EffectManager InFilters: {name?,sceneId?,source?,target?,origin?,effects?}.' },
             updates: { type: 'object', description: '[update-effects] Property updates to apply to matched effects.' },
-            sceneId: { type: 'string', description: '[end-all-effects/end-all-sounds] Limit to this scene ID.' },
+            sceneId: { type: 'string', description: '[end-all-effects] Limit to this scene ID. (end-all-sounds no longer accepts a scene — Sequencer 4.2.x ends all sounds globally.)' },
             confirm: { type: 'boolean', description: '[end-all-effects/end-all-sounds/preload-for-clients] Required true for destructive/broadcast actions.' },
             file: { type: 'string', description: '[play-sound] Sound file path.' },
             files: { type: 'array', items: { type: 'string' }, description: '[preload/preload-for-clients] File paths to preload.' },

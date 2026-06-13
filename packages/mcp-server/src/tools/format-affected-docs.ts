@@ -10,7 +10,13 @@ import type { FkAffectedDocEntry } from '@foundry-mcp/shared';
  * which docs were touched without a separate audit-document call.
  */
 export function formatAffectedDocs(affectedDocs?: FkAffectedDocEntry[]): string {
-    if (!affectedDocs || affectedDocs.length === 0) return '';
+    // undefined = cascade:false (not requested) → no section (R10.6 backward-compat).
+    if (affectedDocs === undefined) return '';
+    // BUG-353: [] = cascade:true ran but found no inbound FK refs. Surface "Affected docs (0)"
+    // so a cascade delete is distinguishable from a plain delete in the response (R10.6 / Phase 4.3).
+    if (affectedDocs.length === 0) {
+        return '\n\n### Affected docs (0)\n_(cascade:true ran; no inbound FK references to clear)_';
+    }
     const lines = affectedDocs.map(
         (d) => `- ${d.type} \`${d.id}\`${d.name ? ` ${d.name}` : ''}: field \`${d.fkField}\` cleared`,
     );

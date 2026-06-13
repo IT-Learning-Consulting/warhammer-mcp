@@ -1014,6 +1014,7 @@ async function handleFireTriggerAs(input: FireTriggerAsInput): Promise<Envelope<
 
   // BUG-250 — pertoken tiles whose requested tokens have all already triggered must not re-fire.
   if (pertoken && eligibleTokenDocs.length === 0) {
+    notify.info(`MATT fire-trigger-as: ${input.tileUuid} — all ${tokenDocs.length} requested token(s) already triggered this pertoken tile, nothing fired`);
     return {
       success: true,
       data: {

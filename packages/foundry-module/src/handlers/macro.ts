@@ -47,6 +47,14 @@ import {
   type ExecuteMacroByNameInputType,
   type ImportMacroFromCompendiumInputType,
   type MacroImportResponse,
+  // Phase 12 module_integration_v1 — advanced-macros execution-routing.
+  type SetExecutionTargetInputType,
+  type ListWorldScriptsInputType,
+  type GetExecutionTargetInputType,
+  type SetExecutionTargetResponse,
+  type ListWorldScriptsResponse,
+  type WorldScriptItem,
+  type GetExecutionTargetResponse,
 } from '@foundry-mcp/shared';
 import { wrappedWrite } from '../transaction-manager.js';
 import { notify } from '../notify.js';
@@ -55,6 +63,8 @@ import {
   validateGMAccess,
   type Envelope,
 } from '../utils/flatWorldCRUDFactory.js';
+// Phase 12 module_integration_v1 — advanced-macros conditional guard (HC1).
+import { requireModuleActive } from './modules/_shared/require-module-active.js';
 
 // ── Error tag + deny message (parity with PLAYLIST_DENY in playlist.ts) ────
 
@@ -499,6 +509,133 @@ export async function importMacroFromCompendium(
   });
 }
 
+// ── Phase 12 module_integration_v1 — advanced-macros execution-routing ──────
+//
+// 3 actions fold into this core umbrella but each guards on requireModuleActive('advanced-macros')
+// FIRST — the 8 core actions above stay UNGUARDED (HC1: a zero-module user's macro CRUD is
+// unaffected). advanced-macros has NO module API object; the flag IS the API (dossier §2). We only
+// ever read/write flags.advanced-macros.runForSpecificUser via the standard Macro Document methods
+// and read the AdvancedMacro `canRunAsGM` getter — all dialog/UI-clean (pre-plan §Live-state,
+// subagent 5). New cases use `return await` from the start (Phase-11 carry-forward).
+
+const ADV_MACROS = 'advanced-macros';
+const RUNFOR_KEY = 'runForSpecificUser';
+const ADV_DENY = (action: string) => `MACRO_ACCESS_DENIED: ${action} requires GM`;
+// hook → flag value
+const WORLD_SCRIPT_FLAGS = { ready: 'runAsWorldScript', setup: 'runAsWorldScriptSetup' } as const;
+
+export async function setExecutionTarget(
+  input: SetExecutionTargetInputType,
+): Promise<Envelope<SetExecutionTargetResponse>> {
+  const guard = requireModuleActive(ADV_MACROS);
+  if (guard) return guard;
+  if (!validateGMAccess().allowed) return { success: false, error: ADV_DENY('set-execution-target') };
+
+  const macro = (game as any).macros?.get(input.macroId);
+  if (!macro) return { success: false, error: `MACRO_NOT_FOUND: no macro with id "${input.macroId}"` };
+  const name = (macro._source?.name as string) ?? input.macroId;
+  const target = input.target;
+
+  // Confirm gate — arbitrary JS at elevated scope (GM client / all clients).
+  if ((target === 'GM' || target === 'runForEveryone') && input.confirm !== true) {
+    return {
+      success: false,
+      error: `MACRO_EXECUTION_TARGET_NOT_CONFIRMED: target "${target}" runs arbitrary JS at elevated scope — pass confirm: true`,
+    };
+  }
+
+  // canRunAsGM pre-flight — for target 'GM', evaluate BEFORE writing; never write a dead flag
+  // (the module's fallback is a SILENT local execution, not an error — dossier §2.5).
+  let canRunAsGM: boolean | null = null;
+  if (target === 'GM') {
+    canRunAsGM = Boolean((macro as any).canRunAsGM);
+    if (!canRunAsGM) {
+      return {
+        success: true,
+        data: {
+          macroId: input.macroId,
+          name,
+          target: (macro.getFlag(ADV_MACROS, RUNFOR_KEY) as string) ?? '',
+          canRunAsGM,
+          warning: 'canRunAsGM_false',
+          reason:
+            'Macro author is not a GM, or a non-GM user has OWNER permission. Target "GM" would silently fall back to LOCAL execution — flag NOT written.',
+        },
+      };
+    }
+  }
+
+  return wrappedWrite('macro.setExecutionTarget', async () => {
+    if (target === '') {
+      await macro.unsetFlag(ADV_MACROS, RUNFOR_KEY);
+    } else {
+      await macro.setFlag(ADV_MACROS, RUNFOR_KEY, target);
+    }
+    // DP-16 read-back.
+    const verified = (macro.getFlag(ADV_MACROS, RUNFOR_KEY) as string) ?? '';
+    if (target !== '' && verified !== target) {
+      throw new Error(`MACRO_SET_TARGET_NOT_PERSISTED: flag is "${verified}" after writing "${target}"`);
+    }
+    notify.updated('macro', `Macro "${name}"`, { summary: `execution target → ${target || '(cleared)'}` });
+    const data: SetExecutionTargetResponse = { macroId: input.macroId, name, target: verified, canRunAsGM };
+    if (target === 'runAsWorldScript' || target === 'runAsWorldScriptSetup') {
+      data.note = 'World-script auto-execution takes effect on the NEXT world reload, not immediately.';
+    }
+    return { success: true as const, data };
+  });
+}
+
+export async function listWorldScripts(
+  input: ListWorldScriptsInputType,
+): Promise<Envelope<ListWorldScriptsResponse>> {
+  const guard = requireModuleActive(ADV_MACROS);
+  if (guard) return guard;
+  if (!validateGMAccess().allowed) return { success: false, error: ADV_DENY('list-world-scripts') };
+
+  const hook = input.hook ?? 'all';
+  const wanted: string[] =
+    hook === 'all'
+      ? [WORLD_SCRIPT_FLAGS.ready, WORLD_SCRIPT_FLAGS.setup]
+      : hook === 'setup'
+        ? [WORLD_SCRIPT_FLAGS.setup]
+        : [WORLD_SCRIPT_FLAGS.ready];
+
+  const items: WorldScriptItem[] = [];
+  for (const macro of ((game as any).macros?.contents ?? [])) {
+    const flag = macro.getFlag(ADV_MACROS, RUNFOR_KEY) as string | undefined;
+    if (flag && wanted.includes(flag)) {
+      items.push({
+        id: macro.id as string,
+        name: (macro._source?.name as string) ?? '',
+        command: (macro._source?.command as string) ?? '',
+        hook: flag === WORLD_SCRIPT_FLAGS.setup ? 'setup' : 'ready',
+      });
+    }
+  }
+  return { success: true, data: { items } };
+}
+
+export async function getExecutionTarget(
+  input: GetExecutionTargetInputType,
+): Promise<Envelope<GetExecutionTargetResponse>> {
+  const guard = requireModuleActive(ADV_MACROS);
+  if (guard) return guard;
+  if (!validateGMAccess().allowed) return { success: false, error: ADV_DENY('get-execution-target') };
+
+  const macro = (game as any).macros?.get(input.macroId);
+  if (!macro) return { success: false, error: `MACRO_NOT_FOUND: no macro with id "${input.macroId}"` };
+  const target = (macro.getFlag(ADV_MACROS, RUNFOR_KEY) as string | undefined) ?? null;
+  return {
+    success: true,
+    data: {
+      macroId: input.macroId,
+      name: (macro._source?.name as string) ?? input.macroId,
+      target,
+      canRunAsGM: Boolean((macro as any).canRunAsGM),
+    },
+  };
+}
+
 // ── Umbrella dispatcher ───────────────────────────────────────────────────
 
 export async function dispatchMacro(data: unknown): Promise<any> {
@@ -527,6 +664,13 @@ export async function dispatchMacro(data: unknown): Promise<any> {
       return executeMacroByName(input);
     case 'import-from-compendium':
       return importMacroFromCompendium(input);
+    // Phase 12 — advanced-macros execution-routing (await per Phase-11 carry-forward).
+    case 'set-execution-target':
+      return await setExecutionTarget(input);
+    case 'list-world-scripts':
+      return await listWorldScripts(input);
+    case 'get-execution-target':
+      return await getExecutionTarget(input);
     default:
       throw new Error(`Unknown macro action: ${(input as any).action}`);
   }

@@ -137,12 +137,25 @@ type GetInput = Extract<ModuleCssInputType, { action: 'get' }>;
 
 async function handleGet(input: GetInput): Promise<Envelope<unknown>> {
   try {
-    const worldStylesheet = readWorldCss();
+    // BUG-360: report worldStylesheet + isEmpty from the DIRECT setting key (the value
+    // set/reset actually write), NOT through readWorldCss()'s legacy-key fallback. A stale
+    // legacy `stylesheet` key otherwise makes isEmpty:false even right after reset/set(""),
+    // contradicting the tool docs. The legacy fallback (what custom-css would still inject)
+    // is surfaced separately so callers retain that visibility.
+    const settings = getSettings();
+    const directWorld: string = settings.get(MODULE_ID, 'worldStylesheet') ?? SENTINEL;
+    const effective = readWorldCss();
     const data: Record<string, unknown> = {
-      worldStylesheet,
-      worldLength: worldStylesheet.length,
-      isEmpty: worldStylesheet === SENTINEL,
+      worldStylesheet: directWorld,
+      worldLength: directWorld.length,
+      isEmpty: directWorld === SENTINEL || directWorld === '',
     };
+    if (effective !== directWorld) {
+      data.legacyStylesheetActive = true;
+      data.effectiveStylesheet = effective;
+      data.note =
+        'worldStylesheet is empty, but custom-css will still inject CSS from the legacy `stylesheet` setting key (Settings.getStylesheet "world" fallback). Clear that legacy key to fully empty the world CSS.';
+    }
     if (input.includeUserStylesheet) {
       const userStylesheet = readUserCss();
       data.userStylesheet = userStylesheet;

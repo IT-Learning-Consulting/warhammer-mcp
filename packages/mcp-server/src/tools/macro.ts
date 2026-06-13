@@ -27,6 +27,10 @@ import {
   type MacroHotbarRef,
   type MacroRegionBehaviorRef,
   type MacroExecuteResponse,
+  // Phase 12 module_integration_v1 — advanced-macros execution-routing responses.
+  type SetExecutionTargetResponse,
+  type ListWorldScriptsResponse,
+  type GetExecutionTargetResponse,
 } from '@foundry-mcp/shared';
 import { BaseTool, BaseToolOptions } from '../base-tool.js';
 
@@ -149,6 +153,39 @@ function formatExecuteResult(r: MacroExecuteResponse): string {
   return lines.join('\n');
 }
 
+// ── Phase 12 — advanced-macros execution-routing formatters ─────────────────
+
+function formatSetExecutionTarget(d: SetExecutionTargetResponse): string {
+  const lines = [
+    `Macro Execution Target Set`,
+    ``,
+    `- **Macro:** \`${d.macroId}\` ${d.name}`,
+    `- **Target:** ${d.target || '_(cleared — vanilla local execution)_'}`,
+  ];
+  if (d.canRunAsGM !== null) lines.push(`- **canRunAsGM:** ${d.canRunAsGM}`);
+  if (d.warning) lines.push(``, `⚠ **${d.warning}** — flag NOT written.`, d.reason ? `_${d.reason}_` : '');
+  if (d.note) lines.push(``, `_${d.note}_`);
+  return lines.filter((l) => l !== undefined).join('\n');
+}
+
+function formatListWorldScripts(d: ListWorldScriptsResponse): string {
+  if (!d.items.length) return 'No world-script macros found.';
+  const lines = d.items.map(
+    (i) => `- \`${i.id}\` ${i.name} · hook=${i.hook}` + (i.command ? ` · cmd=\`${i.command.slice(0, 60)}\`` : ''),
+  );
+  return `World-script macros (${d.items.length})\n\n${lines.join('\n')}`;
+}
+
+function formatGetExecutionTarget(d: GetExecutionTargetResponse): string {
+  return [
+    `Macro Execution Target`,
+    ``,
+    `- **Macro:** \`${d.macroId}\` ${d.name}`,
+    `- **Target:** ${d.target ?? '_(unset — vanilla local execution)_'}`,
+    `- **canRunAsGM:** ${d.canRunAsGM}`,
+  ].join('\n');
+}
+
 function formatDeleteResponse(d: MacroDeleteResponse): string {
   const lines: string[] = [
     `Macro Deleted`,
@@ -208,6 +245,9 @@ export class MacroTool extends BaseTool {
 - **execute**: Run a Macro with explicit consent. macroId + confirmedExecution: true (REQUIRED — false or missing rejects at parse-time with MACRO_EXECUTE_NOT_CONFIRMED). Optional scope injection: actorId, tokenId, speakerId resolve to Foundry objects passed to macro.execute(scope). Returns macroType, chatMessageId (chat), scriptReturnValue (script), warnings[], threw, thrownError, elapsedMs, executedAt.
 - **execute-by-name** (Phase 9B): Resolve a macro by name then execute it. Required: name, confirmedExecution: true. Optional scope: actorId/tokenId/speakerId. Rejects with MACRO_EXECUTE_NAME_AMBIGUOUS (listing matches) when >1 macro shares the name, or MACRO_NOT_FOUND when none match — never guesses.
 - **import-from-compendium** (Phase 9B): Import a Macro from a compendium pack into the world. Required: packId, documentId (NOT a UUID). Returns the new world macro {macroId, macro, sourcePack}.
+- **set-execution-target** (Phase 12 · CONDITIONAL on advanced-macros — returns MODULE_NOT_ACTIVE when absent): Set the advanced-macros execution-routing flag. macroId + target ("GM" | "runForEveryone" | "runForEveryoneElse" | "runAsWorldScript" | "runAsWorldScriptSetup" | <userId> | "" to clear). target "GM"/"runForEveryone" REQUIRE confirm:true (arbitrary JS at elevated scope). target "GM" pre-flights canRunAsGM — if false, the flag is NOT written and a warning is returned (the module would silently fall back to local execution). World-script targets take effect on the NEXT world reload. Returns {target, canRunAsGM, warning?, note?}.
+- **list-world-scripts** (Phase 12 · CONDITIONAL): List macros flagged to auto-run at world load. Optional hook ("setup" | "ready" | "all", default "all"). Returns items[{id, name, command, hook}].
+- **get-execution-target** (Phase 12 · CONDITIONAL): Read a macro's execution-routing flag + canRunAsGM. macroId. Returns {target, canRunAsGM}.
 
 **Scope enum:** global / actors / actor (per CONST.MACRO_SCOPES; live-confirmed Phase 0 probe — NO "world" value).
 
@@ -227,7 +267,7 @@ export class MacroTool extends BaseTool {
           properties: {
             action: {
               type: 'string',
-              enum: ['create', 'update', 'delete', 'get', 'list', 'execute', 'execute-by-name', 'import-from-compendium'],
+              enum: ['create', 'update', 'delete', 'get', 'list', 'execute', 'execute-by-name', 'import-from-compendium', 'set-execution-target', 'list-world-scripts', 'get-execution-target'],
               description: 'The macro action to perform.',
             },
             macroId: {
@@ -283,7 +323,17 @@ export class MacroTool extends BaseTool {
             // delete CCR-Delete-Safety
             confirm: {
               type: 'boolean',
-              description: '[delete] Required confirmation flag. Must be true to proceed.',
+              description: '[delete] Required confirmation flag. Must be true to proceed. [set-execution-target] Required (true) when target is "GM" or "runForEveryone".',
+            },
+            // Phase 12 — advanced-macros execution-routing
+            target: {
+              type: 'string',
+              description: '[set-execution-target] Routing target: "GM" | "runForEveryone" | "runForEveryoneElse" | "runAsWorldScript" | "runAsWorldScriptSetup" | <userId> | "" (clear). "GM"/"runForEveryone" need confirm:true.',
+            },
+            hook: {
+              type: 'string',
+              enum: ['setup', 'ready', 'all'],
+              description: '[list-world-scripts] Which world-load hook to filter by. Default "all".',
             },
             // execute CCR-Trust + scope injection
             confirmedExecution: {
@@ -353,6 +403,42 @@ export class MacroTool extends BaseTool {
         return this.handleExecuteByName(args);
       case 'import-from-compendium':
         return this.handleImportFromCompendium(args);
+      // Phase 12 — advanced-macros execution-routing (conditional; handler-guarded).
+      case 'set-execution-target':
+        return this.handleSetExecutionTarget(args);
+      case 'list-world-scripts':
+        return this.handleListWorldScripts(args);
+      case 'get-execution-target':
+        return this.handleGetExecutionTarget(args);
+    }
+  }
+
+  // ── Phase 12 — advanced-macros execution-routing handlers ──────────────────
+
+  private async handleSetExecutionTarget(args: ArgsFor<'set-execution-target'>) {
+    try {
+      const data = await this.query<SetExecutionTargetResponse>('macro', args);
+      return { content: [{ type: 'text' as const, text: formatSetExecutionTarget(data) }] };
+    } catch (e) {
+      return errorContent('set-execution-target', e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  private async handleListWorldScripts(args: ArgsFor<'list-world-scripts'>) {
+    try {
+      const data = await this.query<ListWorldScriptsResponse>('macro', args);
+      return { content: [{ type: 'text' as const, text: formatListWorldScripts(data) }] };
+    } catch (e) {
+      return errorContent('list-world-scripts', e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  private async handleGetExecutionTarget(args: ArgsFor<'get-execution-target'>) {
+    try {
+      const data = await this.query<GetExecutionTargetResponse>('macro', args);
+      return { content: [{ type: 'text' as const, text: formatGetExecutionTarget(data) }] };
+    } catch (e) {
+      return errorContent('get-execution-target', e instanceof Error ? e.message : String(e));
     }
   }
 

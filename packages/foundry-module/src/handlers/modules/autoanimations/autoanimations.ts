@@ -202,7 +202,14 @@ export async function dispatchModuleAutoAnimations(data: unknown): Promise<any> 
   const g = requireModuleActive('autoanimations', ['sequencer', 'socketlib']);
   if (g) return g;
 
-  const parsed = ModuleAutoAnimationsInput.parse(data);
+  // BUG-366: translate schema-parse failures into a clean typed token instead of letting
+  // a raw Zod invalid_union/unrecognized_keys error surface to the caller.
+  let parsed: ModuleAutoAnimationsInputType;
+  try {
+    parsed = ModuleAutoAnimationsInput.parse(data);
+  } catch (e: unknown) {
+    return { success: false, error: `AA_INVALID_INPUT: ${e instanceof Error ? e.message : String(e)}` };
+  }
 
   switch (parsed.action) {
     case 'get-item-animation':   return handleGetItemAnimation(parsed);

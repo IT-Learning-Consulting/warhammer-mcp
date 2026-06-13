@@ -222,7 +222,9 @@ export function createEmbeddedCRUDHandlers<
       }
 
       // DP-16 post-verify: re-read from scene collection.
-      const persisted = getEmbeddedOrThrow<any>(scene, collection, doc.id, documentName);
+      // BUG-363(d): use the friendly label (Template/Light/Sound) for the *_NOT_FOUND token so it
+      // matches the errorTag prefix, instead of the raw Foundry class name (MeasuredTemplate/AmbientLight).
+      const persisted = getEmbeddedOrThrow<any>(scene, collection, doc.id, capitalize(documentLabel));
 
       // PARITY-003: field-compare loop mirrors update:261-274 (F08 _source read).
       // Skip flags + family-specific dp16SkipFields (normalization / deep objects).
@@ -265,7 +267,7 @@ export function createEmbeddedCRUDHandlers<
     const input = strictParse<TUpdate>(schemas.update, data, useStrictParse);
     const scene = getSceneOrThrow(input.sceneId);
     const docId = (input as any)[idField] as string;
-    const doc = getEmbeddedOrThrow<any>(scene, collection, docId, documentName);
+    const doc = getEmbeddedOrThrow<any>(scene, collection, docId, capitalize(documentLabel));
 
     // BUG-075: snapshot BEFORE the mutating call.
     const requestedChanges: Record<string, unknown> = { ...input.changes };
@@ -318,7 +320,7 @@ export function createEmbeddedCRUDHandlers<
     );
     const scene = getSceneOrThrow(input.sceneId);
     const docId = input[idField] as string;
-    const doc = getEmbeddedOrThrow<any>(scene, collection, docId, documentName);
+    const doc = getEmbeddedOrThrow<any>(scene, collection, docId, capitalize(documentLabel));
 
     return wrappedWrite(`${documentLabel}.delete${capitalize(documentLabel)}`, async () => {
       if (deleteApi === 'doc.delete') {
@@ -362,7 +364,7 @@ export function createEmbeddedCRUDHandlers<
     );
     const scene = getSceneOrThrow(input.sceneId);
     const docId = input[idField] as string;
-    const doc = getEmbeddedOrThrow<any>(scene, collection, docId, documentName);
+    const doc = getEmbeddedOrThrow<any>(scene, collection, docId, capitalize(documentLabel));
 
     return {
       success: true,

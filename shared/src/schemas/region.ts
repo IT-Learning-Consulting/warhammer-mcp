@@ -131,7 +131,20 @@ export const RegionListInput = z
 
 const TeleportTokenSystem = z
   .object({
-    destination: z.string().nullable().optional(),
+    // BUG-353: destination is a DocumentUUIDField targeting a REGION (v13:
+    // "teleports Tokens ... to a preset destination Region"). It must be a full Region
+    // UUID like "Scene.<sceneId>.Region.<regionId>". A bare id or "Scene.<id>" is NOT a
+    // Region UUID, so Foundry's field validator silently cleans it to null at write time.
+    // Guard requires the ".Region." segment (catches exactly the failing forms) while
+    // accepting any valid Region UUID.
+    destination: z
+      .string()
+      .refine(
+        (v) => v === '' || v.includes('.Region.'),
+        'destination must be a full Region document UUID like "Scene.<sceneId>.Region.<regionId>" — a bare id or "Scene.<id>" silently nulls at write time',
+      )
+      .nullable()
+      .optional(),
     choice: z.boolean().optional(),
   })
   .strict();

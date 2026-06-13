@@ -87,10 +87,23 @@ export type NotifyKind =
   | 'cross-doc-fk'
   | 'folder'
   | 'setting'
+  | 'keybinding'
   | 'chatMessage'
   | 'tagger'
   | 'sequencer'
-  | 'autoanimations';
+  | 'autoanimations'
+  | 'robak'
+  | 'tokenbar'
+  | 'armoury'
+  | 'party-resources'
+  | 'gmtoolkit'
+  | 'chat-commander'
+  | 'timekeeping'
+  | 'patrol'
+  | 'gatherer'
+  | 'mastercrafted'
+  | 'item-piles'
+  | 'levels';
 
 export type NotifySeverity =
   | 'created'

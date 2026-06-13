@@ -231,7 +231,10 @@ class PersistentCreatureIndex {
   // when this version (or a pack fingerprint) changes — so any change to the index derivation MUST
   // bump this version, or the stale pre-fix index keeps being served and creatureType filters miss.
   // BUG-269: bumped from 1.1.0 — challengeRating now uses TB (floor(T/10)) not raw T value.
-  private readonly INDEX_VERSION = '1.2.0';
+  // BUG-357: bumped to 1.3.0 — the index now includes creature-type actors (doc.type ==='creature'),
+  // not just npc/character; without this bump worlds keep serving the stale index that omits
+  // bestiary creatures like the Goblin, so creatureType:'greenskin' misses it.
+  private readonly INDEX_VERSION = '1.3.0';
   private readonly INDEX_FILENAME = 'enhanced-creature-index.json';
   // BUG-268: in-flight build promise — serializes index builds so exactly one
   // savePersistedIndex writer runs at a time (see buildEnhancedIndex).
@@ -649,8 +652,10 @@ class PersistentCreatureIndex {
 
       for (const doc of documents) {
         try {
-          // Only process NPCs and characters
-          if (doc.type !== 'npc' && doc.type !== 'character') {
+          // Process NPCs, characters, AND creatures. BUG-357: creature-type bestiary actors
+          // (e.g. the core Goblin, whose species.value is "Goblin" → greenskin) were excluded
+          // here, so creatureType filters like greenskin never surfaced them.
+          if (doc.type !== 'npc' && doc.type !== 'character' && doc.type !== 'creature') {
             continue;
           }
 
@@ -5206,18 +5211,65 @@ export class FoundryDataAccess {
       // buildEffectPayload is imported lazily to avoid a top-of-file shuffle.
       const { buildEffectPayload } = await import('@foundry-mcp/shared');
 
+      // BUG-340: an `immediate`-trigger script that returns false self-deletes its own
+      // effect during creation (documented wfrp4e recipe — effects/triggers/immediate.md).
+      // createEmbeddedDocuments then returns [] (the doc was removed inside the create op),
+      // or the read-back is absent — but the script DID run. Detect this so the one-shot
+      // self-deleting recipe is reported as success (fired + autoDeleted), not failure.
+      const isSelfDeletingImmediate = (eff: any): boolean =>
+        eff?.trigger === 'immediate' &&
+        /\breturn\s+false\b/.test(typeof eff?.script === 'string' ? eff.script : '');
+
       // --- actor-direct branch: effect lives directly on the actor ---
       if (data.target.scope === 'actor-direct') {
         const actorDirect = data.target as { scope: 'actor-direct'; actorId?: string; actorName?: string };
         const actor = this._resolveActor(actorDirect.actorId, actorDirect.actorName);
         const effectPayload = buildEffectPayload(data.effect);
         const created: any[] = await actor.createEmbeddedDocuments('ActiveEffect', [effectPayload]);
-        if (!created || created.length === 0) throw new Error('Failed to create ActiveEffect on actor');
+        if (!created || created.length === 0) {
+          if (isSelfDeletingImmediate(data.effect)) {
+            notify.created('active-effect', data.effect.name, {
+              summary: `on ${actor.name} (immediate one-shot — fired + self-deleted)`,
+            });
+            return {
+              success: true,
+              scope: 'actor-direct',
+              actorId: actor.id,
+              actorName: actor.name,
+              itemId: null,
+              itemName: null,
+              effectId: null,
+              effectName: data.effect.name,
+              parentType: 'Actor' as const,
+              fired: true,
+              autoDeleted: true,
+            };
+          }
+          throw new Error('Failed to create ActiveEffect on actor');
+        }
 
         const createdEffect: any = created[0];
         // CCR-2a re-read: verify the AE was persisted
         const fresh: any = actor.effects.get(createdEffect.id);
         if (!fresh) {
+          if (isSelfDeletingImmediate(data.effect)) {
+            notify.created('active-effect', createdEffect.name, {
+              summary: `on ${actor.name} (immediate one-shot — fired + self-deleted)`,
+            });
+            return {
+              success: true,
+              scope: 'actor-direct',
+              actorId: actor.id,
+              actorName: actor.name,
+              itemId: null,
+              itemName: null,
+              effectId: createdEffect.id,
+              effectName: createdEffect.name,
+              parentType: 'Actor' as const,
+              fired: true,
+              autoDeleted: true,
+            };
+          }
           throw new Error(`ADD_ACTIVE_EFFECT_NOT_PERSISTED: effect ${createdEffect.id} absent after create`);
         }
 
@@ -5247,7 +5299,25 @@ export class FoundryDataAccess {
       const { item, owner, scope } = this._resolveItem(this._targetToResolverInput(data.target as any));
       const effectPayload = buildEffectPayload(data.effect);
       const created: any[] = await item.createEmbeddedDocuments('ActiveEffect', [effectPayload]);
-      if (!created || created.length === 0) throw new Error('Failed to create ActiveEffect');
+      if (!created || created.length === 0) {
+        if (isSelfDeletingImmediate(data.effect)) {
+          notify.created('active-effect', data.effect.name, {
+            summary: `on ${item.name} (immediate one-shot — fired + self-deleted)`,
+          });
+          return {
+            success: true,
+            scope,
+            actorId: owner?.id ?? null,
+            itemId: item.id,
+            itemName: item.name,
+            effectId: null,
+            effectName: data.effect.name,
+            fired: true,
+            autoDeleted: true,
+          };
+        }
+        throw new Error('Failed to create ActiveEffect');
+      }
 
       const createdEffect: any = created[0];
 
@@ -5362,7 +5432,24 @@ export class FoundryDataAccess {
         } catch {
           throw new Error(`UPDATE_ACTIVE_EFFECT_NOT_PERSISTED: effect ${effect.id} disappeared after update`);
         }
-        verifyDocWrite(freshEffect, flatUpdate, 'UPDATE_ACTIVE_EFFECT_NOT_PERSISTED');
+        // BUG-342: foundry.utils.flattenObject treats arrays as LEAF values, so the whole
+        // `system.scriptData` array is a single flat key. Its wfrp4e-managed `options`
+        // sub-object is normalized on write (live keys: targeter/defending/runIfDisabled/
+        // deleteEffect/showDuplicates) and never matches the MCP payload template, so a
+        // whole-array compare false-fails. Skip the array from the generic drift verify and
+        // instead verify the caller-meaningful scriptData[0] fields (script/trigger/label) landed.
+        const scriptDataSkip = touchedScript ? ['system.scriptData'] : [];
+        verifyDocWrite(freshEffect, flatUpdate, 'UPDATE_ACTIVE_EFFECT_NOT_PERSISTED', { skipPaths: scriptDataSkip });
+        if (touchedScript) {
+          const sd0: any = (freshEffect as any).system?.scriptData?.[0] ?? {};
+          for (const f of ['script', 'trigger', 'label'] as const) {
+            if (typeof data.updates[f] === 'string' && sd0[f] !== data.updates[f]) {
+              throw new Error(
+                `UPDATE_ACTIVE_EFFECT_NOT_PERSISTED: scriptData.${f} did not persist (expected ${JSON.stringify(data.updates[f])}, got ${JSON.stringify(sd0[f])})`,
+              );
+            }
+          }
+        }
 
         notify.updated('active-effect', effect.name, {
           summary: `on ${actor.name}`,
@@ -5463,7 +5550,22 @@ export class FoundryDataAccess {
       } catch {
         throw new Error(`UPDATE_ACTIVE_EFFECT_NOT_PERSISTED: effect ${effect.id} disappeared after update`);
       }
-      verifyDocWrite(freshEffect, flatUpdate, 'UPDATE_ACTIVE_EFFECT_NOT_PERSISTED');
+      // BUG-342: foundry.utils.flattenObject treats arrays as LEAF values, so the whole
+      // `system.scriptData` array is a single flat key whose wfrp4e-normalized `options`
+      // sub-object never matches the MCP payload template (whole-array compare false-fails).
+      // Skip it from the generic drift verify; verify the meaningful scriptData[0] fields instead.
+      const scriptDataSkip = touchedScript ? ['system.scriptData'] : [];
+      verifyDocWrite(freshEffect, flatUpdate, 'UPDATE_ACTIVE_EFFECT_NOT_PERSISTED', { skipPaths: scriptDataSkip });
+      if (touchedScript) {
+        const sd0: any = (freshEffect as any).system?.scriptData?.[0] ?? {};
+        for (const f of ['script', 'trigger', 'label'] as const) {
+          if (typeof data.updates[f] === 'string' && sd0[f] !== data.updates[f]) {
+            throw new Error(
+              `UPDATE_ACTIVE_EFFECT_NOT_PERSISTED: scriptData.${f} did not persist (expected ${JSON.stringify(data.updates[f])}, got ${JSON.stringify(sd0[f])})`,
+            );
+          }
+        }
+      }
 
       notify.updated('active-effect', effect.name, {
         summary: `on ${item.name}`,
@@ -5622,8 +5724,23 @@ export class FoundryDataAccess {
 
   private resolveCombat(combatId?: string): any {
     const combats: any = (game as any).combats;
-    const combat = combatId ? combats?.get(combatId) : combats?.active;
-    return combat ?? null;
+    if (combatId) return combats?.get(combatId) ?? null;
+    // Primary: game.combats.active (the combat flagged active on the viewed/active scene).
+    if (combats?.active) return combats.active;
+    // BUG-354 fallback: game.combats.active can read null in the headless MCP path after
+    // remove-combatants vacates the turn-holder (the .active getter resolves via the viewed
+    // scene + combat.active flag, which can desync when the current-turn slot is emptied),
+    // even though the Combat document still lives in game.combats. Recover it so no-combatId
+    // callers (end-combat, advance-combat) keep working: prefer a combat on the active scene,
+    // else fall back to the sole combat if exactly one exists.
+    const all: any[] = Array.from(combats?.values?.() ?? combats?.contents ?? []);
+    if (all.length === 0) return null;
+    const sceneId: string | undefined = (game as any).scenes?.active?.id ?? (game as any).scenes?.current?.id;
+    if (sceneId) {
+      const onScene = all.find((c: any) => (c.scene?.id ?? c.scene) === sceneId);
+      if (onScene) return onScene;
+    }
+    return all.length === 1 ? all[0] : null;
   }
 
   private snapshotStatus(actor: any): any {
@@ -5842,8 +5959,14 @@ export class FoundryDataAccess {
     if (!actor) throw new Error(`Actor not found with ID: ${data.actorId}`);
 
     const damageType = data.damageType ?? 'NORMAL';
-    const damageTypeConst: any =
-      (CONFIG as any).WFRP4E?.DAMAGE_TYPE?.[damageType] ?? 0;
+    // BUG-344: wfrp4e exposes its config as `game.wfrp4e.config`, NOT `CONFIG.WFRP4E`
+    // (the latter is undefined in this system — verified live + against wfrp4e.js:33298
+    // `game.wfrp4e = { …, config: WFRP4E }`). The old `CONFIG.WFRP4E.DAMAGE_TYPE` lookup
+    // always returned undefined → `?? 0` → every IGNORE_* variant silently collapsed to
+    // NORMAL, so AP+TB soak was applied regardless of damageType (IGNORE_ALL removed
+    // amount−TB, not the full amount). Use the canonical game.wfrp4e.config accessor.
+    const wfrp4eConfig: any = (globalThis as any).game?.wfrp4e?.config ?? {};
+    const damageTypeConst: any = wfrp4eConfig.DAMAGE_TYPE?.[damageType] ?? 0;
 
     const before = this.snapshotStatus(actor);
 
@@ -5913,7 +6036,10 @@ export class FoundryDataAccess {
     const actor: any = (game as any).actors?.get(data.actorId);
     if (!actor) throw new Error(`Actor not found with ID: ${data.actorId}`);
 
-    const validKeys = Object.keys((CONFIG as any).WFRP4E?.conditions ?? {});
+    // BUG-344 (same root cause): wfrp4e config is on game.wfrp4e.config, not CONFIG.WFRP4E.
+    // The old CONFIG.WFRP4E.conditions lookup returned undefined → validKeys=[] → the guard
+    // below was silently skipped, so unknown condition keys were never rejected.
+    const validKeys = Object.keys((globalThis as any).game?.wfrp4e?.config?.conditions ?? {});
     if (validKeys.length && !validKeys.includes(data.conditionKey)) {
       throw new Error(
         `Unknown condition key '${data.conditionKey}'. Valid: ${validKeys.join(', ')}`,
@@ -6046,7 +6172,11 @@ export class FoundryDataAccess {
     if (filter === 'applied') {
       actorAEs = Array.from(actor.appliedEffects ?? []);
     } else if (filter === 'temporary') {
-      actorAEs = Array.from(actor.temporaryEffects ?? []);
+      // BUG-364: actor.temporaryEffects includes status/condition AEs whose isTemporary is
+      // true purely from a statusId but whose duration fields are all null — i.e. not actually
+      // time-bound. Use actor.effects + applyFilter (rounds/turns/seconds > 0) so the actor-level
+      // result matches the item-level predicate and only genuinely time-bound AEs are returned.
+      actorAEs = Array.from(actor.effects ?? []).filter(applyFilter);
     } else if (filter === 'conditions') {
       actorAEs = Array.from(actor.effects ?? []).filter((e: any) => e.isCondition);
     } else {

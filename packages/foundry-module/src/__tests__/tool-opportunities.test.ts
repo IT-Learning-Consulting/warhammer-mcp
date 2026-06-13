@@ -331,6 +331,6 @@ describe('FoundryDataAccess.getActiveEffectByName — TOOL-IDEA-003', () => {
         target: { scope: 'actor', actorId: 'a1', itemId: 'i1' },
         effectName: 'Nonexistent',
       }),
-    ).rejects.toThrow(/not found on item/);
+    ).rejects.toThrow(/not found on "/);
   });
 });

@@ -783,6 +783,7 @@ export async function handleWoundToggleDisable(input: WoundToggleDisableInput): 
       if (currentDisabled === input.disabled) {
         // Already in the desired state — no toggle needed.
         newDisabledState = currentDisabled;
+        notify.info(`token: ${actor.name ?? input.actorId} — wound-toggle-disable: already disabled=${newDisabledState}, no change`);
         return {
           success: true,
           data: {

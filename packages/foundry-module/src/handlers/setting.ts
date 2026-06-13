@@ -211,8 +211,9 @@ export async function dispatchSetting(data: unknown): Promise<any> {
   try {
     input = SettingToolInput.parse(data ?? {});
   } catch (e) {
+    // BUG-366: clean typed token instead of a raw Zod dump for an invalid action/shape.
     const message = e instanceof Error ? e.message : 'Invalid input';
-    throw new Error(`Invalid input: ${message}`);
+    return { success: false, error: `SETTING_INVALID_INPUT: ${message}` };
   }
 
   switch (input.action) {

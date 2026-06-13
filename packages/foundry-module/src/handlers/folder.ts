@@ -169,15 +169,22 @@ export async function createFolder(data: unknown): Promise<Envelope<any>> {
 
   if (input.folder !== undefined && input.folder !== null) {
     const parentFolder = (game as any).folders?.get(input.folder);
-    if (parentFolder) {
-      const newDepth = ((parentFolder.depth as number) ?? 0) + 1;
-      const FOLDER_MAX_DEPTH = (globalThis as any).CONST?.FOLDER_MAX_DEPTH ?? 4;
-      if (newDepth > FOLDER_MAX_DEPTH) {
-        return {
-          success: false,
-          error: `FOLDER_MAX_DEPTH_EXCEEDED: creating this folder would put it at depth ${newDepth} which exceeds CONST.FOLDER_MAX_DEPTH (${FOLDER_MAX_DEPTH})`,
-        };
-      }
+    // BUG-367: pre-flight the parent reference. A non-existent parent id otherwise falls
+    // through to Folder.create() and fails late at post-write verify with a generic
+    // FOLDER_WRITE_NOT_PERSISTED — surface a precise FOLDER_NOT_FOUND instead.
+    if (!parentFolder) {
+      return {
+        success: false,
+        error: `FOLDER_NOT_FOUND: no folder with id "${input.folder}" — cannot create a child under a non-existent parent`,
+      };
+    }
+    const newDepth = ((parentFolder.depth as number) ?? 0) + 1;
+    const FOLDER_MAX_DEPTH = (globalThis as any).CONST?.FOLDER_MAX_DEPTH ?? 4;
+    if (newDepth > FOLDER_MAX_DEPTH) {
+      return {
+        success: false,
+        error: `FOLDER_MAX_DEPTH_EXCEEDED: creating this folder would put it at depth ${newDepth} which exceeds CONST.FOLDER_MAX_DEPTH (${FOLDER_MAX_DEPTH})`,
+      };
     }
   }
 

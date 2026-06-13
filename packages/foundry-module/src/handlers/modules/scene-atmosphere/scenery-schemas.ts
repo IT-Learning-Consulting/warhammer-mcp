@@ -87,6 +87,15 @@ export const setActiveVariationInput = z.object({
    * Mutually exclusive with variationIndex — supply exactly one.
    */
   variationName: z.string().optional(),
+  /**
+   * BUG-355: optional confirm. The sibling destructive actions (add/delete-variation) require
+   * confirm:true, so callers following that established confirm-gate pattern pass confirm:true
+   * here too — but this `.strict()` schema previously rejected it with `unrecognized_keys`.
+   * Switching the active variation applies the incoming variation's sceneData and skips the
+   * outgoing snapshot (see ELEMENT-RESTORE-SKIP WARNING), so confirm:true is meaningful and
+   * accepted; it is optional to avoid breaking existing no-confirm callers.
+   */
+  confirm: z.literal(true).optional(),
 }).strict();
 
 // ── add-variation ─────────────────────────────────────────────────────────────

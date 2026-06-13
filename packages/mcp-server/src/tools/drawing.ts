@@ -95,6 +95,12 @@ function formatDrawingView(d: DrawingViewModel): string {
     ``,
     `### State`,
     `- hidden: ${d.hidden ? 'yes' : 'no'} · locked: ${d.locked ? 'yes' : 'no'} · interface-layer: ${d.interface ? 'yes' : 'no'}`,
+    // BUG-361: render the flag bag (incl. flags['advanced-drawing-tools']) so ADT fields
+    // (invisible, lineStyle.dash, textStyle.arc, fontWeight, …) are verifiable on readback,
+    // not write-only. The structured ViewModel already carries them; this surfaces them in text.
+    ...(d.flags && Object.keys(d.flags).length > 0
+      ? [``, `### Flags`, '```json', JSON.stringify(d.flags, null, 2), '```']
+      : []),
   ].join('\n');
 }
 

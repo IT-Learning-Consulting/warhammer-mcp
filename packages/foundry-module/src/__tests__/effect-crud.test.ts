@@ -410,4 +410,54 @@ describe('updateActiveEffect — BUG-216 post-verify', () => {
     });
     expect(res.effectId).toBe('e2');
   });
+
+  it('BUG-342: tolerates wfrp4e options-shape normalization on a script update', async () => {
+    // Live divergence: wfrp4e rewrites scriptData[].options on write to its own shape
+    // (targeter/defending/runIfDisabled/deleteEffect/showDuplicates), which never matches
+    // the MCP payload template (immediate/defer/tag). flattenObject treats the scriptData
+    // array as a single leaf key, so a naive whole-array drift compare false-fails with
+    // UPDATE_ACTIVE_EFFECT_NOT_PERSISTED even though the write landed. The fix skips the
+    // array from the generic verify and checks the scriptData[0] script body instead.
+    const LIVE_OPTIONS = {
+      hideScript: '', activateScript: '', submissionScript: '',
+      targeter: false, defending: false, runIfDisabled: false,
+      deleteEffect: false, showDuplicates: false,
+    };
+    const eff: any = {
+      id: 'e-342', name: 'Script Effect',
+      system: { scriptData: [{ label: 'Script Effect', trigger: 'manual', script: 'old', options: { ...LIVE_OPTIONS } }], transferData: {} },
+    };
+    eff._source = {
+      id: 'e-342', name: 'Script Effect', disabled: false,
+      system: { scriptData: [{ label: 'Script Effect', trigger: 'manual', script: 'old', options: { ...LIVE_OPTIONS } }], transferData: {} },
+    };
+    eff.update = vi.fn(async (payload: Record<string, unknown>) => {
+      // Simulate wfrp4e: accept the new script body but FORCE its own options shape.
+      if (payload['system.scriptData']) {
+        const incoming: any = (payload['system.scriptData'] as any[])[0];
+        const normalized = { ...incoming, options: { ...LIVE_OPTIONS } };
+        eff.system.scriptData = [normalized];
+        eff._source.system.scriptData = [normalized];
+      }
+      for (const [k, v] of Object.entries(payload)) {
+        if (!k.startsWith('system.')) { eff[k] = v; eff._source[k] = v; }
+      }
+      return eff;
+    });
+    eff.toObject = () => ({ ...eff });
+    const item = makeItemStub('i-342', 'Blade', [eff]);
+    const actor = makeActorStub('a-342', 'Hans', [item]);
+    setupStubs({ actors: [actor] });
+    const da = makeDA();
+
+    // Old code (whole-array compare) threw here; the fix must NOT throw.
+    const res = await da.updateActiveEffect({
+      target: { scope: 'actor', actorId: 'a-342', itemId: 'i-342' },
+      effectId: 'e-342',
+      updates: { script: 'newbody' },
+    });
+    expect(res.effectId).toBe('e-342');
+    // Targeted check still proves the script body actually persisted.
+    expect(eff._source.system.scriptData[0].script).toBe('newbody');
+  });
 });

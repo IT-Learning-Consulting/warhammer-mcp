@@ -82,13 +82,25 @@ function normalizeSystemOverrides(overrides: Record<string, unknown>): Record<st
   const out: Record<string, unknown> = { ...overrides };
   for (const field of QUALITY_FIELDS) {
     const fieldValue = out[field];
-    if (fieldValue && typeof fieldValue === 'object') {
+    if (Array.isArray(fieldValue) || typeof fieldValue === 'string') {
+      // Bare list/string directly under `qualities`/`flaws` (no `{value:...}` wrapper).
+      // NOTE: this check MUST precede the generic object check below — an array is
+      // also `typeof === 'object'`, so the old ordering silently dropped bare arrays.
+      out[field] = { value: normalizeQualitiesValue(fieldValue) };
+    } else if (fieldValue && typeof fieldValue === 'object') {
+      // Nested `{ value: ... }` wrapper.
       const inner = (fieldValue as { value?: unknown }).value;
       out[field] = { value: normalizeQualitiesValue(inner) };
-    } else if (typeof fieldValue === 'string' || Array.isArray(fieldValue)) {
-      // Callers who skip the `{value: ...}` wrapper and put the list directly under
-      // `qualities`/`flaws` — coerce to the canonical wrapper shape.
-      out[field] = { value: normalizeQualitiesValue(fieldValue) };
+    }
+    // BUG-337: dotted-key form `"qualities.value": "salvo 3, …"`. This rides as a
+    // LITERAL property key, bypassing the nested-object check above; Foundry's
+    // expandObject later splits it into `qualities.value`, but the raw string would
+    // then be coerced by the wfrp4e data model into `[{}]` (silent data loss with
+    // success:true). Normalize the dotted key's value here so expandObject yields the
+    // canonical array. The dotted key is preserved (expandObject handles the nesting).
+    const dottedKey = `${field}.value`;
+    if (dottedKey in out) {
+      out[dottedKey] = normalizeQualitiesValue(out[dottedKey]);
     }
   }
   return out;
@@ -178,7 +190,7 @@ Security: script / preApplyScript / enableScript fields are executed by Foundry 
             systemOverrides: {
               type: 'object',
               description:
-                'Raw system field overrides merged on top of the generated system payload. Advanced use. **For known typed fields, prefer the top-level shorthand fields** (`damage`, `weaponGroup`, `qualities`, `flaws`, etc.) — those are Zod-validated. `systemOverrides` is an unvalidated escape hatch. **qualities/flaws auto-normalize**: if you pass `{ value: "impale, precise, fine 2" }` (string) or `{ value: ["impale", "fine 2"] }` (array of strings) or `{ value: [{ name: "impale", value: null }, { name: "fine", value: 2 }] }` (canonical), all three coerce to the canonical `Array<{ name, value }>` shape before write. Numeric-trailing qualities like "Fine 2" / "Repeater 3" parse to `{ name: "fine", value: 2 }`. Multi-word like "Barbed Bolt" lowercases the first word and camelCases the rest → `"barbedBolt"`.',
+                'Raw system field overrides merged on top of the generated system payload. **qualities / flaws / weaponGroup: set them HERE via the nested-object form** — `systemOverrides: { qualities: { value: "impale, precise, fine 2" }, weaponGroup: "twohanded" }`. Do NOT use a top-level `qualities: [...]` array (rides additionalProperties and can arrive stringified → ZodError), and do NOT use the dotted form for qualities/flaws (`"qualities.value": "…"`) historically dropped to `[{}]`. The nested-object form is the verified-working shape. **qualities/flaws auto-normalize**: `{ value: "impale, precise, fine 2" }` (string), `{ value: ["impale", "fine 2"] }` (array of strings), `{ value: [{ name: "impale", value: null }, { name: "fine", value: 2 }] }` (canonical), AND the dotted `"qualities.value": "…"` form all coerce to the canonical `Array<{ name, value }>` before write (never `[{}]`). Numeric-trailing qualities like "Fine 2" / "Repeater 3" parse to `{ name: "fine", value: 2 }`. Multi-word like "Barbed Bolt" lowercases the first word and camelCases the rest → `"barbedBolt"`. Use systemOverrides for any non-typed field too (advanced escape hatch).',
               additionalProperties: true,
             },
           },

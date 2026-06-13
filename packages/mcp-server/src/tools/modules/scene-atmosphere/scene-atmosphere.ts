@@ -1517,9 +1517,22 @@ FXMASTER — particle weather + scene filters (requires fxmaster module active):
 Free particle types: autumnleaves · bats · birds · bubbles · clouds · crows · eagles
                      embers · fog · hail · rain · rats · snow · snowstorm · spiders · stars
 Free filter types:  bloom · color · fog · lightning · oldfilm · predator · underwater
+fxmaster-plus types (require the fxmaster-plus add-on module active):
+  particles: fireflies · ghosts · magiccrystals · sakurabloom · sakurablossoms
+  filters:   sunlight
+wfrp-fxmaster-custom types (require the wfrp-fxmaster-custom module active):
+  particles: warpstonemotes · chaosembers · blightspores · soulwisps · fallingash
+             warpfiresparks · censersmoke · daemoneyes · witchlight
+  weather:   windgusts · dustgale · warpstorm · ashstorm
+  filters:   corruption (pulsing warp taint) · grimdark (desaturated vignette) · warpshimmer (heat-haze distortion)
+             waterflow (directional flowing-water refraction) · waterwaves (directional traveling waves)
+             watervortex (whirlpool around centerX/centerY) · lightningbolt (random bolt strikes, topDown option + screen flash)
+             (all custom filters accept region masking via filterEffectsRegion / set-region-filters)
 Free presets (24): acid-rain · autumn-leaves · blizzard · blood-rain · cloudy · drizzle
   fog · hail · heat-wave · hurricane · ice-storm · mist · monsoon · nullfront · overcast
   partly-cloudy · rain · rolling-fog · sleet · snow · spore-cloud · sunshower · thunderstorm · wildfire-smoke
+  (Gambit's FXMaster fork 8.1.x also registers 18 themed plus-only presets — aether-haze,
+   meteor-shower, etc. — playable only with fxmaster-plus; use list-valid-presets to filter.)
 
 DYNAMIC-SOUNDSCAPES — soundscape playlists with mood routing (requires dynamic-soundscapes module active):
 updateState-delay: set-soundscape/stop-soundscape write the world setting immediately (server-persisted).

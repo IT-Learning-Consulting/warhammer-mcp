@@ -68,9 +68,15 @@ describe('FoundryDataAccess.applyDamage (BUG-064)', () => {
 
   beforeEach(() => {
     hooks = installHookRegistry();
-    (globalThis as any).CONFIG = {
-      WFRP4E: { DAMAGE_TYPE: { NORMAL: 0, IGNORE_AP: 1, IGNORE_TB: 2, IGNORE_ALL: 3 } },
-      queries: {},
+    // BUG-344: wfrp4e exposes DAMAGE_TYPE on `game.wfrp4e.config`, NOT `CONFIG.WFRP4E`
+    // (CONFIG.WFRP4E is undefined in the live system). The old mock set it on CONFIG.WFRP4E,
+    // so the test stayed green while production silently collapsed every IGNORE_* to NORMAL.
+    // The mock now reflects reality: DAMAGE_TYPE lives on game.wfrp4e.config, and CONFIG.WFRP4E
+    // is intentionally absent so a regression back to the CONFIG.WFRP4E accessor fails this test.
+    (globalThis as any).CONFIG = { queries: {} };
+    (globalThis as any).game = (globalThis as any).game ?? {};
+    (globalThis as any).game.wfrp4e = {
+      config: { DAMAGE_TYPE: { NORMAL: 0, IGNORE_AP: 1, IGNORE_TB: 2, IGNORE_ALL: 3 } },
     };
     da = new FoundryDataAccess();
     (da as any).validateFoundryState = () => {};

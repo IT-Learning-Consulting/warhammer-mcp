@@ -21,6 +21,8 @@ import { ModuleCssTool } from '../tools/modules/custom-css/css.js';
 import { ModuleCssToolInput } from '../tools/modules/custom-css/schemas.js';
 import { DocumentIoTool } from '../tools/document-io.js';
 import { DocumentIoToolInput } from '@foundry-mcp/shared';
+import { KeybindingTools } from '../tools/keybinding.js';
+import { KeybindingToolInput } from '@foundry-mcp/shared';
 
 const stubLogger: any = {
   child: () => stubLogger,
@@ -87,6 +89,7 @@ const cases: ParityCase[] = [
   { toolName: 'module-css', makeTool: () => new ModuleCssTool(toolOptions), zodSchema: ModuleCssToolInput, hasActionEnum: true },
   { toolName: 'request-player-rolls', makeTool: () => new DiceRollTools(toolOptions), zodSchema: RequestPlayerRollsArgs, hasActionEnum: false },
   { toolName: 'document-io', makeTool: () => new DocumentIoTool(toolOptions), zodSchema: DocumentIoToolInput, hasActionEnum: true },
+  { toolName: 'keybinding', makeTool: () => new KeybindingTools(toolOptions), zodSchema: KeybindingToolInput, hasActionEnum: true },
 ];
 
 describe('BUG-330 published inputSchema ↔ Zod schema parity', () => {

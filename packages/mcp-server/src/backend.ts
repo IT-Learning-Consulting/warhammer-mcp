@@ -33,6 +33,8 @@ import { ActorCreationTools } from './tools/actor-creation.js';
 
 import { DiceRollTools } from './tools/dice-roll.js';
 
+import { KeybindingTools } from './tools/keybinding.js';
+
 import { OwnershipTool } from './tools/ownership.js';
 
 import { RollTableTool } from './tools/rolltable.js';
@@ -115,12 +117,35 @@ import { ModuleMattTool } from './tools/modules/monks-active-tiles/matt.js';
 // Phase 5 module_integration_v1 — conditional module-tagger + module-sequencer umbrellas.
 import { ModuleTaggerTool } from './tools/modules/tagger/tagger.js';
 import { ModuleSequencerTool } from './tools/modules/sequencer/sequencer.js';
+// Phase 4 module_integration_v1 — conditional module-levels umbrella.
+import { ModuleLevelsTool } from './tools/modules/levels/levels.js';
 // Phase 8 module_integration_v1 — conditional module-autoanimations umbrella.
 import { ModuleAutoAnimationsTool } from './tools/modules/autoanimations/autoanimations.js';
+// Phase 9 module_integration_v1 — WFRP mechanic delegates: module-robak + module-tokenbar (conditional).
+import { ModuleRobakTool } from './tools/modules/robak/robak.js';
+import { ModuleTokenbarTool } from './tools/modules/tokenbar/tokenbar.js';
+// Phase 10 module_integration_v1 — module-armoury (Forien's Armoury, conditional).
+import { ModuleArmouryTool } from './tools/modules/forien-armoury/armoury.js';
+// Phase 11 module_integration_v1 — module-party-resources + module-gmtoolkit (conditional).
+import { ModulePartyResourcesTool } from './tools/modules/fvtt-party-resources/party-resources.js';
+import { ModuleGmtoolkitTool } from './tools/modules/wfrp4e-gm-toolkit/gmtoolkit.js';
+// Phase 12 module_integration_v1 — module-chat-commander (_chatcommands conditional).
+import { ModuleChatCommanderTool } from './tools/modules/_chatcommands/chat-commander.js';
+// Phase 14 module_integration_v1 — thin-session modules (conditional).
+import { ModuleTimekeepingTool } from './tools/modules/simple-timekeeping/timekeeping.js';
+import { ModulePatrolTool } from './tools/modules/patrol/patrol.js';
+import { ModuleGathererTool } from './tools/modules/gatherer/gatherer.js';
+import { ModuleMastercraftedTool } from './tools/modules/mastercrafted/mastercrafted.js';
 // Phase 6 module_integration_v1 — conditional module-scene-atmosphere bundle umbrella.
 import { ModuleSceneAtmosphereTool } from './tools/modules/scene-atmosphere/scene-atmosphere.js';
+// Phase 7 module_integration_v1 — conditional module-access-control bundle umbrella (LocknKey + LockView).
+import { ModuleAccessControlTool } from './tools/modules/access-control/access-control.js';
 // Phase 13A module_integration_v1 — conditional module-css umbrella.
 import { ModuleCssTool } from './tools/modules/custom-css/css.js';
+// Phase 15 module_integration_v1 — conditional module-lighting umbrella (CommunityLighting).
+import { ModuleLightingTool } from './tools/modules/community-lighting/lighting.js';
+// Phase 3 module_integration_v1 — conditional module-itempiles umbrella (Item Piles economy surface).
+import { ModuleItempilesTool } from './tools/modules/item-piles/item-piles.js';
 // BUG-107: extracted to side-effect-free module so test imports don't boot backend.
 import { coerceArgsBySchema } from './coerce-args.js';
 
@@ -270,6 +295,8 @@ async function startBackend(): Promise<void> {
 
   const diceRollTools = new DiceRollTools({ foundryClient, logger });
 
+  const keybindingTools = new KeybindingTools({ foundryClient, logger });
+
   const ownershipTool = new OwnershipTool({ foundryClient, logger });
 
   const rollTableTool = new RollTableTool({ foundryClient, logger });
@@ -349,12 +376,35 @@ async function startBackend(): Promise<void> {
   // Phase 5 module_integration_v1 — module-tagger + module-sequencer (conditional).
   const moduleTaggerTool = new ModuleTaggerTool({ foundryClient, logger });
   const moduleSequencerTool = new ModuleSequencerTool({ foundryClient, logger });
+  // Phase 4 module_integration_v1 — module-levels (conditional).
+  const moduleLevelsTool = new ModuleLevelsTool({ foundryClient, logger });
   // Phase 8 module_integration_v1 — module-autoanimations (conditional).
   const moduleAutoAnimationsTool = new ModuleAutoAnimationsTool({ foundryClient, logger });
+  // Phase 9 module_integration_v1 — WFRP mechanic delegates: module-robak + module-tokenbar (conditional).
+  const moduleRobakTool = new ModuleRobakTool({ foundryClient, logger });
+  const moduleTokenbarTool = new ModuleTokenbarTool({ foundryClient, logger });
+  // Phase 10 module_integration_v1 — module-armoury (forien-armoury conditional).
+  const moduleArmouryTool = new ModuleArmouryTool({ foundryClient, logger });
+  // Phase 11 module_integration_v1 — module-party-resources + module-gmtoolkit (conditional).
+  const modulePartyResourcesTool = new ModulePartyResourcesTool({ foundryClient, logger });
+  const moduleGmtoolkitTool = new ModuleGmtoolkitTool({ foundryClient, logger });
+  // Phase 12 module_integration_v1 — module-chat-commander (_chatcommands conditional).
+  const moduleChatCommanderTool = new ModuleChatCommanderTool({ foundryClient, logger });
+  // Phase 14 module_integration_v1 — thin-session modules (conditional).
+  const moduleTimekeepingTool = new ModuleTimekeepingTool({ foundryClient, logger });
+  const modulePatrolTool = new ModulePatrolTool({ foundryClient, logger });
+  const moduleGathererTool = new ModuleGathererTool({ foundryClient, logger });
+  const moduleMastercraftedTool = new ModuleMastercraftedTool({ foundryClient, logger });
   // Phase 6 module_integration_v1 — module-scene-atmosphere bundle (conditional, per-member guard).
   const moduleSceneAtmosphereTool = new ModuleSceneAtmosphereTool({ foundryClient, logger });
+  // Phase 7 module_integration_v1 — module-access-control bundle (conditional, per-member guard).
+  const moduleAccessControlTool = new ModuleAccessControlTool({ foundryClient, logger });
   // Phase 13A module_integration_v1 — module-css (conditional).
   const moduleCssTool = new ModuleCssTool({ foundryClient, logger });
+  // Phase 15 module_integration_v1 — module-lighting (conditional).
+  const moduleLightingTool = new ModuleLightingTool({ foundryClient, logger });
+  // Phase 3 module_integration_v1 — module-itempiles (conditional).
+  const moduleItempilesTool = new ModuleItempilesTool({ foundryClient, logger });
 
   const registry = new ToolRegistry();
   registry.register('get-character', (args) => characterTools.handleGetCharacter(args));
@@ -384,6 +434,8 @@ async function startBackend(): Promise<void> {
   registry.register('request-player-rolls', (args) => diceRollTools.handleRequestPlayerRolls(args));
   // Phase 2 mcp_coverage_expansion — dice-roll (immediate roll/validate/simulate); reuses DiceRollTools.
   registry.register('dice-roll', (args) => diceRollTools.handleDiceRoll(args));
+  // Phase 10 mcp_coverage_expansion — keybinding (GM-client list/get/set/reset/find-conflicts).
+  registry.register('keybinding', (args) => keybindingTools.handleKeybinding(args));
   registry.register('ownership', (args) => ownershipTool.execute(args));
   // Phase 4 mcp_crud_expansion — list-scenes + switch-scene folded into scene umbrella.
   registry.register('rolltable', (args) => rollTableTool.execute(args));
@@ -458,12 +510,35 @@ async function startBackend(): Promise<void> {
   // Phase 5 module_integration_v1 — module-tagger + module-sequencer (conditional).
   registry.register('module-tagger', (args) => moduleTaggerTool.execute(args as any));
   registry.register('module-sequencer', (args) => moduleSequencerTool.execute(args as any));
+  // Phase 4 module_integration_v1 — module-levels (conditional).
+  registry.register('module-levels', (args) => moduleLevelsTool.execute(args as any));
   // Phase 8 module_integration_v1 — module-autoanimations (conditional).
   registry.register('module-autoanimations', (args) => moduleAutoAnimationsTool.execute(args as any));
+  // Phase 9 module_integration_v1 — WFRP mechanic delegates: module-robak + module-tokenbar (conditional).
+  registry.register('module-robak', (args) => moduleRobakTool.execute(args as any));
+  registry.register('module-tokenbar', (args) => moduleTokenbarTool.execute(args as any));
+  // Phase 10 module_integration_v1 — module-armoury (forien-armoury conditional).
+  registry.register('module-armoury', (args) => moduleArmouryTool.execute(args as any));
+  // Phase 11 module_integration_v1 — module-party-resources + module-gmtoolkit (conditional).
+  registry.register('module-party-resources', (args) => modulePartyResourcesTool.execute(args as any));
+  registry.register('module-gmtoolkit', (args) => moduleGmtoolkitTool.execute(args as any));
+  // Phase 12 module_integration_v1 — module-chat-commander (_chatcommands conditional).
+  registry.register('module-chat-commander', (args) => moduleChatCommanderTool.execute(args as any));
+  // Phase 14 module_integration_v1 — thin-session modules (conditional).
+  registry.register('module-timekeeping', (args) => moduleTimekeepingTool.execute(args as any));
+  registry.register('module-patrol', (args) => modulePatrolTool.execute(args as any));
+  registry.register('module-gatherer', (args) => moduleGathererTool.execute(args as any));
+  registry.register('module-mastercrafted', (args) => moduleMastercraftedTool.execute(args as any));
   // Phase 6 module_integration_v1 — module-scene-atmosphere bundle (conditional, per-member guard).
   registry.register('module-scene-atmosphere', (args) => moduleSceneAtmosphereTool.execute(args as any));
+  // Phase 7 module_integration_v1 — module-access-control bundle (conditional, per-member guard).
+  registry.register('module-access-control', (args) => moduleAccessControlTool.execute(args as any));
   // Phase 13A module_integration_v1 — module-css (conditional).
   registry.register('module-css', (args) => moduleCssTool.execute(args as any));
+  // Phase 15 module_integration_v1 — module-lighting (conditional).
+  registry.register('module-lighting', (args) => moduleLightingTool.execute(args as any));
+  // Phase 3 module_integration_v1 — module-itempiles (conditional).
+  registry.register('module-itempiles', (args) => moduleItempilesTool.execute(args as any));
   // Phase 4 mcp_crud_expansion — add-actors-to-scene + delete-token folded into scene umbrella.
   registry.register('delete-actor', (args) => worldDeleteTools.handleDeleteActor(args));
 
@@ -483,6 +558,8 @@ async function startBackend(): Promise<void> {
     ...actorCreationTools.getToolDefinitions(),
 
     ...diceRollTools.getToolDefinitions(),
+
+    ...keybindingTools.getToolDefinitions(),
 
     ...ownershipTool.getToolDefinitions(),
 
@@ -575,14 +652,38 @@ async function startBackend(): Promise<void> {
     // Phase 5 module_integration_v1 — module-tagger + module-sequencer (conditional).
     ...moduleTaggerTool.getToolDefinitions(),
     ...moduleSequencerTool.getToolDefinitions(),
+    // Phase 4 module_integration_v1 — module-levels (conditional).
+    ...moduleLevelsTool.getToolDefinitions(),
     // Phase 8 module_integration_v1 — module-autoanimations (conditional).
     ...moduleAutoAnimationsTool.getToolDefinitions(),
+    // Phase 9 module_integration_v1 — WFRP mechanic delegates: module-robak + module-tokenbar (conditional).
+    ...moduleRobakTool.getToolDefinitions(),
+    ...moduleTokenbarTool.getToolDefinitions(),
+    // Phase 10 module_integration_v1 — module-armoury (forien-armoury conditional).
+    ...moduleArmouryTool.getToolDefinitions(),
+    // Phase 11 module_integration_v1 — module-party-resources + module-gmtoolkit (conditional).
+    ...modulePartyResourcesTool.getToolDefinitions(),
+    ...moduleGmtoolkitTool.getToolDefinitions(),
+    // Phase 12 module_integration_v1 — module-chat-commander (conditional).
+    ...moduleChatCommanderTool.getToolDefinitions(),
+    // Phase 14 module_integration_v1 — thin-session modules (conditional).
+    ...moduleTimekeepingTool.getToolDefinitions(),
+    ...modulePatrolTool.getToolDefinitions(),
+    ...moduleGathererTool.getToolDefinitions(),
+    ...moduleMastercraftedTool.getToolDefinitions(),
 
     // Phase 6 module_integration_v1 — module-scene-atmosphere bundle (conditional, per-member guard).
     ...moduleSceneAtmosphereTool.getToolDefinitions(),
+    // Phase 7 module_integration_v1 — module-access-control bundle (conditional, per-member guard).
+    ...moduleAccessControlTool.getToolDefinitions(),
 
     // Phase 13A module_integration_v1 — module-css (conditional).
     ...moduleCssTool.getToolDefinitions(),
+    // Phase 15 module_integration_v1 — module-lighting (conditional).
+    ...moduleLightingTool.getToolDefinitions(),
+
+    // Phase 3 module_integration_v1 — module-itempiles (conditional).
+    ...moduleItempilesTool.getToolDefinitions(),
 
   ];
 

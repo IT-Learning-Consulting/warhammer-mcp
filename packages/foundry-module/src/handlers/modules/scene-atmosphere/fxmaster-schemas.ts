@@ -32,6 +32,34 @@ const FREE_FILTER_TYPES = [
   'bloom', 'color', 'fog', 'lightning', 'oldfilm', 'predator', 'underwater',
 ] as const;
 
+// fxmaster-plus add-on types — only valid when the `fxmaster-plus` module is active
+// (registers via fxmaster.preRegister*Effects). Verified live 2026-06-12 against
+// fxmaster-plus v1.0.8 (Particle Effects UI + clean recent-errors load).
+const PLUS_PARTICLE_TYPES = [
+  'fireflies', 'ghosts', 'magiccrystals', 'sakurabloom', 'sakurablossoms',
+] as const;
+const PLUS_FILTER_TYPES = ['sunlight'] as const;
+
+// wfrp-fxmaster-custom add-on types — only valid when that module is active.
+// Built on the free FXMaster engine (no fxmaster-plus required). WFRP atmosphere set.
+const CUSTOM_PARTICLE_TYPES = [
+  'warpstonemotes', 'chaosembers', 'blightspores', 'soulwisps', 'fallingash',
+  'warpfiresparks', 'censersmoke', 'daemoneyes', 'witchlight',
+  // weather group
+  'windgusts', 'dustgale', 'warpstorm', 'ashstorm',
+] as const;
+const CUSTOM_FILTER_TYPES = [
+  'corruption', 'grimdark', 'warpshimmer',
+  'waterflow', 'waterwaves', 'watervortex', 'lightningbolt',
+] as const;
+
+const ALL_PARTICLE_TYPES = [...FREE_PARTICLE_TYPES, ...PLUS_PARTICLE_TYPES, ...CUSTOM_PARTICLE_TYPES] as const;
+const ALL_FILTER_TYPES = [...FREE_FILTER_TYPES, ...PLUS_FILTER_TYPES, ...CUSTOM_FILTER_TYPES] as const;
+
+// The 24 free-tier presets — confirmed live against Gambit's FXMaster fork 8.1.4
+// via list-valid-presets (the fork is backward-compatible: all 24 still play; it
+// also registers 18 themed plus-only presets that require fxmaster-plus, which
+// list-valid-presets correctly excludes when plus is absent).
 const FREE_PRESET_NAMES = [
   'acid-rain', 'autumn-leaves', 'blizzard', 'blood-rain', 'cloudy', 'drizzle',
   'fog', 'hail', 'heat-wave', 'hurricane', 'ice-storm', 'mist', 'monsoon',
@@ -64,15 +92,15 @@ const particleBaseOptions = z.object({
   levels: z.array(z.string()).optional(),
 });
 
-/** Particle entry for play-particles (type + type-specific options). */
+/** Particle entry for play-particles (type + type-specific options). PLUS types need fxmaster-plus active. */
 const particleEntry = z.object({
-  type: z.enum(FREE_PARTICLE_TYPES),
+  type: z.enum(ALL_PARTICLE_TYPES),
   options: particleBaseOptions.catchall(z.unknown()).optional(),
 });
 
-/** Filter entry for play-filters. */
+/** Filter entry for play-filters. PLUS types (sunlight) need fxmaster-plus active. */
 const filterEntry = z.object({
-  type: z.enum(FREE_FILTER_TYPES),
+  type: z.enum(ALL_FILTER_TYPES),
   options: z.record(z.unknown()).optional(),
 });
 
@@ -203,7 +231,7 @@ export const setEnabledInput = z.object({
 export const setRegionParticlesInput = z.object({
   action: z.literal('set-region-particles'),
   regionId: z.string(),
-  particleType: z.enum(FREE_PARTICLE_TYPES),
+  particleType: z.enum(ALL_PARTICLE_TYPES),
   options: particleBaseOptions.catchall(z.unknown()).optional(),
   /** Replace all existing particleEffectsRegion behaviors on this region. */
   replace: z.boolean().optional(),
@@ -212,7 +240,7 @@ export const setRegionParticlesInput = z.object({
 export const setRegionFiltersInput = z.object({
   action: z.literal('set-region-filters'),
   regionId: z.string(),
-  filterType: z.enum(FREE_FILTER_TYPES),
+  filterType: z.enum(ALL_FILTER_TYPES),
   options: z.record(z.unknown()).optional(),
   replace: z.boolean().optional(),
 }).strict();
