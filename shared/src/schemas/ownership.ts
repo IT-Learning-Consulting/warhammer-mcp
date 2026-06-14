@@ -13,6 +13,7 @@
 //   META levels (-10 NOCHANGE, -20 DEFAULT) are UI sentinels — never accepted.
 
 import { z } from 'zod';
+import { FoundryUuid, UserId } from './branded-ids.js';
 
 // All 7 doc types Phase 1 accepts on the polymorphic surface. Folder is
 // read-allowed but write-rejected per ADR-024 (handler / single-target schemas
@@ -31,8 +32,8 @@ export type DocumentType = z.infer<typeof DocumentTypeEnum>;
 // Shared target shape: documentType + exactly one of uuid / id / name.
 const DocumentTargetShape = {
   documentType: DocumentTypeEnum,
-  uuid: z.string().optional(),
-  id: z.string().optional(),
+  uuid: FoundryUuid.optional(),
+  id: z.string().optional(), // polymorphic: not branded (Phase 1 design)
   name: z.string().optional(),
 };
 
@@ -140,7 +141,7 @@ function checkUserOrDefault(
 export const SetDocumentOwnershipInput = z
   .object({
     ...DocumentTargetShape,
-    userId: z.string().optional(),
+    userId: UserId.optional(),
     default: z.boolean().optional(),
     level: z.number().int(),
   })
@@ -183,7 +184,7 @@ const BulkTargetSchema = z.object(DocumentTargetShape).strict();
 export const BulkSetDocumentOwnershipInput = z
   .object({
     targets: z.array(BulkTargetSchema).min(1),
-    userId: z.string().optional(),
+    userId: UserId.optional(),
     default: z.boolean().optional(),
     level: z.number().int(),
   })

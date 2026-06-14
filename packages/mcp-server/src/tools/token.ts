@@ -19,6 +19,8 @@ import {
   TokenToolInput,
   type TokenViewModel,
   type TokenListItem,
+  SceneId,
+  TokenId,
 } from '@foundry-mcp/shared';
 import { BaseTool, BaseToolOptions } from '../base-tool.js';
 
@@ -37,9 +39,9 @@ interface TokenUpdateResponse {
   changedFields: string[];
 }
 interface TokenDeleteResponse {
-  deletedId: string;
+  deletedId: string; // not a branded id (polymorphic / non-document)
   deletedName: string;
-  sceneId: string;
+  sceneId: SceneId;
   remainingTokens: number;
 }
 interface TokenGetResponse {
@@ -54,9 +56,9 @@ interface TokenListResponse {
   filterApplied?: string | null;
 }
 interface TokenAddResponse {
-  sceneId: string;
+  sceneId: SceneId;
   added: number;
-  tokenIds: string[];
+  tokenIds: TokenId[];
   placement: string;
 }
 

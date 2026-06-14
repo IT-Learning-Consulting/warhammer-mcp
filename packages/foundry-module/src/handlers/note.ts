@@ -249,8 +249,11 @@ export async function createNote(data: unknown): Promise<Envelope<NoteCreateResp
   return wrappedWrite('note.create', async () => {
     // Phase 6.4 auto-link branch: create JournalEntry first, then note with new IDs.
     let autoCreatedEntry: { id: string; firstPageId: string | null } | undefined;
-    let resolvedEntryId = rest.entryId;
-    let resolvedPageId = rest.pageId;
+    // Widened to plain string: these start as the branded input ids (JournalEntryId /
+    // JournalEntryPageId — branded ⊂ string) but may be reassigned with a freshly-created
+    // entry's raw Foundry id below; the value only flows into the untyped Note payload.
+    let resolvedEntryId: string | null | undefined = rest.entryId;
+    let resolvedPageId: string | null | undefined = rest.pageId;
 
     if (journalContent) {
       const JournalEntry: any = (globalThis as any).JournalEntry;

@@ -3,8 +3,10 @@
 // CCR-5: Zod input validation lives package-local on the foundry-module side. The mcp-server tool
 // layer only needs typed response shapes for this.query<T> (DP-15 — never <any>).
 
+import { ActorId, CombatId, CombatantId, FoundryUuid, ItemId, TokenId } from '@foundry-mcp/shared';
+
 export interface ArmouryMeResult {
-  actorId: string;
+  actorId: ActorId;
   actorName: string | null;
   value: number;
   regen: number | null;
@@ -14,7 +16,7 @@ export interface ArmouryMeResult {
 }
 
 export interface ArmourySpendMeResult {
-  actorId: string;
+  actorId: ActorId;
   actorName: string | null;
   previousValue: number;
   amount: number;
@@ -23,20 +25,20 @@ export interface ArmourySpendMeResult {
 }
 
 export interface ArmouryScrollResult {
-  itemId: string;
+  itemId: ItemId;
   name: string;
   scope: 'world' | 'actor';
-  actorId: string | null;
-  spellUuid: string | null;
+  actorId: ActorId | null;
+  spellUuid: FoundryUuid | null;
   language: string;
   quantity: number;
   canUse: boolean | null;
 }
 
 export interface ArmouryGrimoireSpellsResult {
-  itemId: string;
+  itemId: ItemId;
   name: string;
-  actorId: string | null;
+  actorId: ActorId | null;
   equipped: boolean;
   language: string;
   spells: Array<{ name: string | null; uuid: string }>;
@@ -44,16 +46,16 @@ export interface ArmouryGrimoireSpellsResult {
 }
 
 export interface ArmouryEquipGrimoireResult {
-  itemId: string;
+  itemId: ItemId;
   name: string;
-  actorId: string;
+  actorId: ActorId;
   equipped: boolean;
   grantedSpells: Array<{ id: string; name: string }>;
   removedSpellCount: number;
 }
 
 export interface ArmouryDamageEntry {
-  itemId: string;
+  itemId: ItemId;
   name: string;
   type: string; // weapon | armour | trapping
   damage: number; // total damage points (weapon/trapping) or summed AP damage (armour)
@@ -62,14 +64,14 @@ export interface ArmouryDamageEntry {
 }
 
 export interface ArmouryCheckDamageResult {
-  actorId: string;
+  actorId: ActorId;
   actorName: string | null;
   damaged: ArmouryDamageEntry[];
   totalRepairCost: number;
 }
 
 export interface ArmouryRepairResult {
-  itemId: string;
+  itemId: ItemId;
   name: string;
   field: string; // the path written
   previousValue: number;
@@ -77,15 +79,15 @@ export interface ArmouryRepairResult {
 }
 
 export interface ArmouryAmmoQueueResult {
-  combatId: string | null;
+  combatId: CombatId | null;
   queue: Record<string, Array<{ _id: string; user: string; quantity: number }>>; // keyed by actorId
   entryCount: number;
 }
 
 export interface ArmouryCombatFatigueResult {
-  combatId: string | null;
+  combatId: CombatId | null;
   combatants: Array<{
-    combatantId: string;
+    combatantId: CombatantId;
     name: string | null;
     roundsBeforeTest: number | null;
     roundsBeforePassOut: number | null;
@@ -106,7 +108,7 @@ export interface ArmouryIntegrationResult {
 }
 
 export interface ArmouryCantripResult {
-  tokenId: string;
+  tokenId: TokenId;
   actorName: string | null;
   lore: string;
   requiredSL: number;

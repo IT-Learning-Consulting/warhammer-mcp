@@ -5,8 +5,7 @@
 // Spike-Sentinel 6 RESOLVED. darkness.{min, max} are AlphaField range.
 
 import { z } from 'zod';
-
-const FOUNDRY_ID = z.string().min(1);
+import { SceneId, AmbientSoundId } from './branded-ids.js';
 
 const SoundDarknessInput = z
   .object({
@@ -48,7 +47,7 @@ const SoundWritableFields = {
 export const SoundCreateInput = z
   .object({
     action: z.literal('create'),
-    sceneId: FOUNDRY_ID,
+    sceneId: SceneId,
     ...SoundWritableFields,
     x: z.number(),
     y: z.number(),
@@ -58,8 +57,8 @@ export const SoundCreateInput = z
 export const SoundUpdateInput = z
   .object({
     action: z.literal('update'),
-    sceneId: FOUNDRY_ID,
-    soundId: FOUNDRY_ID,
+    sceneId: SceneId,
+    soundId: AmbientSoundId,
     changes: z
       .object(SoundWritableFields)
       .strict()
@@ -72,23 +71,23 @@ export const SoundUpdateInput = z
 export const SoundDeleteInput = z
   .object({
     action: z.literal('delete'),
-    sceneId: FOUNDRY_ID,
-    soundId: FOUNDRY_ID,
+    sceneId: SceneId,
+    soundId: AmbientSoundId,
   })
   .strict();
 
 export const SoundGetInput = z
   .object({
     action: z.literal('get'),
-    sceneId: FOUNDRY_ID,
-    soundId: FOUNDRY_ID,
+    sceneId: SceneId,
+    soundId: AmbientSoundId,
   })
   .strict();
 
 export const SoundListInput = z
   .object({
     action: z.literal('list'),
-    sceneId: FOUNDRY_ID.optional(),
+    sceneId: SceneId.optional(),
     filter: z.string().optional(),
     hidden: z.boolean().optional(),
     page: z.number().int().min(1).optional(),
@@ -101,8 +100,8 @@ export const SoundListInput = z
 export const SoundDuplicateInput = z
   .object({
     action: z.literal('duplicate'),
-    sceneId: FOUNDRY_ID,
-    soundId: FOUNDRY_ID,
+    sceneId: SceneId,
+    soundId: AmbientSoundId,
   })
   .strict();
 

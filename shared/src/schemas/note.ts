@@ -10,12 +10,11 @@ import { TextureDataSchema, type TextureData } from './texture-data.js';
 // Phase 6.4 — auto-link branch reuses Phase 3's PageInput discriminated union.
 // B3: do NOT redefine the page shape; lift the canonical one from journal.ts.
 import { PageInput } from './journal.js';
-
-const FOUNDRY_ID = z.string().min(1);
+import { SceneId, NoteId, JournalEntryId, JournalEntryPageId } from './branded-ids.js';
 
 const NoteWritableFields = {
-  entryId: FOUNDRY_ID.nullable().optional(),
-  pageId: FOUNDRY_ID.nullable().optional(),
+  entryId: JournalEntryId.nullable().optional(),
+  pageId: JournalEntryPageId.nullable().optional(),
   x: z.number().optional(),
   y: z.number().optional(),
   elevation: z.number().optional(),
@@ -43,7 +42,7 @@ export const NoteJournalContentInput = z.object({
 export const NoteCreateInput = z
   .object({
     action: z.literal('create'),
-    sceneId: FOUNDRY_ID,
+    sceneId: SceneId,
     ...NoteWritableFields,
     x: z.number(),
     y: z.number(),
@@ -58,8 +57,8 @@ export const NoteCreateInput = z
 export const NoteUpdateInput = z
   .object({
     action: z.literal('update'),
-    sceneId: FOUNDRY_ID,
-    noteId: FOUNDRY_ID,
+    sceneId: SceneId,
+    noteId: NoteId,
     changes: z
       .object(NoteWritableFields)
       .strict()
@@ -72,25 +71,25 @@ export const NoteUpdateInput = z
 export const NoteDeleteInput = z
   .object({
     action: z.literal('delete'),
-    sceneId: FOUNDRY_ID,
-    noteId: FOUNDRY_ID,
+    sceneId: SceneId,
+    noteId: NoteId,
   })
   .strict();
 
 export const NoteGetInput = z
   .object({
     action: z.literal('get'),
-    sceneId: FOUNDRY_ID,
-    noteId: FOUNDRY_ID,
+    sceneId: SceneId,
+    noteId: NoteId,
   })
   .strict();
 
 export const NoteListInput = z
   .object({
     action: z.literal('list'),
-    sceneId: FOUNDRY_ID.optional(),
+    sceneId: SceneId.optional(),
     filter: z.string().optional(),
-    entryId: FOUNDRY_ID.optional(),
+    entryId: JournalEntryId.optional(),
     onlyOrphaned: z.boolean().optional(),
     page: z.number().int().min(1).optional(),
     pageSize: z.number().int().min(1).max(100).optional(),

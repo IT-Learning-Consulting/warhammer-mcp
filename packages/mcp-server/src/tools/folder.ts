@@ -18,6 +18,7 @@ import {
     type FolderViewModel,
     type FolderListItem,
     type FolderContentsItem,
+    FolderId,
 } from '@foundry-mcp/shared';
 import { BaseTool, BaseToolOptions } from '../base-tool.js';
 
@@ -27,20 +28,20 @@ type ArgsFor<A extends FolderArgs['action']> = Extract<FolderArgs, { action: A }
 // ── Inline response shapes (DP-15) ───────────────────────────────────────────
 
 interface FolderCreateResponse {
-    folderId: string;
+    folderId: FolderId;
     folder: FolderViewModel;
     requestedChanges: Record<string, unknown>;
 }
 
 interface FolderUpdateResponse {
-    folderId: string;
+    folderId: FolderId;
     folder: FolderViewModel;
     requestedChanges: Record<string, unknown>;
     changedFields: string[];
 }
 
 interface FolderDeleteResponse {
-    deletedId: string;
+    deletedId: string; // not a branded id (polymorphic / non-document)
     remainingCount: number;
 }
 
@@ -58,7 +59,7 @@ interface FolderListResponse {
 }
 
 interface FolderListContentsResponse {
-    folderId: string;
+    folderId: FolderId;
     folderName: string;
     recursive: boolean;
     count: number;

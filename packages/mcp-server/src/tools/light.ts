@@ -34,7 +34,7 @@ interface LightUpdateResponse {
   changedFields: string[];
 }
 interface LightDeleteResponse {
-  deletedId: string;
+  deletedId: string; // not a branded id (polymorphic / non-document)
   remainingLights: number;
 }
 interface LightGetResponse {

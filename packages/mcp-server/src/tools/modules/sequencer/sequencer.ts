@@ -10,6 +10,7 @@
 //   - Phase 5 module_integration_v1 acceptance criteria #2.
 
 import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
+import { SceneId } from '@foundry-mcp/shared';
 import { moduleNotActiveContent } from '../_shared/module-guard.js';
 
 // ── Response shapes (DP-15) ───────────────────────────────────────────────────
@@ -29,7 +30,7 @@ interface EffectData {
   origin: string | null;
   source: string | null;
   target: string | null;
-  sceneId: string | null;
+  sceneId: SceneId | null;
   persist: boolean;
   file: string | null;
   temporary: unknown;
@@ -42,7 +43,7 @@ interface SequencerEffectsResult {
   updatedCount?: number;
   ended?: boolean;
   filter?: Record<string, unknown>;
-  sceneId?: string | null;
+  sceneId?: SceneId | null;
 }
 
 interface DatabaseResult {

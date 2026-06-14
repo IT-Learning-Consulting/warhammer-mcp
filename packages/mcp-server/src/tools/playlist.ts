@@ -23,6 +23,8 @@ import {
   type PlaylistViewModel,
   type PlaylistSoundViewModel,
   type PlaylistListItem,
+  type PlaylistId,
+  type PlaylistSoundId,
 } from '@foundry-mcp/shared';
 import { BaseTool, BaseToolOptions } from '../base-tool.js';
 import { formatAffectedDocs } from './format-affected-docs.js';
@@ -35,18 +37,18 @@ type ArgsFor<A extends PlaylistArgs['action']> = Extract<PlaylistArgs, { action:
 interface PlaylistCreatePlaylistResponse {
   id: string;
   name: string;
-  soundIds: string[];
+  soundIds: PlaylistSoundId[];
   requestedChanges: Record<string, unknown>;
   playlist: PlaylistViewModel;
 }
 interface PlaylistUpdatePlaylistResponse {
-  playlistId: string;
+  playlistId: PlaylistId;
   playlist: PlaylistViewModel;
   requestedChanges: Record<string, unknown>;
   changedFields: string[];
 }
 interface PlaylistDeletePlaylistResponse {
-  playlistId: string;
+  playlistId: PlaylistId;
   deletedSoundCount: number;
   affectedDocs?: import('@foundry-mcp/shared').FkAffectedDocEntry[];
 }
@@ -74,25 +76,25 @@ type PlaylistListResponse =
   | PlaylistListCountResponse;
 
 interface PlaylistAddSoundResponse {
-  playlistId: string;
+  playlistId: PlaylistId;
   sound: PlaylistSoundViewModel;
   requestedChanges: Record<string, unknown>;
 }
 interface PlaylistUpdateSoundResponse {
-  playlistId: string;
+  playlistId: PlaylistId;
   sound: PlaylistSoundViewModel;
   requestedChanges: Record<string, unknown>;
   changedFields: string[];
 }
 interface PlaylistDeleteSoundResponse {
-  deletedId: string;
-  playlistId: string;
+  deletedId: string; // not a branded id (polymorphic / non-document)
+  playlistId: PlaylistId;
   remainingSoundCount: number;
   affectedDocs?: import('@foundry-mcp/shared').FkAffectedDocEntry[];
 }
 
 interface PlaylistPlayResponse {
-  playlistId: string;
+  playlistId: PlaylistId;
   playing: boolean;
   mode: number;
   suppressed?: boolean;
@@ -103,7 +105,7 @@ interface PlaylistDuplicateResponse {
   playlist: PlaylistViewModel;
 }
 interface PlaylistBulkImportResponse {
-  playlistId: string;
+  playlistId: PlaylistId;
   imported: number;
   files: string[];
 }
@@ -112,7 +114,7 @@ interface PlaylistPreloadResponse {
   preloaded: boolean;
 }
 interface PlaylistStopResponse {
-  playlistId: string;
+  playlistId: PlaylistId;
   playing: boolean;
 }
 

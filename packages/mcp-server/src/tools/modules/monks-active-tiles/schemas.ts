@@ -6,6 +6,7 @@
 // per-action handlers and is not the security boundary.
 
 import { z } from 'zod';
+import { RegionId, SceneId, TokenId } from '@foundry-mcp/shared';
 
 const MattActionObj = z.object({
   id: z.string().optional(),
@@ -35,11 +36,11 @@ export const ModuleMattInput = z.discriminatedUnion('action', [
   z.object({ action: z.literal('get-capabilities') }),
   // BUG-254 full-payload flag; BUG-330 parity with the published inputSchema.
   z.object({ action: z.literal('get-trigger-tile'), tileUuid: z.string(), returnFullPayload: z.boolean().optional() }),
-  z.object({ action: z.literal('list-trigger-tiles'), sceneId: z.string().optional() }),
+  z.object({ action: z.literal('list-trigger-tiles'), sceneId: SceneId.optional() }),
   z.object({ action: z.literal('validate-sequence'), actions: z.array(MattActionObj) }),
   z.object({
     action: z.literal('create-trigger-tile'),
-    sceneId: z.string(),
+    sceneId: SceneId,
     x: z.number(),
     y: z.number(),
     width: z.number().optional(),
@@ -80,7 +81,7 @@ export const ModuleMattInput = z.discriminatedUnion('action', [
   z.object({
     action: z.literal('update-action'),
     tileUuid: z.string(),
-    actionId: z.string(),
+    actionId: z.string(), // not a branded id (polymorphic / non-document) — MATT internal 16-char sequence action id
     data: z.record(z.unknown()),
     newActionKey: z.string().optional(),
     confirm: z.boolean().optional(),
@@ -88,7 +89,7 @@ export const ModuleMattInput = z.discriminatedUnion('action', [
   z.object({
     action: z.literal('remove-action'),
     tileUuid: z.string(),
-    actionId: z.string(),
+    actionId: z.string(), // not a branded id (polymorphic / non-document) — MATT internal 16-char sequence action id
     confirm: z.boolean().optional(),
   }),
   z.object({
@@ -100,7 +101,7 @@ export const ModuleMattInput = z.discriminatedUnion('action', [
   z.object({
     action: z.literal('duplicate-action'),
     tileUuid: z.string(),
-    actionId: z.string(),
+    actionId: z.string(), // not a branded id (polymorphic / non-document) — MATT internal 16-char sequence action id
     confirm: z.boolean().optional(),
   }),
   z.object({
@@ -111,7 +112,7 @@ export const ModuleMattInput = z.discriminatedUnion('action', [
   z.object({
     action: z.literal('reset-history'),
     tileUuid: z.string(),
-    tokenId: z.string().optional(),
+    tokenId: TokenId.optional(),
   }),
   z.object({
     action: z.literal('fire-trigger'),
@@ -121,7 +122,7 @@ export const ModuleMattInput = z.discriminatedUnion('action', [
   z.object({
     action: z.literal('fire-trigger-as'),
     tileUuid: z.string(),
-    tokenIds: z.array(z.string()).min(1).max(10),
+    tokenIds: z.array(TokenId).min(1).max(10),
     method: z.string().optional(),
     // BUG-258: optional anchor tag — fire starts at the action AFTER the named anchor.
     landing: z.string().optional(),
@@ -132,13 +133,13 @@ export const ModuleMattInput = z.discriminatedUnion('action', [
     name: z.string().optional(),
     tileUuid: z.string().optional(),
     tag: z.string().optional(),
-    libraryId: z.string().optional(),
-    sceneId: z.string().optional(),
+    libraryId: z.string().optional(), // not a branded id (polymorphic / non-document)
+    sceneId: SceneId.optional(),
   }),
   z.object({
     action: z.literal('link-region-trigger'),
-    sceneId: z.string(),
-    regionId: z.string(),
+    sceneId: SceneId,
+    regionId: RegionId,
     tileUuid: z.string(),
     events: z.array(z.string()).optional(),
     usetiletrigger: z.boolean().optional(),

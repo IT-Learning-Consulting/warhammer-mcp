@@ -13,6 +13,7 @@
 // It does NOT write placed-token texture.src — use `token {action:"update"}` for that.
 
 import { z } from 'zod';
+import { ActorId } from './branded-ids.js';
 import { LightDataSchema } from './light-data.js';
 import { TextureDataSchema } from './texture-data.js';
 
@@ -97,21 +98,21 @@ const PrototypeTokenWritableFields = {
 // art target discriminator — covers actor.img, item.img,
 // and actor.prototypeToken.texture.src (via which).
 export const ArtTargetInput = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('actor'), id: FOUNDRY_ID }).strict(),
-  z.object({ type: z.literal('item'), id: FOUNDRY_ID }).strict(),
+  z.object({ type: z.literal('actor'), id: FOUNDRY_ID }).strict(), // id: polymorphic field name — not branded (Phase 1 design)
+  z.object({ type: z.literal('item'), id: FOUNDRY_ID }).strict(),  // id: polymorphic field name — not branded (Phase 1 design)
 ]);
 
 export const ActorConfigGetPrototypeTokenInput = z
   .object({
     action: z.literal('get-prototype-token'),
-    actorId: FOUNDRY_ID,
+    actorId: ActorId,
   })
   .strict();
 
 export const ActorConfigUpdatePrototypeTokenInput = z
   .object({
     action: z.literal('update-prototype-token'),
-    actorId: FOUNDRY_ID,
+    actorId: ActorId,
     changes: z
       .object(PrototypeTokenWritableFields)
       .strict()

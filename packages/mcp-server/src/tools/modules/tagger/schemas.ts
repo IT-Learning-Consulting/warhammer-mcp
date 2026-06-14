@@ -5,6 +5,7 @@
 // This schema is used for coercion + TypeScript inference only.
 
 import { z } from 'zod';
+import { SceneId } from '@foundry-mcp/shared';
 
 const DocRefs = z.union([z.string(), z.array(z.string())]);
 
@@ -13,7 +14,7 @@ export const ModuleTaggerToolInput = z.object({
   uuids: DocRefs.optional(),
   tags: z.array(z.string()).optional(),
   toggle: z.boolean().optional(),
-  sceneId: z.string().optional(),
+  sceneId: SceneId.optional(),
   matchAny: z.boolean().optional(),
   matchExactly: z.boolean().optional(),
   caseInsensitive: z.boolean().optional(),

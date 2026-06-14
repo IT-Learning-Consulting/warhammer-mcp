@@ -7,8 +7,7 @@
 // GM-only writes per plan §Design Decisions (no author-or-GM exemption surface).
 
 import { z } from 'zod';
-
-const FOUNDRY_ID = z.string().min(1);
+import { SceneId, MeasuredTemplateId } from './branded-ids.js';
 
 const TemplateTypeEnum = z
   .enum(['circle', 'cone', 'rect', 'ray'])
@@ -43,7 +42,7 @@ const TemplateWritableFields = {
 export const TemplateCreateInput = z
   .object({
     action: z.literal('create'),
-    sceneId: FOUNDRY_ID,
+    sceneId: SceneId,
     ...TemplateWritableFields,
     // Position is required for create — Foundry needs x/y to place the template.
     x: z.number(),
@@ -54,8 +53,8 @@ export const TemplateCreateInput = z
 export const TemplateUpdateInput = z
   .object({
     action: z.literal('update'),
-    sceneId: FOUNDRY_ID,
-    templateId: FOUNDRY_ID,
+    sceneId: SceneId,
+    templateId: MeasuredTemplateId,
     changes: z
       .object(TemplateWritableFields)
       .strict()
@@ -68,23 +67,23 @@ export const TemplateUpdateInput = z
 export const TemplateDeleteInput = z
   .object({
     action: z.literal('delete'),
-    sceneId: FOUNDRY_ID,
-    templateId: FOUNDRY_ID,
+    sceneId: SceneId,
+    templateId: MeasuredTemplateId,
   })
   .strict();
 
 export const TemplateGetInput = z
   .object({
     action: z.literal('get'),
-    sceneId: FOUNDRY_ID,
-    templateId: FOUNDRY_ID,
+    sceneId: SceneId,
+    templateId: MeasuredTemplateId,
   })
   .strict();
 
 export const TemplateListInput = z
   .object({
     action: z.literal('list'),
-    sceneId: FOUNDRY_ID.optional(),
+    sceneId: SceneId.optional(),
     filter: z.string().optional(),
     hidden: z.boolean().optional(),
     page: z.number().int().min(1).optional(),
@@ -97,8 +96,8 @@ export const TemplateListInput = z
 export const TemplateDuplicateInput = z
   .object({
     action: z.literal('duplicate'),
-    sceneId: FOUNDRY_ID,
-    templateId: FOUNDRY_ID,
+    sceneId: SceneId,
+    templateId: MeasuredTemplateId,
   })
   .strict();
 

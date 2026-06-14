@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { FolderId, PackId, ItemId } from '@foundry-mcp/shared';
 import { FoundryClient } from '../foundry-client.js';
 import { Logger } from '../logger.js';
 import { BaseTool, BaseToolOptions } from '../base-tool.js';
@@ -12,7 +13,7 @@ const CreateActorSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   type: z.enum(['character', 'npc', 'creature']),
   systemData: z.record(z.unknown()).optional(),
-  folderId: z.string().optional(),
+  folderId: FolderId.optional(),
   options: z.object({
     skipItems: z.boolean().optional(),
   }).strict().optional(),
@@ -195,8 +196,8 @@ export class ActorCreationTools extends BaseTool {
    */
   async handleCreateActorFromCompendium(args: any): Promise<any> {
     const schema = z.object({
-      packId: z.string().min(1, 'Pack ID cannot be empty'),
-      itemId: z.string().min(1, 'Item ID cannot be empty'),
+      packId: PackId,
+      itemId: ItemId,
       names: z.array(z.string().min(1)).min(1, 'At least one name is required'),
       quantity: z.number().min(1).max(10).optional(),
       addToScene: z.boolean().default(false),
@@ -303,8 +304,8 @@ export class ActorCreationTools extends BaseTool {
    */
   async handleGetCompendiumEntryFull(args: any): Promise<any> {
     const schema = z.object({
-      packId: z.string().min(1, 'Pack ID cannot be empty'),
-      entryId: z.string().min(1, 'Entry ID cannot be empty'),
+      packId: PackId,
+      entryId: z.string().min(1, 'Entry ID cannot be empty'), // not a branded id (polymorphic / non-document)
       summary_only: z.boolean().default(false),
     });
 
@@ -387,7 +388,7 @@ export class ActorCreationTools extends BaseTool {
   /**
    * Format simplified actor creation response
    */
-  private formatSimpleActorCreationResponse(result: any, packId: string, itemId: string, customNames: string[]): any {
+  private formatSimpleActorCreationResponse(result: any, packId: PackId, itemId: ItemId, customNames: string[]): any {
     const summary = `✅ Created ${result.totalCreated} of ${result.totalRequested} requested actors`;
 
     const details = result.actors.map((actor: any) =>

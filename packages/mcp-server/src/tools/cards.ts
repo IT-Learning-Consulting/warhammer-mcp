@@ -14,6 +14,8 @@
 import { z } from 'zod';
 import {
   CardsToolInput,
+  CardsId,
+  CardId,
   type CardsStackView,
   type CardsStackListItem,
   type CardView,
@@ -26,19 +28,44 @@ type ArgsFor<A extends CardsArgs['action']> = Extract<CardsArgs, { action: A }>;
 
 // ── Inline response interfaces (mirror foundry-module handler data payloads) ──
 
-interface StackResponse { success: true; id?: string; stackId?: string; sourceId?: string; stack: CardsStackView; requestedChanges?: Record<string, unknown>; changedFields?: string[]; }
+interface StackResponse {
+  success: true;
+  id?: string;
+  stackId?: CardsId;
+  sourceId?: string; // not a branded id (polymorphic / non-document)
+  stack: CardsStackView;
+  requestedChanges?: Record<string, unknown>;
+  changedFields?: string[];
+}
 interface StackListResponse { success: true; stacks?: CardsStackListItem[]; total?: number; page?: number; pageSize?: number; pageCount?: number; filterApplied?: string | null; }
-interface StackDeleteResponse { success: true; dryRun: boolean; stackId: string; stackName?: string; embeddedCardCount?: number; deletedCardCount?: number; }
-interface CardResponse { success: true; stackId: string; card: CardView; requestedChanges?: Record<string, unknown>; changedFields?: string[]; redacted?: boolean; }
-interface CardDeleteResponse { success: true; stackId: string; deletedId: string; remainingCardCount: number; }
-interface CardListResponse { success: true; stackId: string; cards?: CardListItem[]; total?: number; page?: number; pageSize?: number; pageCount?: number; }
-interface FlipResponse { success: true; stackId: string; cardId: string; face: number | null; card: CardView; }
-interface ShuffleResponse { success: true; stackId: string; cardCount: number; }
-interface RecallResponse { success: true; dryRun: boolean; stackId: string; stackType: string; cardCount: number; projectedReturn?: number; }
-interface DealResponse { success: true; dryRun?: boolean; deckId: string; dealt?: number; deckAvailableAfter?: number; hands?: Array<{ stackId: string; cardCount: number }>; destinationCount?: number; cardsPerHand?: number; sourceDeckCardCount?: number; cardsAfterDeal?: number; sufficient?: boolean; }
-interface DrawResponse { success: true; handId: string; deckId: string; drawnCount: number; drawnCardIds: string[]; handCardCount: number; }
-interface PassResponse { success: true; fromStackId: string; toStackId: string; passedCount: number; passedCardIds: string[]; }
-interface PlayDiscardResponse { success: true; action: string; cardId: string; fromStackId: string; toStackId: string; newCardId: string; }
+interface StackDeleteResponse { success: true; dryRun: boolean; stackId: CardsId; stackName?: string; embeddedCardCount?: number; deletedCardCount?: number; }
+interface CardResponse { success: true; stackId: CardsId; card: CardView; requestedChanges?: Record<string, unknown>; changedFields?: string[]; redacted?: boolean; }
+interface CardDeleteResponse {
+  success: true;
+  stackId: CardsId;
+  deletedId: string; // not a branded id (polymorphic / non-document)
+  remainingCardCount: number;
+}
+interface CardListResponse { success: true; stackId: CardsId; cards?: CardListItem[]; total?: number; page?: number; pageSize?: number; pageCount?: number; }
+interface FlipResponse { success: true; stackId: CardsId; cardId: CardId; face: number | null; card: CardView; }
+interface ShuffleResponse { success: true; stackId: CardsId; cardCount: number; }
+interface RecallResponse { success: true; dryRun: boolean; stackId: CardsId; stackType: string; cardCount: number; projectedReturn?: number; }
+interface DealResponse {
+  success: true;
+  dryRun?: boolean;
+  deckId: CardsId;
+  dealt?: number;
+  deckAvailableAfter?: number;
+  hands?: Array<{ stackId: CardsId; cardCount: number }>;
+  destinationCount?: number;
+  cardsPerHand?: number;
+  sourceDeckCardCount?: number;
+  cardsAfterDeal?: number;
+  sufficient?: boolean;
+}
+interface DrawResponse { success: true; handId: CardsId; deckId: CardsId; drawnCount: number; drawnCardIds: string[]; handCardCount: number; }
+interface PassResponse { success: true; fromStackId: CardsId; toStackId: CardsId; passedCount: number; passedCardIds: string[]; }
+interface PlayDiscardResponse { success: true; action: string; cardId: CardId; fromStackId: CardsId; toStackId: CardsId; newCardId: CardId; }
 
 // ── Utilities ────────────────────────────────────────────────────────────────
 

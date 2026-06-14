@@ -31,6 +31,7 @@ import {
   type SetExecutionTargetResponse,
   type ListWorldScriptsResponse,
   type GetExecutionTargetResponse,
+  MacroId,
 } from '@foundry-mcp/shared';
 import { BaseTool, BaseToolOptions } from '../base-tool.js';
 
@@ -40,18 +41,18 @@ type ArgsFor<A extends MacroArgs['action']> = Extract<MacroArgs, { action: A }>;
 // ── Inline response interfaces (mirror foundry-module handler local types) ────
 
 interface MacroCreateResponse {
-  macroId: string;
+  macroId: MacroId;
   macro: MacroViewModel;
   requestedChanges: Record<string, unknown>;
 }
 interface MacroUpdateResponse {
-  macroId: string;
+  macroId: MacroId;
   macro: MacroViewModel;
   requestedChanges: Record<string, unknown>;
   changedFields: string[];
 }
 interface MacroDeleteResponse {
-  deletedId: string;
+  deletedId: string; // not a branded id (polymorphic / non-document)
   remainingCount: number;
   hotbarRefs: MacroHotbarRef[];
   regionBehaviorRefs: MacroRegionBehaviorRef[];
@@ -60,7 +61,7 @@ interface MacroGetResponse {
   macro: MacroViewModel;
 }
 interface MacroImportResponse {
-  macroId: string;
+  macroId: MacroId;
   macro: MacroViewModel;
   sourcePack: string;
 }

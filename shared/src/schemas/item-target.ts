@@ -8,13 +8,14 @@
 // z.discriminatedUnion requires each branch to be a plain ZodObject.
 
 import { z } from 'zod';
+import { ActorId, ItemId } from './branded-ids.js';
 
 const ActorTarget = z
   .object({
     scope: z.literal('actor'),
-    actorId: z.string().optional(),
+    actorId: ActorId.optional(),
     actorName: z.string().optional(),
-    itemId: z.string().optional(),
+    itemId: ItemId.optional(),
     itemName: z.string().optional(),
   })
   .strict();
@@ -22,7 +23,7 @@ const ActorTarget = z
 const WorldTarget = z
   .object({
     scope: z.literal('world'),
-    itemId: z.string().optional(),
+    itemId: ItemId.optional(),
     itemName: z.string().optional(),
   })
   .strict();

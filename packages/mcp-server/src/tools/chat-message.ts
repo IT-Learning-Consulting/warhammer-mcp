@@ -33,6 +33,7 @@ import {
     type ChatMessageListItem,
     type ChatMessageExportLogResponse,
     type ChatMessageClearLogResponse,
+    ChatMessageId,
 } from '@foundry-mcp/shared';
 import { BaseTool, BaseToolOptions } from '../base-tool.js';
 
@@ -42,20 +43,20 @@ type ArgsFor<A extends ChatMessageArgs['action']> = Extract<ChatMessageArgs, { a
 // ── Inline response shapes (DP-15) ───────────────────────────────────────────
 
 interface ChatMessageCreateResponse {
-    messageId: string;
+    messageId: ChatMessageId;
     message: ChatMessageViewModel;
     requestedChanges: Record<string, unknown>;
 }
 
 interface ChatMessageUpdateResponse {
-    messageId: string;
+    messageId: ChatMessageId;
     message: ChatMessageViewModel;
     requestedChanges: Record<string, unknown>;
     changedFields: string[];
 }
 
 interface ChatMessageDeleteResponse {
-    deletedId: string;
+    deletedId: string; // not a branded id (polymorphic / non-document)
     remainingCount: number;
 }
 

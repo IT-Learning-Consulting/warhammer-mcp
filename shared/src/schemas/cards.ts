@@ -23,8 +23,8 @@
 // Thin primitive (HC1 / CCR-3): no CONFIG reads, no game-rule logic.
 
 import { z } from 'zod';
+import { CardsId, CardId, FolderId, UserId } from './branded-ids.js';
 
-const FOUNDRY_ID = z.string().min(1);
 const STACK_TYPE = z.enum(['deck', 'hand', 'pile']);
 const DRAW_MODE = z.enum(['top', 'bottom', 'random']);
 // DocumentOwnershipField: { userId | "default": level(0-3) }.
@@ -46,7 +46,7 @@ const StackWritableFields = {
   img: z.string().optional(),
   displayCount: z.boolean().optional(),
   ownership: OWNERSHIP.optional(),
-  folder: z.string().nullable().optional(),
+  folder: FolderId.nullable().optional(),
   sort: z.number().int().optional(),
   width: z.number().optional(),
   height: z.number().optional(),
@@ -87,7 +87,7 @@ export const CardsCreateStackInput = z
 export const CardsGetStackInput = z
   .object({
     action: z.literal('get-stack'),
-    stackId: FOUNDRY_ID,
+    stackId: CardsId,
   })
   .strict();
 
@@ -104,7 +104,7 @@ export const CardsListStacksInput = z
 export const CardsUpdateStackInput = z
   .object({
     action: z.literal('update-stack'),
-    stackId: FOUNDRY_ID,
+    stackId: CardsId,
     changes: z
       .object(StackWritableFields)
       .strict()
@@ -117,7 +117,7 @@ export const CardsUpdateStackInput = z
 export const CardsDeleteStackInput = z
   .object({
     action: z.literal('delete-stack'),
-    stackId: FOUNDRY_ID,
+    stackId: CardsId,
     confirm: z.literal(true),
     dryRun: z.boolean().default(false),
   })
@@ -126,7 +126,7 @@ export const CardsDeleteStackInput = z
 export const CardsDuplicateStackInput = z
   .object({
     action: z.literal('duplicate-stack'),
-    stackId: FOUNDRY_ID,
+    stackId: CardsId,
   })
   .strict();
 
@@ -135,7 +135,7 @@ export const CardsDuplicateStackInput = z
 export const CardsAddCardInput = z
   .object({
     action: z.literal('add-card'),
-    stackId: FOUNDRY_ID,
+    stackId: CardsId,
     ...CardWritableFields,
     // required override — must follow the spread (CardWritableFields.name is optional).
     name: z.string().min(1),
@@ -145,18 +145,18 @@ export const CardsAddCardInput = z
 export const CardsGetCardInput = z
   .object({
     action: z.literal('get-card'),
-    stackId: FOUNDRY_ID,
-    cardId: FOUNDRY_ID,
+    stackId: CardsId,
+    cardId: CardId,
     // Trap 1 — evaluate face-down redaction from this user's perspective. Omit → GM sees all.
-    perspectiveUserId: z.string().optional(),
+    perspectiveUserId: UserId.optional(),
   })
   .strict();
 
 export const CardsUpdateCardInput = z
   .object({
     action: z.literal('update-card'),
-    stackId: FOUNDRY_ID,
-    cardId: FOUNDRY_ID,
+    stackId: CardsId,
+    cardId: CardId,
     changes: z
       .object(CardWritableFields)
       .strict()
@@ -169,16 +169,16 @@ export const CardsUpdateCardInput = z
 export const CardsDeleteCardInput = z
   .object({
     action: z.literal('delete-card'),
-    stackId: FOUNDRY_ID,
-    cardId: FOUNDRY_ID,
+    stackId: CardsId,
+    cardId: CardId,
   })
   .strict();
 
 export const CardsListCardsInput = z
   .object({
     action: z.literal('list-cards'),
-    stackId: FOUNDRY_ID,
-    perspectiveUserId: z.string().optional(),
+    stackId: CardsId,
+    perspectiveUserId: UserId.optional(),
     page: z.number().int().min(1).optional(),
     pageSize: z.number().int().min(1).max(100).optional(),
     countOnly: z.boolean().optional(),
@@ -188,8 +188,8 @@ export const CardsListCardsInput = z
 export const CardsFlipCardInput = z
   .object({
     action: z.literal('flip-card'),
-    stackId: FOUNDRY_ID,
-    cardId: FOUNDRY_ID,
+    stackId: CardsId,
+    cardId: CardId,
     // null = flip to back (face-down); number = flip to that face index. Omit → toggle (Card#flip()).
     face: z.number().int().nullable().optional(),
   })
@@ -200,7 +200,7 @@ export const CardsFlipCardInput = z
 export const CardsShuffleInput = z
   .object({
     action: z.literal('shuffle'),
-    stackId: FOUNDRY_ID,
+    stackId: CardsId,
     chatNotification: z.boolean().default(false),
   })
   .strict();
@@ -208,7 +208,7 @@ export const CardsShuffleInput = z
 export const CardsRecallInput = z
   .object({
     action: z.literal('recall'),
-    stackId: FOUNDRY_ID,
+    stackId: CardsId,
     confirm: z.literal(true),
     dryRun: z.boolean().default(false),
     chatNotification: z.boolean().default(false),
@@ -220,8 +220,8 @@ export const CardsRecallInput = z
 export const CardsDealInput = z
   .object({
     action: z.literal('deal'),
-    deckId: FOUNDRY_ID,
-    handIds: z.array(FOUNDRY_ID).min(1),
+    deckId: CardsId,
+    handIds: z.array(CardsId).min(1),
     number: z.number().int().min(1).default(1),
     how: DRAW_MODE.default('top'),
     confirm: z.literal(true),
@@ -233,8 +233,8 @@ export const CardsDealInput = z
 export const CardsDrawInput = z
   .object({
     action: z.literal('draw'),
-    handId: FOUNDRY_ID,
-    deckId: FOUNDRY_ID,
+    handId: CardsId,
+    deckId: CardsId,
     number: z.number().int().min(1).default(1),
     how: DRAW_MODE.default('top'),
     chatNotification: z.boolean().default(false),
@@ -244,9 +244,9 @@ export const CardsDrawInput = z
 export const CardsPassInput = z
   .object({
     action: z.literal('pass'),
-    stackId: FOUNDRY_ID,
-    toStackId: FOUNDRY_ID,
-    cardIds: z.array(FOUNDRY_ID).min(1),
+    stackId: CardsId,
+    toStackId: CardsId,
+    cardIds: z.array(CardId).min(1),
     chatNotification: z.boolean().default(false),
   })
   .strict();
@@ -254,9 +254,9 @@ export const CardsPassInput = z
 export const CardsPlayInput = z
   .object({
     action: z.literal('play'),
-    stackId: FOUNDRY_ID,
-    cardId: FOUNDRY_ID,
-    toStackId: FOUNDRY_ID,
+    stackId: CardsId,
+    cardId: CardId,
+    toStackId: CardsId,
     chatNotification: z.boolean().default(false),
   })
   .strict();
@@ -264,9 +264,9 @@ export const CardsPlayInput = z
 export const CardsDiscardInput = z
   .object({
     action: z.literal('discard'),
-    stackId: FOUNDRY_ID,
-    cardId: FOUNDRY_ID,
-    toStackId: FOUNDRY_ID,
+    stackId: CardsId,
+    cardId: CardId,
+    toStackId: CardsId,
     chatNotification: z.boolean().default(false),
   })
   .strict();

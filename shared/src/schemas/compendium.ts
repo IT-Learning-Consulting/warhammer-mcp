@@ -2,6 +2,7 @@
 // CCR-4 per-domain file. Input schemas use .strict() per CCR-5.
 
 import { z } from 'zod';
+import { FolderId, PackId } from './branded-ids.js';
 
 export const CompendiumSearchResultSchema = z.object({
   id: z.string(),
@@ -62,8 +63,8 @@ export const GetAvailablePacksInput = z.object({}).strict();
 // (too verbose). The flag is also accepted by get-compendium-item (server-side hint
 // only — module returns the same shape regardless).
 export const GetCompendiumDocumentFullInput = z.object({
-  packId: z.string(),
-  documentId: z.string(),
+  packId: PackId,
+  documentId: z.string(), // polymorphic: not branded (Phase 1 design)
   summary_only: z.boolean().optional(),
 }).strict();
 
@@ -105,9 +106,9 @@ export const CreatePackInput = z.object({
 // via `pack.configure()`.
 export const UpdatePackInput = z.object({
   action: z.literal('update-pack'),
-  packId: z.string(),
+  packId: PackId,
   changes: z.object({
-    folder: z.string().nullable().optional(),
+    folder: FolderId.nullable().optional(),
     sort: z.number().int().optional(),
     locked: z.boolean().optional(),
   }).strict(),
@@ -115,14 +116,14 @@ export const UpdatePackInput = z.object({
 
 export const ReadPackInput = z.object({
   action: z.literal('read-pack'),
-  packId: z.string(),
+  packId: PackId,
   page: z.number().int().min(1).optional(),
   pageSize: z.number().int().min(1).max(500).optional(),
 }).strict();
 
 export const AddDocumentToPackInput = z.object({
   action: z.literal('add-document-to-pack'),
-  packId: z.string(),
+  packId: PackId,
   source: z.union([
     z.object({ kind: z.literal('uuid'), uuid: z.string() }).strict(),
     z.object({ kind: z.literal('inline'), data: z.record(z.string(), z.unknown()) }).strict(),
@@ -131,20 +132,20 @@ export const AddDocumentToPackInput = z.object({
   // sets it via newDoc.update({folder}) AFTER importDocument (toCompendium keeps
   // the source's WORLD folder id, which doesn't resolve in the pack → root). The
   // folder must already exist in pack.folders.
-  folder: z.string().optional(),
+  folder: FolderId.optional(),
 }).strict();
 
 export const UpdateDocumentInPackInput = z.object({
   action: z.literal('update-document-in-pack'),
-  packId: z.string(),
-  documentId: z.string(),
+  packId: PackId,
+  documentId: z.string(), // polymorphic: not branded (Phase 1 design)
   changes: z.record(z.string(), z.unknown()),
 }).strict();
 
 export const ReadDocumentFromPackInput = z.object({
   action: z.literal('read-document-from-pack'),
-  packId: z.string(),
-  documentId: z.string(),
+  packId: PackId,
+  documentId: z.string(), // polymorphic: not branded (Phase 1 design)
 }).strict();
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -165,34 +166,34 @@ export const ReadDocumentFromPackInput = z.object({
 
 export const CreateFolderInPackInput = z.object({
   action: z.literal('create-folder-in-pack'),
-  packId: z.string(),
+  packId: PackId,
   folderName: z.string().min(1),
-  parentFolderId: z.string().optional(),
+  parentFolderId: FolderId.optional(),
   color: z.string().optional(),
   sort: z.number().int().optional(),
 }).strict();
 
 export const ListFoldersInPackInput = z.object({
   action: z.literal('list-folders-in-pack'),
-  packId: z.string(),
+  packId: PackId,
 }).strict();
 
 export const UpdateFolderInPackInput = z.object({
   action: z.literal('update-folder-in-pack'),
-  packId: z.string(),
-  folderId: z.string(),
+  packId: PackId,
+  folderId: FolderId,
   changes: z.object({
     folderName: z.string().min(1).optional(),
     color: z.string().nullable().optional(),
     sort: z.number().int().optional(),
-    parentFolderId: z.string().nullable().optional(),
+    parentFolderId: FolderId.nullable().optional(),
   }).strict(),
 }).strict();
 
 export const DeleteFolderInPackInput = z.object({
   action: z.literal('delete-folder-in-pack'),
-  packId: z.string(),
-  folderId: z.string(),
+  packId: PackId,
+  folderId: FolderId,
   confirm: z.boolean(),
   deleteContents: z.boolean().default(false),
 }).strict();

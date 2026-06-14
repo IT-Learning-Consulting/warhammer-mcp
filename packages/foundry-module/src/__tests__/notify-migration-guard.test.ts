@@ -45,6 +45,12 @@ const CHAT_FORBIDDEN = /\bChatMessage\.create\s*\(/;
 const CHAT_ALLOWLIST = new Set<string>([
   'notify.ts',        // emitChat() — legitimate dispatch
   'data-access.ts',   // requestPlayerRolls roll-button (paired with notify.created('mcp',...))
+  // main.ts: player-/GM-facing game broadcasts notify's GM-only audit channel cannot carry —
+  // disease-contracted GM-note (custom alias + must always show, not setting-gated),
+  // wfrp-test-button `chat` action (public OR owners+GMs), and disease-onset omen
+  // (whispered to owners/players). notify.emitChat whispers GM-only with speaker:{}, so
+  // routing these through it would change audience/visibility or drop the speaker alias.
+  'main.ts',
 ]);
 
 describe('migration guard — ui.notifications', () => {

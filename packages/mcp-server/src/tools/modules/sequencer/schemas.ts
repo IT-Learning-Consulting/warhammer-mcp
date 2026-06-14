@@ -4,6 +4,7 @@
 // The foundry-module handler owns .strict() + the macro-guard + security gate.
 
 import { z } from 'zod';
+import { SceneId } from '@foundry-mcp/shared';
 
 export const ModuleSequencerToolInput = z.object({
   action: z.enum([
@@ -18,7 +19,7 @@ export const ModuleSequencerToolInput = z.object({
   options: z.record(z.unknown()).optional(),
   filter: z.record(z.unknown()).optional(),
   updates: z.record(z.unknown()).optional(),
-  sceneId: z.string().optional(),
+  sceneId: SceneId.optional(),
   confirm: z.boolean().optional(),
   file: z.string().optional(),
   files: z.array(z.string()).optional(),

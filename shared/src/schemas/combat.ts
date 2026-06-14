@@ -2,29 +2,25 @@
 // Input schemas use .strict() per CCR-5.
 
 import { z } from 'zod';
-
-// Shared id aliases
-export const CombatId = z.string();
-export const CombatantId = z.string();
-export const ActorId = z.string();
+import { ActorId, CombatId, CombatantId, SceneId } from './branded-ids.js';
 
 // manage-combat inputs (6)
 
 export const GetCombatInput = z
   .object({
-    combatId: z.string().optional(),
+    combatId: CombatId.optional(),
   })
   .strict();
 
 export const ListCombatantsInput = z
   .object({
-    combatId: z.string().optional(),
+    combatId: CombatId.optional(),
   })
   .strict();
 
 export const AdvanceCombatInput = z
   .object({
-    combatId: z.string().optional(),
+    combatId: CombatId.optional(),
     action: z.enum([
       'start',
       'next',
@@ -39,22 +35,22 @@ export const AdvanceCombatInput = z
 
 export const AddCombatantsInput = z
   .object({
-    combatId: z.string().optional(),
-    actorIds: z.array(z.string()).min(1),
-    sceneId: z.string().optional(),
+    combatId: CombatId.optional(),
+    actorIds: z.array(ActorId).min(1),
+    sceneId: SceneId.optional(),
   })
   .strict();
 
 export const RemoveCombatantsInput = z
   .object({
-    combatId: z.string().optional(),
-    combatantIds: z.array(z.string()).min(1),
+    combatId: CombatId.optional(),
+    combatantIds: z.array(CombatantId).min(1),
   })
   .strict();
 
 export const EndCombatInput = z
   .object({
-    combatId: z.string().optional(),
+    combatId: CombatId.optional(),
   })
   .strict();
 
@@ -62,7 +58,7 @@ export const EndCombatInput = z
 
 export const ApplyDamageInput = z
   .object({
-    actorId: z.string(),
+    actorId: ActorId,
     amount: z.number().int().nonnegative(),
     damageType: z
       .enum(['NORMAL', 'IGNORE_AP', 'IGNORE_TB', 'IGNORE_ALL'])

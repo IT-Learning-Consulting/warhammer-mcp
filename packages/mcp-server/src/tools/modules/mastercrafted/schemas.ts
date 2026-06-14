@@ -3,6 +3,8 @@
 // CCR-5: Zod input validation lives package-local on the foundry-module side. The mcp-server tool
 // layer only needs typed response shapes for this.query<T> (DP-15 — never <any>).
 
+import { UserId } from '@foundry-mcp/shared';
+
 export interface RecipeSummary {
   bookName: string;
   recipeName: string;
@@ -34,7 +36,7 @@ export interface CheckCraftableResult {
 export interface PendingCraft {
   actorName: string;
   actorUuid: string;
-  craftId: string;
+  craftId: string; // not a branded id (polymorphic / non-document)
   resolveAt: number;
   remainingSeconds: number;
   itemsToDeliver: string[];
@@ -51,7 +53,7 @@ export interface ExecuteCraftResult {
   recipeName: string;
   actorUuid: string;
   timed: boolean;
-  pendingCraftIds: string[];
+  pendingCraftIds: string[]; // not a branded id (polymorphic / non-document)
   quantityPathFixed: boolean;
   quantityPathWarning?: string;
   products: string[];
@@ -66,7 +68,7 @@ export interface ProcessDelayedResult {
 export interface GrantDiscoveryResult {
   pageUuid: string;
   name: string;
-  userId: string;
+  userId: UserId;
   level: number;
 }
 

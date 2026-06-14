@@ -8,6 +8,7 @@
 // they are not handler inputs. Handler-input schemas in this file DO use .strict().
 
 import { z } from 'zod';
+import { FolderId, RollTableId, TableResultId } from './branded-ids.js';
 
 // ── Protocol ───────────────────────────────────────────────────────────────
 
@@ -132,14 +133,14 @@ export const TextResultSchema = z.object({
 export const DocumentResultSchema = z.object({
   type: z.literal('document'),
   documentCollection: z.string().min(1),
-  documentId: z.string().min(1),
+  documentId: z.string().min(1), // polymorphic: not branded (Phase 1 design)
   ...ResultCommonShape,
 }).strict();
 
 export const CompendiumResultSchema = z.object({
   type: z.literal('compendium'),
   documentCollection: z.string().min(1),
-  documentId: z.string().min(1),
+  documentId: z.string().min(1), // polymorphic: not branded (Phase 1 design)
   ...ResultCommonShape,
 }).strict();
 
@@ -156,7 +157,7 @@ const RollTableWritableFields = {
   formula: z.string().min(1).optional(),
   replacement: z.boolean().optional(),
   displayRoll: z.boolean().optional(),
-  folder: z.string().nullable().optional(),
+  folder: FolderId.nullable().optional(),
   sort: z.number().int().optional(),
 };
 
@@ -167,30 +168,30 @@ export const CreateRollTableInput = z.object({
   img: z.string().optional(),
   replacement: z.boolean().optional(),
   displayRoll: z.boolean().optional(),
-  folder: z.string().nullable().optional(),
+  folder: FolderId.nullable().optional(),
   sort: z.number().int().optional(),
   results: z.array(TableResultInputSchema).optional(),
 }).strict();
 
 export const AddTableResultsInput = z.object({
-  tableId: z.string().min(1),
+  tableId: RollTableId,
   results: z.array(TableResultInputSchema).min(1),
 }).strict();
 
 export const ListRollTablesInput = z.object({}).strict();
 
 export const GetRollTableInput = z.object({
-  tableId: z.string().min(1),
+  tableId: RollTableId,
 }).strict();
 
 export const RollOnTableInput = z.object({
-  tableId: z.string().min(1),
+  tableId: RollTableId,
   rollMode: z.string().optional(),
   modifier: z.number().int().optional(),
 }).strict();
 
 export const DeleteRollTableInput = z.object({
-  tableId: z.string().min(1),
+  tableId: RollTableId,
   // Phase 10 cross-doc-fk: when true, walks the catalog for inbound FK refs
   // to this RollTable and clears them before delete. Default false (R10.6).
   // NOTE: catalog has no inbound FKs to RollTable currently — `cascade:true`
@@ -199,7 +200,7 @@ export const DeleteRollTableInput = z.object({
 }).strict();
 
 export const UpdateRollTableInput = z.object({
-  tableId: z.string().min(1),
+  tableId: RollTableId,
   changes: z.object(RollTableWritableFields).strict().refine(
     (obj) => Object.keys(obj).length > 0,
     { message: 'ROLLTABLE_EMPTY_PAYLOAD: changes object must contain at least one field' },
@@ -207,10 +208,10 @@ export const UpdateRollTableInput = z.object({
 }).strict();
 
 export const UpdateTableResultsInput = z.object({
-  tableId: z.string().min(1),
+  tableId: RollTableId,
   updates: z.array(
     z.object({
-      _id: z.string().min(1),
+      _id: z.string().min(1), // polymorphic: not branded (Phase 1 design)
       name: z.string().optional(),
       img: z.string().optional(),
       description: z.string().optional(),
@@ -223,20 +224,20 @@ export const UpdateTableResultsInput = z.object({
 }).strict();
 
 export const DeleteTableResultsInput = z.object({
-  tableId: z.string().min(1),
-  resultIds: z.array(z.string().min(1)).min(1),
+  tableId: RollTableId,
+  resultIds: z.array(TableResultId).min(1),
 }).strict();
 
 export const NormalizeRollTableInput = z.object({
-  tableId: z.string().min(1),
+  tableId: RollTableId,
 }).strict();
 
 export const ResetRollTableInput = z.object({
-  tableId: z.string().min(1),
+  tableId: RollTableId,
 }).strict();
 
 export const DrawManyFromTableInput = z.object({
-  tableId: z.string().min(1),
+  tableId: RollTableId,
   number: z.number().int().min(1).max(50),
   displayChat: z.boolean().optional(),
   recursive: z.boolean().optional(),
@@ -245,7 +246,7 @@ export const DrawManyFromTableInput = z.object({
 
 export const ImportRollTableFromCompendiumInput = z.object({
   pack: z.string().min(1),
-  documentId: z.string().min(1),
+  documentId: z.string().min(1), // polymorphic: not branded (Phase 1 design)
   normalize: z.boolean().default(true),
 }).strict();
 

@@ -30,6 +30,7 @@ type ArgsFor<A extends DocumentIoArgs['action']> = Extract<DocumentIoArgs, { act
 // ── Inline response wrappers (mirror foundry-module handler return envelopes) ──
 
 interface ExportResponse { success: true; documentType: string; id: string; data: Record<string, unknown>; }
+// newId/oldId/idMap values are cross-type polymorphic id remaps (import-as-new spans 8 doc types) — not branded ids (Phase 1 design).
 interface ImportResponse { success: true; documentType: string; newId: string; oldId: string; idMap: Record<string, string>; warnings: string[]; }
 interface PreviewResponse { success: true; documentType: string; name: string; embeddedCounts: Record<string, number>; hasFolder: boolean; hasOwnership: boolean; uuidLinkCount: number; warnings: string[]; }
 

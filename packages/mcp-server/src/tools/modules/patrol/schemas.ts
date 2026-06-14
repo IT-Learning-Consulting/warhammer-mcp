@@ -3,6 +3,8 @@
 // CCR-5: Zod input validation lives package-local on the foundry-module side. The mcp-server tool
 // layer only needs typed response shapes for this.query<T> (DP-15 — never <any>).
 
+import { DrawingId, SceneId } from '@foundry-mcp/shared';
+
 export interface PatrolGlobalState {
   wanderStarted: boolean;
   pathStarted: boolean;
@@ -34,8 +36,8 @@ export interface DisableTokenResult {
 }
 
 export interface SetZoneResult {
-  drawingId: string;
-  sceneId: string;
+  drawingId: DrawingId;
+  sceneId: SceneId;
   label: string;
   referenced: boolean;
 }
@@ -61,7 +63,7 @@ export interface WorldSettingsResult {
 }
 
 export interface ListTokensResult {
-  sceneId: string;
+  sceneId: SceneId;
   filter: string;
   count: number;
   tokens: { tokenUuid: string; tokenName: string; mode: string; flags: Record<string, unknown> }[];

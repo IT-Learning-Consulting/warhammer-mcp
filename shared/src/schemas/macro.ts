@@ -18,6 +18,7 @@
 //   - CCR-Delete-Safety: `confirm: z.boolean()` truthy-check enforced at handler level.
 
 import { z } from 'zod';
+import { MacroId, FolderId, ActorId, TokenId, PackId } from './branded-ids.js';
 
 // ── Shared primitives ──────────────────────────────────────────────────────
 
@@ -38,7 +39,7 @@ export const CreateMacroInput = z.object({
   scope: MACRO_SCOPE.optional(),       // defaults to 'global' server-side
   command: z.string().optional(),      // Foundry default ''
   img: z.string().min(1).nullable().optional(),
-  folder: FOUNDRY_ID.nullable().optional(),
+  folder: FolderId.nullable().optional(),
   flags: z.record(z.any()).optional(),
 });
 
@@ -48,7 +49,7 @@ const UpdateMacroChanges = z.object({
   scope: MACRO_SCOPE.optional(),
   command: z.string().optional(),
   img: z.string().min(1).nullable().optional(),
-  folder: FOUNDRY_ID.nullable().optional(),
+  folder: FolderId.nullable().optional(),
   flags: z.record(z.any()).optional(),
 }).strict().refine(
   (o) => Object.keys(o).length > 0,
@@ -57,25 +58,25 @@ const UpdateMacroChanges = z.object({
 
 export const UpdateMacroInput = z.object({
   action: z.literal('update'),
-  macroId: FOUNDRY_ID,
+  macroId: MacroId,
   changes: UpdateMacroChanges,
 });
 
 export const DeleteMacroInput = z.object({
   action: z.literal('delete'),
-  macroId: FOUNDRY_ID,
+  macroId: MacroId,
   confirm: z.boolean(),
 });
 
 export const GetMacroInput = z.object({
   action: z.literal('get'),
-  macroId: FOUNDRY_ID,
+  macroId: MacroId,
 });
 
 export const ListMacrosInput = z.object({
   action: z.literal('list'),
   filter: z.string().optional(),
-  folderId: FOUNDRY_ID.optional(),
+  folderId: FolderId.optional(),
   type: MACRO_TYPE.optional(),
   page: z.number().int().positive().optional(),
   pageSize: z.number().int().min(1).max(100).optional(),
@@ -84,14 +85,14 @@ export const ListMacrosInput = z.object({
 
 export const ExecuteMacroInput = z.object({
   action: z.literal('execute'),
-  macroId: FOUNDRY_ID,
+  macroId: MacroId,
   // CCR-Trust — stricter than playlist's z.boolean(); Zod rejects absent/false at parse time
   // with a literal-mismatch error, surfaced as MACRO_EXECUTE_NOT_CONFIRMED by the handler.
   confirmedExecution: z.literal(true),
   // Optional scope injection — handler resolves IDs to Foundry objects before macro.execute(scope).
-  actorId: FOUNDRY_ID.optional(),
-  tokenId: FOUNDRY_ID.optional(),
-  speakerId: FOUNDRY_ID.optional(),
+  actorId: ActorId.optional(),
+  tokenId: TokenId.optional(),
+  speakerId: FOUNDRY_ID.optional(), // polymorphic: not branded (Phase 1 design)
 });
 
 // ── Phase 9B — execute-by-name + import-from-compendium ─────────────────────
@@ -102,17 +103,17 @@ export const ExecuteMacroByNameInput = z.object({
   action: z.literal('execute-by-name'),
   name: z.string().min(1),
   confirmedExecution: z.literal(true),
-  actorId: FOUNDRY_ID.optional(),
-  tokenId: FOUNDRY_ID.optional(),
-  speakerId: FOUNDRY_ID.optional(),
+  actorId: ActorId.optional(),
+  tokenId: TokenId.optional(),
+  speakerId: FOUNDRY_ID.optional(), // polymorphic: not branded (Phase 1 design)
 }).strict();
 
 // R9B.4 — import a Macro from a compendium pack into the world. CCR-2a.
 // {packId, documentId} per plan D1 (matches item-directory / rolltable convention; NOT {uuid}).
 export const ImportMacroFromCompendiumInput = z.object({
   action: z.literal('import-from-compendium'),
-  packId: z.string().min(1),
-  documentId: FOUNDRY_ID,
+  packId: PackId,
+  documentId: FOUNDRY_ID, // polymorphic: not branded (Phase 1 design)
 }).strict();
 
 // ── Phase 12 module_integration_v1 — Advanced Macros execution-routing actions ──
@@ -125,7 +126,7 @@ export const ImportMacroFromCompendiumInput = z.object({
 
 export const SetExecutionTargetInput = z.object({
   action: z.literal('set-execution-target'),
-  macroId: FOUNDRY_ID,
+  macroId: MacroId,
   // "GM" | "runForEveryone" | "runForEveryoneElse" | "runAsWorldScript" | "runAsWorldScriptSetup" | <User._id> | "" (clear)
   target: z.string(),
   // Handler-enforced confirm gate for target "GM" / "runForEveryone" (arbitrary JS, elevated scope).
@@ -139,7 +140,7 @@ export const ListWorldScriptsInput = z.object({
 
 export const GetExecutionTargetInput = z.object({
   action: z.literal('get-execution-target'),
-  macroId: FOUNDRY_ID,
+  macroId: MacroId,
 }).strict();
 
 export const MacroToolInput = z.discriminatedUnion('action', [

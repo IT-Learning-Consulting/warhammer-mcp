@@ -34,7 +34,7 @@ interface SoundUpdateResponse {
   changedFields: string[];
 }
 interface SoundDeleteResponse {
-  deletedId: string;
+  deletedId: string; // not a branded id (polymorphic / non-document)
   remainingSounds: number;
 }
 interface SoundGetResponse {
@@ -42,7 +42,7 @@ interface SoundGetResponse {
 }
 interface SoundDuplicateResponse {
   sound: SoundViewModel;
-  sourceId: string;
+  sourceId: string; // not a branded id (polymorphic / non-document)
 }
 interface SoundListBareResponse {
   sounds: SoundListItem[];

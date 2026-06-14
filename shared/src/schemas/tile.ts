@@ -9,8 +9,7 @@
 
 import { z } from 'zod';
 import { TextureDataSchema, type TextureData } from './texture-data.js';
-
-const FOUNDRY_ID = z.string().min(1);
+import { SceneId, TileId } from './branded-ids.js';
 
 // BUG-194: local mirror of OCCLUSION_MODES — rejects mode=2 (undefined Foundry gap).
 const OCCLUSION_MODES = { NONE: 0, FADE: 1, RADIAL: 3, VISION: 4 } as const;
@@ -60,7 +59,7 @@ const TileWritableFields = {
 export const TileCreateInput = z
   .object({
     action: z.literal('create'),
-    sceneId: FOUNDRY_ID,
+    sceneId: SceneId,
     ...TileWritableFields,
     width: z.number().positive(),
     height: z.number().positive(),
@@ -70,8 +69,8 @@ export const TileCreateInput = z
 export const TileUpdateInput = z
   .object({
     action: z.literal('update'),
-    sceneId: FOUNDRY_ID,
-    tileId: FOUNDRY_ID,
+    sceneId: SceneId,
+    tileId: TileId,
     changes: z
       .object(TileWritableFields)
       .strict()
@@ -84,23 +83,23 @@ export const TileUpdateInput = z
 export const TileDeleteInput = z
   .object({
     action: z.literal('delete'),
-    sceneId: FOUNDRY_ID,
-    tileId: FOUNDRY_ID,
+    sceneId: SceneId,
+    tileId: TileId,
   })
   .strict();
 
 export const TileGetInput = z
   .object({
     action: z.literal('get'),
-    sceneId: FOUNDRY_ID,
-    tileId: FOUNDRY_ID,
+    sceneId: SceneId,
+    tileId: TileId,
   })
   .strict();
 
 export const TileListInput = z
   .object({
     action: z.literal('list'),
-    sceneId: FOUNDRY_ID.optional(),
+    sceneId: SceneId.optional(),
     filter: z.string().optional(),
     hidden: z.boolean().optional(),
     locked: z.boolean().optional(),
@@ -115,24 +114,24 @@ export const TileListInput = z
 export const TileDuplicateInput = z
   .object({
     action: z.literal('duplicate'),
-    sceneId: FOUNDRY_ID,
-    tileId: FOUNDRY_ID,
+    sceneId: SceneId,
+    tileId: TileId,
   })
   .strict();
 
 export const TileBringToFrontInput = z
   .object({
     action: z.literal('bring-to-front'),
-    sceneId: FOUNDRY_ID,
-    tileId: FOUNDRY_ID,
+    sceneId: SceneId,
+    tileId: TileId,
   })
   .strict();
 
 export const TileSendToBackInput = z
   .object({
     action: z.literal('send-to-back'),
-    sceneId: FOUNDRY_ID,
-    tileId: FOUNDRY_ID,
+    sceneId: SceneId,
+    tileId: TileId,
   })
   .strict();
 

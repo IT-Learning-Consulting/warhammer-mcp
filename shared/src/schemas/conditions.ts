@@ -2,6 +2,7 @@
 // Input schemas use .strict() per CCR-5.
 
 import { z } from 'zod';
+import { ActorId } from './branded-ids.js';
 
 // Static list mirroring CONFIG.WFRP4E.conditions. Handler-side also validates
 // against live CONFIG.WFRP4E.conditions keys to catch system drift.
@@ -27,7 +28,7 @@ export const ConditionKey = z.enum([
 
 export const ApplyConditionInput = z
   .object({
-    actorId: z.string(),
+    actorId: ActorId,
     conditionKey: ConditionKey,
     value: z.number().int().min(1).optional().default(1),
   })
@@ -35,7 +36,7 @@ export const ApplyConditionInput = z
 
 export const RemoveConditionInput = z
   .object({
-    actorId: z.string(),
+    actorId: ActorId,
     conditionKey: ConditionKey,
     count: z.number().int().min(1).optional().default(1),
   })
@@ -43,7 +44,7 @@ export const RemoveConditionInput = z
 
 export const ListConditionsInput = z
   .object({
-    actorId: z.string(),
+    actorId: ActorId,
   })
   .strict();
 
@@ -53,7 +54,7 @@ export const ListConditionsInput = z
 // still work because actor-level AEs come back as before.
 export const ListActiveEffectsInput = z
   .object({
-    actorId: z.string(),
+    actorId: ActorId,
     filter: z
       .enum(['all', 'applied', 'temporary', 'conditions'])
       .optional()
@@ -88,7 +89,7 @@ export const ActiveEffectProjection = z.object({
     }),
   ),
   parentType: z.enum(['Actor', 'Item']).optional(),
-  parentId: z.string().optional(),
+  parentId: z.string().optional(), // polymorphic: not branded (Phase 1 design)
   parentName: z.string().optional(),
 });
 

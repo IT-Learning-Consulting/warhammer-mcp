@@ -14,15 +14,14 @@
 //   - R5.3: rollMode enum uses Foundry canonical keys (publicroll/gmroll/blindroll/selfroll/roll).
 
 import { z } from 'zod';
-
-const FOUNDRY_ID = z.string().min(1);
+import { UserId, ChatMessageId, ActorId, SceneId, TokenId } from './branded-ids.js';
 
 // ── Shared sub-schemas ────────────────────────────────────────────────────────
 
 const ChatSpeaker = z.object({
-  scene: FOUNDRY_ID.optional(),
-  actor: FOUNDRY_ID.optional(),
-  token: FOUNDRY_ID.optional(),
+  scene: SceneId.optional(),
+  actor: ActorId.optional(),
+  token: TokenId.optional(),
   alias: z.string().optional(),
 }).partial().optional();
 
@@ -36,7 +35,7 @@ const ROLL_MODE = z.enum(['publicroll', 'gmroll', 'blindroll', 'selfroll', 'roll
 export const ChatMessageCreateInput = z.object({
   action: z.literal('create'),
   // R5.2: author (DocumentAuthorField — current user by default)
-  author: FOUNDRY_ID.optional(),
+  author: UserId.optional(),
   content: z.string().optional(),
   type: z.string().optional(),
   style: CHAT_MESSAGE_STYLE.optional(),
@@ -58,7 +57,7 @@ export const ChatMessageCreateInput = z.object({
 
 export const ChatMessageUpdateInput = z.object({
   action: z.literal('update'),
-  messageId: FOUNDRY_ID,
+  messageId: ChatMessageId,
   changes: z.object({
     // author is not updatable post-create
     content: z.string().optional(),
@@ -81,14 +80,14 @@ export const ChatMessageUpdateInput = z.object({
 
 export const ChatMessageDeleteInput = z.object({
   action: z.literal('delete'),
-  messageId: FOUNDRY_ID,
+  messageId: ChatMessageId,
   // CCR-Delete-Safety: confirm required, NO .default() (Phase 4 Lesson 2)
   confirm: z.boolean(),
 }).strict();
 
 export const ChatMessageGetInput = z.object({
   action: z.literal('get'),
-  messageId: FOUNDRY_ID,
+  messageId: ChatMessageId,
 }).strict();
 
 export const ChatMessageListInput = z.object({
@@ -97,9 +96,9 @@ export const ChatMessageListInput = z.object({
   pageSize: z.number().int().min(1).max(200).default(20),
   sortOrder: z.enum(['asc', 'desc']).default('desc'),
   filters: z.object({
-    author: FOUNDRY_ID.optional(),
-    speakerActor: FOUNDRY_ID.optional(),
-    speakerScene: FOUNDRY_ID.optional(),
+    author: UserId.optional(),
+    speakerActor: ActorId.optional(),
+    speakerScene: SceneId.optional(),
     type: z.string().optional(),
     style: CHAT_MESSAGE_STYLE.optional(),
   }).optional(),

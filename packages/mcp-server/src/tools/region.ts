@@ -22,6 +22,9 @@ import {
   type RegionViewModel,
   type RegionListItem,
   type RegionBehaviorSummary,
+  type SceneId,
+  type RegionId,
+  type RegionBehaviorId,
 } from '@foundry-mcp/shared';
 import { BaseTool, BaseToolOptions } from '../base-tool.js';
 
@@ -40,8 +43,8 @@ interface RegionUpdateResponse {
   changedFields: string[];
 }
 interface RegionDeleteResponse {
-  deletedId: string;
-  sceneId: string;
+  deletedId: string; // not a branded id (polymorphic / non-document)
+  sceneId: SceneId;
   remainingRegions: number;
 }
 interface RegionGetResponse {
@@ -56,17 +59,17 @@ interface RegionListResponse {
   filterApplied?: string | null;
 }
 interface RegionBehaviorCreateResponse {
-  regionId: string;
+  regionId: RegionId;
   behavior: RegionBehaviorSummary;
 }
 interface RegionBehaviorUpdateResponse {
-  regionId: string;
+  regionId: RegionId;
   behavior: RegionBehaviorSummary;
   changedFields: string[];
 }
 interface RegionBehaviorDeleteResponse {
-  regionId: string;
-  deletedBehaviorId: string;
+  regionId: RegionId;
+  deletedBehaviorId: RegionBehaviorId;
   remainingBehaviors: number;
 }
 interface RegionAddShapeResponse {

@@ -15,8 +15,7 @@
 
 import { z } from 'zod';
 import { RegionShapeSchema } from './region-shape.js';
-
-const FOUNDRY_ID = z.string().min(1);
+import { SceneId, RegionId, RegionBehaviorId } from './branded-ids.js';
 
 // REGION_VISIBILITY: LAYER=0, GAMEMASTER=1, ALWAYS=2
 const RegionVisibilityEnum = z
@@ -71,7 +70,7 @@ const RegionWritableFields = {
 export const RegionCreateInput = z
   .object({
     action: z.literal('create'),
-    sceneId: FOUNDRY_ID,
+    sceneId: SceneId,
     ...RegionWritableFields,
     name: z.string().min(1),
   })
@@ -80,8 +79,8 @@ export const RegionCreateInput = z
 export const RegionUpdateInput = z
   .object({
     action: z.literal('update'),
-    sceneId: FOUNDRY_ID,
-    regionId: FOUNDRY_ID,
+    sceneId: SceneId,
+    regionId: RegionId,
     changes: z
       .object(RegionWritableFields)
       .strict()
@@ -94,16 +93,16 @@ export const RegionUpdateInput = z
 export const RegionDeleteInput = z
   .object({
     action: z.literal('delete'),
-    sceneId: FOUNDRY_ID,
-    regionId: FOUNDRY_ID,
+    sceneId: SceneId,
+    regionId: RegionId,
   })
   .strict();
 
 export const RegionGetInput = z
   .object({
     action: z.literal('get'),
-    sceneId: FOUNDRY_ID,
-    regionId: FOUNDRY_ID,
+    sceneId: SceneId,
+    regionId: RegionId,
     includeBehaviors: z.boolean().optional(),
   })
   .strict();
@@ -111,7 +110,7 @@ export const RegionGetInput = z
 export const RegionListInput = z
   .object({
     action: z.literal('list'),
-    sceneId: FOUNDRY_ID.optional(),
+    sceneId: SceneId.optional(),
     filter: z.string().optional(),
     locked: z.boolean().optional(),
     page: z.number().int().min(1).optional(),
@@ -212,8 +211,8 @@ const RegionBehaviorPayload = z.discriminatedUnion('type', [
 export const RegionCreateBehaviorInput = z
   .object({
     action: z.literal('createBehavior'),
-    sceneId: FOUNDRY_ID,
-    regionId: FOUNDRY_ID,
+    sceneId: SceneId,
+    regionId: RegionId,
     name: z.string().optional(),
     disabled: z.boolean().optional(),
     behavior: RegionBehaviorPayload,
@@ -223,9 +222,9 @@ export const RegionCreateBehaviorInput = z
 export const RegionUpdateBehaviorInput = z
   .object({
     action: z.literal('updateBehavior'),
-    sceneId: FOUNDRY_ID,
-    regionId: FOUNDRY_ID,
-    behaviorId: FOUNDRY_ID,
+    sceneId: SceneId,
+    regionId: RegionId,
+    behaviorId: RegionBehaviorId,
     name: z.string().optional(),
     disabled: z.boolean().optional(),
     // The behavior payload is optional on update — caller may toggle only `disabled` or rename.
@@ -236,9 +235,9 @@ export const RegionUpdateBehaviorInput = z
 export const RegionDeleteBehaviorInput = z
   .object({
     action: z.literal('deleteBehavior'),
-    sceneId: FOUNDRY_ID,
-    regionId: FOUNDRY_ID,
-    behaviorId: FOUNDRY_ID,
+    sceneId: SceneId,
+    regionId: RegionId,
+    behaviorId: RegionBehaviorId,
   })
   .strict();
 
@@ -247,8 +246,8 @@ export const RegionDeleteBehaviorInput = z
 export const RegionAddShapeInput = z
   .object({
     action: z.literal('add-shape'),
-    sceneId: FOUNDRY_ID,
-    regionId: FOUNDRY_ID,
+    sceneId: SceneId,
+    regionId: RegionId,
     shape: RegionShapeSchema,
   })
   .strict();

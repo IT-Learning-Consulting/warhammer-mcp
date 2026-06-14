@@ -3,6 +3,7 @@
 
 import { z } from 'zod';
 import { CreateCustomItemCommon } from '../common.js';
+import { FoundryUuid } from '../../branded-ids.js';
 
 const Price = z.object({
   gc: z.number().optional(),
@@ -17,7 +18,7 @@ export const ScrollSchema = CreateCustomItemCommon.extend({
   price: Price.optional(),
   availability: z.string().optional(),
   location: z.number().optional(),
-  spellUuid: z.string().optional(),
+  spellUuid: FoundryUuid.optional(),
   language: z.string().optional(),
 });
 

@@ -1,4 +1,7 @@
 // Barrel re-export for CCR-4 per-domain schema split.
+// Branded Foundry document-ID types (Phase 1 — R1.1) — exported first so every
+// schema module and tool can import them through the barrel.
+export * from './branded-ids.js';
 export * from './actor.js';
 export * from './item.js';
 export * from './compendium.js';

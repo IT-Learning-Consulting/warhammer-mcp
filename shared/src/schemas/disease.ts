@@ -2,19 +2,18 @@
 // Discriminated union mirrors the WFRP4e DiseaseModel method surface.
 
 import { z } from 'zod';
-
-const FOUNDRY_ID = z.string().min(1);
+import { ActorId, ItemId } from './branded-ids.js';
 
 // ── Per-action input schemas ──────────────────────────────────────────────────
 
 export const DiseaseListInput = z.object({
   action: z.literal('list'),
-  actorId: FOUNDRY_ID,
+  actorId: ActorId,
 }).strict();
 
 export const DiseaseContractInput = z.object({
   action: z.literal('contract'),
-  actorId: FOUNDRY_ID,
+  actorId: ActorId,
   diseaseName: z.string().min(1).describe('Disease name as it appears in the compendium (e.g. "Bloody Flux")'),
   autoEnduranceTest: z.boolean().optional().default(true).describe('When true (default), automatically rolls a server-side Endurance test. If the test passes the disease is resisted.'),
   endured: z.boolean().optional().default(false).describe('Set to true to skip the Endurance test and add the disease directly.'),
@@ -22,33 +21,33 @@ export const DiseaseContractInput = z.object({
 
 export const DiseaseStartInput = z.object({
   action: z.literal('start'),
-  actorId: FOUNDRY_ID,
-  diseaseItemId: FOUNDRY_ID,
+  actorId: ActorId,
+  diseaseItemId: ItemId,
   type: z.enum(['incubation', 'duration']).describe('Which timer to resolve: incubation (initial) or duration (active disease).'),
 }).strict();
 
 export const DiseaseIncrementInput = z.object({
   action: z.literal('increment'),
-  actorId: FOUNDRY_ID,
-  diseaseItemId: FOUNDRY_ID,
+  actorId: ActorId,
+  diseaseItemId: ItemId,
 }).strict();
 
 export const DiseaseDecrementInput = z.object({
   action: z.literal('decrement'),
-  actorId: FOUNDRY_ID,
-  diseaseItemId: FOUNDRY_ID,
+  actorId: ActorId,
+  diseaseItemId: ItemId,
 }).strict();
 
 export const DiseaseFinishDurationInput = z.object({
   action: z.literal('finish-duration'),
-  actorId: FOUNDRY_ID,
-  diseaseItemId: FOUNDRY_ID,
+  actorId: ActorId,
+  diseaseItemId: ItemId,
 }).strict();
 
 export const DiseaseApplySymptomInput = z.object({
   action: z.literal('apply-symptom'),
-  actorId: FOUNDRY_ID,
-  diseaseItemId: FOUNDRY_ID,
+  actorId: ActorId,
+  diseaseItemId: ItemId,
   symptoms: z.array(
     z.object({
       key: z.string().min(1).describe('Symptom key from CONFIG.WFRP4E.symptoms (e.g. "fever", "delirium")'),
@@ -59,8 +58,8 @@ export const DiseaseApplySymptomInput = z.object({
 
 export const DiseaseCureInput = z.object({
   action: z.literal('cure'),
-  actorId: FOUNDRY_ID,
-  diseaseItemId: FOUNDRY_ID,
+  actorId: ActorId,
+  diseaseItemId: ItemId,
   confirm: z.boolean().describe('Must be true to confirm removal. Throws DISEASE_CURE_NOT_CONFIRMED if false.'),
   reason: z.string().optional(),
 }).strict();

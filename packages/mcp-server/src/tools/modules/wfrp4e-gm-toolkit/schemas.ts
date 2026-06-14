@@ -3,6 +3,8 @@
 // CCR-5: Zod input validation lives package-local on the foundry-module side. The mcp-server tool
 // layer only needs typed response shapes for this.query<T> (DP-15 — never <any>).
 
+import type { TokenId, ActorId, SceneId, PackId } from '@foundry-mcp/shared';
+
 export interface GmtoolkitGroupTestResult {
   testSkill: string;
   ran: boolean;
@@ -12,7 +14,7 @@ export interface GmtoolkitGroupTestResult {
 
 export interface GmtoolkitAdvantageResult {
   // single-token modes
-  tokenId?: string;
+  tokenId?: TokenId;
   actorName?: string | null;
   mode: string;
   previousValue?: number;
@@ -36,7 +38,7 @@ export interface GmtoolkitGroupResult {
 }
 
 export interface GmtoolkitAdjustStatusResult {
-  actorId: string;
+  actorId: ActorId;
   actorName: string | null;
   status: string;
   change: number;
@@ -45,20 +47,20 @@ export interface GmtoolkitAdjustStatusResult {
 }
 
 export interface GmtoolkitSceneLightResult {
-  sceneId: string | null;
+  sceneId: SceneId | null;
   sceneName: string | null;
   tokenVision: boolean | null;
   globalLight: boolean | null;
 }
 
 export interface GmtoolkitPullResult {
-  sceneId: string | null;
+  sceneId: SceneId | null;
   sceneName: string | null;
   activated: boolean;
 }
 
 export interface GmtoolkitCompendiumResult {
-  packId: string;
+  packId: PackId;
   wasPrivate: boolean;
   private: boolean;
 }
@@ -70,14 +72,14 @@ export interface GmtoolkitD100Result {
 }
 
 export interface GmtoolkitConditionsResult {
-  actorId: string;
+  actorId: ActorId;
   actorName: string | null;
   count: number;
   conditions: Array<{ id: string; name: string | null; value: number | null }>;
 }
 
 export interface GmtoolkitSessionTurnoverResult {
-  actorId: string;
+  actorId: ActorId;
   actorName: string | null;
   xpAwarded: number;
   experienceTotal: number;
@@ -86,7 +88,7 @@ export interface GmtoolkitSessionTurnoverResult {
 }
 
 export interface GmtoolkitAddXpResult {
-  actorId: string;
+  actorId: ActorId;
   actorName: string | null;
   amount: number;
   reason: string;

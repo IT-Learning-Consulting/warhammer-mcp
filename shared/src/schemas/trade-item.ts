@@ -3,12 +3,13 @@
 // Encumbrance recomputes automatically via the Foundry prepareData pipeline (HC3).
 
 import { z } from 'zod';
+import { ActorId, ItemId } from './branded-ids.js';
 
 export const TradeItemInput = z
   .object({
-    fromActorId: z.string(),
-    toActorId: z.string(),
-    itemId: z.string(),
+    fromActorId: ActorId,
+    toActorId: ActorId,
+    itemId: ItemId,
     quantity: z.number().int().positive().optional(),
   })
   .strict();

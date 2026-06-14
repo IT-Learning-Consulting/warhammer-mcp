@@ -11,7 +11,7 @@
 // CCR-6: write actions (duplicate, import-from-compendium) trigger notify.created on the Foundry side.
 
 import { z } from 'zod';
-import { ItemDirectoryToolInput } from '@foundry-mcp/shared';
+import { ItemDirectoryToolInput, type FolderId, type PackId, type ItemId } from '@foundry-mcp/shared';
 import { BaseTool, BaseToolOptions } from '../base-tool.js';
 
 type ItemDirectoryArgs = z.infer<typeof ItemDirectoryToolInput>;
@@ -24,7 +24,7 @@ interface WorldItemSummary {
   name: string;
   type: string;
   img: string | null;
-  folderId: string | null;
+  folderId: FolderId | null;
   system: Record<string, unknown>;
   flags: Record<string, unknown>;
 }
@@ -35,7 +35,7 @@ interface ItemDirectoryListResponse {
   page: number;
   pageSize: number;
   typeFilter: string | null;
-  folderId: string | null;
+  folderId: FolderId | null;
 }
 
 interface ItemDirectoryGetResponse {
@@ -43,7 +43,7 @@ interface ItemDirectoryGetResponse {
   name: string;
   type: string;
   img: string | null;
-  folderId: string | null;
+  folderId: FolderId | null;
   system: Record<string, unknown>;
   flags: Record<string, unknown>;
 }
@@ -58,20 +58,20 @@ interface ItemDirectoryDuplicateResponse {
   id: string;
   name: string;
   type: string;
-  sourceId: string;
+  sourceId: string; // not a branded id (polymorphic / non-document)
   img: string | null;
-  folderId: string | null;
+  folderId: FolderId | null;
 }
 
 interface ItemDirectoryImportResponse {
   id: string;
   name: string;
   type: string;
-  packId: string;
-  compendiumItemId: string;
+  packId: PackId;
+  compendiumItemId: ItemId;
   idMatchesCompendium: boolean;
   img: string | null;
-  folderId: string | null;
+  folderId: FolderId | null;
 }
 
 // ── Utilities ─────────────────────────────────────────────────────────────────

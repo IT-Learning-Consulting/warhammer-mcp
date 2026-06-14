@@ -12,8 +12,7 @@
 // formulas read actor.getRollData() ONLY — never raw actor.system (Risk 2.A).
 
 import { z } from 'zod';
-
-const FOUNDRY_ID = z.string().min(1);
+import { ActorId, SceneId, TokenId } from './branded-ids.js';
 
 // Foundry roll visibility modes (CONFIG.Dice.rollModes keys).
 const ROLL_MODES = ['publicroll', 'gmroll', 'blindroll', 'selfroll'] as const;
@@ -23,9 +22,9 @@ const ROLL_MODES = ['publicroll', 'gmroll', 'blindroll', 'selfroll'] as const;
 const DiceRollSpeakerInput = z
   .object({
     alias: z.string().optional(),
-    actor: FOUNDRY_ID.optional(),
-    token: FOUNDRY_ID.optional(),
-    scene: FOUNDRY_ID.optional(),
+    actor: ActorId.optional(),
+    token: TokenId.optional(),
+    scene: SceneId.optional(),
   })
   .strict();
 
@@ -33,7 +32,7 @@ export const DiceRollRollInput = z
   .object({
     action: z.literal('roll'),
     formula: z.string().min(1),
-    actorId: FOUNDRY_ID.optional(),
+    actorId: ActorId.optional(),
     createMessage: z.boolean().optional(),
     rollMode: z.enum(ROLL_MODES).optional(),
     flavor: z.string().optional(),

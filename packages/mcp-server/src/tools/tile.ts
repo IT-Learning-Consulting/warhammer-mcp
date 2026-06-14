@@ -21,6 +21,7 @@ import {
   TileToolInput,
   type TileViewModel,
   type TileListItem,
+  SceneId,
 } from '@foundry-mcp/shared';
 import { BaseTool, BaseToolOptions } from '../base-tool.js';
 
@@ -41,15 +42,15 @@ interface TileUpdateResponse {
   changedFields: string[];
 }
 interface TileDeleteResponse {
-  deletedId: string;
-  sceneId: string;
+  deletedId: string; // not a branded id (polymorphic / non-document)
+  sceneId: SceneId;
 }
 interface TileGetResponse {
   tile: TileViewModel;
 }
 interface TileDuplicateResponse {
   tile: TileViewModel;
-  sourceId: string;
+  sourceId: string; // not a branded id (polymorphic / non-document)
 }
 interface TileZOrderResponse {
   tile: TileViewModel;

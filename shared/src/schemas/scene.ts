@@ -28,10 +28,18 @@
 
 import { z } from 'zod';
 import { ApplyTemplateInput } from './actor.js';
+import {
+  SceneId,
+  JournalEntryId,
+  JournalEntryPageId,
+  PlaylistId,
+  PlaylistSoundId,
+  FolderId,
+  TokenId,
+  PackId,
+} from './branded-ids.js';
 
 // ── Constants & shared shapes ────────────────────────────────────────────────
-
-const FOUNDRY_ID = z.string().min(1);
 
 // 0 = GRIDLESS, 1 = SQUARE, 2 = HEXODDR, 3 = HEXEVENR, 4 = HEXODDQ, 5 = HEXEVENQ
 const GridTypeEnum = z
@@ -183,14 +191,14 @@ const SceneWritableFields = {
   fog: FogInput.optional(),
   environment: EnvironmentInput.optional(),
   // Ambience (FK fields — all nullable per Probe A)
-  journal: FOUNDRY_ID.nullable().optional(),
-  journalEntryPage: FOUNDRY_ID.nullable().optional(),
-  playlist: FOUNDRY_ID.nullable().optional(),
-  playlistSound: FOUNDRY_ID.nullable().optional(),
+  journal: JournalEntryId.nullable().optional(),
+  journalEntryPage: JournalEntryPageId.nullable().optional(),
+  playlist: PlaylistId.nullable().optional(),
+  playlistSound: PlaylistSoundId.nullable().optional(),
   // Weather is non-nullable StringField; "" = no weather.
   weather: z.string().optional(),
   // Organization
-  folder: FOUNDRY_ID.nullable().optional(),
+  folder: FolderId.nullable().optional(),
   sort: z.number().int().optional(),
   // Permissions
   ownership: OwnershipMap.optional(),
@@ -215,7 +223,7 @@ export const SceneCreateInput = z
 export const SceneUpdateInput = z
   .object({
     action: z.literal('update'),
-    sceneId: FOUNDRY_ID,
+    sceneId: SceneId,
     changes: z
       .object(SceneWritableFields)
       .strict()
@@ -228,7 +236,7 @@ export const SceneUpdateInput = z
 export const SceneDeleteInput = z
   .object({
     action: z.literal('delete'),
-    sceneId: FOUNDRY_ID,
+    sceneId: SceneId,
     // Phase 10 cross-doc-fk: when true, clears inbound FK references (e.g.
     // tokens referencing this scene via Note.entryId targets) before delete.
     // Default false preserves Phase 4 behavior (R10.6 backward-compat).
@@ -239,7 +247,7 @@ export const SceneDeleteInput = z
 export const SceneCloneInput = z
   .object({
     action: z.literal('clone'),
-    sceneId: FOUNDRY_ID,
+    sceneId: SceneId,
     // newName is required so the clone is distinguishable in the directory.
     newName: z.string().min(1),
     // Optional overrides applied via Scene.clone(overrides, {save:true}).
@@ -251,21 +259,21 @@ export const SceneCloneInput = z
 export const SceneActivateInput = z
   .object({
     action: z.literal('activate'),
-    sceneId: FOUNDRY_ID,
+    sceneId: SceneId,
   })
   .strict();
 
 export const SceneViewInput = z
   .object({
     action: z.literal('view'),
-    sceneId: FOUNDRY_ID,
+    sceneId: SceneId,
   })
   .strict();
 
 export const SceneThumbnailInput = z
   .object({
     action: z.literal('thumbnail'),
-    sceneId: FOUNDRY_ID,
+    sceneId: SceneId,
     // Foundry's createThumbnail() accepts img/width/height/format/quality overrides.
     // All optional — Foundry picks defaults (300x100 webp at 0.8 quality) per docs.
     width: z.number().int().positive().optional(),
@@ -280,7 +288,7 @@ export const SceneGetInput = z
     action: z.literal('get'),
     // sceneId optional — defaults to currently active scene (back-compat with
     // legacy get-current-scene shape).
-    sceneId: FOUNDRY_ID.optional(),
+    sceneId: SceneId.optional(),
     includeTokens: z.boolean().optional(),
     includeHidden: z.boolean().optional(),
   })
@@ -318,7 +326,7 @@ export const SCENE_CLEARABLE_LAYERS = [
 export const SceneClearLayerInput = z
   .object({
     action: z.literal('clear-layer'),
-    sceneId: FOUNDRY_ID,
+    sceneId: SceneId,
     layer: z.enum(SCENE_CLEARABLE_LAYERS),
     dryRun: z.boolean().optional(),
     confirm: z.literal(true),
@@ -329,7 +337,7 @@ export const SceneClearLayerInput = z
 export const SceneResetFogInput = z
   .object({
     action: z.literal('reset-fog'),
-    sceneId: FOUNDRY_ID,
+    sceneId: SceneId,
     confirm: z.literal(true),
   })
   .strict();
@@ -340,7 +348,7 @@ export const SceneResetFogInput = z
 export const SceneLightingTransitionInput = z
   .object({
     action: z.literal('lighting-transition'),
-    sceneId: FOUNDRY_ID,
+    sceneId: SceneId,
     target: z.union([z.enum(['day', 'dark']), z.number().min(0).max(1)]),
     confirm: z.literal(true),
   })
@@ -350,7 +358,7 @@ export const SceneLightingTransitionInput = z
 export const ScenePreloadInput = z
   .object({
     action: z.literal('preload'),
-    sceneId: FOUNDRY_ID,
+    sceneId: SceneId,
   })
   .strict();
 
@@ -359,8 +367,8 @@ export const ScenePreloadInput = z
 export const SceneImportFromCompendiumInput = z
   .object({
     action: z.literal('import-from-compendium'),
-    packId: z.string().min(1),
-    documentId: FOUNDRY_ID,
+    packId: PackId,
+    documentId: z.string().min(1), // polymorphic: not branded (Phase 1 design)
   })
   .strict();
 
@@ -671,8 +679,8 @@ export interface SceneImportFromCompendiumResponse {
 
 export const ApplyTemplateToTokenInput = z
   .object({
-    sceneId: FOUNDRY_ID,
-    tokenId: FOUNDRY_ID,
+    sceneId: SceneId,
+    tokenId: TokenId,
     templateUuid: ApplyTemplateInput.shape.templateUuid,
     preResolvedChoices: ApplyTemplateInput.shape.preResolvedChoices,
   })

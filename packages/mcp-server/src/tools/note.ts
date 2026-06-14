@@ -19,6 +19,9 @@ import {
   NoteToolInput,
   type NoteViewModel,
   type NoteListItem,
+  SceneId,
+  JournalEntryId,
+  JournalEntryPageId,
 } from '@foundry-mcp/shared';
 import { BaseTool, BaseToolOptions } from '../base-tool.js';
 
@@ -32,7 +35,7 @@ type ArgsFor<A extends NoteArgs['action']> = Extract<NoteArgs, { action: A }>;
 interface NoteCreateResponse {
   note: NoteViewModel;
   requestedChanges: Record<string, unknown>;
-  journalEntry?: { id: string; firstPageId: string | null };
+  journalEntry?: { id: JournalEntryId; firstPageId: JournalEntryPageId | null };
 }
 interface NoteUpdateResponse {
   note: NoteViewModel;
@@ -40,8 +43,8 @@ interface NoteUpdateResponse {
   changedFields: string[];
 }
 interface NoteDeleteResponse {
-  deletedId: string;
-  sceneId: string;
+  deletedId: string; // not a branded id (polymorphic / non-document)
+  sceneId: SceneId;
   remainingNotes: number;
 }
 interface NoteGetResponse {

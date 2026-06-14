@@ -21,6 +21,7 @@ import {
   TemplateToolInput,
   type TemplateViewModel,
   type TemplateListItem,
+  SceneId,
 } from '@foundry-mcp/shared';
 import { BaseTool, BaseToolOptions } from '../base-tool.js';
 
@@ -39,8 +40,8 @@ interface TemplateUpdateResponse {
   changedFields: string[];
 }
 interface TemplateDeleteResponse {
-  deletedId: string;
-  sceneId: string;
+  deletedId: string; // not a branded id (polymorphic / non-document)
+  sceneId: SceneId;
   remainingTemplates: number;
 }
 interface TemplateGetResponse {
@@ -48,7 +49,7 @@ interface TemplateGetResponse {
 }
 interface TemplateDuplicateResponse {
   template: TemplateViewModel;
-  sourceId: string;
+  sourceId: string; // not a branded id (polymorphic / non-document)
 }
 interface TemplateListResponse {
   templates: TemplateListItem[];

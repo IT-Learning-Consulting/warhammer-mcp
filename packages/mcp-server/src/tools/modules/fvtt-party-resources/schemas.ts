@@ -25,14 +25,14 @@ export interface PartyListResult {
 export type PartyGetResult = PartyResourceSnapshot;
 
 export interface PartySetValueResult {
-  resourceId: string;
+  resourceId: string; // not a branded id (polymorphic / non-document)
   previousValue: number;
   value: number;
   notifyChat: boolean;
 }
 
 export interface PartyIncrementResult {
-  resourceId: string;
+  resourceId: string; // not a branded id (polymorphic / non-document)
   previousValue: number;
   value: number;
   jump: number;
@@ -40,7 +40,7 @@ export interface PartyIncrementResult {
 }
 
 export interface PartyDecrementResult {
-  resourceId: string;
+  resourceId: string; // not a branded id (polymorphic / non-document)
   previousValue: number;
   value: number;
   jump: number;
@@ -48,18 +48,18 @@ export interface PartyDecrementResult {
 }
 
 export interface PartyUpdateMetaResult {
-  resourceId: string;
+  resourceId: string; // not a branded id (polymorphic / non-document)
   updatedFields: string[];
   snapshot: PartyResourceSnapshot;
 }
 
 export interface PartyCreateResult {
-  resourceId: string;
+  resourceId: string; // not a branded id (polymorphic / non-document)
   snapshot: PartyResourceSnapshot;
 }
 
 export interface PartyDeleteResult {
-  resourceId: string;
+  resourceId: string; // not a branded id (polymorphic / non-document)
   removed: boolean;
   remaining: number;
 }

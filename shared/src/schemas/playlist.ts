@@ -27,10 +27,9 @@
 // path; the /wfrp-playlist skill prefers archive-by-rename before confirm.
 
 import { z } from 'zod';
+import { PlaylistId, PlaylistSoundId, FolderId } from './branded-ids.js';
 
 // ── Constants & small shared shapes ──────────────────────────────────────────
-
-const FOUNDRY_ID = z.string().min(1);
 
 // CONST.PLAYLIST_MODES — explicit numeric literals (do NOT use z.nativeEnum on
 // the numeric-mode enum: -1 reverse-mapping creates false positives).
@@ -105,7 +104,7 @@ const PlaylistOtherWritableFields = {
   seed: z.number().int().optional(),
   sorting: PLAYLIST_SORTING.optional(),
   sort: z.number().int().optional(),
-  folder: FOUNDRY_ID.nullable().optional(),
+  folder: FolderId.nullable().optional(),
   ownership: z.record(OWNERSHIP_LEVELS).optional(),
   flags: z.record(z.unknown()).optional(),
 };
@@ -128,7 +127,7 @@ export const PlaylistCreatePlaylistInput = z.object({
 
 export const PlaylistUpdatePlaylistInput = z.object({
   action: z.literal('update-playlist'),
-  playlistId: FOUNDRY_ID,
+  playlistId: PlaylistId,
   changes: z.object(PlaylistWritableFields).strict().refine(
     (obj) => Object.keys(obj).length > 0,
     { message: 'PLAYLIST_EMPTY_PAYLOAD: changes object must contain at least one field' },
@@ -137,7 +136,7 @@ export const PlaylistUpdatePlaylistInput = z.object({
 
 export const PlaylistDeletePlaylistInput = z.object({
   action: z.literal('delete-playlist'),
-  playlistId: FOUNDRY_ID,
+  playlistId: PlaylistId,
   // CCR-Delete-Safety: hard delete requires explicit confirm: true. The
   // /wfrp-playlist skill prefers archive-by-rename (update name → "[archived]
   // <name>") before falling through to this confirm gate.
@@ -150,13 +149,13 @@ export const PlaylistDeletePlaylistInput = z.object({
 
 export const PlaylistGetPlaylistInput = z.object({
   action: z.literal('get-playlist'),
-  playlistId: FOUNDRY_ID,
+  playlistId: PlaylistId,
 }).strict();
 
 export const PlaylistListPlaylistsInput = z.object({
   action: z.literal('list-playlists'),
   filter: z.string().optional(),
-  folder: FOUNDRY_ID.nullable().optional(),
+  folder: FolderId.nullable().optional(),
   page: z.number().int().min(1).optional(),
   pageSize: z.number().int().min(1).max(100).optional(),
   countOnly: z.boolean().optional(),
@@ -164,14 +163,14 @@ export const PlaylistListPlaylistsInput = z.object({
 
 export const PlaylistAddSoundInput = z.object({
   action: z.literal('add-sound'),
-  playlistId: FOUNDRY_ID,
+  playlistId: PlaylistId,
   ...PlaylistSoundCreateFields,
 }).strict();
 
 export const PlaylistUpdateSoundInput = z.object({
   action: z.literal('update-sound'),
-  playlistId: FOUNDRY_ID,
-  soundId: FOUNDRY_ID,
+  playlistId: PlaylistId,
+  soundId: PlaylistSoundId,
   changes: z.object(PlaylistSoundWritableFields).strict().refine(
     (obj) => Object.keys(obj).length > 0,
     { message: 'PLAYLIST_SOUND_EMPTY_PAYLOAD: changes object must contain at least one field' },
@@ -180,8 +179,8 @@ export const PlaylistUpdateSoundInput = z.object({
 
 export const PlaylistDeleteSoundInput = z.object({
   action: z.literal('delete-sound'),
-  playlistId: FOUNDRY_ID,
-  soundId: FOUNDRY_ID,
+  playlistId: PlaylistId,
+  soundId: PlaylistSoundId,
   // Phase 10 cross-doc-fk: when true, clears Scene.playlistSound FKs targeting
   // this specific sound before delete. Default false (R10.6).
   cascade: z.boolean().default(false).optional(),
@@ -189,7 +188,7 @@ export const PlaylistDeleteSoundInput = z.object({
 
 export const PlaylistPlayInput = z.object({
   action: z.literal('play'),
-  playlistId: FOUNDRY_ID,
+  playlistId: PlaylistId,
   // Optional mode override: if provided, the playlist's `mode` field is updated
   // to the matching numeric value before playAll() fires. Mapping:
   //   'disabled'    → -1   'sequential'    → 0
@@ -199,7 +198,7 @@ export const PlaylistPlayInput = z.object({
 
 export const PlaylistStopInput = z.object({
   action: z.literal('stop'),
-  playlistId: FOUNDRY_ID,
+  playlistId: PlaylistId,
 }).strict();
 
 // ── Phase 9C — duplicate-playlist + pause-sound + bulk-import-sounds + preload-sound ──
@@ -207,14 +206,14 @@ export const PlaylistStopInput = z.object({
 // R9C.3 — duplicate a whole Playlist (toObject minus _id/sort/folder → create). CCR-2a.
 export const PlaylistDuplicateInput = z.object({
   action: z.literal('duplicate-playlist'),
-  playlistId: FOUNDRY_ID,
+  playlistId: PlaylistId,
 }).strict();
 
 // R9C.5 — pause-sound: dedicated wrapper enforcing {playing:false, pausedTime}. CCR-2a.
 export const PlaylistPauseSoundInput = z.object({
   action: z.literal('pause-sound'),
-  playlistId: FOUNDRY_ID,
-  soundId: FOUNDRY_ID,
+  playlistId: PlaylistId,
+  soundId: PlaylistSoundId,
   // Position (seconds) to resume from; defaults to the sound's current playback time.
   pausedTime: z.number().nonnegative().optional(),
 }).strict();
@@ -222,7 +221,7 @@ export const PlaylistPauseSoundInput = z.object({
 // R9C.5 — bulk-import-sounds: create one PlaylistSound per audio file in a folder. CCR-2a.
 export const PlaylistBulkImportSoundsInput = z.object({
   action: z.literal('bulk-import-sounds'),
-  playlistId: FOUNDRY_ID,
+  playlistId: PlaylistId,
   folder: z.string().min(1),
   source: z.enum(['data', 'public', 's3']).optional(),
 }).strict();

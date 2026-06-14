@@ -19,8 +19,7 @@
 // Thin primitive (HC1 / CCR-3): no CONFIG reads, no game-rule logic.
 
 import { z } from 'zod';
-
-const FOUNDRY_ID = z.string().min(1);
+import { SceneId, DrawingId } from './branded-ids.js';
 const HEX_COLOR = z
   .string()
   .regex(/^#[0-9a-fA-F]{6}$/, 'must be a 6-digit hex colour like #rrggbb');
@@ -136,7 +135,7 @@ const DrawingWritableFields = {
 export const DrawingCreateInput = z
   .object({
     action: z.literal('create'),
-    sceneId: FOUNDRY_ID,
+    sceneId: SceneId,
     ...DrawingWritableFields,
     // create requires position + a shape (with its type).
     x: z.number(),
@@ -148,8 +147,8 @@ export const DrawingCreateInput = z
 export const DrawingUpdateInput = z
   .object({
     action: z.literal('update'),
-    sceneId: FOUNDRY_ID,
-    drawingId: FOUNDRY_ID,
+    sceneId: SceneId,
+    drawingId: DrawingId,
     changes: z
       .object(DrawingWritableFields)
       .strict()
@@ -162,23 +161,23 @@ export const DrawingUpdateInput = z
 export const DrawingDeleteInput = z
   .object({
     action: z.literal('delete'),
-    sceneId: FOUNDRY_ID,
-    drawingId: FOUNDRY_ID,
+    sceneId: SceneId,
+    drawingId: DrawingId,
   })
   .strict();
 
 export const DrawingGetInput = z
   .object({
     action: z.literal('get'),
-    sceneId: FOUNDRY_ID,
-    drawingId: FOUNDRY_ID,
+    sceneId: SceneId,
+    drawingId: DrawingId,
   })
   .strict();
 
 export const DrawingListInput = z
   .object({
     action: z.literal('list'),
-    sceneId: FOUNDRY_ID.optional(),
+    sceneId: SceneId.optional(),
     hidden: z.boolean().optional(),
     locked: z.boolean().optional(),
     shapeType: SHAPE_TYPE.optional(),
@@ -191,8 +190,8 @@ export const DrawingListInput = z
 export const DrawingDuplicateInput = z
   .object({
     action: z.literal('duplicate'),
-    sceneId: FOUNDRY_ID,
-    drawingId: FOUNDRY_ID,
+    sceneId: SceneId,
+    drawingId: DrawingId,
   })
   .strict();
 

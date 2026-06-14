@@ -14,6 +14,13 @@
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 
+// HC8 EXCEPTION (Phase 1 branded-IDs): the actorId/itemId fields below feed
+// `zodToJsonSchema(ActiveEffectTarget, ...)` which IS the published wire inputSchema.
+// Branding them is wire-visible — the brand's `.min(1)` injects `minLength:1` (these were
+// bare `z.string()`) and reusing one brand instance across branches makes zod-to-json-schema
+// emit an unresolvable `$ref`. Both would break HC8 byte-identical. So these stay UNBRANDED.
+// (The handler-side branding of AE ids happens via the response DTOs, not here.)
+
 // Reuse the ItemTarget's existing branches verbatim — back-compat for all
 // existing item-AE writes (scope:'actor'+itemId and scope:'world'+itemId).
 const ActorTarget = z

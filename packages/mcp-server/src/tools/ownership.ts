@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { UserId } from "@foundry-mcp/shared";
 import { FoundryClient } from "../foundry-client.js";
 import { Logger } from "../logger.js";
 import { BaseTool, BaseToolOptions } from "../base-tool.js";
@@ -19,13 +20,13 @@ import { BaseTool, BaseToolOptions } from "../base-tool.js";
 // Response shapes for the 4 Foundry-side handlers — typed so TS catches consumer drift.
 interface SetDocumentOwnershipResponse {
   documentType: string;
-  resolvedId: string;
+  resolvedId: string; // not a branded id (polymorphic / non-document)
   ownership: Record<string, number>;
 }
 
 interface GetDocumentOwnershipResponse {
   documentType: string;
-  resolvedId: string;
+  resolvedId: string; // not a branded id (polymorphic / non-document)
   ownership: Record<string, number> | null;
   reason?: string;
 }
@@ -60,7 +61,7 @@ const TargetIdShape = {
 const AssignOwnershipSchema = z.object({
   action: z.literal("assign"),
   ...TargetIdShape,
-  userId: z.string().optional(),
+  userId: UserId.optional(),
   default: z.boolean().optional(),
   level: LevelInput,
 });
@@ -68,7 +69,7 @@ const AssignOwnershipSchema = z.object({
 const RemoveOwnershipSchema = z.object({
   action: z.literal("remove"),
   ...TargetIdShape,
-  userId: z.string(),
+  userId: UserId,
 });
 
 const ListOwnershipSchema = z.object({
@@ -84,7 +85,7 @@ const BulkSetOwnershipSchema = z.object({
     id: z.string().optional(),
     name: z.string().optional(),
   })).min(1),
-  userId: z.string().optional(),
+  userId: UserId.optional(),
   default: z.boolean().optional(),
   level: LevelInput,
 });

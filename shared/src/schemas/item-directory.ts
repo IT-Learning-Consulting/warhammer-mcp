@@ -7,14 +7,13 @@
 // served by list-actor-items; compendium reads by search-compendium.
 
 import { z } from 'zod';
-
-const FOUNDRY_ID = z.string().min(1);
+import { FolderId, ItemId, PackId } from './branded-ids.js';
 
 export const ItemDirectoryListInput = z
   .object({
     action: z.literal('list'),
     typeFilter: z.string().optional(),
-    folderId: z.string().optional(),
+    folderId: FolderId.optional(),
     page: z.number().int().min(1).optional(),
     pageSize: z.number().int().min(1).max(200).optional(),
   })
@@ -23,7 +22,7 @@ export const ItemDirectoryListInput = z
 export const ItemDirectoryGetInput = z
   .object({
     action: z.literal('get'),
-    itemId: FOUNDRY_ID,
+    itemId: ItemId,
   })
   .strict();
 
@@ -44,7 +43,7 @@ export const ItemDirectorySearchInput = z
 export const ItemDirectoryDuplicateInput = z
   .object({
     action: z.literal('duplicate'),
-    itemId: FOUNDRY_ID,
+    itemId: ItemId,
     newName: z.string().optional(),
   })
   .strict();
@@ -52,8 +51,8 @@ export const ItemDirectoryDuplicateInput = z
 export const ItemDirectoryImportFromCompendiumInput = z
   .object({
     action: z.literal('import-from-compendium'),
-    packId: z.string().min(1),
-    itemId: FOUNDRY_ID,
+    packId: PackId,
+    itemId: ItemId,
     updateData: z.record(z.unknown()).optional(),
   })
   .strict();

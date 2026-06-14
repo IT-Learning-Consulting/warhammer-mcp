@@ -10,6 +10,7 @@
 //   - Phase 5 module_integration_v1 acceptance criteria #1–4.
 
 import { z } from 'zod';
+import { SceneId } from '@foundry-mcp/shared';
 import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
 import { moduleNotActiveContent } from '../_shared/module-guard.js';
 
@@ -35,7 +36,7 @@ interface TaggerQueryDoc {
 }
 
 interface TaggerQueryResult {
-  sceneId?: string;
+  sceneId?: SceneId;
   documents?: TaggerQueryDoc[];
   count?: number;
   allScenes?: boolean;

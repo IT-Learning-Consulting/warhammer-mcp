@@ -16,6 +16,17 @@
 
 import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
 import { moduleNotActiveContent } from '../_shared/module-guard.js';
+import {
+  ActorId,
+  FolderId,
+  PlaylistId,
+  PlaylistSoundId,
+  RegionBehaviorId,
+  RegionId,
+  SceneId,
+  TileId,
+  TokenId,
+} from '@foundry-mcp/shared';
 
 const TOOL_NAME = 'module-scene-atmosphere' as const;
 
@@ -125,31 +136,31 @@ interface SetEnabledResult {
 }
 
 interface SetRegionParticlesResult {
-  regionId: string;
-  behaviorId: string | null;
+  regionId: RegionId;
+  behaviorId: RegionBehaviorId | null;
   behaviorType: string;
   particleType: string;
   replaced: boolean;
 }
 
 interface SetRegionFiltersResult {
-  regionId: string;
-  behaviorId: string | null;
+  regionId: RegionId;
+  behaviorId: RegionBehaviorId | null;
   behaviorType: string;
   filterType: string;
   replaced: boolean;
 }
 
 interface SuppressSceneParticlesResult {
-  regionId: string;
-  behaviorId?: string | null;
+  regionId: RegionId;
+  behaviorId?: RegionBehaviorId | null;
   removed: boolean;
   behaviorType: string;
 }
 
 interface SuppressSceneFiltersResult {
-  regionId: string;
-  behaviorId?: string | null;
+  regionId: RegionId;
+  behaviorId?: RegionBehaviorId | null;
   removed: boolean;
   behaviorType: string;
 }
@@ -177,7 +188,7 @@ type FxmasterResult =
 // ── Phase 3: tokenmagic + automatic-wounds result shapes ──────────────────────
 
 interface TokenmagicApplyResult {
-  placeableId: string;
+  placeableId: string; // not a branded id (polymorphic / non-document)
   placeableType: string;
   appliedCount: number;
   filterTypes: string[];
@@ -187,7 +198,7 @@ interface TokenmagicApplyResult {
 }
 
 interface TokenmagicUpsertResult {
-  placeableId: string;
+  placeableId: string; // not a branded id (polymorphic / non-document)
   placeableType: string;
   upsertedCount: number;
   filterTypes: string[];
@@ -196,11 +207,11 @@ interface TokenmagicUpsertResult {
 }
 
 interface TokenmagicRemoveResult {
-  placeableId: string;
+  placeableId: string; // not a branded id (polymorphic / non-document)
   placeableType: string;
-  filterId: string | null;
+  filterId: string | null; // not a branded id (polymorphic / non-document)
   filterType: string | null;
-  filterInternalId: string | null;
+  filterInternalId: string | null; // not a branded id (polymorphic / non-document)
   targetDesc: string;
   verifiedRemainingFilterCount: number;
 }
@@ -217,35 +228,35 @@ interface TokenmagicPresetResult {
 }
 
 interface TokenmagicWoundCreateResult {
-  tokenId: string;
+  tokenId: TokenId;
   tokenName: string;
   damageFraction: number;
   verifiedWoundFilterCount: number;
 }
 
 interface TokenmagicWoundHealResult {
-  tokenId: string;
+  tokenId: TokenId;
   tokenName: string;
   healingFraction: number;
   verifiedRemainingWoundFilterCount: number;
 }
 
 interface TokenmagicWoundRemoveResult {
-  tokenId: string;
+  tokenId: TokenId;
   tokenName: string;
   removed: boolean;
   verifiedRemainingWoundFilterCount: number;
 }
 
 interface TokenmagicWoundReapplyResult {
-  tokenId: string;
+  tokenId: TokenId;
   tokenName: string;
   reapplied: boolean;
   verifiedWoundFilterCount: number;
 }
 
 interface WoundToggleDisableResult {
-  actorId: string;
+  actorId: ActorId;
   actorName: string;
   disabled: boolean;
   enabled: boolean;
@@ -255,7 +266,7 @@ interface WoundToggleDisableResult {
 }
 
 interface WoundSetBloodColorResult {
-  tokenId: string;
+  tokenId: TokenId;
   tokenName: string;
   color: string;
   verifiedColor: string | null;
@@ -286,7 +297,7 @@ interface SceneryVariation {
 }
 
 interface ListVariationsResult {
-  sceneId: string;
+  sceneId: SceneId;
   sceneName: string;
   activeVariationIndex: number;
   variations: SceneryVariation[];
@@ -295,7 +306,7 @@ interface ListVariationsResult {
 }
 
 interface GetActiveVariationResult {
-  sceneId: string;
+  sceneId: SceneId;
   sceneName: string;
   hasScenery: boolean;
   activeVariationIndex: number;
@@ -303,7 +314,7 @@ interface GetActiveVariationResult {
 }
 
 interface SetActiveVariationResult {
-  sceneId: string;
+  sceneId: SceneId;
   sceneName: string;
   previousIndex: number;
   newActiveIndex: number;
@@ -313,7 +324,7 @@ interface SetActiveVariationResult {
 }
 
 interface AddVariationResult {
-  sceneId: string;
+  sceneId: SceneId;
   sceneName: string;
   addedVariationIndex: number;
   addedVariationName: string;
@@ -324,7 +335,7 @@ interface AddVariationResult {
 }
 
 interface DeleteVariationResult {
-  sceneId: string;
+  sceneId: SceneId;
   sceneName: string;
   deletedVariationName: string;
   deletedIndex: number;
@@ -334,7 +345,7 @@ interface DeleteVariationResult {
 }
 
 interface SetVariationBackgroundsResult {
-  sceneId: string;
+  sceneId: SceneId;
   sceneName: string;
   variationIndex: number;
   variationName: string;
@@ -346,7 +357,7 @@ interface SetVariationBackgroundsResult {
 }
 
 interface ResetVariationSceneDataResult {
-  sceneId: string;
+  sceneId: SceneId;
   sceneName: string;
   variationIndex: number;
   variationName: string;
@@ -355,14 +366,14 @@ interface ResetVariationSceneDataResult {
 }
 
 interface CheckSceneryModuleActiveResult {
-  moduleId: string;
+  moduleId: string; // not a branded id (polymorphic / non-document)
   active: boolean;
   title: string | null;
   version: string | null;
 }
 
 interface ReadScenerySettingsResult {
-  moduleId: string;
+  moduleId: string; // not a branded id (polymorphic / non-document)
   settings: Record<string, unknown>;
   globalElementTypes: Record<string, unknown>;
   note: string;
@@ -402,7 +413,7 @@ interface EndTransitionResult {
 
 interface SetSceneTransitionResult {
   subAction: string;
-  sceneId?: string | null;
+  sceneId?: SceneId | null;
   sceneName?: string | null;
   savedOptions?: TransitionOptions;
   // per-scene: verifiedHasOptions; world-default: verified
@@ -415,7 +426,7 @@ interface SetSceneTransitionResult {
 
 interface GetSceneTransitionResult {
   subAction: string;
-  sceneId?: string | null;
+  sceneId?: SceneId | null;
   sceneName?: string | null;
   // per-scene branch
   hasTransition?: boolean;
@@ -427,7 +438,7 @@ interface GetSceneTransitionResult {
 }
 
 interface DeleteSceneTransitionResult {
-  sceneId: string;
+  sceneId: SceneId;
   sceneName: string;
   hadTransition: boolean;
   deleted: boolean;
@@ -451,7 +462,7 @@ interface TileFaceEntry {
 }
 
 interface SwitchTileFaceResult {
-  tileId: string;
+  tileId: TileId;
   tileName: string;
   previousFacePath?: string | null;
   facePath?: string;
@@ -463,7 +474,7 @@ interface SwitchTileFaceResult {
 }
 
 interface ListTileFacesResult {
-  tileId: string;
+  tileId: TileId;
   originalImage: string | null;
   altImages: string[];
   activeFace: string | null;
@@ -473,7 +484,7 @@ interface ListTileFacesResult {
 }
 
 interface GetTileOriginalFaceResult {
-  tileId: string;
+  tileId: TileId;
   tileName: string;
   originalImage: string | null;
   hasOriginalImage: boolean;
@@ -481,7 +492,7 @@ interface GetTileOriginalFaceResult {
 }
 
 interface GetTileActiveFaceResult {
-  tileId: string;
+  tileId: TileId;
   tileName: string;
   activeSrc: string | null;
   activeFaceLabel?: string;
@@ -489,7 +500,7 @@ interface GetTileActiveFaceResult {
 }
 
 interface ResetToOriginalFaceResult {
-  tileId: string;
+  tileId: TileId;
   tileName: string;
   originalImage: string;
   previousFacePath?: string | null;
@@ -500,7 +511,7 @@ interface ResetToOriginalFaceResult {
 }
 
 interface AddTileFaceResult {
-  tileId: string;
+  tileId: TileId;
   tileName: string;
   addedFacePath: string;
   altImages: string[];
@@ -512,7 +523,7 @@ interface AddTileFaceResult {
 }
 
 interface RemoveTileFaceResult {
-  tileId: string;
+  tileId: TileId;
   tileName: string;
   removedFacePath: string;
   wasActiveFace: boolean;
@@ -524,7 +535,7 @@ interface RemoveTileFaceResult {
 }
 
 interface CycleTileFaceResult {
-  tileId: string;
+  tileId: TileId;
   tileName: string;
   previousFacePath: string | null;
   previousFaceIndex: number;
@@ -539,7 +550,7 @@ interface CycleTileFaceResult {
 }
 
 interface ClearTileFacesResult {
-  tileId: string;
+  tileId: TileId;
   tileName: string;
   hadFaces: boolean;
   clearedAltImagesCount: number;
@@ -564,23 +575,23 @@ type MultifaceTilesResult =
 // ── Phase 5: dynamic-soundscapes result shapes ────────────────────────────────
 
 interface SetSoundscapeResult {
-  playlistId: string;
+  playlistId: PlaylistId;
   playlistName: string;
-  verifiedPlaylistId: string;
+  verifiedPlaylistId: PlaylistId;
   settingMatch: boolean;
   updateStateDelayNote: string;
 }
 
 interface StopSoundscapeResult {
   stopped: boolean;
-  previousPlaylistId: string | null;
+  previousPlaylistId: PlaylistId | null;
   previousPlaylistName: string | null;
-  verifiedPlaylistId: string | null;
+  verifiedPlaylistId: PlaylistId | null;
   updateStateDelayNote: string;
 }
 
 interface SetMoodResult {
-  playlistId: string;
+  playlistId: PlaylistId;
   playlistName: string;
   mood: string;
   verifiedMood: string;
@@ -589,7 +600,7 @@ interface SetMoodResult {
 }
 
 interface GetMoodResult {
-  playlistId: string;
+  playlistId: PlaylistId;
   playlistName: string;
   mood: string;
   isFlagExplicit: boolean;
@@ -597,9 +608,9 @@ interface GetMoodResult {
 }
 
 interface SetLayerEnabledResult {
-  playlistId: string;
+  playlistId: PlaylistId;
   playlistName: string;
-  soundId: string;
+  soundId: PlaylistSoundId;
   soundName: string;
   enabled: boolean;
   verifiedEnabled: boolean | null;
@@ -607,9 +618,9 @@ interface SetLayerEnabledResult {
 }
 
 interface SetLayerVolumeResult {
-  playlistId: string;
+  playlistId: PlaylistId;
   playlistName: string;
-  soundId: string;
+  soundId: PlaylistSoundId;
   soundName: string;
   volume: number;
   verifiedVolume: number | null;
@@ -627,8 +638,8 @@ interface SoundscapeEntry {
 
 interface ListSoundscapesResult {
   soundscapesFolder: string | null;
-  soundscapesFolderId: string | null;
-  playingPlaylistId: string | null;
+  soundscapesFolderId: FolderId | null;
+  playingPlaylistId: PlaylistId | null;
   count: number;
   soundscapes: SoundscapeEntry[];
 }
@@ -654,31 +665,31 @@ interface BlockEntry {
 }
 
 interface ListBlocksResult {
-  playlistId: string;
+  playlistId: PlaylistId;
   playlistName: string;
   blockCount: number;
   blocks: BlockEntry[];
 }
 
 interface GetSelectedResult {
-  selectedPlaylistId: string | null;
+  selectedPlaylistId: PlaylistId | null;
   selectedPlaylistName: string | null;
-  playingPlaylistId: string | null;
+  playingPlaylistId: PlaylistId | null;
   note: string;
 }
 
 interface SetSelectedResult {
-  playlistId: string | null;
+  playlistId: PlaylistId | null;
   playlistName: string | null;
-  verifiedPlaylistId: string | null;
+  verifiedPlaylistId: PlaylistId | null;
   settingMatch: boolean;
   note: string;
 }
 
 interface CreateSoundscapeResult {
-  playlistId: string;
+  playlistId: PlaylistId;
   playlistName: string;
-  folderId: string;
+  folderId: FolderId;
   folderName: string;
   mode: number;
   modeNote: string;
@@ -686,7 +697,7 @@ interface CreateSoundscapeResult {
 
 interface DeleteSoundscapeResult {
   deleted: boolean;
-  playlistId: string;
+  playlistId: PlaylistId;
   playlistName: string;
   soundsDeleted: number;
   stoppedPlayback: boolean;
@@ -694,9 +705,9 @@ interface DeleteSoundscapeResult {
 }
 
 interface AddSoundResult {
-  playlistId: string;
+  playlistId: PlaylistId;
   playlistName: string;
-  soundId: string;
+  soundId: PlaylistSoundId;
   soundName: string;
   path: string;
   volume: number;
@@ -707,9 +718,9 @@ interface AddSoundResult {
 }
 
 interface RemoveSoundResult {
-  playlistId: string;
+  playlistId: PlaylistId;
   playlistName: string;
-  soundId: string;
+  soundId: PlaylistSoundId;
   soundName: string;
   deleted: boolean;
   verifiedGone: boolean;
@@ -719,7 +730,7 @@ interface RemoveSoundResult {
 }
 
 interface UpdateBlocksResult {
-  playlistId: string;
+  playlistId: PlaylistId;
   playlistName: string;
   previousBlockCount: number;
   newBlockCount: number;

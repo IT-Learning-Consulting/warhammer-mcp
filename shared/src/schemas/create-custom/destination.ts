@@ -4,6 +4,7 @@
 // by the Foundry-module handler's _ensureFolderChain helper.
 
 import { z } from 'zod';
+import { ActorId } from '../branded-ids.js';
 
 // NOTE: The "actor must have actorId OR actorName" check is enforced at the
 // handler layer rather than via `.refine()` here — zod's discriminatedUnion
@@ -13,7 +14,7 @@ import { z } from 'zod';
 const DestinationActor = z
   .object({
     type: z.literal('actor'),
-    actorId: z.string().optional(),
+    actorId: ActorId.optional(),
     actorName: z.string().optional(),
   })
   .strict();

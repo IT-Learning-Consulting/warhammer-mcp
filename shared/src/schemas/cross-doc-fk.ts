@@ -58,16 +58,16 @@ export const AuditOrphansInput = z.object({
 export const AuditDocumentInput = z.object({
     action: z.literal('audit-document'),
     documentType: CrossDocFkDocType,
-    documentId: FOUNDRY_ID,
+    documentId: FOUNDRY_ID, // polymorphic: not branded (Phase 1 design)
 });
 
 // One orphan reference identifies a stale FK by source doc + field + the bad target id.
 export const FkOrphanRef = z.object({
     sourceDocType: CrossDocFkDocType,
-    sourceDocId: FOUNDRY_ID,
+    sourceDocId: FOUNDRY_ID, // polymorphic: not branded (Phase 1 design)
     sourceField: z.string().min(1),
     refDocType: CrossDocFkDocType,
-    refId: z.string().min(1),
+    refId: z.string().min(1), // polymorphic: not branded (Phase 1 design)
 });
 export type FkOrphanRefType = z.infer<typeof FkOrphanRef>;
 

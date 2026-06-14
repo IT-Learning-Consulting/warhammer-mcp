@@ -6,8 +6,7 @@
 
 import { z } from 'zod';
 import { LightDataSchema, type LightData } from './light-data.js';
-
-const FOUNDRY_ID = z.string().min(1);
+import { SceneId, AmbientLightId } from './branded-ids.js';
 
 const LightWritableFields = {
   x: z.number().optional(),
@@ -24,7 +23,7 @@ const LightWritableFields = {
 export const LightCreateInput = z
   .object({
     action: z.literal('create'),
-    sceneId: FOUNDRY_ID,
+    sceneId: SceneId,
     ...LightWritableFields,
     x: z.number(),
     y: z.number(),
@@ -34,8 +33,8 @@ export const LightCreateInput = z
 export const LightUpdateInput = z
   .object({
     action: z.literal('update'),
-    sceneId: FOUNDRY_ID,
-    lightId: FOUNDRY_ID,
+    sceneId: SceneId,
+    lightId: AmbientLightId,
     changes: z
       .object(LightWritableFields)
       .strict()
@@ -48,23 +47,23 @@ export const LightUpdateInput = z
 export const LightDeleteInput = z
   .object({
     action: z.literal('delete'),
-    sceneId: FOUNDRY_ID,
-    lightId: FOUNDRY_ID,
+    sceneId: SceneId,
+    lightId: AmbientLightId,
   })
   .strict();
 
 export const LightGetInput = z
   .object({
     action: z.literal('get'),
-    sceneId: FOUNDRY_ID,
-    lightId: FOUNDRY_ID,
+    sceneId: SceneId,
+    lightId: AmbientLightId,
   })
   .strict();
 
 export const LightListInput = z
   .object({
     action: z.literal('list'),
-    sceneId: FOUNDRY_ID.optional(),
+    sceneId: SceneId.optional(),
     filter: z.string().optional(),
     hidden: z.boolean().optional(),
     isGlobal: z.boolean().optional(),

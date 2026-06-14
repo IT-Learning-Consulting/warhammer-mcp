@@ -6,11 +6,12 @@
 import { z } from 'zod';
 import { ActiveEffectTarget } from './active-effect-target.js';
 import { ActiveEffectDataSchema } from './create-custom/effect.js';
+import { ActiveEffectId } from './branded-ids.js';
 
 export const UpdateActiveEffectInput = z
   .object({
     target: ActiveEffectTarget,
-    effectId: z.string().optional(),
+    effectId: ActiveEffectId.optional(),
     effectName: z.string().optional(),
     updates: ActiveEffectDataSchema.partial(),
     returnFullPayload: z.boolean().optional(),

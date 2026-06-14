@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { RollTableId, TableResultId } from "@foundry-mcp/shared";
 import { FoundryClient } from "../foundry-client.js";
 import { Logger } from "../logger.js";
 import { BaseTool, BaseToolOptions } from "../base-tool.js";
@@ -13,34 +14,34 @@ import { BaseTool, BaseToolOptions } from "../base-tool.js";
 // ── Response interfaces for new actions (concrete typed per CCR-Envelope-Consumer rule 3) ──
 
 interface UpdateRollTableResponse {
-  tableId: string;
+  tableId: RollTableId;
   changes: Record<string, unknown>;
 }
 
 interface AddTableResultsResponse {
-  tableId: string;
+  tableId: RollTableId;
   addedCount: number;
 }
 
 // Handler returns updatedCount only (no updatedIds in the Foundry-side handler).
 interface UpdateTableResultsResponse {
-  tableId: string;
+  tableId: RollTableId;
   updatedCount: number;
 }
 
 // Handler returns deletedCount only (no deletedIds in the Foundry-side handler).
 interface DeleteTableResultsResponse {
-  tableId: string;
+  tableId: RollTableId;
   deletedCount: number;
 }
 
 interface NormalizeRollTableResponse {
-  tableId: string;
+  tableId: RollTableId;
   resultCount: number;
 }
 
 interface ResetRollTableResultsResponse {
-  tableId: string;
+  tableId: RollTableId;
   resultCount: number;
 }
 
@@ -66,7 +67,7 @@ interface DrawManyFromTableResponse {
 }
 
 interface ImportRollTableFromCompendiumResponse {
-  newTableId: string;
+  newTableId: RollTableId;
   name: string;
   normalized: boolean;
 }
@@ -87,7 +88,7 @@ const TableResultInputZ = z.discriminatedUnion("type", [
     z.object({
         type: z.literal("document"),
         documentCollection: z.string(),
-        documentId: z.string(),
+        documentId: z.string(), // not a branded id (polymorphic / non-document)
         name: z.string().optional(),
         img: z.string().optional(),
         description: z.string().optional(),
@@ -97,7 +98,7 @@ const TableResultInputZ = z.discriminatedUnion("type", [
     z.object({
         type: z.literal("compendium"),
         documentCollection: z.string(),
-        documentId: z.string(),
+        documentId: z.string(), // not a branded id (polymorphic / non-document)
         name: z.string().optional(),
         img: z.string().optional(),
         description: z.string().optional(),
@@ -130,13 +131,13 @@ const ListRollTablesSchema = z.object({
 // Get roll table schema
 const GetRollTableSchema = z.object({
     action: z.literal("get"),
-    tableId: z.string()
+    tableId: RollTableId
 });
 
 // Roll on table schema
 const RollOnTableSchema = z.object({
     action: z.literal("roll"),
-    tableId: z.string(),
+    tableId: RollTableId,
     rollMode: z.enum(["public", "private", "blind", "self"]).default("public"),
     modifier: z.number().optional()
 });
@@ -144,7 +145,7 @@ const RollOnTableSchema = z.object({
 // Delete roll table schema
 const DeleteRollTableSchema = z.object({
     action: z.literal("delete"),
-    tableId: z.string(),
+    tableId: RollTableId,
     // BUG-322: CCR-Delete-Safety gate — must pass confirm: true to proceed
     confirm: z.boolean().optional()
 });
@@ -153,7 +154,7 @@ const DeleteRollTableSchema = z.object({
 
 const UpdateRollTableSchema = z.object({
     action: z.literal("update"),
-    tableId: z.string(),
+    tableId: RollTableId,
     changes: z.object({
         name: z.string().optional(),
         img: z.string().optional(),
@@ -168,13 +169,13 @@ const UpdateRollTableSchema = z.object({
 
 const AddTableResultsSchema = z.object({
     action: z.literal("add-results"),
-    tableId: z.string(),
+    tableId: RollTableId,
     results: z.array(TableResultInputZ).min(1),
 });
 
 const UpdateTableResultsSchema = z.object({
     action: z.literal("update-results"),
-    tableId: z.string(),
+    tableId: RollTableId,
     updates: z.array(z.object({
         _id: z.string(),
         name: z.string().optional(),
@@ -189,23 +190,23 @@ const UpdateTableResultsSchema = z.object({
 
 const DeleteTableResultsSchema = z.object({
     action: z.literal("delete-results"),
-    tableId: z.string(),
-    resultIds: z.array(z.string()).min(1),
+    tableId: RollTableId,
+    resultIds: z.array(TableResultId).min(1),
 });
 
 const NormalizeRollTableSchema = z.object({
     action: z.literal("normalize"),
-    tableId: z.string(),
+    tableId: RollTableId,
 });
 
 const ResetRollTableSchema = z.object({
     action: z.literal("reset"),
-    tableId: z.string(),
+    tableId: RollTableId,
 });
 
 const DrawManyFromTableSchema = z.object({
     action: z.literal("draw-many"),
-    tableId: z.string(),
+    tableId: RollTableId,
     number: z.number().int().min(1).max(50),
     displayChat: z.boolean().optional(),
     recursive: z.boolean().optional(),
@@ -215,7 +216,7 @@ const DrawManyFromTableSchema = z.object({
 const ImportRollTableFromCompendiumSchema = z.object({
     action: z.literal("import-from-compendium"),
     pack: z.string(),
-    documentId: z.string(),
+    documentId: z.string(), // not a branded id (polymorphic / non-document)
     normalize: z.boolean().optional(),
 });
 
@@ -536,7 +537,7 @@ export class RollTableTool extends BaseTool {
         };
     }
 
-    private async handleGet(args: { tableId: string }) {
+    private async handleGet(args: { tableId: RollTableId }) {
         this.logger.info("Getting roll table", { tableId: args.tableId });
 
         const response = await this.query<any>(
@@ -577,7 +578,7 @@ export class RollTableTool extends BaseTool {
     }
 
     private async handleRoll(args: {
-        tableId: string;
+        tableId: RollTableId;
         rollMode: string;
         modifier?: number | undefined;
     }) {
@@ -608,7 +609,7 @@ export class RollTableTool extends BaseTool {
         };
     }
 
-    private async handleDelete(args: { tableId: string; confirm?: boolean | undefined }) {
+    private async handleDelete(args: { tableId: RollTableId; confirm?: boolean | undefined }) {
         // BUG-322: CCR-Delete-Safety gate — mirrors macro.ts handleDelete pattern
         if (!args.confirm) {
             return {

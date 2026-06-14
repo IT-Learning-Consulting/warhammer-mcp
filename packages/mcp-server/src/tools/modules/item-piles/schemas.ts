@@ -3,11 +3,13 @@
 // TS return interfaces (no Zod) for typed this.query<T>(...) calls.
 // One interface per action return shape. DP-15: never <any> on response.
 
+import { SceneId } from '@foundry-mcp/shared';
+
 export interface ItemPileCreateResult {
   tokenUuid: string | null;
   actorUuid: string | null;
   type: string;
-  sceneId: string;
+  sceneId: SceneId;
   flagData: unknown;
 }
 

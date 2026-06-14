@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { SearchCompendiumOutput, SEARCH_COMPENDIUM_OUTPUT_JSON_SCHEMA } from '@foundry-mcp/shared';
+import { SearchCompendiumOutput, SEARCH_COMPENDIUM_OUTPUT_JSON_SCHEMA, ItemId, PackId } from '@foundry-mcp/shared';
 import { FoundryClient } from '../foundry-client.js';
 import { Logger } from '../logger.js';
 import { BaseTool, BaseToolOptions } from '../base-tool.js';
@@ -295,8 +295,8 @@ export class CompendiumTools extends BaseTool {
 
   async handleGetCompendiumItem(args: any): Promise<any> {
     const schema = z.object({
-      packId: z.string().min(1, 'Pack ID cannot be empty'),
-      itemId: z.string().min(1, 'Item ID cannot be empty'),
+      packId: PackId,
+      itemId: ItemId,
       compact: z.boolean().default(false),
     });
 

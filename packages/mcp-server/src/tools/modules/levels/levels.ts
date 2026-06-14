@@ -10,6 +10,7 @@
 //   - F03: the formatter emits every field the handler returns.
 
 import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
+import { RegionId } from '@foundry-mcp/shared';
 import { moduleNotActiveContent } from '../_shared/module-guard.js';
 
 // ── Response shapes (DP-15 — typed, never <any>) ─────────────────────────────
@@ -32,7 +33,7 @@ interface LevelsElevationData {
   flagsWallHeight: Record<string, unknown> | null;
 }
 interface RegionElevationResult {
-  regionId: string;
+  regionId: RegionId;
   elevation: { bottom: number | null; top: number | null };
   behavior: { id: string; name: string; source: string } | null;
 }

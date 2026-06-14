@@ -1,6 +1,7 @@
 // Item handler input schemas. CCR-4 per-domain file. All .strict() per CCR-5.
 
 import { z } from 'zod';
+import { ActorId, ItemId, FoundryUuid } from './branded-ids.js';
 import { Destination } from './create-custom/destination.js';
 
 // Phase 5 expansion: createItem now takes a destination discriminator
@@ -23,8 +24,8 @@ export const CreateItemInput = z.object({
 // `destination` must be present; either `itemId` or `itemName` must be
 // present for the world branch.
 export const UpdateItemInput = z.object({
-  actorId: z.string().optional(),
-  itemId: z.string().optional(),
+  actorId: ActorId.optional(),
+  itemId: ItemId.optional(),
   itemName: z.string().optional(),
   destination: Destination.optional(),
   updateData: z.record(z.unknown()),
@@ -38,8 +39,8 @@ export const UpdateItemInput = z.object({
 }).strict();
 
 export const DeleteItemInput = z.object({
-  actorId: z.string().optional(),
-  itemId: z.string().optional(),
+  actorId: ActorId.optional(),
+  itemId: ItemId.optional(),
   itemName: z.string().optional(),
   destination: Destination.optional(),
 }).strict();
@@ -56,7 +57,7 @@ const QualityEntry = z.object({
 export const ModifyItemQualitiesInput = z.object({
   characterName: z.string().optional(),
   itemName: z.string().optional(),
-  itemId: z.string().optional(),
+  itemId: ItemId.optional(),
   destination: Destination.optional(),
   addQualities: z.array(QualityEntry),
   removeQualities: z.array(z.string()),
@@ -65,8 +66,8 @@ export const ModifyItemQualitiesInput = z.object({
 }).strict();
 
 export const AddItemFromCompendiumInput = z.object({
-  actorId: z.string(),
-  itemUuid: z.string().optional(),
-  compendiumId: z.string().optional(),
+  actorId: ActorId,
+  itemUuid: FoundryUuid.optional(),
+  compendiumId: z.string().optional(), // not a document id (compendium pack string) — left bare per Phase 1 design
   skipSpecialisationChoice: z.boolean().optional(),
 }).strict();

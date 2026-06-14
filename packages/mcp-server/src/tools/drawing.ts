@@ -17,6 +17,7 @@ import {
   DrawingToolInput,
   type DrawingViewModel,
   type DrawingListItem,
+  SceneId,
 } from '@foundry-mcp/shared';
 import { BaseTool, BaseToolOptions } from '../base-tool.js';
 
@@ -38,8 +39,8 @@ interface DrawingUpdateResponse {
 }
 interface DrawingDeleteResponse {
   success: true;
-  deletedId: string;
-  sceneId: string;
+  deletedId: string; // not a branded id (polymorphic / non-document)
+  sceneId: SceneId;
   remainingDrawings: number;
 }
 interface DrawingGetResponse {
@@ -58,7 +59,7 @@ interface DrawingListResponse {
 interface DrawingDuplicateResponse {
   success: true;
   drawing: DrawingViewModel;
-  sourceId: string;
+  sourceId: string; // not a branded id (polymorphic / non-document)
 }
 
 // ── Utilities ────────────────────────────────────────────────────────────────

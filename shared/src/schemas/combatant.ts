@@ -16,8 +16,7 @@
 // Combat.setInitiative's turn-order maintenance and corrupts the current-turn pointer.
 
 import { z } from 'zod';
-
-const FOUNDRY_ID = z.string().min(1);
+import { CombatantId, CombatId } from './branded-ids.js';
 
 // update-combatant writable allow-list — exactly the safe BaseCombatant.defineSchema()
 // fields. .strict() rejects everything else (actorId/tokenId/sceneId FKs, type, system,
@@ -38,16 +37,16 @@ const CombatantUpdateChanges = z
 export const CombatantGetInput = z
   .object({
     action: z.literal('get-combatant'),
-    combatantId: FOUNDRY_ID,
-    combatId: FOUNDRY_ID.optional(),
+    combatantId: CombatantId,
+    combatId: CombatId.optional(),
   })
   .strict();
 
 export const CombatantUpdateInput = z
   .object({
     action: z.literal('update-combatant'),
-    combatantId: FOUNDRY_ID,
-    combatId: FOUNDRY_ID.optional(),
+    combatantId: CombatantId,
+    combatId: CombatId.optional(),
     changes: CombatantUpdateChanges,
   })
   .strict();
@@ -55,8 +54,8 @@ export const CombatantUpdateInput = z
 export const CombatantSetInitiativeInput = z
   .object({
     action: z.literal('set-initiative'),
-    combatantId: FOUNDRY_ID,
-    combatId: FOUNDRY_ID.optional(),
+    combatantId: CombatantId,
+    combatId: CombatId.optional(),
     // Literal number only. Formula-based initiative is owned by reroll-initiative;
     // a second formula entry point here would be a redundant path.
     value: z.number(),
@@ -66,16 +65,16 @@ export const CombatantSetInitiativeInput = z
 export const CombatantClearInitiativeInput = z
   .object({
     action: z.literal('clear-initiative'),
-    combatantId: FOUNDRY_ID,
-    combatId: FOUNDRY_ID.optional(),
+    combatantId: CombatantId,
+    combatId: CombatId.optional(),
   })
   .strict();
 
 export const CombatantRerollInitiativeInput = z
   .object({
     action: z.literal('reroll-initiative'),
-    combatantId: FOUNDRY_ID,
-    combatId: FOUNDRY_ID.optional(),
+    combatantId: CombatantId,
+    combatId: CombatId.optional(),
     // Optional override; omit to use the system's default initiative formula.
     formula: z.string().min(1).optional(),
   })
@@ -84,8 +83,8 @@ export const CombatantRerollInitiativeInput = z
 export const CombatantSetHiddenInput = z
   .object({
     action: z.literal('set-hidden'),
-    combatantId: FOUNDRY_ID,
-    combatId: FOUNDRY_ID.optional(),
+    combatantId: CombatantId,
+    combatId: CombatId.optional(),
     hidden: z.boolean(),
   })
   .strict();
@@ -93,8 +92,8 @@ export const CombatantSetHiddenInput = z
 export const CombatantSetDefeatedInput = z
   .object({
     action: z.literal('set-defeated'),
-    combatantId: FOUNDRY_ID,
-    combatId: FOUNDRY_ID.optional(),
+    combatantId: CombatantId,
+    combatId: CombatId.optional(),
     defeated: z.boolean(),
   })
   .strict();

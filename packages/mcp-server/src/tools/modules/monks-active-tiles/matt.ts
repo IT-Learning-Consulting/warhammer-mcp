@@ -15,6 +15,7 @@
 //   - CCR-G9: tool name = 'module-matt'; description documents conditionality + pre-flight.
 
 import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
+import { RegionBehaviorId, RegionId, SceneId, TileId, TokenId } from '@foundry-mcp/shared';
 import { type ModuleMattInputType } from './schemas.js';
 
 // ── Response shapes (DP-15) ────────────────────────────────────────────────────
@@ -32,8 +33,8 @@ interface CapabilitiesResponse {
 
 interface TriggerTileResponse {
   uuid: string;
-  tileId: string;
-  sceneId: string;
+  tileId: TileId;
+  sceneId: SceneId;
   name: string | null;
   active: boolean | null;
   trigger: string[] | null;
@@ -58,14 +59,14 @@ interface TriggerTileResponse {
     hidden: boolean;
   };
   texture?: { src: string | null };
-  regionLinks?: Array<{ regionId: string; behaviorId: string; events: unknown }>;
+  regionLinks?: Array<{ regionId: RegionId; behaviorId: RegionBehaviorId; events: unknown }>;
   returnFullPayload?: boolean;
 }
 
 interface ListTilesResponse {
-  sceneId: string;
+  sceneId: SceneId;
   count: number;
-  tiles: Array<{ uuid: string; tileId: string; name: string | null; active: boolean | null; trigger: string[] | null; actionCount: number }>;
+  tiles: Array<{ uuid: string; tileId: TileId; name: string | null; active: boolean | null; trigger: string[] | null; actionCount: number }>;
 }
 
 interface ValidateSequenceResponse {
@@ -88,9 +89,9 @@ interface TaggerResolutionEntry {
 }
 
 interface CreateTileResponse {
-  tileId: string;
+  tileId: TileId;
   uuid: string;
-  sceneId: string;
+  sceneId: SceneId;
   trigger: string[];
   actionCount: number;
   name: string | null;
@@ -100,16 +101,16 @@ interface CreateTileResponse {
 
 interface UpdateConfigResponse {
   uuid: string;
-  tileId: string;
-  sceneId: string;
+  tileId: TileId;
+  sceneId: SceneId;
   updated: string[];
 }
 
 interface SequenceResponse {
   uuid: string;
-  tileId: string;
+  tileId: TileId;
   actionCount: number;
-  actionId?: string;
+  actionId?: string; // not a branded id (polymorphic / non-document) — MATT internal 16-char sequence action id
   actions?: Array<{ id: string; action: string }>;
   taggerResolution?: TaggerResolutionEntry[];
   taggerWarnings?: string[];
@@ -117,13 +118,13 @@ interface SequenceResponse {
 
 interface SetVariablesResponse {
   uuid: string;
-  tileId: string;
+  tileId: TileId;
   variables: Record<string, unknown>;
 }
 
 interface ResetHistoryResponse {
   uuid: string;
-  tileId: string;
+  tileId: TileId;
   cleared: string;
 }
 
@@ -137,7 +138,7 @@ interface FireTriggerAsResponse {
   uuid: string;
   fired: boolean;
   method: string;
-  tokenIds: string[];
+  tokenIds: TokenId[];
   tokensUsed: number;
 }
 
@@ -145,35 +146,35 @@ interface FindTriggerTileResponse {
   count: number;
   match?: {
     uuid: string;
-    sceneId: string;
+    sceneId: SceneId;
     sceneName: string;
-    tileId: string;
+    tileId: TileId;
     name: string | null;
     active: boolean | null;
     trigger: string[] | null;
     actionCount: number;
     tags: string[];
-    libraryId: string | null;
+    libraryId: string | null; // not a branded id (polymorphic / non-document)
   };
   matches: Array<{
     uuid: string;
-    sceneId: string;
+    sceneId: SceneId;
     sceneName: string;
-    tileId: string;
+    tileId: TileId;
     name: string | null;
     active: boolean | null;
     trigger: string[] | null;
     actionCount: number;
     tags: string[];
-    libraryId: string | null;
+    libraryId: string | null; // not a branded id (polymorphic / non-document)
   }>;
 }
 
 interface LinkRegionResponse {
-  regionId: string;
-  behaviorId: string;
+  regionId: RegionId;
+  behaviorId: RegionBehaviorId;
   tileUuid: string;
-  sceneId: string;
+  sceneId: SceneId;
 }
 
 // ── Inline error helper (CCR-G2 — NOT on BaseTool) ───────────────────────────

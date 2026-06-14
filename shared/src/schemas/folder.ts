@@ -12,8 +12,7 @@
 //   - Design Decision: type excluded from update.changes (conventionally immutable post-create).
 
 import { z } from 'zod';
-
-const FOUNDRY_ID = z.string().min(1);
+import { FolderId } from './branded-ids.js';
 
 export const FOLDER_DOCUMENT_TYPES = [
   'Actor',
@@ -34,7 +33,7 @@ export const FolderCreateInput = z.object({
   action: z.literal('create'),
   name: z.string().min(1),
   type: z.enum(FOLDER_DOCUMENT_TYPES),
-  folder: FOUNDRY_ID.nullable().optional(),
+  folder: FolderId.nullable().optional(),
   color: z.string().nullable().optional(),
   description: z.string().optional(),
   sort: z.number().int().optional(),
@@ -44,10 +43,10 @@ export const FolderCreateInput = z.object({
 
 export const FolderUpdateInput = z.object({
   action: z.literal('update'),
-  folderId: FOUNDRY_ID,
+  folderId: FolderId,
   changes: z.object({
     name: z.string().min(1).optional(),
-    folder: FOUNDRY_ID.nullable().optional(),
+    folder: FolderId.nullable().optional(),
     color: z.string().nullable().optional(),
     description: z.string().optional(),
     sort: z.number().int().optional(),
@@ -58,7 +57,7 @@ export const FolderUpdateInput = z.object({
 
 export const FolderDeleteInput = z.object({
   action: z.literal('delete'),
-  folderId: FOUNDRY_ID,
+  folderId: FolderId,
   confirm: z.boolean(),
   deleteContents: z.boolean().default(false),
   cascade: z.boolean().default(false),
@@ -66,14 +65,14 @@ export const FolderDeleteInput = z.object({
 
 export const FolderGetInput = z.object({
   action: z.literal('get'),
-  folderId: FOUNDRY_ID,
+  folderId: FolderId,
 }).strict();
 
 export const FolderListInput = z.object({
   action: z.literal('list'),
   typeFilter: z.enum(FOLDER_DOCUMENT_TYPES).optional(),
   nameFilter: z.string().optional(),
-  parentId: FOUNDRY_ID.nullable().optional(),
+  parentId: FolderId.nullable().optional(),
   page: z.number().int().min(1).optional(),
   pageSize: z.number().int().min(1).max(100).optional(),
   countOnly: z.boolean().optional(),
@@ -81,7 +80,7 @@ export const FolderListInput = z.object({
 
 export const FolderListContentsInput = z.object({
   action: z.literal('list-contents'),
-  folderId: FOUNDRY_ID,
+  folderId: FolderId,
   recursive: z.boolean().default(false),
 }).strict();
 

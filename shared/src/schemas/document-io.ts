@@ -15,6 +15,7 @@
 // HC1 / CCR-3: no CONFIG/WFRP references; thin cross-type primitive.
 
 import { z } from 'zod';
+import { FolderId } from './branded-ids.js';
 
 const FOUNDRY_ID = z.string().min(1);
 
@@ -39,7 +40,7 @@ export const DocumentIoExportInput = z
   .object({
     action: z.literal('export'),
     documentType: DOCUMENT_TYPE,
-    id: FOUNDRY_ID,
+    id: FOUNDRY_ID, // polymorphic: not branded (Phase 1 design)
   })
   .strict();
 
@@ -56,7 +57,7 @@ export const DocumentIoImportInput = z
     //   preserveOwnership=false (default) → strip ownership on import.
     //   targetFolderId=<id> → place doc in that folder; omit → clear folder.
     preserveOwnership: z.boolean().default(false),
-    targetFolderId: FOUNDRY_ID.optional(),
+    targetFolderId: FolderId.optional(),
     // CCR-4: only this action writes; require explicit confirmation.
     confirm: z.literal(true),
   })

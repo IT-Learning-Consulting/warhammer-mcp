@@ -3,6 +3,7 @@
 // discriminator as create-custom-item for unified targeting.
 
 import { z } from 'zod';
+import { ItemId } from './branded-ids.js';
 import { Destination } from './create-custom/destination.js';
 
 const QualityEntry = z.object({
@@ -14,7 +15,7 @@ export const ModifyItemQualitiesV2Input = z
   .object({
     destination: Destination,
     itemName: z.string().optional(),
-    itemId: z.string().optional(),
+    itemId: ItemId.optional(),
     addQualities: z.array(QualityEntry).default([]),
     removeQualities: z.array(z.string()).default([]),
     addFlaws: z.array(QualityEntry).default([]),

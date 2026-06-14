@@ -10,7 +10,7 @@
 // Listing combatants is the flat list-combatants tool's job (no umbrella list action — CCR-9).
 
 import { z } from 'zod';
-import { CombatantToolInput } from '@foundry-mcp/shared';
+import { CombatantToolInput, CombatId, CombatantId, ActorId, TokenId } from '@foundry-mcp/shared';
 import { BaseTool, BaseToolOptions } from '../base-tool.js';
 
 type CombatantArgs = z.infer<typeof CombatantToolInput>;
@@ -19,12 +19,12 @@ type ArgsFor<A extends CombatantArgs['action']> = Extract<CombatantArgs, { actio
 // ── Inline response interfaces ────────────────────────────────────────────────
 
 interface CombatantSnapshot {
-  combatId: string;
+  combatId: CombatId;
   id: string;
   name: string;
   img: string | null;
-  actorId: string | null;
-  tokenId: string | null;
+  actorId: ActorId | null;
+  tokenId: TokenId | null;
   initiative: number | null;
   hidden: boolean;
   defeated: boolean;
@@ -32,28 +32,28 @@ interface CombatantSnapshot {
 }
 
 interface CombatantInitiativeResponse {
-  combatId: string;
-  combatantId: string;
+  combatId: CombatId;
+  combatantId: CombatantId;
   initiative: number;
-  currentCombatantId: string | null;
+  currentCombatantId: CombatantId | null;
   turnPointerStable: boolean;
 }
 
 interface CombatantClearInitiativeResponse {
-  combatId: string;
-  combatantId: string;
+  combatId: CombatId;
+  combatantId: CombatantId;
   initiative: null;
 }
 
 interface CombatantHiddenResponse {
-  combatId: string;
-  combatantId: string;
+  combatId: CombatId;
+  combatantId: CombatantId;
   hidden: boolean;
 }
 
 interface CombatantDefeatedResponse {
-  combatId: string;
-  combatantId: string;
+  combatId: CombatId;
+  combatantId: CombatantId;
   defeated: boolean;
 }
 

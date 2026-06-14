@@ -16,8 +16,8 @@
 //   - R11.2: update rejects role/password/passwordSalt at parse time by omitting them from the strict schema.
 
 import { z } from 'zod';
+import { UserId, ActorId, MacroId } from './branded-ids.js';
 
-const FOUNDRY_ID = z.string().min(1);
 const HEX_COLOR = z.string().regex(/^#[0-9a-fA-F]{6}$/,
     'USER_INVALID_COLOR: color must be a 6-digit hex string such as #ff0000');
 
@@ -93,7 +93,7 @@ const UpdateUserPayload = z.object({
     color: HEX_COLOR.optional(),
     avatar: z.string().min(1).nullable().optional(),
     pronouns: z.string().min(1).optional(),
-    character: FOUNDRY_ID.nullable().optional(),
+    character: ActorId.nullable().optional(),
     permissions: UserPermissionsDelta.optional(),
 }).strict();
 
@@ -107,36 +107,36 @@ export const ListUsersInput = z.object({
 
 export const GetUserInput = z.object({
     action: z.literal('get'),
-    userId: FOUNDRY_ID,
+    userId: UserId,
     includeHotbar: z.boolean().default(false),
 });
 
 export const UpdateUserInput = z.object({
     action: z.literal('update'),
-    userId: FOUNDRY_ID,
+    userId: UserId,
 }).merge(UpdateUserPayload);
 
 export const SetUserRoleInput = z.object({
     action: z.literal('set-role'),
-    userId: FOUNDRY_ID,
+    userId: UserId,
     role: UserRoleName,
 });
 
 export const UserHotbarListInput = z.object({
     action: z.literal('hotbar-list'),
-    userId: FOUNDRY_ID,
+    userId: UserId,
 });
 
 export const UserHotbarAssignInput = z.object({
     action: z.literal('hotbar-assign'),
-    userId: FOUNDRY_ID,
+    userId: UserId,
     slot: z.number().int().min(1).max(50),
-    macroId: FOUNDRY_ID,
+    macroId: MacroId,
 });
 
 export const UserHotbarClearInput = z.object({
     action: z.literal('hotbar-clear'),
-    userId: FOUNDRY_ID,
+    userId: UserId,
     slot: z.number().int().min(1).max(50),
 });
 
@@ -148,7 +148,7 @@ export const UserHotbarClearInput = z.object({
 // in a future hygiene pass to remove this exemption.
 export const UserFlagSetInput = z.object({
     action: z.literal('flag-set'),
-    userId: FOUNDRY_ID,
+    userId: UserId,
     scope: FlagScope,
     key: z.string().min(1),
     value: JsonValue,
@@ -156,7 +156,7 @@ export const UserFlagSetInput = z.object({
 
 export const UserFlagClearInput = z.object({
     action: z.literal('flag-clear'),
-    userId: FOUNDRY_ID,
+    userId: UserId,
     scope: FlagScope,
     key: z.string().min(1),
 });

@@ -1,6 +1,12 @@
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 
+// HC8 EXCEPTION (Phase 1 branded-IDs): actorId/itemId below feed the
+// `ACTOR_TARGET_JSON_SCHEMA` / `ITEM_TARGET_JSON_SCHEMA` zodToJsonSchema fragments that are
+// spread into published tool inputSchemas. Branding is wire-visible here (brand `.min(1)`
+// injects `minLength:1` over the original bare `z.string()`, and instance reuse emits a
+// `$ref`), which would break HC8 byte-identical. So these stay UNBRANDED.
+
 // ActorTarget — an actor on the world (by id OR name)
 export const actorTargetSchema = z.object({
   actorId: z.string().optional(),

@@ -3,6 +3,8 @@
 // CCR-5: Zod input validation lives package-local on the foundry-module side. The mcp-server tool
 // layer only needs typed response shapes for this.query<T> (DP-15 — never <any>).
 
+import { MacroId } from '@foundry-mcp/shared';
+
 export interface ChatCommandItem {
   name: string;
   aliases: string[];
@@ -25,7 +27,7 @@ export interface ListCommandsResult {
 export type GetCommandResult = ChatCommandItem | null;
 
 export interface RegisterCommandResult {
-  macroId: string;
+  macroId: MacroId;
   macroName: string;
   commandName: string; // ACTUAL registered name — may differ from requestedName on conflict
   requestedName: string;
@@ -35,7 +37,7 @@ export interface RegisterCommandResult {
 
 export interface UnregisterCommandResult {
   unregistered: boolean;
-  macroId?: string;
+  macroId?: MacroId;
   macroDeleted: boolean;
   builtinWfrpWarning?: string;
 }

@@ -15,7 +15,7 @@ export type RollResultPayload = z.infer<typeof RollResultPayloadSchema>;
 export const EventEnvelopeSchema = z.discriminatedUnion('event_type', [
   z.object({
     event_type: z.literal('roll-result'),
-    requestId: z.string(),
+    requestId: z.string(), // not a document id — leave bare (Phase 1 design)
     payload: RollResultPayloadSchema,
   }),
 ]);

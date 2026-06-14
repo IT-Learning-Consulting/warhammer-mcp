@@ -3,7 +3,7 @@ import { FoundryClient } from '../foundry-client.js';
 import { Logger } from '../logger.js';
 import { BaseTool, BaseToolOptions } from '../base-tool.js';
 // Phase 2 mcp_coverage_expansion — dice-roll tool (roll/validate/simulate over Foundry Roll).
-import { DiceRollToolInput } from '@foundry-mcp/shared';
+import { DiceRollToolInput, ChatMessageId } from '@foundry-mcp/shared';
 
 // The MCP-side arg parser for request-player-rolls. Distinct from the shared
 // RequestPlayerRollsInput, which mirrors the Foundry-side payload and deliberately
@@ -38,7 +38,7 @@ interface DiceRollRollResponse {
   formula: string;
   result: string;
   terms: SerializedRollTerm[];
-  messageId?: string | null;
+  messageId?: ChatMessageId | null;
 }
 
 interface DiceRollValidateResponse {
@@ -218,7 +218,7 @@ export class DiceRollTools extends BaseTool {
       // Strip MCP-tool-only + awaitResult fields; Foundry handler's strict schema rejects unknown keys.
       const { userConfirmedVisibility: _uc, awaitResult, ...foundryPayload } = params;
 
-      interface RollRequestResponse { requestId?: string; message?: string }
+      interface RollRequestResponse { requestId?: string; message?: string } // requestId: not a branded id (polymorphic / non-document)
       const response = await this.query<RollRequestResponse>('request-player-rolls', foundryPayload);
 
       if (awaitResult && response?.requestId) {

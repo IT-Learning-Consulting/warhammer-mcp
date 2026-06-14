@@ -16,8 +16,7 @@
 import { z } from 'zod';
 import { LightDataSchema, type LightData } from './light-data.js';
 import { TextureDataSchema, type TextureData } from './texture-data.js';
-
-const FOUNDRY_ID = z.string().min(1);
+import { ActorId, SceneId, TokenId } from './branded-ids.js';
 
 // TOKEN_DISPOSITIONS: SECRET=-2, HOSTILE=-1, NEUTRAL=0, FRIENDLY=1
 const DispositionEnum = z
@@ -99,7 +98,7 @@ const TokenTurnMarkerInput = z
 const TokenWritableFields = {
   name: z.string().optional(),
   displayName: DisplayModeEnum.optional(),
-  actorId: FOUNDRY_ID.nullable().optional(),
+  actorId: ActorId.nullable().optional(),
   actorLink: z.boolean().optional(),
   // delta omitted from write surface
   width: z.number().positive().optional(),
@@ -132,7 +131,7 @@ const TokenWritableFields = {
 export const TokenCreateInput = z
   .object({
     action: z.literal('create'),
-    sceneId: FOUNDRY_ID,
+    sceneId: SceneId,
     ...TokenWritableFields,
     name: z.string().min(1),
     x: z.number(),
@@ -143,8 +142,8 @@ export const TokenCreateInput = z
 export const TokenUpdateInput = z
   .object({
     action: z.literal('update'),
-    sceneId: FOUNDRY_ID,
-    tokenId: FOUNDRY_ID,
+    sceneId: SceneId,
+    tokenId: TokenId,
     changes: z
       .object(TokenWritableFields)
       .strict()
@@ -157,23 +156,23 @@ export const TokenUpdateInput = z
 export const TokenDeleteInput = z
   .object({
     action: z.literal('delete'),
-    sceneId: FOUNDRY_ID,
-    tokenId: FOUNDRY_ID,
+    sceneId: SceneId,
+    tokenId: TokenId,
   })
   .strict();
 
 export const TokenGetInput = z
   .object({
     action: z.literal('get'),
-    sceneId: FOUNDRY_ID,
-    tokenId: FOUNDRY_ID,
+    sceneId: SceneId,
+    tokenId: TokenId,
   })
   .strict();
 
 export const TokenListInput = z
   .object({
     action: z.literal('list'),
-    sceneId: FOUNDRY_ID.optional(),
+    sceneId: SceneId.optional(),
     filter: z.string().optional(),
     hidden: z.boolean().optional(),
     onlyLinked: z.boolean().optional(),
@@ -188,11 +187,11 @@ export const TokenListInput = z
 export const TokenAddInput = z
   .object({
     action: z.literal('add'),
-    actorIds: z.array(FOUNDRY_ID).min(1),
+    actorIds: z.array(ActorId).min(1),
     quantities: z.array(z.number().int().positive()).optional(),
     placement: z.enum(['random', 'grid', 'center']).optional(),
     hidden: z.boolean().optional(),
-    sceneId: FOUNDRY_ID.optional(),
+    sceneId: SceneId.optional(),
   })
   .strict();
 
@@ -201,8 +200,8 @@ export const TokenAddInput = z
 export const TokenDeleteTokenInput = z
   .object({
     action: z.literal('delete-token'),
-    sceneId: FOUNDRY_ID,
-    tokenId: FOUNDRY_ID,
+    sceneId: SceneId,
+    tokenId: TokenId,
   })
   .strict();
 

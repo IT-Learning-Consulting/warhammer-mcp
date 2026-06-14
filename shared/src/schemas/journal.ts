@@ -26,10 +26,9 @@
 // per action variant excluding the discriminator.
 
 import { z } from 'zod';
+import { FolderId, JournalCategoryId, JournalEntryId, JournalEntryPageId } from './branded-ids.js';
 
 // ── Constants & small shared shapes ──────────────────────────────────────────
-
-const FOUNDRY_ID = z.string().min(1);
 
 // 4 core page types. Module-provided types (e.g. 'gatherer.gatherer') are read-
 // only in this surface — their CRUD lives with the parent module.
@@ -70,7 +69,7 @@ const PageCommonInput = {
   sort: z.number().int().optional(),
   title: PageTitleInput.optional(),
   // Category FK — assign at create time. Null means "uncategorised".
-  category: FOUNDRY_ID.nullable().optional(),
+  category: JournalCategoryId.nullable().optional(),
   flags: z.record(z.unknown()).optional(),
   ownership: z.record(z.union([z.literal(0), z.literal(1), z.literal(2), z.literal(3)])).optional(),
 };
@@ -119,7 +118,7 @@ const PageChangesCommon = {
   name: z.string().min(1).optional(),
   sort: z.number().int().optional(),
   title: PageTitleInput.optional(),
-  category: FOUNDRY_ID.nullable().optional(),
+  category: JournalCategoryId.nullable().optional(),
   flags: z.record(z.unknown()).optional(),
   ownership: z.record(z.union([z.literal(0), z.literal(1), z.literal(2), z.literal(3)])).optional(),
 };
@@ -141,7 +140,7 @@ export const PageChangesInput = z.object({
 
 const EntryWritableFields = {
   name: z.string().min(1).optional(),
-  folder: FOUNDRY_ID.nullable().optional(),
+  folder: FolderId.nullable().optional(),
   sort: z.number().int().optional(),
   // Ownership: { default?: 0|1|2|3, "<userId>": 0|1|2|3, ... } — Foundry's
   // DocumentOwnershipField. 0=NONE 1=LIMITED 2=OBSERVER 3=OWNER.
@@ -165,7 +164,7 @@ const CategoryWritableFields = {
 export const JournalCreateEntryInput = z.object({
   action: z.literal('create-entry'),
   name: z.string().min(1),
-  folder: FOUNDRY_ID.nullable().optional(),
+  folder: FolderId.nullable().optional(),
   sort: z.number().int().optional(),
   ownership: z.record(z.union([z.literal(0), z.literal(1), z.literal(2), z.literal(3)])).optional(),
   flags: z.record(z.unknown()).optional(),
@@ -182,7 +181,7 @@ export const JournalCreateEntryInput = z.object({
 
 export const JournalUpdateEntryInput = z.object({
   action: z.literal('update-entry'),
-  entryId: FOUNDRY_ID,
+  entryId: JournalEntryId,
   changes: z.object(EntryWritableFields).strict().refine(
     (obj) => Object.keys(obj).length > 0,
     { message: 'JOURNAL_EMPTY_PAYLOAD: changes object must contain at least one field' },
@@ -191,7 +190,7 @@ export const JournalUpdateEntryInput = z.object({
 
 export const JournalDeleteEntryInput = z.object({
   action: z.literal('delete-entry'),
-  entryId: FOUNDRY_ID,
+  entryId: JournalEntryId,
   // Phase 10 cross-doc-fk: when true, clears Scene.journal/journalEntryPage
   // + Note.entryId/pageId FKs pointing at this entry (and its pages) before
   // delete. Default false preserves Phase 3 behavior (R10.6).
@@ -209,12 +208,12 @@ export const JournalListEntriesInput = z.object({
   // When true: each entry's first text-page content is populated in `content`.
   includeContent: z.boolean().optional(),
   // Optional folder filter (by id).
-  folder: FOUNDRY_ID.nullable().optional(),
+  folder: FolderId.nullable().optional(),
 }).strict();
 
 export const JournalGetEntryInput = z.object({
   action: z.literal('get-entry'),
-  entryId: FOUNDRY_ID,
+  entryId: JournalEntryId,
   // When true: respond with the shallow `{id, name, pageIds, pageCount, categoryCount}`
   // shape (cheaper for 272-page lore journals). Default false = deep response.
   shallow: z.boolean().optional(),
@@ -222,21 +221,21 @@ export const JournalGetEntryInput = z.object({
 
 export const JournalAddPageInput = z.object({
   action: z.literal('add-page'),
-  entryId: FOUNDRY_ID,
+  entryId: JournalEntryId,
   page: PageInput,
 }).strict();
 
 export const JournalUpdatePageInput = z.object({
   action: z.literal('update-page'),
-  entryId: FOUNDRY_ID,
-  pageId: FOUNDRY_ID,
+  entryId: JournalEntryId,
+  pageId: JournalEntryPageId,
   changes: PageChangesInput,
 }).strict();
 
 export const JournalDeletePageInput = z.object({
   action: z.literal('delete-page'),
-  entryId: FOUNDRY_ID,
-  pageId: FOUNDRY_ID,
+  entryId: JournalEntryId,
+  pageId: JournalEntryPageId,
   // Phase 10 cross-doc-fk: when true, clears Scene.journalEntryPage +
   // Note.pageId FKs targeting this specific page. Default false (R10.6).
   cascade: z.boolean().default(false).optional(),
@@ -244,15 +243,15 @@ export const JournalDeletePageInput = z.object({
 
 export const JournalReorderPagesInput = z.object({
   action: z.literal('reorder-pages'),
-  entryId: FOUNDRY_ID,
+  entryId: JournalEntryId,
   // Ordered array of every page ID on the entry. Length must equal
   // entry.pages.size — partial reorder rejected (Q&A R3 lock).
-  pageIds: z.array(FOUNDRY_ID).min(1),
+  pageIds: z.array(JournalEntryPageId).min(1),
 }).strict();
 
 export const JournalAddCategoryInput = z.object({
   action: z.literal('add-category'),
-  entryId: FOUNDRY_ID,
+  entryId: JournalEntryId,
   name: z.string().min(1),
   sort: z.number().int().optional(),
   flags: z.record(z.unknown()).optional(),
@@ -260,8 +259,8 @@ export const JournalAddCategoryInput = z.object({
 
 export const JournalUpdateCategoryInput = z.object({
   action: z.literal('update-category'),
-  entryId: FOUNDRY_ID,
-  categoryId: FOUNDRY_ID,
+  entryId: JournalEntryId,
+  categoryId: JournalCategoryId,
   changes: z.object(CategoryWritableFields).strict().refine(
     (obj) => Object.keys(obj).length > 0,
     { message: 'JOURNAL_EMPTY_PAYLOAD: changes object must contain at least one field' },
@@ -270,16 +269,16 @@ export const JournalUpdateCategoryInput = z.object({
 
 export const JournalDeleteCategoryInput = z.object({
   action: z.literal('delete-category'),
-  entryId: FOUNDRY_ID,
-  categoryId: FOUNDRY_ID,
+  entryId: JournalEntryId,
+  categoryId: JournalCategoryId,
 }).strict();
 
 export const JournalAssignPageToCategoryInput = z.object({
   action: z.literal('assign-page-to-category'),
-  entryId: FOUNDRY_ID,
-  pageId: FOUNDRY_ID,
+  entryId: JournalEntryId,
+  pageId: JournalEntryPageId,
   // null = UNASSIGN (clears the page's category FK).
-  categoryId: FOUNDRY_ID.nullable(),
+  categoryId: JournalCategoryId.nullable(),
 }).strict();
 
 // ── Phase 9B — document presentation ────────────────────────────────────────
@@ -289,13 +288,13 @@ export const JournalAssignPageToCategoryInput = z.object({
 // `users?` param has no API backing, so it is intentionally omitted — plan D2).
 export const JournalShowToPlayersInput = z.object({
   action: z.literal('show-to-players'),
-  entryId: FOUNDRY_ID,
+  entryId: JournalEntryId,
 }).strict();
 
 // R9B.2 — duplicate-entry: clone the JournalEntry (entry.clone({}, {save:true})). CCR-2a.
 export const JournalDuplicateEntryInput = z.object({
   action: z.literal('duplicate-entry'),
-  entryId: FOUNDRY_ID,
+  entryId: JournalEntryId,
 }).strict();
 
 // ── Discriminated-union umbrella ────────────────────────────────────────────

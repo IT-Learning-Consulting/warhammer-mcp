@@ -10,7 +10,7 @@
 //   Note: actorLink:true does not automatically sync prototypeToken.texture.src to placed tokens.
 
 import { z } from 'zod';
-import { ActorConfigToolInput } from '@foundry-mcp/shared';
+import { ActorConfigToolInput, ActorId } from '@foundry-mcp/shared';
 import { BaseTool, BaseToolOptions } from '../base-tool.js';
 
 type ActorConfigArgs = z.infer<typeof ActorConfigToolInput>;
@@ -19,13 +19,13 @@ type ArgsFor<A extends ActorConfigArgs['action']> = Extract<ActorConfigArgs, { a
 // ── Inline response interfaces ────────────────────────────────────────────────
 
 interface ActorConfigGetPrototypeTokenResponse {
-  actorId: string;
+  actorId: ActorId;
   actorName: string;
   prototypeToken: Record<string, unknown>;
 }
 
 interface ActorConfigUpdatePrototypeTokenResponse {
-  actorId: string;
+  actorId: ActorId;
   actorName: string;
   requestedChanges: Record<string, unknown>;
   extraFields: Record<string, unknown> | null;

@@ -3,6 +3,8 @@
 // CCR-5: Zod input validation lives package-local on the foundry-module side. The mcp-server tool
 // layer only needs typed response shapes for this.query<T> (DP-15 — never <any>).
 
+import { SceneId } from '@foundry-mcp/shared';
+
 export interface MoonPhase {
   phase: string;
   cycleDay: number;
@@ -44,7 +46,7 @@ export interface ListEventsResult {
 }
 
 export interface SetSceneSyncResult {
-  sceneId: string;
+  sceneId: SceneId;
   sceneName: string;
   darknessSync: string;
 }
@@ -68,7 +70,7 @@ export interface GetConfigResult {
 
 export interface ActivateCalendarResult {
   calendar: string;
-  activeCalendarId?: string;
+  activeCalendarId?: string; // not a branded id (polymorphic / non-document)
   monthCount?: number;
 }
 

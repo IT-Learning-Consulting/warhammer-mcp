@@ -24,6 +24,9 @@
 import { z } from 'zod';
 import {
   CompendiumToolInput,
+  FolderId,
+  FoundryUuid,
+  PackId,
 } from '@foundry-mcp/shared';
 import { BaseTool, BaseToolOptions } from '../base-tool.js';
 
@@ -42,19 +45,19 @@ interface PackMetadataView {
   packageName: string;
   path: string | null;
   locked: boolean;
-  folder: string | null;
+  folder: FolderId | null;
   sort: number;
 }
 
 interface CompendiumCreatePackResponse {
-  packId: string;
+  packId: PackId;
   metadata: PackMetadataView;
   entryCount: number;
   ownership: Record<string, string>;
 }
 
 interface CompendiumUpdatePackResponse {
-  packId: string;
+  packId: PackId;
   changedFields: string[];
   metadata: PackMetadataView;
 }
@@ -64,8 +67,8 @@ interface PackEntrySummary {
   name: string;
   type: string;
   img: string | null;
-  uuid: string;
-  folder: string | null;
+  uuid: FoundryUuid;
+  folder: FolderId | null;
 }
 
 interface PackFolderSummary {
@@ -73,12 +76,12 @@ interface PackFolderSummary {
   name: string;
   color: string | null;
   sort: number;
-  folder: string | null;
+  folder: FolderId | null;
   depth: number;
 }
 
 interface CompendiumReadPackResponse {
-  packId: string;
+  packId: PackId;
   metadata: PackMetadataView;
   totalEntries: number;
   page: number;
@@ -89,36 +92,36 @@ interface CompendiumReadPackResponse {
 }
 
 interface CompendiumCreateFolderInPackResponse {
-  packId: string;
-  folderId: string;
+  packId: PackId;
+  folderId: FolderId;
   name: string;
-  uuid: string;
+  uuid: FoundryUuid;
   depth: number;
 }
 
 interface CompendiumListFoldersInPackResponse {
-  packId: string;
+  packId: PackId;
   folders: PackFolderSummary[];
 }
 
 interface CompendiumUpdateFolderInPackResponse {
-  packId: string;
-  folderId: string;
+  packId: PackId;
+  folderId: FolderId;
   changedFields: string[];
 }
 
 interface CompendiumDeleteFolderInPackResponse {
-  packId: string;
-  folderId: string;
-  deletedFolderIds: string[];
+  packId: PackId;
+  folderId: FolderId;
+  deletedFolderIds: FolderId[];
   unParentedDocs: number;
   deletedDocs: number;
 }
 
 interface CompendiumAddDocumentResponse {
-  packId: string;
-  documentId: string;
-  documentUuid: string;
+  packId: PackId;
+  documentId: string; // not a branded id (polymorphic / non-document)
+  documentUuid: FoundryUuid;
   name: string;
   type: string;
   entryCount: number;
@@ -126,16 +129,16 @@ interface CompendiumAddDocumentResponse {
 }
 
 interface CompendiumUpdateDocumentResponse {
-  packId: string;
-  documentId: string;
-  documentUuid: string;
+  packId: PackId;
+  documentId: string; // not a branded id (polymorphic / non-document)
+  documentUuid: FoundryUuid;
   changedFields: string[];
 }
 
 interface CompendiumReadDocumentResponse {
-  packId: string;
-  documentId: string;
-  documentUuid: string;
+  packId: PackId;
+  documentId: string; // not a branded id (polymorphic / non-document)
+  documentUuid: FoundryUuid;
   data: Record<string, unknown>;
 }
 

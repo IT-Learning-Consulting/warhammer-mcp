@@ -15,6 +15,7 @@
 //   - SupportDetails.generateSupportReport() -> SupportReportData
 
 import { z } from 'zod';
+import { FoundryUuid } from './branded-ids.js';
 
 // ── Capture-surface enums (reused by foundry-module RuntimeEventStore) ──────
 
@@ -100,7 +101,7 @@ export const DiagnosticValidateAeScriptsInput = z.object({
 
 export const DiagnosticInspectDocumentInput = z.object({
   action: z.literal('inspect-document'),
-  uuid: z.string().min(1),
+  uuid: FoundryUuid,
   // Default: counts + first-10 preview of items/effects. true returns full arrays.
   includeFull: z.boolean().optional(),
 }).strict();

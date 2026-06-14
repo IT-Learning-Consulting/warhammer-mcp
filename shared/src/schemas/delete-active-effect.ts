@@ -4,11 +4,12 @@
 
 import { z } from 'zod';
 import { ActiveEffectTarget } from './active-effect-target.js';
+import { ActiveEffectId } from './branded-ids.js';
 
 export const DeleteActiveEffectInput = z
   .object({
     target: ActiveEffectTarget,
-    effectId: z.string().optional(),
+    effectId: ActiveEffectId.optional(),
     effectName: z.string().optional(),
   })
   .strict();

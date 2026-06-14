@@ -19,7 +19,7 @@ import { z } from 'zod';
 
 export const ModuleProbeIsActiveInput = z.object({
   action: z.literal('is-active'),
-  moduleId: z.string().min(1, 'moduleId is required for is-active'),
+  moduleId: z.string().min(1, 'moduleId is required for is-active'), // not a document id — leave bare (Phase 1 design)
 }).strict();
 
 export const ModuleProbeListActiveInput = z.object({
