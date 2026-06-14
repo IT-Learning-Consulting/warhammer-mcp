@@ -1,0 +1,46 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`CreateCustomItemTool — characterization > create prayer (miracle type) at world scope — prose + structured lock 1`] = `"Created **Sigmar's Fiery Hammer** (prayer) in the Items sidebar at **(root)**."`;
+
+exports[`CreateCustomItemTool — characterization > create prayer (miracle type) at world scope — prose + structured lock 2`] = `
+{
+  "folderId": null,
+  "folderPath": [],
+  "itemId": "item-new-003",
+  "itemName": "Sigmar's Fiery Hammer",
+  "itemType": "prayer",
+  "scope": "world",
+  "success": true,
+}
+`;
+
+exports[`CreateCustomItemTool — characterization > create spell on actor scope — prose + structured lock 1`] = `"Created **Firebolt** (spell) on **Hans**. Item ID: \`item-new-002\`."`;
+
+exports[`CreateCustomItemTool — characterization > create spell on actor scope — prose + structured lock 2`] = `
+{
+  "actorId": "actor-001",
+  "actorName": "Hans",
+  "itemId": "item-new-002",
+  "itemName": "Firebolt",
+  "itemType": "spell",
+  "scope": "actor",
+  "success": true,
+}
+`;
+
+exports[`CreateCustomItemTool — characterization > create weapon at world scope — prose + structured lock 1`] = `"Created **Fire Sword** (weapon) in the Items sidebar at **Homebrew / Weapons**. Folder ID: \`folder-001\`."`;
+
+exports[`CreateCustomItemTool — characterization > create weapon at world scope — prose + structured lock 2`] = `
+{
+  "folderId": "folder-001",
+  "folderPath": [
+    "Homebrew",
+    "Weapons",
+  ],
+  "itemId": "item-new-001",
+  "itemName": "Fire Sword",
+  "itemType": "weapon",
+  "scope": "world",
+  "success": true,
+}
+`;

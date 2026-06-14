@@ -1,0 +1,322 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`FoundryDataAccess.getEnhancedCreatureIndex — characterization > snapshot: empty index returns empty array 1`] = `[]`;
+
+exports[`FoundryDataAccess.getEnhancedCreatureIndex — characterization > snapshot: returns raw enhanced creature array from persistentIndex 1`] = `
+[
+  {
+    "challengeRating": 2,
+    "creatureType": "greenskin",
+    "description": "A sneaky greenskin.",
+    "hasSpecialAbilities": true,
+    "hasSpells": false,
+    "id": "goblin-001",
+    "img": "icons/goblin.png",
+    "name": "Goblin",
+    "pack": "wfrp4e-core.bestiary",
+    "packLabel": "Core Bestiary",
+    "size": "average",
+    "toughness": 3,
+    "type": "creature",
+    "wounds": 8,
+  },
+  {
+    "challengeRating": 5,
+    "creatureType": "greenskin",
+    "description": "A greenskin with magical powers.",
+    "hasSpecialAbilities": true,
+    "hasSpells": true,
+    "id": "goblin-shaman-001",
+    "img": "icons/goblin-shaman.png",
+    "name": "Goblin Shaman",
+    "pack": "wfrp4e-core.bestiary",
+    "packLabel": "Core Bestiary",
+    "size": "average",
+    "toughness": 3,
+    "type": "npc",
+    "wounds": 10,
+  },
+  {
+    "challengeRating": 3,
+    "creatureType": "beast",
+    "description": "A Beastman warrior.",
+    "hasSpecialAbilities": false,
+    "hasSpells": false,
+    "id": "gor-001",
+    "img": "icons/gor.png",
+    "name": "Gor",
+    "pack": "wfrp4e-core.bestiary",
+    "packLabel": "Core Bestiary",
+    "size": "average",
+    "toughness": 4,
+    "type": "creature",
+    "wounds": 12,
+  },
+]
+`;
+
+exports[`FoundryDataAccess.listCreaturesByCriteria — characterization > snapshot: creatureType filter narrows to greenskin only 1`] = `
+{
+  "creatures": [
+    {
+      "challengeRating": 2,
+      "creatureType": "greenskin",
+      "description": "A sneaky greenskin.",
+      "hasImage": true,
+      "hasSpecialAbilities": true,
+      "hasSpells": false,
+      "id": "goblin-001",
+      "name": "Goblin",
+      "pack": "wfrp4e-core.bestiary",
+      "packLabel": "Core Bestiary",
+      "size": "average",
+      "summary": "greenskin from Core Bestiary",
+      "toughness": 3,
+      "type": "creature",
+      "wounds": 8,
+    },
+    {
+      "challengeRating": 5,
+      "creatureType": "greenskin",
+      "description": "A greenskin with magical powers.",
+      "hasImage": true,
+      "hasSpecialAbilities": true,
+      "hasSpells": true,
+      "id": "goblin-shaman-001",
+      "name": "Goblin Shaman",
+      "pack": "wfrp4e-core.bestiary",
+      "packLabel": "Core Bestiary",
+      "size": "average",
+      "summary": "greenskin from Core Bestiary",
+      "toughness": 3,
+      "type": "npc",
+      "wounds": 10,
+    },
+  ],
+  "searchSummary": {
+    "criteria": {
+      "creatureType": "greenskin",
+    },
+    "indexMetadata": {
+      "searchMethod": "enhanced_persistent_index",
+      "totalIndexedCreatures": 3,
+    },
+    "packsSearched": 1,
+    "resultsByPack": {
+      "Core Bestiary": 2,
+    },
+    "topPacks": [
+      {
+        "id": "wfrp4e-core.bestiary",
+        "label": "Core Bestiary",
+        "priority": 100,
+      },
+    ],
+    "totalCreaturesFound": 2,
+  },
+}
+`;
+
+exports[`FoundryDataAccess.listCreaturesByCriteria — characterization > snapshot: fallback path (enhancedIndex disabled) returns basic search shape 1`] = `
+{
+  "creatures": [],
+  "searchSummary": {
+    "criteria": {
+      "creatureType": "greenskin",
+    },
+    "fallback": true,
+    "packsSearched": 0,
+    "resultsByPack": {},
+    "searchMethod": "basic_fallback",
+    "topPacks": [],
+    "totalCreaturesFound": 0,
+  },
+}
+`;
+
+exports[`FoundryDataAccess.listCreaturesByCriteria — characterization > snapshot: hasSpells=true filter returns spellcasters only 1`] = `
+{
+  "creatures": [
+    {
+      "challengeRating": 5,
+      "creatureType": "greenskin",
+      "description": "A greenskin with magical powers.",
+      "hasImage": true,
+      "hasSpecialAbilities": true,
+      "hasSpells": true,
+      "id": "goblin-shaman-001",
+      "name": "Goblin Shaman",
+      "pack": "wfrp4e-core.bestiary",
+      "packLabel": "Core Bestiary",
+      "size": "average",
+      "summary": "greenskin from Core Bestiary",
+      "toughness": 3,
+      "type": "npc",
+      "wounds": 10,
+    },
+  ],
+  "searchSummary": {
+    "criteria": {
+      "hasSpells": true,
+    },
+    "indexMetadata": {
+      "searchMethod": "enhanced_persistent_index",
+      "totalIndexedCreatures": 3,
+    },
+    "packsSearched": 1,
+    "resultsByPack": {
+      "Core Bestiary": 1,
+    },
+    "topPacks": [
+      {
+        "id": "wfrp4e-core.bestiary",
+        "label": "Core Bestiary",
+        "priority": 100,
+      },
+    ],
+    "totalCreaturesFound": 1,
+  },
+}
+`;
+
+exports[`FoundryDataAccess.listCreaturesByCriteria — characterization > snapshot: no filters returns all creatures sorted by CR then name 1`] = `
+{
+  "creatures": [
+    {
+      "challengeRating": 2,
+      "creatureType": "greenskin",
+      "description": "A sneaky greenskin.",
+      "hasImage": true,
+      "hasSpecialAbilities": true,
+      "hasSpells": false,
+      "id": "goblin-001",
+      "name": "Goblin",
+      "pack": "wfrp4e-core.bestiary",
+      "packLabel": "Core Bestiary",
+      "size": "average",
+      "summary": "greenskin from Core Bestiary",
+      "toughness": 3,
+      "type": "creature",
+      "wounds": 8,
+    },
+    {
+      "challengeRating": 3,
+      "creatureType": "beast",
+      "description": "A Beastman warrior.",
+      "hasImage": true,
+      "hasSpecialAbilities": false,
+      "hasSpells": false,
+      "id": "gor-001",
+      "name": "Gor",
+      "pack": "wfrp4e-core.bestiary",
+      "packLabel": "Core Bestiary",
+      "size": "average",
+      "summary": "beast from Core Bestiary",
+      "toughness": 4,
+      "type": "creature",
+      "wounds": 12,
+    },
+    {
+      "challengeRating": 5,
+      "creatureType": "greenskin",
+      "description": "A greenskin with magical powers.",
+      "hasImage": true,
+      "hasSpecialAbilities": true,
+      "hasSpells": true,
+      "id": "goblin-shaman-001",
+      "name": "Goblin Shaman",
+      "pack": "wfrp4e-core.bestiary",
+      "packLabel": "Core Bestiary",
+      "size": "average",
+      "summary": "greenskin from Core Bestiary",
+      "toughness": 3,
+      "type": "npc",
+      "wounds": 10,
+    },
+  ],
+  "searchSummary": {
+    "criteria": {},
+    "indexMetadata": {
+      "searchMethod": "enhanced_persistent_index",
+      "totalIndexedCreatures": 3,
+    },
+    "packsSearched": 1,
+    "resultsByPack": {
+      "Core Bestiary": 3,
+    },
+    "topPacks": [
+      {
+        "id": "wfrp4e-core.bestiary",
+        "label": "Core Bestiary",
+        "priority": 100,
+      },
+    ],
+    "totalCreaturesFound": 3,
+  },
+}
+`;
+
+exports[`FoundryDataAccess.listCreaturesByCriteria — characterization > snapshot: threatLevel range filter returns only creatures in range 1`] = `
+{
+  "creatures": [
+    {
+      "challengeRating": 2,
+      "creatureType": "greenskin",
+      "description": "A sneaky greenskin.",
+      "hasImage": true,
+      "hasSpecialAbilities": true,
+      "hasSpells": false,
+      "id": "goblin-001",
+      "name": "Goblin",
+      "pack": "wfrp4e-core.bestiary",
+      "packLabel": "Core Bestiary",
+      "size": "average",
+      "summary": "greenskin from Core Bestiary",
+      "toughness": 3,
+      "type": "creature",
+      "wounds": 8,
+    },
+    {
+      "challengeRating": 3,
+      "creatureType": "beast",
+      "description": "A Beastman warrior.",
+      "hasImage": true,
+      "hasSpecialAbilities": false,
+      "hasSpells": false,
+      "id": "gor-001",
+      "name": "Gor",
+      "pack": "wfrp4e-core.bestiary",
+      "packLabel": "Core Bestiary",
+      "size": "average",
+      "summary": "beast from Core Bestiary",
+      "toughness": 4,
+      "type": "creature",
+      "wounds": 12,
+    },
+  ],
+  "searchSummary": {
+    "criteria": {
+      "threatLevel": {
+        "max": 3,
+        "min": 1,
+      },
+    },
+    "indexMetadata": {
+      "searchMethod": "enhanced_persistent_index",
+      "totalIndexedCreatures": 3,
+    },
+    "packsSearched": 1,
+    "resultsByPack": {
+      "Core Bestiary": 2,
+    },
+    "topPacks": [
+      {
+        "id": "wfrp4e-core.bestiary",
+        "label": "Core Bestiary",
+        "priority": 100,
+      },
+    ],
+    "totalCreaturesFound": 2,
+  },
+}
+`;

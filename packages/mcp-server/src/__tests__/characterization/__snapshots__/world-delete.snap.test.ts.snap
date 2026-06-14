@@ -1,0 +1,9 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`WorldDeleteTools — characterization > delete-actor — successful deletion raw passthrough 1`] = `
+{
+  "deleted": true,
+  "id": "actor-abc123",
+  "name": "Hans Gruber",
+}
+`;

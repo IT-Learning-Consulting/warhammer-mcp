@@ -1,0 +1,42 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`DiceRollTools — characterization > dice-roll/roll — formatted roll result 1`] = `
+"🎲 **Roll** \`4d6kh3+2\`
+
+- **Total:** 14
+- **Result:** 3 + 5 + 4 + 2
+- **Terms:**
+  - Die \`4d6kh3\` = 12
+  - OperatorTerm \`+\`
+  - NumericTerm \`2\` = 2"
+`;
+
+exports[`DiceRollTools — characterization > dice-roll/roll — with message posted to chat 1`] = `
+"🎲 **Roll** \`1d100\`
+
+- **Total:** 42
+- **Result:** 42
+- **Terms:**
+  - Die \`1d100\` = 42
+- **Message:** \`msg-chat-001\`"
+`;
+
+exports[`DiceRollTools — characterization > dice-roll/simulate — distribution stats 1`] = `
+"🎲 **Simulate** \`1d6\` (n=10)
+
+- **Mean:** 4.20
+- **Min:** 3
+- **Max:** 6"
+`;
+
+exports[`DiceRollTools — characterization > dice-roll/validate — invalid formula 1`] = `
+"🎲 **Validate** \`1d20+\`
+
+- **Valid:** ❌ no"
+`;
+
+exports[`DiceRollTools — characterization > dice-roll/validate — valid formula 1`] = `
+"🎲 **Validate** \`4d6kh3+2\`
+
+- **Valid:** ✅ yes"
+`;

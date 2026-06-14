@@ -109,7 +109,7 @@ async function handleTag(input: TagInput): Promise<Envelope<unknown>> {
     if (failures.length > 0) {
       return { success: false, error: `TAGGER_VERIFY_FAILED: tag write not reflected on: ${failures.map((f) => f.uuid).join(', ')}` };
     }
-    const currentTags = allCurrentTags[0].tags; // backward compat: first doc's tags
+    const currentTags = allCurrentTags[0]!.tags; // backward compat: first doc's tags
     notify.updated('tagger', `Tagged ${docs.length} doc(s): [${input.tags.join(', ')}]`, {});
     return {
       success: true,
@@ -134,7 +134,7 @@ async function handleUntag(input: UntagInput): Promise<Envelope<unknown>> {
     if (failures.length > 0) {
       return { success: false, error: `TAGGER_VERIFY_FAILED: untag write not reflected on: ${failures.map((f) => f.uuid).join(', ')}` };
     }
-    const currentTags = allCurrentTags[0].tags; // backward compat: first doc's tags
+    const currentTags = allCurrentTags[0]!.tags; // backward compat: first doc's tags
     notify.updated('tagger', `Removed tags [${input.tags.join(', ')}] from ${docs.length} doc(s)`, {});
     return {
       success: true,
@@ -162,7 +162,7 @@ async function handleSetTags(input: SetTagsInput): Promise<Envelope<unknown>> {
     if (failures.length > 0) {
       return { success: false, error: `TAGGER_VERIFY_FAILED: set-tags write not reflected on: ${failures.map((f) => f.uuid).join(', ')}` };
     }
-    const currentTags = allCurrentTags[0].tags; // backward compat: first doc's tags
+    const currentTags = allCurrentTags[0]!.tags; // backward compat: first doc's tags
     notify.updated('tagger', `Set tags on ${docs.length} doc(s): [${input.tags.join(', ')}]`, {});
     return {
       success: true,
@@ -205,7 +205,7 @@ async function handleClearTags(input: ClearTagsInput): Promise<Envelope<unknown>
     if (failures.length > 0) {
       return { success: false, error: `TAGGER_VERIFY_FAILED: clear-tags write not reflected on: ${failures.map((f) => f.uuid).join(', ')}` };
     }
-    const currentTags = allCurrentTags[0].tags; // backward compat: first doc's tags
+    const currentTags = allCurrentTags[0]!.tags; // backward compat: first doc's tags
     const clearedDesc = input.tags ? `[${input.tags.join(', ')}]` : 'all tags';
     notify.updated('tagger', `Cleared ${clearedDesc} from ${docs.length} doc(s)`, {});
     return {

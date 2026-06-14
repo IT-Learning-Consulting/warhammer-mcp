@@ -1,0 +1,133 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`DrawingTool — characterization > create — drawing created view 1`] = `
+"**Drawing Created**
+
+## Drawing \`draw-id-001\`
+**Scene:** \`scene-id-001\`
+
+### Shape
+- type: rectangle
+- width: 200, height: 120, radius: 0
+- bezierFactor: 0 (freehand smoothing for polygon shapes)
+
+### Position
+- x: 100, y: 150, rotation: 0°, elevation: 0, sort: 0
+
+### Style
+- fill: type 1 · #ff0000 @ alpha 0.5
+- stroke: #000000 @ alpha 1 · width 2
+- texture: _(none)_
+
+### Text
+- text: "Hazard Zone"
+- font: Signika 48px · #ffffff @ alpha 1
+
+### State
+- hidden: no · locked: no · interface-layer: no"
+`;
+
+exports[`DrawingTool — characterization > delete — deleted confirmation 1`] = `
+"**Drawing Deleted**
+
+**ID:** \`draw-id-001\`
+**Scene:** \`scene-id-001\`
+**Remaining drawings:** 3
+
+⚠️ Permanent."
+`;
+
+exports[`DrawingTool — characterization > duplicate — cloned drawing with sourceId 1`] = `
+"**Drawing Duplicated**
+
+**Source:** \`draw-id-001\` → **New:** \`draw-id-002\`
+
+## Drawing \`draw-id-002\`
+**Scene:** \`scene-id-001\`
+
+### Shape
+- type: rectangle
+- width: 200, height: 120, radius: 0
+- bezierFactor: 0 (freehand smoothing for polygon shapes)
+
+### Position
+- x: 100, y: 150, rotation: 0°, elevation: 0, sort: 0
+
+### Style
+- fill: type 1 · #ff0000 @ alpha 0.5
+- stroke: #000000 @ alpha 1 · width 2
+- texture: _(none)_
+
+### Text
+- text: "Hazard Zone"
+- font: Signika 48px · #ffffff @ alpha 1
+
+### State
+- hidden: no · locked: no · interface-layer: no"
+`;
+
+exports[`DrawingTool — characterization > get — single drawing view 1`] = `
+"## Drawing \`draw-id-001\`
+**Scene:** \`scene-id-001\`
+
+### Shape
+- type: rectangle
+- width: 200, height: 120, radius: 0
+- bezierFactor: 0 (freehand smoothing for polygon shapes)
+
+### Position
+- x: 100, y: 150, rotation: 0°, elevation: 0, sort: 0
+
+### Style
+- fill: type 1 · #ff0000 @ alpha 0.5
+- stroke: #000000 @ alpha 1 · width 2
+- texture: _(none)_
+
+### Text
+- text: "Hazard Zone"
+- font: Signika 48px · #ffffff @ alpha 1
+
+### State
+- hidden: no · locked: no · interface-layer: no"
+`;
+
+exports[`DrawingTool — characterization > list — countOnly path 1`] = `
+"**Drawing count**
+
+**Total:** 7"
+`;
+
+exports[`DrawingTool — characterization > list — paginated drawings 1`] = `
+"**Drawings** (page 1, 1 total)
+
+- \`draw-id-001\` @ scene \`scene-id-001\` · rectangle · "Hazard Zone""
+`;
+
+exports[`DrawingTool — characterization > update — changed fields + updated drawing view 1`] = `
+"**Drawing Updated**
+
+**Changed fields:** hidden
+
+## Drawing \`draw-id-001\`
+**Scene:** \`scene-id-001\`
+
+### Shape
+- type: rectangle
+- width: 200, height: 120, radius: 0
+- bezierFactor: 0 (freehand smoothing for polygon shapes)
+
+### Position
+- x: 100, y: 150, rotation: 0°, elevation: 0, sort: 0
+
+### Style
+- fill: type 1 · #ff0000 @ alpha 0.5
+- stroke: #000000 @ alpha 1 · width 2
+- texture: _(none)_
+
+### Text
+- text: "Hazard Zone"
+- font: Signika 48px · #ffffff @ alpha 1
+
+### State
+- hidden: yes · locked: no · interface-layer: no"
+`;

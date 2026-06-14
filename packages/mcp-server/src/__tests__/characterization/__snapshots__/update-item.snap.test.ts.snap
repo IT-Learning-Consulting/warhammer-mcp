@@ -1,0 +1,19 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`UpdateItemTool — characterization > update actor-embedded skill advances by actorId + itemId 1`] = `
+{
+  "actorId": "actor-abc",
+  "itemId": "item-skill-001",
+  "updated": true,
+  "verified": true,
+}
+`;
+
+exports[`UpdateItemTool — characterization > update world-scope item by name — raw passthrough 1`] = `
+{
+  "itemId": "item-world-002",
+  "itemName": "Longsword",
+  "updated": true,
+  "verified": false,
+}
+`;

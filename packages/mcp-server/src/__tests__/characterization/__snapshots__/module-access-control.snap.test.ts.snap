@@ -1,0 +1,52 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ModuleAccessControlTool — characterization > MODULE_NOT_ACTIVE — probe inactive branch 1`] = `"module-access-control failed: MODULE_NOT_ACTIVE: LocknKey is not active"`;
+
+exports[`ModuleAccessControlTool — characterization > configure-lock — write result 1`] = `
+"module-access-control.configure-lock:
+{
+  "documentId": "Wall.abc123",
+  "documentType": "wall",
+  "locked": true,
+  "jammed": false,
+  "pickDC": 30
+}"
+`;
+
+exports[`ModuleAccessControlTool — characterization > get-bundle-status — formatted member list 1`] = `
+"module-access-control bundle status:
+- LocknKey (LnK v1.4.0): ACTIVE
+- LockView: INACTIVE
+- lib-wrapper: ACTIVE (LockView enforcement gate)"
+`;
+
+exports[`ModuleAccessControlTool — characterization > get-lock-state (LocknKey — documentId present) 1`] = `
+"module-access-control.get-lock-state:
+{
+  "isLockable": true,
+  "locked": true,
+  "pickDC": 30,
+  "breakDC": -1,
+  "jammed": false,
+  "lockOnClose": true
+}"
+`;
+
+exports[`ModuleAccessControlTool — characterization > get-scene-flags — LockView scene flags 1`] = `
+"module-access-control.get-scene-flags:
+{
+  "panLocked": false,
+  "zoomLocked": true,
+  "boundingBoxLocked": false,
+  "autoscale": "horizontal",
+  "forceInitialView": true
+}"
+`;
+
+exports[`ModuleAccessControlTool — characterization > set-pan-lock — write result 1`] = `
+"module-access-control.set-pan-lock:
+{
+  "panLocked": true,
+  "sceneId": "Scene.xyz"
+}"
+`;

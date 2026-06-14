@@ -1,0 +1,4 @@
+{
+  "comment": "Expected inputSchema validity failures vs JSON-Schema draft-07 (R0.6 conformance fallback). A NEW failure fails the gate; when a tool is fixed, remove it here.",
+  "expectedFailures": []
+}

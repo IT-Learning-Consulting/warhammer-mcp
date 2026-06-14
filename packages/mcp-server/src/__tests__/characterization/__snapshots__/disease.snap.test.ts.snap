@@ -1,0 +1,62 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`DiseaseTool — characterization > apply-symptom — symptoms applied 1`] = `
+"🩹 **Bloody Flux — symptoms applied**
+
+Applied: fever, delirium
+Active effects: 2"
+`;
+
+exports[`DiseaseTool — characterization > contract — contracted 1`] = `
+"🦠 **Bloody Flux contracted**
+
+**ID:** \`dis001\`
+**Incubation:** 1d10 days _(unresolved — call start: incubation)_
+**Duration:** 2d10 days
+**Symptoms:** _(none yet)_"
+`;
+
+exports[`DiseaseTool — characterization > contract — resisted 1`] = `"✅ **actor001 resisted Bloody Flux** — Endurance test passed."`;
+
+exports[`DiseaseTool — characterization > cure — disease removed 1`] = `"💊 **Bloody Flux cured** — removed from actor \`actor001\`."`;
+
+exports[`DiseaseTool — characterization > decrement — duration active 1`] = `
+"⬇️ **Bloody Flux decremented**
+
+Incubation: 0 · Duration: 6 (active)"
+`;
+
+exports[`DiseaseTool — characterization > finish-duration — cured 1`] = `"✅ **Bloody Flux — duration finished, disease cured.**"`;
+
+exports[`DiseaseTool — characterization > finish-duration — extended with new disease 1`] = `
+"⏳ **Bloody Flux — duration extended** to **5** days.
+
+⚠️ New disease created: **The Pox** \`dis002\`"
+`;
+
+exports[`DiseaseTool — characterization > increment — incubation bumped 1`] = `
+"⬆️ **Bloody Flux incremented**
+
+Incubation: 5 · Duration: 0"
+`;
+
+exports[`DiseaseTool — characterization > list — actor with diseases 1`] = `
+"🦠 **Diseases on actor \`actor001\`** (1)
+
+- **Bloody Flux** \`dis001\`
+  incubation: 3 days · duration: 7 days
+  symptoms: Fever, Delirium"
+`;
+
+exports[`DiseaseTool — characterization > list — no diseases 1`] = `
+"🦠 **Diseases on actor \`actor001\`** (0)
+
+_(no diseases)_"
+`;
+
+exports[`DiseaseTool — characterization > start — resolve incubation timer 1`] = `
+"🎲 **Bloody Flux — incubation resolved**
+
+Incubation: **4** days
+Duration: **2d10** days"
+`;

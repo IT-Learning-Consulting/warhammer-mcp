@@ -1,0 +1,28 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ModuleTaggerTool — characterization > MODULE_NOT_ACTIVE — tag throws → moduleNotActiveContent format 1`] = `"module-tagger failed: MODULE_NOT_ACTIVE: tagger is not active"`;
+
+exports[`ModuleTaggerTool — characterization > check-tags — getTags read (check:false) 1`] = `
+"module-tagger.check-tags: tags for 1 document(s).
+
+- Goblin Boss: [enemy, boss, named]"
+`;
+
+exports[`ModuleTaggerTool — characterization > check-tags — hasTags boolean (check:true) 1`] = `"module-tagger.check-tags: hasTags = true (checked 1 document(s))"`;
+
+exports[`ModuleTaggerTool — characterization > clear-tags — tags cleared from documents 1`] = `"module-tagger.clear-tags: applied to 1 document(s). Tags: all tags."`;
+
+exports[`ModuleTaggerTool — characterization > query — documents found in scene 1`] = `
+"module-tagger.query: found 2 document(s) in scene abc123.
+
+- Goblin Archer [Token] Scene.abc123.Token.token001
+- Goblin Boss [Token] Scene.abc123.Token.token002"
+`;
+
+exports[`ModuleTaggerTool — characterization > query — no documents found in scene 1`] = `"module-tagger.query: no documents found matching the given tags in scene abc123."`;
+
+exports[`ModuleTaggerTool — characterization > set-tags — atomic tag overwrite 1`] = `"module-tagger.set-tags: applied to 1 document(s). Tags: [boss, named]."`;
+
+exports[`ModuleTaggerTool — characterization > tag — documents tagged with tag list 1`] = `"module-tagger.tag: applied to 2 document(s). Tags: [enemy, elite]. Current tags: [enemy, elite]"`;
+
+exports[`ModuleTaggerTool — characterization > untag — documents untagged 1`] = `"module-tagger.untag: applied to 1 document(s). Tags: [elite]. Current tags: [enemy]"`;

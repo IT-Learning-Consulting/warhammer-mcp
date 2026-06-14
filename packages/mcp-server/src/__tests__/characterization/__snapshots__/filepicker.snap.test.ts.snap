@@ -1,0 +1,28 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`FilePickerTool — characterization > create-directory — success 1`] = `
+"📂 **Directory Created**
+
+- Source: \`data\`
+- Path: \`worlds/aitww/assets/new-folder\`"
+`;
+
+exports[`FilePickerTool — characterization > list — dirs and files 1`] = `
+"📁 **Browse: worlds/aitww/assets**
+
+**Dirs** (2):
+- worlds/aitww/assets/maps
+- worlds/aitww/assets/tokens
+
+**Files** (2):
+- worlds/aitww/assets/bg.webp
+- worlds/aitww/assets/icon.webp"
+`;
+
+exports[`FilePickerTool — characterization > list — empty directory 1`] = `
+"📁 **Browse: worlds/aitww/empty**
+
+_(no dirs)_
+
+_(no files)_"
+`;

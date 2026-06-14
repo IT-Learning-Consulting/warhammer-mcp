@@ -1,0 +1,51 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ManageConditionsTools — characterization > apply-condition — fatigued applied (raw passthrough) 1`] = `
+{
+  "actorId": "actor001234567890",
+  "applied": true,
+  "conditionKey": "fatigued",
+  "value": 1,
+}
+`;
+
+exports[`ManageConditionsTools — characterization > apply-condition — stunned with explicit value 2 1`] = `
+{
+  "actorId": "actor001234567890",
+  "applied": true,
+  "conditionKey": "stunned",
+  "value": 2,
+}
+`;
+
+exports[`ManageConditionsTools — characterization > list-conditions — empty (no conditions) 1`] = `[]`;
+
+exports[`ManageConditionsTools — characterization > list-conditions — two conditions on actor 1`] = `
+[
+  {
+    "disabled": false,
+    "id": "effect001",
+    "name": "Fatigued",
+    "statuses": [
+      "fatigued",
+    ],
+  },
+  {
+    "disabled": false,
+    "id": "effect002",
+    "name": "Stunned",
+    "statuses": [
+      "stunned",
+    ],
+  },
+]
+`;
+
+exports[`ManageConditionsTools — characterization > remove-condition — fatigued 1 stack removed 1`] = `
+{
+  "actorId": "actor001234567890",
+  "conditionKey": "fatigued",
+  "count": 1,
+  "removed": true,
+}
+`;

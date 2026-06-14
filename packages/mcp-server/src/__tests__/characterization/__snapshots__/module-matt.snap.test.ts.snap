@@ -1,0 +1,50 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ModuleMattTool — characterization > MODULE_NOT_ACTIVE — get-capabilities throws → errorContent format 1`] = `"module-matt/get-capabilities failed: MODULE_NOT_ACTIVE: monks-active-tiles is not active"`;
+
+exports[`ModuleMattTool — characterization > create-trigger-tile — formats uuid, scene, trigger, actionCount 1`] = `"Created MATT tile "Ambush Tile" (Scene.abc123.Tile.tile003) on scene abc123 — trigger=[enter], 1 action(s)."`;
+
+exports[`ModuleMattTool — characterization > find-trigger-tile — single match result 1`] = `
+"Found 1 MATT tile(s):
+- "Main Gate Trap" (Scene.abc123.Tile.tile001) scene=Dungeon Level 1 active=true trigger=[enter] actions=2"
+`;
+
+exports[`ModuleMattTool — characterization > fire-trigger — formats uuid and fired status 1`] = `"Fired MATT tile Scene.abc123.Tile.tile001 (fired=true, tokens=1)."`;
+
+exports[`ModuleMattTool — characterization > get-capabilities — formats trigger counts, groups, deps 1`] = `
+"MATT capabilities — 3 trigger modes, 78 built-in actions (groups: system/token/scene).
+Dangerous (need confirm): pause, resetfog.
+Optional deps: sequencer:off, tagger:on."
+`;
+
+exports[`ModuleMattTool — characterization > get-trigger-tile — prose summary with actions and variables 1`] = `
+"MATT tile "Main Gate Trap" (Scene.abc123.Tile.tile001)
+  scene=abc123 tile=tile001
+  active=true trigger=[enter] restriction=all chance=100
+  pertoken=false cooldown=0
+  2 action(s):
+  0: chatmessage (act001aaaaaaaaaa)
+  1: pause (act002aaaaaaaaaa)
+  variables={"triggered":true} history=1 entries"
+`;
+
+exports[`ModuleMattTool — characterization > list-trigger-tiles — multi-tile scene list 1`] = `
+"MATT tiles on scene abc123 (2):
+- Main Gate Trap (Scene.abc123.Tile.tile001) active=true trigger=[enter] actions=2
+- tile002 (Scene.abc123.Tile.tile002) active=false trigger=[click] actions=1"
+`;
+
+exports[`ModuleMattTool — characterization > replace-action-sequence — formats sequence with action list 1`] = `
+"MATT tile Scene.abc123.Tile.tile001 — 2 action(s).
+  0: chatmessage (act001aaaaaaaaaa)
+  1: pause (act002aaaaaaaaaa)"
+`;
+
+exports[`ModuleMattTool — characterization > validate-sequence — invalid sequence with errors and warnings 1`] = `
+"Sequence INVALID.
+Errors:
+  - Unknown action key: deleteme
+Warnings:
+  - action[0] has no data fields
+Dangerous actions (need confirm): pause"
+`;

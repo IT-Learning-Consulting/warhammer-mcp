@@ -1,0 +1,36 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`KeybindingTools — characterization > keybinding/find-conflicts — conflicts detected 1`] = `
+"⌨️ **Keybinding conflicts** — 1 collision(s)
+
+- **Control + KeyF** → \`core.searchAll\` (p0), \`wfrp4e.rollFormula\` (p0)"
+`;
+
+exports[`KeybindingTools — characterization > keybinding/get — single action detail 1`] = `
+"⌨️ **\`core.panUp\`** — Pan Up
+
+- **Bound:** \`KeyW\`
+- **Default:** \`KeyW\`
+- **Precedence:** 0
+- **Hint:** Move the canvas viewport upward"
+`;
+
+exports[`KeybindingTools — characterization > keybinding/list — all actions in namespace 1`] = `
+"⌨️ **Keybindings** (namespace \`core\`) — 2 action(s)
+
+- \`core.panUp\` — Pan Up: \`KeyW\`
+- \`core.panDown\` — Pan Down: \`KeyS\`"
+`;
+
+exports[`KeybindingTools — characterization > keybinding/reset-action — defaults restored 1`] = `"⌨️ **Reset** \`core.panUp\` → \`KeyW\` _(defaults, client only)_"`;
+
+exports[`KeybindingTools — characterization > keybinding/reset-all — dry run preview 1`] = `
+"⌨️ **Reset-all preview** — 2 customized action(s) would reset:
+
+  - \`core.panUp\` (Pan Up)
+  - \`core.panDown\` (Pan Down)
+
+Pass \`confirm:true\` to execute (irreversible, client only)."
+`;
+
+exports[`KeybindingTools — characterization > keybinding/set — rebind confirmation 1`] = `"⌨️ **Set** \`core.panUp\` → \`ArrowUp\` _(client only)_"`;

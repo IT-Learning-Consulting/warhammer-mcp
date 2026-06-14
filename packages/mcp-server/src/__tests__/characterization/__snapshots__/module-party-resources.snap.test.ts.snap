@@ -1,0 +1,19 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ModulePartyResourcesTool — characterization > MODULE_NOT_ACTIVE — fvtt-party-resources not active 1`] = `"module-party-resources failed: MODULE_NOT_ACTIVE: fvtt-party-resources is not active"`;
+
+exports[`ModulePartyResourcesTool — characterization > create — resource created 1`] = `"module-party-resources.create: "Power Pool" (new_pool) created — value 0 [0..20], visible true, position 2."`;
+
+exports[`ModulePartyResourcesTool — characterization > get — single resource 1`] = `"module-party-resources.get: "Doom" (doom_track) = 3 [0..13], visible true, player-managed false, notify-chat true, icon (off), position 0."`;
+
+exports[`ModulePartyResourcesTool — characterization > increment — value incremented 1`] = `"module-party-resources.increment: doom_track 5 → 6 (+1, max 13)."`;
+
+exports[`ModulePartyResourcesTool — characterization > list — no resources 1`] = `"module-party-resources.list: no resources registered."`;
+
+exports[`ModulePartyResourcesTool — characterization > list — resources present 1`] = `
+"module-party-resources.list: 2 resource(s):
+  • Doom (doom_track): 3 [0..13] [chat]
+  • Corruption (corruption): 1 [0..10] (hidden)"
+`;
+
+exports[`ModulePartyResourcesTool — characterization > set-value — value updated 1`] = `"module-party-resources.set-value: doom_track 3 → 5 (chat broadcast)."`;

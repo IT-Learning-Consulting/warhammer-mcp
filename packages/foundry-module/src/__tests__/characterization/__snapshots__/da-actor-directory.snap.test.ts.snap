@@ -1,0 +1,86 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`FoundryDataAccess.listActorItems — characterization > returns all items on actor with no type filter 1`] = `
+{
+  "actorId": "actor-1",
+  "actorName": "Test Fighter",
+  "count": 3,
+  "items": [
+    {
+      "advances": 0,
+      "id": "i1",
+      "name": "Sword",
+      "specification": "",
+      "type": "weapon",
+    },
+    {
+      "advances": 3,
+      "id": "i2",
+      "name": "Athletics",
+      "specification": null,
+      "type": "skill",
+    },
+    {
+      "advances": 1,
+      "id": "i3",
+      "name": "Frenzy",
+      "specification": "",
+      "type": "talent",
+    },
+  ],
+  "success": true,
+}
+`;
+
+exports[`FoundryDataAccess.listActorItems — characterization > returns filtered items when typeFilter is given 1`] = `
+{
+  "actorId": "actor-1",
+  "actorName": "Test Fighter",
+  "count": 1,
+  "items": [
+    {
+      "advances": 0,
+      "id": "i2",
+      "name": "Athletics",
+      "specification": "",
+      "type": "skill",
+    },
+  ],
+  "success": true,
+}
+`;
+
+exports[`FoundryDataAccess.listActors — characterization > returns all actors when no type filter is provided 1`] = `
+[
+  {
+    "id": "a1",
+    "img": "systems/wfrp4e/icons/actors/human.png",
+    "name": "Brunhilde",
+    "type": "character",
+  },
+  {
+    "id": "a2",
+    "name": "Goblin Boss",
+    "type": "creature",
+  },
+  {
+    "id": "a3",
+    "img": "systems/wfrp4e/icons/actors/human.png",
+    "name": "Hans the Merchant",
+    "type": "npc",
+  },
+]
+`;
+
+exports[`FoundryDataAccess.listActors — characterization > returns empty array when no actors match type filter 1`] = `[]`;
+
+exports[`FoundryDataAccess.listActors — characterization > returns only actors matching the given type 1`] = `
+[
+  {
+    "id": "a1",
+    "img": "systems/wfrp4e/icons/actors/human.png",
+    "name": "Brunhilde",
+    "type": "character",
+  },
+]
+`;

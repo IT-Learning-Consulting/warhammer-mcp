@@ -1,0 +1,128 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`CardsTool — characterization (write) > add-card — card added to stack 1`] = `
+"**Card Added**
+
+## Card \`card001\` — Ace of Swords
+**Stack:** \`deck001\` · **type:** base
+**face:** 0 · **drawn:** no
+**suit:** swords · **value:** 1
+**faces:** 1 face(s)"
+`;
+
+exports[`CardsTool — characterization (write) > create-stack — new deck view 1`] = `
+"**Card Stack Created**
+
+## Card stack \`deck001\` — deck
+**Name:** Initiative Deck
+**Cards:** 0 (available 0, drawn 0)
+**displayCount:** no · **folder:** _(none)_"
+`;
+
+exports[`CardsTool — characterization (write) > deal — cards dealt to hands 1`] = `
+"**Cards Dealt**
+
+**Deck:** \`deck001\` · dealt 10 · 40 available after
+  - \`hand001\`: 5 card(s)
+  - \`hand002\`: 5 card(s)"
+`;
+
+exports[`CardsTool — characterization (write) > delete-card — card removed 1`] = `
+"**Card Deleted**
+
+**ID:** \`card001\` from stack \`deck001\`
+**Remaining cards:** 51
+
+⚠️ Permanent."
+`;
+
+exports[`CardsTool — characterization (write) > delete-stack — confirmed delete 1`] = `
+"**Card Stack Deleted**
+
+**ID:** \`deck001\`
+**Cards removed:** 52
+
+⚠️ Permanent."
+`;
+
+exports[`CardsTool — characterization (write) > discard — card discarded to pile 1`] = `
+"**Card Discarded**
+
+\`card002\` from \`hand001\` → \`discard001\` (new id \`card002new\`)"
+`;
+
+exports[`CardsTool — characterization (write) > draw — hand draws from deck 1`] = `
+"**Cards Drawn**
+
+**Hand:** \`hand001\` drew 3 from \`deck001\` (hand now 8)
+**Drawn ids:** \`card001\`, \`card002\`, \`card003\`"
+`;
+
+exports[`CardsTool — characterization (write) > duplicate-stack — source + new ids 1`] = `
+"**Card Stack Duplicated**
+
+**Source:** \`deck001\` → **New:** \`deck002\`
+
+## Card stack \`deck002\` — deck
+**Name:** Initiative Deck (Copy)
+**Cards:** 0 (available 0, drawn 0)
+**displayCount:** no · **folder:** _(none)_"
+`;
+
+exports[`CardsTool — characterization (write) > flip-card — new face state 1`] = `
+"**Card Flipped** → face-down (back shown)
+
+## Card \`card001\` — Ace of Swords
+**Stack:** \`deck001\` · **type:** base
+**face:** face-down (back shown) · **drawn:** no
+**suit:** swords · **value:** 1
+**faces:** 1 face(s)"
+`;
+
+exports[`CardsTool — characterization (write) > pass — cards moved between stacks 1`] = `
+"**Cards Passed**
+
+\`hand001\` → \`pile001\` · 2 card(s)
+**Passed ids:** \`card001\`, \`card002\`"
+`;
+
+exports[`CardsTool — characterization (write) > play — card played to pile 1`] = `
+"**Card Played**
+
+\`card001\` from \`hand001\` → \`pile001\` (new id \`card001new\`)"
+`;
+
+exports[`CardsTool — characterization (write) > recall — confirmed recall 1`] = `
+"**Stack Recalled**
+
+**Stack:** \`deck001\` (deck) · now 52 card(s)"
+`;
+
+exports[`CardsTool — characterization (write) > shuffle — stack shuffled 1`] = `
+"**Stack Shuffled**
+
+**Stack:** \`deck001\` · 52 card(s)"
+`;
+
+exports[`CardsTool — characterization (write) > update-card — changed fields + card view 1`] = `
+"**Card Updated**
+
+**Changed:** suit
+
+## Card \`card001\` — Ace of Swords
+**Stack:** \`deck001\` · **type:** base
+**face:** 0 · **drawn:** no
+**suit:** cups · **value:** 1
+**faces:** 1 face(s)"
+`;
+
+exports[`CardsTool — characterization (write) > update-stack — changed fields + view 1`] = `
+"**Card Stack Updated**
+
+**Changed:** name
+
+## Card stack \`deck001\` — deck
+**Name:** Renamed Deck
+**Cards:** 0 (available 0, drawn 0)
+**displayCount:** no · **folder:** _(none)_"
+`;

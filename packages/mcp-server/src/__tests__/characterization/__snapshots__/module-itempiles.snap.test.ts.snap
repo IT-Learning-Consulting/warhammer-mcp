@@ -1,0 +1,52 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ModuleItempilesTool — characterization > MODULE_NOT_ACTIVE — probe inactive branch 1`] = `"module-itempiles failed: MODULE_NOT_ACTIVE: item-piles is not active"`;
+
+exports[`ModuleItempilesTool — characterization > add-currency — currency added 1`] = `
+"module-itempiles.add-currency: added "5ss 10bp" to Actor.pile01
+- currentCurrencies: {"gc":0,"ss":5,"bp":10}"
+`;
+
+exports[`ModuleItempilesTool — characterization > create-pile — pile created 1`] = `
+"module-itempiles.create-pile: created container pile
+- tokenUuid: Scene.s.Token.pile01
+- actorUuid: Actor.pile01
+- sceneId: Scene.s
+- flagData: {"type":"container","enabled":true}"
+`;
+
+exports[`ModuleItempilesTool — characterization > get-contents — empty pile 1`] = `
+"module-itempiles.get-contents: pile Actor.pile02
+- valid=true, container=true, merchant=false, vault=false
+- locked=false, closed=false, empty=true
+- itemCount: 0
+- currencies: {"gc":0,"ss":0,"bp":0}
+- flagData: {"type":"container"}"
+`;
+
+exports[`ModuleItempilesTool — characterization > get-contents — pile with items 1`] = `
+"module-itempiles.get-contents: pile Actor.pile01
+- valid=true, container=true, merchant=false, vault=false
+- locked=false, closed=false, empty=false
+- itemCount: 2
+- items:
+  • Sword [weapon] qty:1 uuid:Actor.pile01.Item.sw1
+  • Shield [weapon] qty:1 uuid:Actor.pile01.Item.sh1
+- currencies: {"gc":0,"ss":5,"bp":3}
+- flagData: {"type":"container"}"
+`;
+
+exports[`ModuleItempilesTool — characterization > transfer-items — items transferred 1`] = `
+"module-itempiles.transfer-items: mode="transfer"
+- source: Actor.pile01
+- target: Actor.pc01
+- target item count now: 3
+- items transferred: 1, attributes transferred: 0"
+`;
+
+exports[`ModuleItempilesTool — characterization > vault-info — grid data 1`] = `
+"module-itempiles.vault-info: subAction="grid-data" for vault Actor.vault01
+- grid: 10×5 (enabled: 10×5)
+- spaces: total=50, enabled=50, free=47
+- items placed: 3, free cells: 47"
+`;

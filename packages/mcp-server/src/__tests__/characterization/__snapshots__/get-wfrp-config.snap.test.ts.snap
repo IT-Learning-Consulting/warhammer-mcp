@@ -1,0 +1,7 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`GetWfrpConfigTool — characterization > all keys skipped — empty values 1`] = `"{"values":{},"skipped":["badKey1","badKey2"]}"`;
+
+exports[`GetWfrpConfigTool — characterization > multiple keys — values and skipped 1`] = `"{"values":{"statusTiers":{"Brass":"brass","Silver":"silver","Gold":"gold"},"conditions":{"prone":"Prone","stunned":"Stunned","bleeding":"Bleeding"}},"skipped":["unknownKey"]}"`;
+
+exports[`GetWfrpConfigTool — characterization > single key request — xpCost values 1`] = `"{"values":{"xpCost":{"characteristic":[25,30,40,50,70],"skill":[10,15,20,30,40]}},"skipped":[]}"`;

@@ -1,0 +1,19 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`AddItemFromCompendiumTool — characterization > add item by itemUuid — raw passthrough 1`] = `
+{
+  "actorId": "actor-001",
+  "embedded": true,
+  "itemId": "item-new-001",
+  "itemName": "Longsword",
+}
+`;
+
+exports[`AddItemFromCompendiumTool — characterization > add specialisation skill with skipSpecialisationChoice — raw passthrough 1`] = `
+{
+  "actorId": "actor-002",
+  "embedded": true,
+  "itemId": "item-new-002",
+  "itemName": "Lore (Beasts)",
+}
+`;

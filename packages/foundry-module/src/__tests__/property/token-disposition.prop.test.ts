@@ -1,0 +1,243 @@
+// fast-check property tests — getTokenDisposition + getWFRPCharacteristicCode invariants (Phase 0 R0.2)
+//
+// Sites: FoundryDataAccess.getTokenDisposition  (data-access.ts ~1715, private)
+//         FoundryDataAccess.getWFRPCharacteristicCode (data-access.ts ~2709, private)
+//
+// Both are pure mapping / clamp helpers that never touch Foundry globals.
+// We access them via (da as any).<method>() after stubbing validateFoundryState.
+//
+// Contract — getTokenDisposition:
+//   1. NUMERIC INPUT: numeric values are returned as-is (no clamping by this function).
+//   2. NON-NUMERIC INPUT: any non-number returns TOKEN_DISPOSITIONS.NEUTRAL (0).
+//   3. OUTPUT IS ALWAYS A NUMBER (typeof === 'number').
+//
+// Contract — getWFRPCharacteristicCode:
+//   1. OUTPUT IS IN THE KNOWN CODE SET {'ws','bs','s','t','i','ag','dex','int','wp','fel'}.
+//   2. CASE/WHITESPACE INSENSITIVE for canonical names: "Weapon Skill" → 'ws', etc.
+//   3. UNKNOWN INPUTS default to 'ws' (weapon skill fallback).
+//   4. TOTALITY: never throws for any string input.
+
+import { describe, it } from 'vitest';
+import fc from 'fast-check';
+import { FoundryDataAccess } from '../../data-access.js';
+
+// ---------------------------------------------------------------------------
+// Test rig
+// ---------------------------------------------------------------------------
+
+function makeDA(): any {
+  const da = new FoundryDataAccess();
+  // Bypass the Foundry-state gate so pure methods are reachable.
+  (da as any).validateFoundryState = () => {};
+  return da;
+}
+
+const da = makeDA();
+
+// ---------------------------------------------------------------------------
+// Known constants from constants.ts
+// ---------------------------------------------------------------------------
+
+const TOKEN_DISPOSITIONS = { HOSTILE: -1, NEUTRAL: 0, FRIENDLY: 1 } as const;
+
+const VALID_CHAR_CODES = new Set(['ws', 'bs', 's', 't', 'i', 'ag', 'dex', 'int', 'wp', 'fel']);
+
+// Canonical WFRP characteristic names (exact matches the map handles).
+const CANONICAL_CHAR_INPUTS: [string, string][] = [
+  ['weapon skill', 'ws'],
+  ['weaponskill', 'ws'],
+  ['ws', 'ws'],
+  ['ballistic skill', 'bs'],
+  ['ballisticskill', 'bs'],
+  ['bs', 'bs'],
+  ['strength', 's'],
+  ['s', 's'],
+  ['toughness', 't'],
+  ['t', 't'],
+  ['initiative', 'i'],
+  ['i', 'i'],
+  ['agility', 'ag'],
+  ['ag', 'ag'],
+  ['dexterity', 'dex'],
+  ['dex', 'dex'],
+  ['intelligence', 'int'],
+  ['int', 'int'],
+  ['willpower', 'wp'],
+  ['wp', 'wp'],
+  ['fellowship', 'fel'],
+  ['fel', 'fel'],
+];
+
+// ---------------------------------------------------------------------------
+// getTokenDisposition properties
+// ---------------------------------------------------------------------------
+
+describe('getTokenDisposition — numeric passthrough', () => {
+  it('any finite number is returned unchanged', () => {
+    fc.assert(
+      fc.property(fc.integer(), (n) => {
+        const result: number = da.getTokenDisposition(n);
+        return result === n;
+      }),
+      { numRuns: 2000 }
+    );
+  });
+
+  it('any float is returned unchanged', () => {
+    fc.assert(
+      fc.property(fc.double({ noNaN: true }), (n) => {
+        const result: number = da.getTokenDisposition(n);
+        return result === n;
+      }),
+      { numRuns: 1000 }
+    );
+  });
+});
+
+describe('getTokenDisposition — non-numeric defaults to NEUTRAL (0)', () => {
+  it('string input returns 0 (NEUTRAL)', () => {
+    fc.assert(
+      fc.property(fc.string(), (s) => {
+        const result: number = da.getTokenDisposition(s);
+        return result === TOKEN_DISPOSITIONS.NEUTRAL;
+      }),
+      { numRuns: 1000 }
+    );
+  });
+
+  it('null/undefined/object input returns 0 (NEUTRAL)', () => {
+    fc.assert(
+      fc.property(
+        fc.oneof(
+          fc.constant(null),
+          fc.constant(undefined),
+          fc.constant({}),
+          fc.constant([]),
+          fc.constant(true),
+          fc.constant(false),
+        ),
+        (v) => {
+          const result: number = da.getTokenDisposition(v);
+          return result === TOKEN_DISPOSITIONS.NEUTRAL;
+        }
+      ),
+      { numRuns: 200 }
+    );
+  });
+});
+
+describe('getTokenDisposition — output is always a number', () => {
+  it('any input produces typeof number', () => {
+    fc.assert(
+      fc.property(fc.anything(), (v) => {
+        const result = da.getTokenDisposition(v);
+        return typeof result === 'number';
+      }),
+      { numRuns: 2000 }
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getWFRPCharacteristicCode properties
+// ---------------------------------------------------------------------------
+
+// Prototype-property names that escape the charMap via Object.prototype lookup:
+// charMap is a plain `{}` literal (not null-prototype), so keys matching
+// Object.prototype properties (constructor, __proto__, toString, etc.) return
+// the prototype value rather than undefined, bypassing the `|| 'ws'` fallback.
+// These inputs are excluded from the "output in valid code set" property;
+// they are documented as a known source limitation (see potentialBugs).
+const PROTO_ESCAPE_NAMES = new Set([
+  '__proto__', 'constructor', 'tostring', 'valueof', 'hasownproperty',
+  'isprototypeof', 'propertyisenumerable', 'tolocalestring',
+]);
+
+const safeCharInput = fc.string().filter(
+  (s) => !PROTO_ESCAPE_NAMES.has(s.toLowerCase().replace(/\s+/g, ''))
+);
+
+describe('getWFRPCharacteristicCode — output in valid code set', () => {
+  it('any non-prototype-polluting string input produces a code in the known set', () => {
+    fc.assert(
+      fc.property(safeCharInput, (charName) => {
+        const code: unknown = da.getWFRPCharacteristicCode(charName);
+        return VALID_CHAR_CODES.has(code as string);
+      }),
+      { numRuns: 2000 }
+    );
+  });
+});
+
+describe('getWFRPCharacteristicCode — canonical names map correctly', () => {
+  for (const [input, expected] of CANONICAL_CHAR_INPUTS) {
+    it(`"${input}" → "${expected}"`, () => {
+      fc.assert(
+        fc.property(fc.constant(input), (name) => {
+          return da.getWFRPCharacteristicCode(name) === expected;
+        }),
+        { numRuns: 1 }
+      );
+    });
+  }
+});
+
+describe('getWFRPCharacteristicCode — case and whitespace insensitivity', () => {
+  it('mixed-case "Weapon Skill" resolves to ws', () => {
+    fc.assert(
+      fc.property(
+        fc.constantFrom('Weapon Skill', 'WEAPON SKILL', 'weapon skill', 'WeaponSkill'),
+        (name) => da.getWFRPCharacteristicCode(name) === 'ws'
+      ),
+      { numRuns: 4 }
+    );
+  });
+});
+
+describe('getWFRPCharacteristicCode — unknown input defaults to ws', () => {
+  // Strings that contain none of the canonical key substrings AND are not
+  // prototype-property names (constructor/toString/valueOf/__proto__/hasOwnProperty etc.).
+  // The charMap is a plain object literal without a null prototype, so keys like
+  // "constructor" hit Object.prototype and return a truthy non-string value,
+  // bypassing the `|| 'ws'` fallback — this is a known source limitation
+  // (see potentialBugs entry in the Phase 0 R0.2 authoring report).
+  const PROTO_NAMES = new Set([
+    'constructor', 'tostring', 'valueof', '__proto__', 'hasownproperty',
+    'isprototypeof', 'propertyisenumerable', 'tolocalestring',
+  ]);
+
+  const unknownStr = fc
+    .string({ minLength: 1 })
+    .filter((s) => {
+      const n = s.toLowerCase().replace(/\s+/g, '');
+      // Exclude both canonical char keys AND Object.prototype pollution names.
+      return !['ws', 'bs', 's', 't', 'i', 'ag', 'dex', 'int', 'wp', 'fel',
+        'weaponskill', 'ballisticskill', 'strength', 'toughness', 'initiative',
+        'agility', 'dexterity', 'intelligence', 'willpower', 'fellowship',
+      ].includes(n) && !PROTO_NAMES.has(n);
+    });
+
+  it('unrecognised string (excluding prototype names) defaults to "ws"', () => {
+    fc.assert(
+      fc.property(unknownStr, (name) => da.getWFRPCharacteristicCode(name) === 'ws'),
+      { numRuns: 1000 }
+    );
+  });
+});
+
+describe('getWFRPCharacteristicCode — totality', () => {
+  it('never throws for any string input', () => {
+    fc.assert(
+      fc.property(fc.string(), (charName) => {
+        let threw = false;
+        try {
+          da.getWFRPCharacteristicCode(charName);
+        } catch {
+          threw = true;
+        }
+        return !threw;
+      }),
+      { numRuns: 2000 }
+    );
+  });
+});

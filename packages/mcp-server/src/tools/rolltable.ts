@@ -756,7 +756,7 @@ export class RollTableTool extends BaseTool {
             text += `**Requested:** ${args.number}  **Returned:** ${response.returned ?? response.results.length}\n\n`;
 
             for (let i = 0; i < response.results.length; i++) {
-                const r = response.results[i];
+                const r = response.results[i]!;
                 const label = r.text || r.documentUuid || "(unknown)";
                 const idTag = r.id ? ` [_id: ${r.id}]` : "";
                 text += `${i + 1}. ${label}${idTag}`;

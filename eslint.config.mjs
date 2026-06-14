@@ -1,0 +1,207 @@
+// @ts-check
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
+
+import js from '@eslint/js';
+import tseslint from 'typescript-eslint';
+import globals from 'globals';
+import boundaries from 'eslint-plugin-boundaries';
+import eslintConfigPrettier from 'eslint-config-prettier';
+import eslintPluginPrettier from 'eslint-plugin-prettier';
+
+/*
+ * ESLint v9 flat config — migrated from .eslintrc.json
+ * (MCP Code-Quality Hardening v1, Phase 0, sub-phase 0.3; user decision Q2 -> v9 flat + typescript-eslint v8).
+ *
+ * Preserves all 15 prior .eslintrc.json rules, and adds:
+ *   - R0.5  async-safety: no-floating-promises + no-misused-promises at ERROR (typed; production .ts only).
+ *           PRD correction - checksVoidReturn uses `arguments:false` (NOT `attributes`, which is JSX-only);
+ *           Foundry Hooks.on(evt, asyncFn) passes async callbacks as fn ARGUMENTS.
+ *   - R0.4  complexity caps at WARN globally; scripts/lint-ratchet.mjs re-lints changed files at ERROR.
+ *           A services/ override caps file length at 600 (ERROR) - inert until the Phase-3 split.
+ *   - R0.3/CCR-Domain-Boundary: eslint-plugin-boundaries registered; rules off (inert) until services/ exists.
+ *
+ * Type-aware linting (projectService) is scoped to PRODUCTION .ts only. Test files, *.config.ts, and the
+ * root tests/ skill-harness live outside every tsconfig (each excludes *.test.* etc.), so type-aware rules
+ * would throw "not found in project" on them; they get the non-typed TS ruleset instead.
+ *
+ * The 91 legacy errors that the v8 recommended set / broadened JS coverage surfaced on existing code are
+ * demoted to WARN here (ratchet model: "legacy files warn"). The lint-ratchet (0.3.2) re-errors changed
+ * files. The 10 plan-mandated promise-rule violations were FIXED at the source (user decision 2026-06-13),
+ * so the promise rules stay at ERROR globally.
+ */
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+/** Files outside every tsconfig - excluded from type-aware linting (no projectService). */
+const NON_PROJECT_TS = [
+  '**/*.test.ts',
+  '**/*.spec.ts',
+  '**/__tests__/**/*.ts',
+  '**/*.bench.ts',
+  '**/*.config.ts',
+  'tests/**/*.ts',
+];
+
+/** Test/spec files - relaxed, non-typed. */
+const TEST_GLOBS = ['**/*.test.ts', '**/*.spec.ts', '**/__tests__/**/*.ts', '**/*.bench.ts', 'tests/**/*.ts'];
+
+export default tseslint.config(
+  // 1 - Global ignores (replaces .eslintrc.json `ignorePatterns` + build artifacts + generated/type-decl files).
+  {
+    ignores: [
+      '**/dist/**',
+      '**/build/**',
+      '**/node_modules/**',
+      '**/*.tsbuildinfo',
+      '**/coverage/**',
+      '**/*.bundle.cjs',
+      '**/*.d.ts',
+      'packages/foundry-module/generated-maps/**',
+    ],
+  },
+
+  // 2 - Base JS recommended (all linted files).
+  js.configs.recommended,
+
+  // 3 - Preserved base (non-plugin) rules from .eslintrc.json (all files).
+  {
+    rules: {
+      'no-console': ['warn', { allow: ['warn', 'error'] }],
+      'prefer-const': 'warn',
+      'no-var': 'warn',
+      'object-shorthand': 'warn',
+      'prefer-template': 'warn',
+      'no-empty': 'warn',
+      'no-async-promise-executor': 'warn',
+    },
+  },
+
+  // 4 - TypeScript: recommended + preserved TS rules + complexity caps (all .ts, non-typed).
+  {
+    files: ['**/*.ts'],
+    extends: [...tseslint.configs.recommended],
+    rules: {
+      // TS resolves identifiers (incl. Foundry globals); base no-undef is redundant + false-positives.
+      'no-undef': 'off',
+      // typescript-eslint/recommended bumps core prefer-const to error; the old config had it at warn (preserved).
+      'prefer-const': 'warn',
+      // --- preserved @typescript-eslint rules from .eslintrc.json ---
+      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+      '@typescript-eslint/explicit-function-return-type': 'warn',
+      '@typescript-eslint/no-explicit-any': 'warn',
+      '@typescript-eslint/prefer-nullish-coalescing': 'off',
+      '@typescript-eslint/prefer-optional-chain': 'off',
+      // --- legacy debt demoted to WARN (ratchet model; not plan-mandated at error) ---
+      '@typescript-eslint/no-empty-object-type': 'warn',
+      '@typescript-eslint/no-unsafe-function-type': 'warn',
+      '@typescript-eslint/ban-ts-comment': 'warn',
+      'no-case-declarations': 'warn',
+      'no-useless-escape': 'warn',
+      // --- R0.4 complexity caps (WARN globally; ratcheted to ERROR on changed files) ---
+      'max-lines-per-function': ['warn', 60],
+      complexity: ['warn', 10],
+      'max-depth': ['warn', 3],
+      'max-params': ['warn', 4],
+      'max-lines': ['warn', 400],
+    },
+  },
+
+  // 5 - Type-aware linting for PRODUCTION .ts only (R0.5). Existing violations were fixed, so these stay ERROR.
+  {
+    files: ['**/*.ts'],
+    ignores: NON_PROJECT_TS,
+    languageOptions: {
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: __dirname,
+      },
+    },
+    rules: {
+      '@typescript-eslint/no-floating-promises': 'error',
+      '@typescript-eslint/no-misused-promises': ['error', { checksVoidReturn: { arguments: false } }],
+      '@typescript-eslint/await-thenable': 'error',
+    },
+  },
+
+  // 6 - eslint-plugin-boundaries registered; rules INERT until the Phase-3 services/ split (CCR-Domain-Boundary).
+  {
+    files: ['packages/*/src/**/*.ts'],
+    plugins: { boundaries },
+    settings: {
+      // Phase-3 placeholder taxonomy; rules stay off so nothing is enforced yet.
+      'boundaries/elements': [
+        { type: 'shared', pattern: 'shared/src/**' },
+        { type: 'handler', pattern: 'packages/foundry-module/src/handlers/**' },
+        { type: 'tool', pattern: 'packages/mcp-server/src/tools/**' },
+      ],
+    },
+    rules: {
+      'boundaries/element-types': 'off',
+      'boundaries/no-private': 'off',
+      'boundaries/entry-point': 'off',
+    },
+  },
+
+  // 7 - Test files: relaxed + non-typed (they sit outside every tsconfig -> no projectService).
+  {
+    files: TEST_GLOBS,
+    languageOptions: {
+      globals: {
+        ...globals.node,
+        // vitest globals (foundry-module enables vitest/globals; mcp-server imports explicitly).
+        describe: 'readonly',
+        it: 'readonly',
+        test: 'readonly',
+        expect: 'readonly',
+        vi: 'readonly',
+        beforeEach: 'readonly',
+        afterEach: 'readonly',
+        beforeAll: 'readonly',
+        afterAll: 'readonly',
+        suite: 'readonly',
+      },
+    },
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/explicit-function-return-type': 'off',
+      '@typescript-eslint/no-non-null-assertion': 'off',
+      '@typescript-eslint/no-floating-promises': 'off',
+      'max-lines-per-function': 'off',
+      'max-lines': 'off',
+      complexity: 'off',
+      'no-console': 'off',
+    },
+  },
+
+  // 8 - Node scripts + config files (.mjs/.cjs/.js): node globals, console allowed, no TS plugin.
+  //     Legacy scripts were never linted by the old config (--ext .ts,.js + ignored *.js) -> base rules WARN.
+  {
+    files: ['**/*.{mjs,cjs,js}'],
+    languageOptions: {
+      globals: { ...globals.node },
+    },
+    rules: {
+      'no-console': 'off',
+      'no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+      'no-undef': 'warn',
+    },
+  },
+
+  // 9 - services/ override: hard 600-line cap at ERROR. Inert until Phase 3 creates services/ (CCR-Complexity-Caps).
+  {
+    files: ['**/services/**/*.ts'],
+    rules: {
+      'max-lines': ['error', 600],
+    },
+  },
+
+  // 10 - Prettier: disable conflicting formatting rules, then run prettier as a WARN-level rule (preserved).
+  eslintConfigPrettier,
+  {
+    plugins: { prettier: eslintPluginPrettier },
+    rules: {
+      'prettier/prettier': 'warn',
+    },
+  },
+);

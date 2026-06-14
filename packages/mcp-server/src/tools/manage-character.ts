@@ -569,7 +569,7 @@ Use for quick stat changes, character creation, testing, or corrections where yo
         // Find exact or best match
         const compendiumItem = typeResults.find((item: any) =>
             item.name.toLowerCase() === args.itemName.toLowerCase()
-        ) || typeResults[0];
+        ) || typeResults[0]!;
 
         // Construct UUID
         const compendiumUuid = `Compendium.${compendiumItem.pack}.${compendiumItem.id || compendiumItem._id}`;

@@ -1,0 +1,122 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`CompendiumUmbrellaTools — characterization > add-document-to-pack — uuid source 1`] = `
+"## Document Added to Compendium
+
+- **packId:** \`world.homebrew-weapons\`
+- **documentId:** \`doc001\` · **name:** Iron Sword · **type:** Item
+- **documentUuid:** \`Compendium.world.homebrew-weapons.Item.doc001\`
+- **entryCount (post-add):** 1"
+`;
+
+exports[`CompendiumUmbrellaTools — characterization > create-folder-in-pack — root level 1`] = `
+"## In-Pack Folder Created
+
+- **packId:** \`world.homebrew-weapons\`
+- **folderId:** \`fld001\` · **name:** Common
+- **uuid:** \`Compendium.world.homebrew-weapons.Folder.fld001\`
+- **depth:** 1"
+`;
+
+exports[`CompendiumUmbrellaTools — characterization > create-pack — world scope 1`] = `
+"## Compendium Pack Created
+
+- **packId:** \`world.homebrew-weapons\`
+- **entryCount:** 0
+- **ownership keys:** 1 (default)
+
+### Metadata
+- **id:** \`world.homebrew-weapons\`
+- **name:** homebrew-weapons · **label:** Homebrew Weapons
+- **type:** Item · **system:** wfrp4e
+- **packageType:** world · **packageName:** adventures-in-the-warhammer-world
+- **path:** _(auto)_ · **locked:** no
+- **folder:** _(none)_ · **sort:** 0"
+`;
+
+exports[`CompendiumUmbrellaTools — characterization > delete-folder-in-pack — unparent contents 1`] = `
+"## In-Pack Folder Deleted
+
+- **packId:** \`world.homebrew-weapons\`
+- **folderId:** \`fld001\`
+- **deletedFolderIds (1):** fld001
+- **unParentedDocs:** 3 · **deletedDocs:** 0"
+`;
+
+exports[`CompendiumUmbrellaTools — characterization > list-folders-in-pack — multiple folders 1`] = `
+"## In-Pack Folders \`world.homebrew-weapons\` (2)
+
+- \`fld001\` Common · depth=1 · parent=_(root)_ · sort=0
+- \`fld002\` Rare · depth=2 · parent=fld001 · color=#aa0000 · sort=10"
+`;
+
+exports[`CompendiumUmbrellaTools — characterization > read-document-from-pack — full data 1`] = `
+"## Compendium Document \`ent001\`
+
+- **packId:** \`wfrp4e-core.actors\`
+- **documentUuid:** \`Compendium.wfrp4e-core.actors.Actor.ent001\`
+- **top-level data keys (4):** _id, name, type, system
+
+### Full data
+\`\`\`json
+{
+  "_id": "ent001",
+  "name": "Goblin",
+  "type": "npc",
+  "system": {}
+}
+\`\`\`"
+`;
+
+exports[`CompendiumUmbrellaTools — characterization > read-pack — paginated entry list 1`] = `
+"## Compendium Pack \`wfrp4e-core.actors\`
+
+**Pagination:** page 1 of 1 · pageSize 100 · totalEntries 2
+
+### Metadata
+- **id:** \`wfrp4e-core.actors\`
+- **name:** homebrew-weapons · **label:** WFRP4e Core Actors
+- **type:** Actor · **system:** wfrp4e
+- **packageType:** world · **packageName:** adventures-in-the-warhammer-world
+- **path:** _(auto)_ · **locked:** no
+- **folder:** _(none)_ · **sort:** 0
+
+### In-pack folders (1)
+- \`fld001\` Vermin · depth=1 · parent=_(root)_ · color=#550000 · sort=10
+
+### Entries (2)
+- \`ent001\` Goblin · type=npc · folder=_(root)_ · uuid=\`Compendium.wfrp4e-core.actors.Actor.ent001\`
+- \`ent002\` Rat · type=npc · folder=fld001 · uuid=\`Compendium.wfrp4e-core.actors.Actor.ent002\`"
+`;
+
+exports[`CompendiumUmbrellaTools — characterization > update-document-in-pack — rename 1`] = `
+"## Compendium Document Updated
+
+- **packId:** \`world.homebrew-weapons\`
+- **documentId:** \`doc001\`
+- **documentUuid:** \`Compendium.world.homebrew-weapons.Item.doc001\`
+- **changedFields:** name"
+`;
+
+exports[`CompendiumUmbrellaTools — characterization > update-folder-in-pack — rename 1`] = `
+"## In-Pack Folder Updated
+
+- **packId:** \`world.homebrew-weapons\`
+- **folderId:** \`fld001\`
+- **changedFields:** name"
+`;
+
+exports[`CompendiumUmbrellaTools — characterization > update-pack — locked flag 1`] = `
+"## Compendium Pack Updated
+
+- **packId:** \`world.homebrew-weapons\`
+- **changedFields:** locked
+
+### Metadata
+- **id:** \`world.homebrew-weapons\`
+- **name:** homebrew-weapons · **label:** Homebrew Weapons
+- **type:** Item · **system:** wfrp4e
+- **packageType:** world · **packageName:** adventures-in-the-warhammer-world
+- **path:** _(auto)_ · **locked:** yes
+- **folder:** _(none)_ · **sort:** 0"
+`;

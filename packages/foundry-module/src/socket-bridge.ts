@@ -182,7 +182,7 @@ export class SocketBridge {
         } catch {
           // Bridge not yet wired (init race) — heartbeat will recover.
         }
-        this.handleMessage(message);
+        void this.handleMessage(message);
       } catch (error) {
         this.log(`Failed to parse message: ${error}`);
       }

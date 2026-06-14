@@ -1,0 +1,17 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ModifyItemQualitiesTool — characterization > add qualities to actor-embedded weapon — formatted string 1`] = `
+"Modified **Longsword**.
+Added qualities: impale, precise"
+`;
+
+exports[`ModifyItemQualitiesTool — characterization > add quality and flaw simultaneously — formatted string 1`] = `
+"Modified **Rusty Dagger**.
+Added qualities: fast
+Added flaws: tiring"
+`;
+
+exports[`ModifyItemQualitiesTool — characterization > remove flaw from world-scope item — formatted string 1`] = `
+"Modified **Old Shield**.
+Removed flaws: clumsy"
+`;

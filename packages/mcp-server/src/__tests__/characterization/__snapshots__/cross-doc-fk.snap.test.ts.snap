@@ -1,0 +1,66 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`CrossDocFkTool — characterization > audit-document — outbound and inbound refs 1`] = `
+"## Cross-doc FK audit — Scene \`scene001\` Market Square
+
+**Outbound stale FKs (this doc points at deleted targets):** 1
+**Inbound refs (other docs that point AT this doc; stale-if-deleted):** 1
+
+### Outbound orphans
+- Scene \`scene001\` Market Square: field \`journal\` → stale ref \`jrnl999\` [ORPHAN]
+
+### Inbound refs (would orphan on delete)
+- User \`user001\` GM: field \`viewedScene\` → stale ref \`scene001\` [ORPHAN]
+"
+`;
+
+exports[`CrossDocFkTool — characterization > audit-orphans — no orphans 1`] = `
+"## Cross-doc FK audit
+
+**Pagination:** page 1 of 1 · pageSize 100 · totalOrphans 0
+
+_No FK orphans found across the world catalog._
+
+**Orphan count:** 0
+_World refs only — pass \`includeCompendiums: true\` to scan compendium-prefixed UUIDs._"
+`;
+
+exports[`CrossDocFkTool — characterization > audit-orphans — with orphans grouped by type 1`] = `
+"## Cross-doc FK audit
+
+**Pagination:** page 1 of 1 · pageSize 100 · totalOrphans 2
+
+### Scene (1)
+
+- Scene \`scene001\` Market Square: field \`journal\` → stale ref \`jrnl999\` [ORPHAN]
+
+### Actor (1)
+
+- Actor \`actor001\`: field \`token.actorId\` → stale ref \`actor999\` [ORPHAN]
+
+**Orphan count:** 2
+_World refs only._
+
+Use \`/wfrp-cleanup-fks bulk-repair\` to clear these (preview → dryRun → confirm flow)."
+`;
+
+exports[`CrossDocFkTool — characterization > repair-orphans — dry run 1`] = `
+"## Repair Orphans (DRY RUN)
+_DRY RUN — no mutations performed. Re-invoke with \`dryRun: false\` to apply._
+- **Requested:** 1
+- **Cleared:** 0
+- **Skipped:** 0
+### Would clear (1)
+
+- Scene \`scene001\` field \`journal\` → stale \`jrnl999\`"
+`;
+
+exports[`CrossDocFkTool — characterization > repair-orphans — real mutation 1`] = `
+"## Repair Orphans
+- **Requested:** 1
+- **Cleared:** 1
+- **Skipped:** 0
+### Cleared (1)
+
+- Scene \`scene001\` field \`journal\` → stale \`jrnl999\` ✓"
+`;

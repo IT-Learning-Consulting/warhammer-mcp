@@ -1,0 +1,30 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ModulePatrolTool — characterization > MODULE_NOT_ACTIVE — patrol not active 1`] = `"module-patrol failed: MODULE_NOT_ACTIVE: patrol is not active"`;
+
+exports[`ModulePatrolTool — characterization > apply-undetectable — set active 1`] = `"module-patrol.apply-undetectable: Shadow Thief patrolundetectable=true"`;
+
+exports[`ModulePatrolTool — characterization > enable-token — wander mode 1`] = `
+"module-patrol.enable-token (wander):
+  ✓ Goblin Sentry (wander)"
+`;
+
+exports[`ModulePatrolTool — characterization > get-token-config — token with wander flags 1`] = `
+"module-patrol.get-config: Goblin Sentry
+- flags: patrolWander=true, patrolPath=false, enableSpotting=true, patrolundetectable=false
+- global: wander=true path=false"
+`;
+
+exports[`ModulePatrolTool — characterization > list-tokens — no patrol tokens 1`] = `"module-patrol.list-tokens: no patrol tokens on scene Scene.abc (filter: wander)."`;
+
+exports[`ModulePatrolTool — characterization > list-tokens — patrol tokens on scene 1`] = `
+"module-patrol.list-tokens: 2 token(s) (filter: all):
+  • Goblin Sentry [wander] (Scene.abc.Token.x1)
+  • Orc Patrol [path] (Scene.abc.Token.x2)"
+`;
+
+exports[`ModulePatrolTool — characterization > toggle-global — started 1`] = `
+"module-patrol.toggle-global: started (engines: both)
+- wander=true path=true
+- ⚠ Global patrol state is in-memory only — resets on reload."
+`;

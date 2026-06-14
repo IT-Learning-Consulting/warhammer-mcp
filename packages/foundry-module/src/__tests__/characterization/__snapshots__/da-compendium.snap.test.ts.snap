@@ -1,0 +1,178 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`FoundryDataAccess.getAvailablePacks — characterization > snapshot: empty packs map returns empty array 1`] = `[]`;
+
+exports[`FoundryDataAccess.getAvailablePacks — characterization > snapshot: returns mapped pack metadata array 1`] = `
+[
+  {
+    "id": "wfrp4e-core.bestiary",
+    "label": "Core Bestiary",
+    "private": false,
+    "system": "wfrp4e",
+    "type": "Actor",
+  },
+  {
+    "id": "wfrp4e-core.items",
+    "label": "Core Items",
+    "private": false,
+    "system": "wfrp4e",
+    "type": "Item",
+  },
+]
+`;
+
+exports[`FoundryDataAccess.getCompendiumDocumentFull — characterization > snapshot: actor document with items and effects 1`] = `
+{
+  "effects": [
+    {
+      "disabled": false,
+      "duration": {
+        "duration": 2,
+        "remaining": 1,
+        "type": "rounds",
+      },
+      "icon": "icons/effects/frightened.png",
+      "id": "eff-001",
+      "name": "Frightened",
+    },
+  ],
+  "fullData": {
+    "_id": "goblin-doc-00001",
+    "img": "icons/goblin.png",
+    "name": "Goblin",
+    "system": {
+      "characteristics": {
+        "t": {
+          "value": 20,
+        },
+        "ws": {
+          "value": 25,
+        },
+      },
+      "status": {
+        "wounds": {
+          "max": 8,
+          "value": 8,
+        },
+      },
+    },
+    "type": "npc",
+  },
+  "id": "goblin-doc-00001",
+  "img": "icons/goblin.png",
+  "items": [
+    {
+      "id": "trait-001",
+      "img": "icons/trait.png",
+      "name": "Cowardly",
+      "system": {
+        "description": {
+          "value": "Goblins are cowardly.",
+        },
+      },
+      "type": "trait",
+    },
+  ],
+  "name": "Goblin",
+  "pack": "wfrp4e-core.bestiary",
+  "packLabel": "Core Bestiary",
+  "system": {
+    "characteristics": {
+      "t": {
+        "value": 20,
+      },
+      "ws": {
+        "value": 25,
+      },
+    },
+    "status": {
+      "wounds": {
+        "max": 8,
+        "value": 8,
+      },
+    },
+  },
+  "type": "npc",
+}
+`;
+
+exports[`FoundryDataAccess.getCompendiumDocumentFull — characterization > snapshot: item document (no items/effects collections) 1`] = `
+{
+  "fullData": {
+    "_id": "sword-item-00001",
+    "name": "Hand Weapon",
+    "system": {
+      "damage": {
+        "value": "SB+4",
+      },
+      "qualities": {
+        "value": [
+          "Fast",
+        ],
+      },
+    },
+    "type": "weapon",
+  },
+  "id": "sword-item-00001",
+  "img": "icons/weapons/hand-weapon.png",
+  "name": "Hand Weapon",
+  "pack": "wfrp4e-core.trappings",
+  "packLabel": "Core Trappings",
+  "system": {
+    "damage": {
+      "value": "SB+4",
+    },
+    "qualities": {
+      "value": [
+        "Fast",
+      ],
+    },
+  },
+  "type": "weapon",
+}
+`;
+
+exports[`FoundryDataAccess.searchCompendium — characterization > snapshot: basic name match returns CompendiumSearchResult shape 1`] = `
+[
+  {
+    "description": "",
+    "hasImage": true,
+    "id": "goblin-id-0001",
+    "img": "icons/goblin.png",
+    "name": "Goblin",
+    "pack": "wfrp4e-core.bestiary",
+    "packLabel": "Core Bestiary",
+    "summary": "npc from Core Bestiary",
+    "type": "npc",
+  },
+  {
+    "description": "",
+    "hasImage": false,
+    "id": "goblin-boss-0001",
+    "img": undefined,
+    "name": "Goblin Boss",
+    "pack": "wfrp4e-core.bestiary",
+    "packLabel": "Core Bestiary",
+    "summary": "npc from Core Bestiary",
+    "type": "npc",
+  },
+]
+`;
+
+exports[`FoundryDataAccess.searchCompendium — characterization > snapshot: itemType filter narrows results by type 1`] = `
+[
+  {
+    "description": "",
+    "hasImage": false,
+    "id": "sword-001",
+    "img": undefined,
+    "name": "Sword",
+    "pack": "wfrp4e-core.items",
+    "packLabel": "Core Items",
+    "summary": "weapon from Core Items",
+    "type": "weapon",
+  },
+]
+`;
+
+exports[`FoundryDataAccess.searchCompendium — characterization > snapshot: no matches returns empty array 1`] = `[]`;

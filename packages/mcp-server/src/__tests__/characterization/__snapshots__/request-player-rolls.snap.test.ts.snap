@@ -1,0 +1,9 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`request-player-rolls — characterization > awaitResult=true: returns result envelope when player completes roll 1`] = `"Roll completed. {"outcome":"success","total":42,"sl":2,"success":true}"`;
+
+exports[`request-player-rolls — characterization > awaitResult=true: timeout/failure message when await fails 1`] = `"Roll request sent but await timed out or failed: Timed out waiting for player roll"`;
+
+exports[`request-player-rolls — characterization > fire-and-forget: multi-target group skill roll (no message suffix) 1`] = `"Roll request sent successfully! "`;
+
+exports[`request-player-rolls — characterization > fire-and-forget: single player characteristic roll (WFRP) 1`] = `"Roll request sent successfully! Roll request sent to Hans Müller (Weapon Skill)"`;

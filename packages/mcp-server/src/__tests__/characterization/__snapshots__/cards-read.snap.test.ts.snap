@@ -1,0 +1,77 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`CardsTool — characterization (read) > deal — dryRun preview 1`] = `
+"**Deal preview (dryRun)**
+
+**Deck:** \`deck001\` — 50 available
+**Hands:** 2 × 5 = 10 cards
+**Deck after:** 40
+**Sufficient:** yes
+
+Re-run with confirm:true (no dryRun) to deal."
+`;
+
+exports[`CardsTool — characterization (read) > delete-stack — dryRun preview 1`] = `
+"**Delete preview (dryRun)**
+
+**Stack:** "Initiative Deck" \`deck001\`
+**Cards that would be removed:** 52
+
+Re-run with confirm:true (no dryRun) to delete."
+`;
+
+exports[`CardsTool — characterization (read) > get-card — face-down redacted 1`] = `
+"## Card \`card001\` — Ace of Swords
+**Stack:** \`deck001\` · **type:** base
+**face:** face-down (back shown) · **drawn:** no
+**suit:** swords · **value:** 1
+**faces:** _(faces redacted — face-down, viewer not owner)_
+
+_(faces redacted for the supplied perspective)_"
+`;
+
+exports[`CardsTool — characterization (read) > get-card — face-up card 1`] = `
+"## Card \`card001\` — Ace of Swords
+**Stack:** \`deck001\` · **type:** base
+**face:** 0 · **drawn:** no
+**suit:** swords · **value:** 1
+**faces:** 1 face(s)"
+`;
+
+exports[`CardsTool — characterization (read) > get-stack — full stack view 1`] = `
+"## Card stack \`deck001\` — deck
+**Name:** Initiative Deck
+**Description:** Cards for initiative order.
+**Cards:** 52 (available 50, drawn 2)
+**displayCount:** yes · **folder:** _(none)_"
+`;
+
+exports[`CardsTool — characterization (read) > list-cards — card list 1`] = `
+"**Cards** (2)
+
+- \`card001\` · "Ace of Swords" · face 0 · 1 face(s)
+- \`card002\` · "Two of Cups" · face-down · drawn · _redacted_"
+`;
+
+exports[`CardsTool — characterization (read) > list-stacks — bare list 1`] = `
+"**Card stacks** (2)
+
+- \`deck001\` · deck · "Initiative Deck" · 52 card(s)
+- \`hand001\` · hand · "GM Hand" · 5 card(s)"
+`;
+
+exports[`CardsTool — characterization (read) > list-stacks — countOnly 1`] = `
+"**Card stack count**
+
+**Total:** 7"
+`;
+
+exports[`CardsTool — characterization (read) > recall — dryRun preview 1`] = `
+"**Recall preview (dryRun)**
+
+**Stack:** \`deck001\` (deck)
+**Cards held:** 50
+**Projected return:** 2
+
+Re-run with confirm:true (no dryRun) to recall."
+`;

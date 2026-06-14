@@ -1,0 +1,90 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ChatMessageTool — characterization > clear-chat-log — confirmed delete 1`] = `
+"🧹 **Chat log cleared**
+
+Deleted **150** message(s) (public 100 / GM 30 / whisper 20)."
+`;
+
+exports[`ChatMessageTool — characterization > clear-chat-log — dryRun preview 1`] = `
+"🔎 **Clear chat-log preview**
+
+**Would delete 150** message(s):
+- public: 100
+- GM-only: 30
+- whispered: 20
+
+Oldest: 2001-09-09T00:46:40.000Z · Newest: 2001-09-09T01:46:40.000Z
+
+_Re-run with confirm:true (dryRun omitted) to delete._"
+`;
+
+exports[`ChatMessageTool — characterization > create — message created summary 1`] = `
+"Chat Message Created
+- **ID:** \`msg001\`
+- **Author:** userId001
+- **Visibility:** public
+- **Speaker:** Narrator
+- **Style:** 0"
+`;
+
+exports[`ChatMessageTool — characterization > create — whisper message 1`] = `
+"Chat Message Created
+- **ID:** \`msg002\`
+- **Author:** userId001
+- **Visibility:** whisper to 1 user(s)
+- **Speaker:** Narrator
+- **Style:** 0"
+`;
+
+exports[`ChatMessageTool — characterization > delete — message removed 1`] = `
+"Chat Message Deleted
+
+- **Deleted ID:** \`msg001\`
+- **Remaining messages:** 42"
+`;
+
+exports[`ChatMessageTool — characterization > export-chat-log — text format 1`] = `
+"📜 **Chat Log Export** (text, 3 messages)
+
+Narrator: The bray-shaman raises its staff.
+GM: Roll for initiative.
+"
+`;
+
+exports[`ChatMessageTool — characterization > get — full message view 1`] = `
+"## ChatMessage \`msg001\`
+- **Author:** userId001
+- **Style:** 0 (0=other, 1=ooc, 2=ic, 3=emote)
+- **Visibility:** public
+- **Speaker:** Narrator
+- **Timestamp:** 2001-09-09T01:46:40.000Z
+**Content:**
+<p>The bray-shaman raises its staff.</p>"
+`;
+
+exports[`ChatMessageTool — characterization > list — no messages found 1`] = `"No chat messages found matching criteria."`;
+
+exports[`ChatMessageTool — characterization > list — paginated message list 1`] = `
+"Chat Messages
+
+Page 1 of 50 (100 total)
+
+- \`msg001\` [Narrator] <p>The bray-shaman raises its staff.</p>
+- \`msg002\` [whisper] [SECRET] Hans is a Chaos cultist."
+`;
+
+exports[`ChatMessageTool — characterization > update — changed fields + full view 1`] = `
+"Chat Message Updated
+
+**Changed fields:** content
+
+## ChatMessage \`msg001\`
+- **Author:** userId001
+- **Style:** 0 (0=other, 1=ooc, 2=ic, 3=emote)
+- **Visibility:** public
+- **Speaker:** Narrator
+- **Timestamp:** 2001-09-09T01:46:40.000Z
+**Content:**
+<p>Updated narration.</p>"
+`;

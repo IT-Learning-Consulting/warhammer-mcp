@@ -1,0 +1,9 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ApplyTemplateToTokenTool — characterization > stacked second template application — zero-delta applied counts 1`] = `"Applied template Cavalry Trappings to token token-goblin01 (Goblin): 0 skills, 0 talents, 0 spells, 5 trappings."`;
+
+exports[`ApplyTemplateToTokenTool — characterization > token template application — summary line with token id and counts 1`] = `"Applied template Veteran Soldier to token token-goblin01 (Goblin): 2 skills, 1 talents, 0 spells, 3 trappings."`;
+
+exports[`ApplyTemplateToTokenTool — characterization > token with no actor name — falls back to actorId in summary 1`] = `"Applied template Scout to token token-unknown01 (actor-unknown-base): 2 skills, 0 talents, 0 spells, 1 trappings."`;
+
+exports[`ApplyTemplateToTokenTool — characterization > wizard token template — includes spell count 1`] = `"Applied template Battle Wizard to token token-wizard01 (Human Wizard): 4 skills, 2 talents, 5 spells, 1 trappings."`;

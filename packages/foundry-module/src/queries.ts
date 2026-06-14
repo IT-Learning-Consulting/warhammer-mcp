@@ -490,7 +490,7 @@ export class QueryHandlers {
         const createdItems = await actor.createEmbeddedDocuments('Item', [itemData], embedOptions);
         if (!createdItems || createdItems.length === 0) throw new Error('Failed to create item on actor');
 
-        const createdItem = createdItems[0];
+        const createdItem = createdItems[0]!;
         notify.created('item', createdItem.name ?? 'unknown', { summary: `on ${actor.name} from compendium`, uuid: (createdItem as any).uuid });
 
         const payload = {

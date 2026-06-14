@@ -1,0 +1,153 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`FoundryDataAccess.getActiveScene — characterization > returns a non-active scene when sceneId is provided 1`] = `
+{
+  "active": false,
+  "background": "scenes/market.webp",
+  "height": 3000,
+  "id": "scene-2",
+  "img": "scenes/market.webp",
+  "lights": 0,
+  "name": "Dungeon",
+  "navigation": true,
+  "notes": [],
+  "padding": 0.25,
+  "sounds": 0,
+  "tokens": [],
+  "walls": 0,
+  "width": 4000,
+}
+`;
+
+exports[`FoundryDataAccess.getActiveScene — characterization > returns current scene data with tokens and notes 1`] = `
+{
+  "active": true,
+  "background": "scenes/market.webp",
+  "height": 3000,
+  "id": "scene-1",
+  "img": "scenes/market.webp",
+  "lights": 3,
+  "name": "Market Square",
+  "navigation": true,
+  "notes": [
+    {
+      "id": "note-1",
+      "text": "Fountain",
+      "x": 200,
+      "y": 300,
+    },
+  ],
+  "padding": 0.25,
+  "sounds": 1,
+  "tokens": [
+    {
+      "actorId": "actor-1",
+      "disposition": -1,
+      "height": 1,
+      "hidden": false,
+      "id": "tok-1",
+      "img": "systems/wfrp4e/icons/blank.png",
+      "name": "Goblin",
+      "width": 1,
+      "x": 100,
+      "y": 200,
+    },
+  ],
+  "walls": 12,
+  "width": 4000,
+}
+`;
+
+exports[`FoundryDataAccess.listScenes — characterization > filters by name substring 1`] = `
+[
+  {
+    "active": false,
+    "background": "scenes/dungeon.webp",
+    "dimensions": {
+      "height": 2000,
+      "width": 2000,
+    },
+    "gridSize": 100,
+    "id": "scene-b",
+    "lighting": 5,
+    "name": "Dungeon Level 1",
+    "navigation": false,
+    "sounds": 0,
+    "tokens": 0,
+    "walls": 30,
+  },
+]
+`;
+
+exports[`FoundryDataAccess.listScenes — characterization > returns bare array of scenes with no options (back-compat) 1`] = `
+[
+  {
+    "active": true,
+    "background": "scenes/market.webp",
+    "dimensions": {
+      "height": 3000,
+      "width": 4000,
+    },
+    "gridSize": 100,
+    "id": "scene-a",
+    "lighting": 2,
+    "name": "Market Square",
+    "navigation": true,
+    "sounds": 1,
+    "tokens": 3,
+    "walls": 8,
+  },
+  {
+    "active": false,
+    "background": "scenes/dungeon.webp",
+    "dimensions": {
+      "height": 2000,
+      "width": 2000,
+    },
+    "gridSize": 100,
+    "id": "scene-b",
+    "lighting": 5,
+    "name": "Dungeon Level 1",
+    "navigation": false,
+    "sounds": 0,
+    "tokens": 0,
+    "walls": 30,
+  },
+]
+`;
+
+exports[`FoundryDataAccess.listScenes — characterization > returns countOnly envelope 1`] = `
+{
+  "filterApplied": false,
+  "total": 2,
+}
+`;
+
+exports[`FoundryDataAccess.listScenes — characterization > returns empty array when no scenes exist 1`] = `[]`;
+
+exports[`FoundryDataAccess.listScenes — characterization > returns paginated envelope when page is specified 1`] = `
+{
+  "page": 1,
+  "pageCount": 2,
+  "pageSize": 1,
+  "scenes": [
+    {
+      "active": true,
+      "background": "scenes/market.webp",
+      "dimensions": {
+        "height": 3000,
+        "width": 4000,
+      },
+      "gridSize": 100,
+      "id": "scene-a",
+      "lighting": 2,
+      "name": "Market Square",
+      "navigation": true,
+      "sounds": 1,
+      "tokens": 3,
+      "walls": 8,
+    },
+  ],
+  "total": 2,
+}
+`;

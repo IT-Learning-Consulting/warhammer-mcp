@@ -1,0 +1,161 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`PlaylistTool — characterization (write) > add-sound — sound added 1`] = `
+"PlaylistSound Added
+
+## PlaylistSound \`snd001\` — Crowd Murmur
+**Playlist:** \`pl001\`
+### Audio
+- path: worlds/aitww/audio/tavern-crowd.ogg
+- volume: 0.4 · repeat: yes · fade: inheritms · channel: inherit
+### Playback
+- playing: no · sort: 0
+### Flags
+- flag keys: 0
+
+**Requested fields:** path, volume"
+`;
+
+exports[`PlaylistTool — characterization (write) > bulk-import-sounds — files imported 1`] = `
+"📦 **Bulk Import**
+
+Imported **3** sound(s) into playlist \`pl001\`:
+- \`worlds/aitww/audio/a.ogg\`
+- \`worlds/aitww/audio/b.ogg\`
+- \`worlds/aitww/audio/c.ogg\`"
+`;
+
+exports[`PlaylistTool — characterization (write) > create-playlist — playlist created 1`] = `
+"Playlist Created
+
+## Playlist \`pl001\` — Tavern Ambience
+### Settings
+- channel: environment · mode: shuffle · sorting: a · sort: 0
+- playing: no · fade: 2000ms · seed: 0
+- folder: _(none)_
+### Sounds (0)
+  _(no sounds)_
+### Ownership / Flags
+- ownership keys: 1
+- flags keys: 0
+
+**Inline sound IDs:** _(none)_
+**Requested fields:** name, channel, mode"
+`;
+
+exports[`PlaylistTool — characterization (write) > delete-playlist — cascade sounds 1`] = `
+"Playlist Deleted
+
+**ID:** \`pl001\`
+**Cascaded sounds:** 3
+
+Permanent — recovery requires journal restore or fresh creation.
+
+### Affected docs (0)
+_(cascade:true ran; no inbound FK references to clear)_"
+`;
+
+exports[`PlaylistTool — characterization (write) > delete-sound — sound removed 1`] = `
+"PlaylistSound Deleted
+
+**ID:** \`snd001\`
+**Playlist:** \`pl001\`
+**Remaining sounds:** 2
+
+### Affected docs (0)
+_(cascade:true ran; no inbound FK references to clear)_"
+`;
+
+exports[`PlaylistTool — characterization (write) > duplicate-playlist — cloned 1`] = `
+"🧬 **Playlist Duplicated**
+
+**New:** Tavern Ambience (Copy) (\`pl002\`)
+
+## Playlist \`pl002\` — Tavern Ambience (Copy)
+### Settings
+- channel: environment · mode: shuffle · sorting: a · sort: 0
+- playing: no · fade: 2000ms · seed: 0
+- folder: _(none)_
+### Sounds (0)
+  _(no sounds)_
+### Ownership / Flags
+- ownership keys: 1
+- flags keys: 0"
+`;
+
+exports[`PlaylistTool — characterization (write) > pause-sound — sound paused 1`] = `
+"⏸️ **Sound Paused**
+
+## PlaylistSound \`snd001\` — Crowd Murmur
+**Playlist:** \`pl001\`
+### Audio
+- path: worlds/aitww/audio/tavern-crowd.ogg
+- volume: 0.4 · repeat: yes · fade: inheritms · channel: inherit
+### Playback
+- playing: no · paused@42s · sort: 0
+### Flags
+- flag keys: 0"
+`;
+
+exports[`PlaylistTool — characterization (write) > play — playlist started 1`] = `
+"Playlist Started
+
+**Playlist:** \`pl001\`
+**Mode:** shuffle
+**Playing:** yes"
+`;
+
+exports[`PlaylistTool — characterization (write) > play — suppressed (disabled mode) 1`] = `
+"Playlist Started
+
+**Playlist:** \`pl001\`
+**Mode:** disabled
+**Playing:** no
+Suppressed: yes (DISABLED mode — play is a no-op)"
+`;
+
+exports[`PlaylistTool — characterization (write) > preload-sound — pushed to clients 1`] = `
+"⏬ **Sound Preloaded**
+
+\`worlds/aitww/audio/tavern-crowd.ogg\` pushed to all clients. _(Transient — no persisted state.)_"
+`;
+
+exports[`PlaylistTool — characterization (write) > stop — playlist stopped 1`] = `
+"Playlist Stopped
+
+**Playlist:** \`pl001\`
+**Playing:** no"
+`;
+
+exports[`PlaylistTool — characterization (write) > update-playlist — changed fields + view 1`] = `
+"Playlist Updated
+
+**Changed fields:** fade
+
+## Playlist \`pl001\` — Tavern Ambience
+### Settings
+- channel: environment · mode: shuffle · sorting: a · sort: 0
+- playing: no · fade: 4000ms · seed: 0
+- folder: _(none)_
+### Sounds (0)
+  _(no sounds)_
+### Ownership / Flags
+- ownership keys: 1
+- flags keys: 0"
+`;
+
+exports[`PlaylistTool — characterization (write) > update-sound — changed fields + view 1`] = `
+"PlaylistSound Updated
+
+**Changed fields:** volume
+
+## PlaylistSound \`snd001\` — Crowd Murmur
+**Playlist:** \`pl001\`
+### Audio
+- path: worlds/aitww/audio/tavern-crowd.ogg
+- volume: 0.8 · repeat: yes · fade: inheritms · channel: inherit
+### Playback
+- playing: no · sort: 0
+### Flags
+- flag keys: 0"
+`;

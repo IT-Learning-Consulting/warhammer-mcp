@@ -1,0 +1,16 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ModuleLightingTool — characterization > MODULE_NOT_ACTIVE — probe inactive branch 1`] = `"module-lighting failed: MODULE_NOT_ACTIVE: CommunityLighting is not active"`;
+
+exports[`ModuleLightingTool — characterization > list-animations — empty registry 1`] = `"module-lighting.list-animations: no CommunityLighting animations registered (CONFIG.Canvas.lightAnimations is empty of CL entries)."`;
+
+exports[`ModuleLightingTool — characterization > list-animations — with custom properties 1`] = `
+"module-lighting.list-animations: 1 CommunityLighting animation(s):
+  • CLSmoke  (author: CommunityLighting) — custom props: [secondaryColor, speed]"
+`;
+
+exports[`ModuleLightingTool — characterization > list-animations — with entries (no custom props) 1`] = `
+"module-lighting.list-animations: 2 CommunityLighting animation(s):
+  • CLFlicker  (author: CommunityLighting)
+  • CLPulse  (author: CommunityLighting)"
+`;

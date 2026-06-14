@@ -1,0 +1,158 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`DiagnosticTool — characterization > hook-inventory — hooks with drift detected 1`] = `
+"**Diagnostic — hook-inventory**
+
+Hooks: 3 distinct, 9 listener(s).
+
+**Drift detected (1):**
+- \`updateToken\` count=6 > threshold=5
+
+**Hooks (top 3):**
+- \`updateToken\` × 6 ⚠️ drift
+- \`renderActorSheet\` × 2
+- \`createChatMessage\` × 1"
+`;
+
+exports[`DiagnosticTool — characterization > inspect-document — actor with effects and items preview 1`] = `
+"**Diagnostic — inspect-document**
+
+**Actor**:character "Hans Gruber"
+- UUID: \`Actor.actor-abc123\`
+- Sheet: \`ActorSheetWfrp4e\`
+- Effects: 2
+  - Prone [eff-001] (disabled=false, transfer=false)
+  - Bleeding [eff-002] (disabled=false, transfer=true)
+- Items: 3
+  - Sword [item-001] (weapon)
+  - Leather Armour [item-002] (armour)
+  - Athletics [item-003] (skill)
+
+**System:**
+\`\`\`json
+{
+  "characteristics": {
+    "ws": {
+      "value": 35
+    }
+  }
+}
+\`\`\`
+
+**Flags:** warhammer-mcp
+
+**Ownership:** default=0, user-gm=3"
+`;
+
+exports[`DiagnosticTool — characterization > module-inventory — mixed active/inactive modules 1`] = `
+"**Diagnostic — module-inventory**
+
+Modules: 3 (active: 2).
+
+| id | version | active | availability | unavailable |
+|---|---|---|---|---|
+| \`warhammer-mcp\` | 1.0.0 | yes | AVAILABLE (0) | no |
+| \`wfrp4e-core\` | 3.0.0 | yes | AVAILABLE (0) | no |
+| \`old-module\` | 0.1.0 | no | REQUIRES_UPDATE (3) | yes ⚠️ core-incompat |"
+`;
+
+exports[`DiagnosticTool — characterization > recent-errors — empty buffer 1`] = `
+"**Recent errors** — none.
+
+Buffer: 0/200."
+`;
+
+exports[`DiagnosticTool — characterization > recent-errors — events present 1`] = `
+"**Recent errors** (2 of 2) (filter: severity=error, limit=20)
+
+Buffer: 2/200.
+
+- 2024-06-10T06:13:20.000Z [error] window @ wfrp4e.js:1234: Cannot read property of undefined
+- 2024-06-10T06:13:21.000Z [warn] console.warn [init]: Deprecated API usage"
+`;
+
+exports[`DiagnosticTool — characterization > scan-broken-uuids — actor scope with details 1`] = `
+"**Diagnostic — scan-broken-uuids**
+
+Checked 3 doc(s); 1 with broken refs; 2 broken @UUID link(s) (42ms).
+
+**Broken refs:**
+- Hans Gruber [actor-001] \`system.description.value\`: \`Actor.missing123\`
+- Hans Gruber [actor-001] (embedded item item-abc) \`system.description.value\`: \`Item.missingXYZ\`"
+`;
+
+exports[`DiagnosticTool — characterization > scan-career-refs — world counts-only mode 1`] = `
+"**Diagnostic — scan-career-refs**
+
+Checked 10 career item(s); 3 unresolved skill/talent name(s) (120ms).
+
+_Counts-only mode (scope.type=world without confirmExpensive). Re-call with \`scope.confirmExpensive: true\` for details._"
+`;
+
+exports[`DiagnosticTool — characterization > settings-inventory — namespace-filtered settings 1`] = `
+"**Diagnostic — settings-inventory**
+
+Settings: 2 entries in namespace "warhammer-mcp".
+
+**warhammer-mcp** (2):
+- \`mcpVerboseConsole\` (world, Boolean) — current: true | default: false
+- \`auditWritesToChat\` (world, Boolean) — current: false | default: false"
+`;
+
+exports[`DiagnosticTool — characterization > support-snapshot — version summary with modules 1`] = `
+"**Support snapshot**
+
+- Foundry core: 13.341
+- System: wfrp4e 6.6.2
+- World: Adventures in the Warhammer World (adventures-in-the-warhammer-world)
+- Active modules: 2
+
+**Modules:**
+- warhammer-mcp @ 1.0.0 — Warhammer MCP
+- wfrp4e-core @ 3.0.0 — WFRP4e Core"
+`;
+
+exports[`DiagnosticTool — characterization > validate-ae-scripts — item scope with mixed issues 1`] = `
+"**Diagnostic — validate-ae-scripts**
+
+Checked 5 AE(s); 2 invalid; 1 schema-drift (pre-v11 non-array scriptData) (15ms).
+
+**Syntax errors (1):**
+- Fire Sword → AE Burning Effect [applyDamage]: SyntaxError: Unexpected token ')'
+
+**Unknown triggers (1):**
+- Ice Blade → AE Chill Aura: trigger \`onMysticalTrigger\`
+
+**Schema drift (1 — pre-v11 non-array scriptData):**
+- Old Wand → AE Legacy Script: scriptData must be array"
+`;
+
+exports[`DiagnosticTool — characterization > validate-wfrp-config — OK 1`] = `
+"**Diagnostic — validate-wfrp-config**
+
+OK: all CONFIG.WFRP4E keys conform to expected shape."
+`;
+
+exports[`DiagnosticTool — characterization > validate-wfrp-config — failures 1`] = `
+"**Diagnostic — validate-wfrp-config**
+
+FAIL: 2 failure(s):
+
+- \`xpCost\` expected array length>=10, actual length=5
+- \`species\` expected non-empty record, actual empty object"
+`;
+
+exports[`DiagnosticTool — characterization > world-issues — mixed bucket counts 1`] = `
+"**World issues**
+
+- Package compatibility: 1
+- Usability: 0
+- Validation: 2
+
+**packageCompatibility:**
+- outdated-module: {"label":"Module is outdated","type":"compat"}
+
+**validation:**
+- missing-field-a: {"label":"Missing required field A"}
+- schema-drift-b: {"label":"Schema drift on field B"}"
+`;

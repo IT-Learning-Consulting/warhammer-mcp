@@ -1,0 +1,45 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ModuleLevelsTool — characterization > MODULE_NOT_ACTIVE — probe inactive branch 1`] = `"module-levels failed: MODULE_NOT_ACTIVE: levels is not active"`;
+
+exports[`ModuleLevelsTool — characterization > get-capabilities — family active 1`] = `
+"module-levels.get-capabilities:
+Family:
+  - levels: ACTIVE (v15.0.0)
+  - wall-height: ACTIVE (v7.2.0)
+  - levelsvolumetrictemplates: not installed
+  - levels-layer-effects: not installed
+volumetric=false layerEffects=false betterRoofs=false
+Migration: migrateOnStartup=false, pending=false, residualRangeBottom=false
+Settings (read-only-inform):
+  - levels.defaultTokenElevation: 0
+  - wall-height.defaultTokenHeight: 6"
+`;
+
+exports[`ModuleLevelsTool — characterization > get-elevation-data — token elevation 1`] = `
+"module-levels.get-elevation-data: Token "Karl"
+  elevation: 10
+  flags.levels: {"rangeBottom":10}
+  flags.wall-height: {"tokenHeight":6}"
+`;
+
+exports[`ModuleLevelsTool — characterization > rescale-grid-distance — dry run (no confirm) 1`] = `
+"module-levels.rescale-grid-distance [DRY-RUN (no docs mutated)]: 5 → 2 (×0.400)
+  affected: Token=8, Tile=2, Wall=0; sceneLevelBands=3; total=10
+  Pass confirm:true to execute."
+`;
+
+exports[`ModuleLevelsTool — characterization > set-scene-flags — flags written 1`] = `
+"module-levels.set-scene-flags:
+  sceneId: Scene.abc
+  backgroundElevation: 0
+  weatherElevation: 5"
+`;
+
+exports[`ModuleLevelsTool — characterization > set-token-elevation — elevation written 1`] = `
+"module-levels.set-token-elevation:
+  tokenId: Token.xyz
+  sceneId: Scene.abc
+  elevation: 10
+  tokenHeight: 6"
+`;

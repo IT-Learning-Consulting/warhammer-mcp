@@ -1,0 +1,129 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`SoundTool — characterization > create — ambient sound created with requested fields 1`] = `
+"🔊 **AmbientSound Created**
+
+## AmbientSound \`sound-id-001\`
+**Scene:** \`scene-id-001\`
+
+### Position
+- x: 500, y: 300, elevation: 0, radius: 30
+
+### Audio
+- path: sounds/ambient/tavern.ogg
+- volume: 0.4, repeat: yes, easing: yes
+
+### Flags
+- walls: on · hidden: no
+
+### Darkness Threshold
+- min: 0, max: 1
+
+### Effects
+- base: type=_(none)_, intensity=5
+- muffled: type=_(none)_, intensity=5
+
+_Requested fields: x, y, path, volume, radius_"
+`;
+
+exports[`SoundTool — characterization > delete — deleted confirmation with remaining count 1`] = `
+"🗑️ **AmbientSound Deleted**
+
+**ID:** \`sound-id-001\`
+**Remaining sounds on scene:** 1
+
+⚠️ Permanent."
+`;
+
+exports[`SoundTool — characterization > duplicate — cloned sound with sourceId 1`] = `
+"🧬 **AmbientSound Duplicated**
+
+_From \`sound-id-001\`_
+
+## AmbientSound \`sound-id-002\`
+**Scene:** \`scene-id-001\`
+
+### Position
+- x: 500, y: 300, elevation: 0, radius: 30
+
+### Audio
+- path: sounds/ambient/tavern.ogg
+- volume: 0.4, repeat: yes, easing: yes
+
+### Flags
+- walls: on · hidden: no
+
+### Darkness Threshold
+- min: 0, max: 1
+
+### Effects
+- base: type=_(none)_, intensity=5
+- muffled: type=_(none)_, intensity=5"
+`;
+
+exports[`SoundTool — characterization > get — single sound view 1`] = `
+"## AmbientSound \`sound-id-001\`
+**Scene:** \`scene-id-001\`
+
+### Position
+- x: 500, y: 300, elevation: 0, radius: 30
+
+### Audio
+- path: sounds/ambient/tavern.ogg
+- volume: 0.4, repeat: yes, easing: yes
+
+### Flags
+- walls: on · hidden: no
+
+### Darkness Threshold
+- min: 0, max: 1
+
+### Effects
+- base: type=_(none)_, intensity=5
+- muffled: type=_(none)_, intensity=5"
+`;
+
+exports[`SoundTool — characterization > list — bare list of sounds 1`] = `
+"🔊 **AmbientSounds** (1)
+
+- \`sound-id-001\` @ scene \`scene-id-001\` · vol=0.4 · hidden=no · sounds/ambient/tavern.ogg"
+`;
+
+exports[`SoundTool — characterization > list — countOnly path with filter 1`] = `
+"🔊 **AmbientSound count**
+
+**Total:** 2
+**Filter applied:** tavern"
+`;
+
+exports[`SoundTool — characterization > list — paginated sounds 1`] = `
+"🔊 **AmbientSounds** (page 1 of 1, 3 total)
+
+- \`sound-id-001\` @ scene \`scene-id-001\` · vol=0.4 · hidden=no · sounds/ambient/tavern.ogg"
+`;
+
+exports[`SoundTool — characterization > update — changed fields + updated sound view 1`] = `
+"✏️ **AmbientSound Updated**
+
+**Changed fields:** hidden, volume
+
+## AmbientSound \`sound-id-001\`
+**Scene:** \`scene-id-001\`
+
+### Position
+- x: 500, y: 300, elevation: 0, radius: 30
+
+### Audio
+- path: sounds/ambient/tavern.ogg
+- volume: 0.6, repeat: yes, easing: yes
+
+### Flags
+- walls: on · hidden: yes
+
+### Darkness Threshold
+- min: 0, max: 1
+
+### Effects
+- base: type=_(none)_, intensity=5
+- muffled: type=_(none)_, intensity=5"
+`;

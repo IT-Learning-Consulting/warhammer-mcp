@@ -1,0 +1,70 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`FolderTool — characterization > create — folder created 1`] = `
+"Folder Created
+
+- **ID:** \`fld001\`
+- **Name:** Session 12 NPCs
+- **Type:** Actor
+- **Depth:** 0
+- **Parent:** _(root)_"
+`;
+
+exports[`FolderTool — characterization > delete — folder removed 1`] = `
+"Folder Deleted
+
+- **Deleted ID:** \`fld001\`
+- **Remaining folders:** 5"
+`;
+
+exports[`FolderTool — characterization > get — folder view 1`] = `
+"## Folder \`fld001\` — Session 12 NPCs
+- **Type:** Actor
+- **Depth:** 0
+- **Parent folder:** _(root)_
+- **Color:** #ff0000
+- **Sort:** 0 (sorting: manual)"
+`;
+
+exports[`FolderTool — characterization > list — bare list with items 1`] = `
+"Folders (2 folders)
+
+- \`fld001\` Session 12 NPCs [Actor] #ff0000
+- \`fld002\` Session 13 NPCs [Actor]"
+`;
+
+exports[`FolderTool — characterization > list — countOnly 1`] = `"Total folders: 12"`;
+
+exports[`FolderTool — characterization > list — empty 1`] = `"No folders found matching criteria."`;
+
+exports[`FolderTool — characterization > list — paginated shape 1`] = `
+"Folders
+
+Page 1 of 3 (5 total)
+
+- \`fld001\` Session 12 NPCs [Actor]"
+`;
+
+exports[`FolderTool — characterization > list-contents — empty folder 1`] = `"Folder "Empty Folder" (shallow) is empty."`;
+
+exports[`FolderTool — characterization > list-contents — shallow folder contents 1`] = `
+"Folder Contents — "Session 12 NPCs" (shallow)
+
+- \`act001\` Hans Mauer [Actor] · Actor.act001
+- \`act002\` Gertrude Schmidt [Actor] · Actor.act002
+
+Total: 2"
+`;
+
+exports[`FolderTool — characterization > update — changed fields + view 1`] = `
+"Folder Updated
+
+**Changed fields:** color
+
+## Folder \`fld001\` — Session 12 NPCs
+- **Type:** Actor
+- **Depth:** 0
+- **Parent folder:** _(root)_
+- **Color:** #00ff00
+- **Sort:** 0 (sorting: manual)"
+`;

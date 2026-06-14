@@ -1,0 +1,145 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ActorCreationTools — characterization > create-actor — blank character actor created 1`] = `
+{
+  "actor": {
+    "id": "newactor12345678",
+    "name": "TestCharacter",
+    "type": "character",
+  },
+  "summary": "✅ Created character actor "TestCharacter" (ID: newactor12345678)",
+}
+`;
+
+exports[`ActorCreationTools — characterization > create-actor — npc with systemData and skipItems 1`] = `
+{
+  "actor": {
+    "id": "npcactor12345678",
+    "name": "Town Guard",
+    "type": "npc",
+  },
+  "summary": "✅ Created npc actor "Town Guard" (ID: npcactor12345678)",
+}
+`;
+
+exports[`ActorCreationTools — characterization > create-actor-from-compendium — multiple actors with token placement 1`] = `
+{
+  "details": {
+    "actors": [
+      {
+        "id": "gob001actor12345",
+        "name": "Snag",
+        "type": "creature",
+      },
+      {
+        "id": "gob002actor12345",
+        "name": "Fang",
+        "type": "creature",
+      },
+      {
+        "id": "gob003actor12345",
+        "name": "Nit",
+        "type": "creature",
+      },
+    ],
+    "errors": [],
+    "sourceEntry": {
+      "itemId": "goblin001234567",
+      "packId": "wfrp4e-core.bestiary",
+    },
+    "tokensPlaced": 3,
+  },
+  "message": "✅ Created 3 of 3 requested actors
+
+• **Snag** (from wfrp4e-core.bestiary)
+• **Fang** (from wfrp4e-core.bestiary)
+• **Nit** (from wfrp4e-core.bestiary)
+🎯 Added 3 tokens to the current scene",
+  "success": true,
+  "summary": "✅ Created 3 of 3 requested actors",
+}
+`;
+
+exports[`ActorCreationTools — characterization > create-actor-from-compendium — single actor, no scene placement 1`] = `
+{
+  "details": {
+    "actors": [
+      {
+        "id": "gobactor1234567",
+        "name": "Snaggletooth",
+        "type": "creature",
+      },
+    ],
+    "errors": [],
+    "sourceEntry": {
+      "itemId": "goblin001234567",
+      "packId": "wfrp4e-core.bestiary",
+    },
+    "tokensPlaced": 0,
+  },
+  "message": "✅ Created 1 of 1 requested actors
+
+• **Snaggletooth** (from wfrp4e-core.bestiary)",
+  "success": true,
+  "summary": "✅ Created 1 of 1 requested actors",
+}
+`;
+
+exports[`ActorCreationTools — characterization > get-compendium-entry-full — full stat block 1`] = `
+{
+  "effects": [],
+  "fullData": {
+    "prototypeToken": {
+      "name": "Goblin",
+    },
+  },
+  "items": [
+    {
+      "id": "trait001",
+      "name": "Bite",
+      "type": "trait",
+    },
+    {
+      "id": "weapon001",
+      "name": "Crude Club",
+      "type": "weapon",
+    },
+  ],
+  "name": "Goblin",
+  "pack": "Core Bestiary",
+  "summary": "📊 **Goblin** (creature from Core Bestiary)
+📦 Items: Bite, Crude Club",
+  "system": {
+    "characteristics": {
+      "ws": {
+        "value": 30,
+      },
+    },
+  },
+  "type": "creature",
+}
+`;
+
+exports[`ActorCreationTools — characterization > get-compendium-entry-full — summary_only mode 1`] = `
+{
+  "effects": [],
+  "items": [
+    {
+      "id": "trait001",
+      "name": "Bite",
+      "type": "trait",
+    },
+    {
+      "id": "weapon001",
+      "name": "Crude Club",
+      "type": "weapon",
+    },
+  ],
+  "mode": "summary_only",
+  "name": "Goblin",
+  "pack": "Core Bestiary",
+  "summary": "📊 **Goblin** (creature from Core Bestiary)
+📦 Items: Bite, Crude Club",
+  "type": "creature",
+}
+`;

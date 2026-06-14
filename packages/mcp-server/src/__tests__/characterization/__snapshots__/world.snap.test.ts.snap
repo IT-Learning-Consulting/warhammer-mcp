@@ -1,0 +1,55 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`WorldTool — characterization > get-world-info — minimal payload (all optional fields missing) 1`] = `
+"🌍 **World Info**
+
+**Title:** 
+**ID:** \`\`
+**System:**  v
+**Foundry version:** 
+
+### Users
+- Total: 0
+- Active: 0
+- GMs: 0
+- Players: 0
+
+### Active users
+_(no one connected)_"
+`;
+
+exports[`WorldTool — characterization > get-world-info — no active users 1`] = `
+"🌍 **World Info**
+
+**Title:** Empty World
+**ID:** \`empty-world\`
+**System:** wfrp4e v6.6.0
+**Foundry version:** 13.300
+
+### Users
+- Total: 1
+- Active: 0
+- GMs: 1
+- Players: 0
+
+### Active users
+_(no one connected)_"
+`;
+
+exports[`WorldTool — characterization > get-world-info — world with active GM user 1`] = `
+"🌍 **World Info**
+
+**Title:** Adventures in the Warhammer World
+**ID:** \`adventures-in-the-warhammer-world\`
+**System:** wfrp4e v6.6.2
+**Foundry version:** 13.341
+
+### Users
+- Total: 2
+- Active: 1
+- GMs: 1
+- Players: 1
+
+### Active users
+- 👑 Gamemaster (\`user-gm-001\`)"
+`;

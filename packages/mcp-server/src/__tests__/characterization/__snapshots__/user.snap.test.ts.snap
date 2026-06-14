@@ -1,0 +1,130 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`UserTool — characterization > flag-clear — flag cleared 1`] = `
+"User Flag Cleared
+
+- **User ID:** \`user001\`
+- **Flag:** warhammer-mcp.tutorialSeen
+- **Cleared:** yes"
+`;
+
+exports[`UserTool — characterization > flag-set — boolean flag 1`] = `
+"User Flag Set
+
+- **User ID:** \`user001\`
+- **Flag:** warhammer-mcp.tutorialSeen
+- **Value:** \`true\`"
+`;
+
+exports[`UserTool — characterization > get — user with hotbar 1`] = `
+"## User \`user001\` — GrimmFM
+
+### Identity
+- role: 4 · isGM: yes · banned: no
+- active: yes · viewedScene: scene001
+- color: #ff0000 · avatar: icons/avatar.webp · pronouns: he/him 
+- character: actor001 · hotbar slots used: 3
+
+### Flags / Permissions
+- explicit permission overrides: 0
+- flag scopes: 1
+
+### Hotbar
+- slot 1: \`macro001\`
+- slot 5: \`macro002\`"
+`;
+
+exports[`UserTool — characterization > hotbar-assign — slot filled 1`] = `
+"User Hotbar Updated
+
+- **User ID:** \`user001\`
+- **Slot:** 3
+- **Macro ID:** \`macro003\` (Apply Bleed)
+- **Assigned:** yes
+- **Overwrote previous slot value:** no
+- **Previous macro ID:** _(none)_"
+`;
+
+exports[`UserTool — characterization > hotbar-clear — slot cleared 1`] = `
+"User Hotbar Slot Cleared
+
+- **User ID:** \`user001\`
+- **Slot:** 3
+- **Cleared:** yes
+- **Already empty:** no
+- **Previous macro ID:** macro003"
+`;
+
+exports[`UserTool — characterization > hotbar-list — empty hotbar 1`] = `
+"User Hotbar
+
+- **User ID:** \`user002\`
+- **Occupied slots:** 0
+
+_No assigned hotbar slots._"
+`;
+
+exports[`UserTool — characterization > hotbar-list — occupied slots 1`] = `
+"User Hotbar
+
+- **User ID:** \`user001\`
+- **Occupied slots:** 2
+
+- slot 1: \`macro001\` (Roll Initiative)
+- slot 5: \`macro002\`"
+`;
+
+exports[`UserTool — characterization > list — user listing 1`] = `
+"Users (2 of 2)
+
+- **Offset:** 0
+- **Limit:** 50
+
+- \`user001\` GrimmFM · role=4 · active=yes · color=#ff0000 · character=actor001 · hotbar=3 · viewedScene=scene001
+- \`user002\` Brunhilde · role=1 · active=no · color=#00ff00 · character=_(none)_ · hotbar=0 · viewedScene=_(none)_"
+`;
+
+exports[`UserTool — characterization > set-role — promoted to trusted 1`] = `
+"User Role Updated
+
+- **User ID:** \`user002\`
+- **Previous role:** PLAYER
+- **New role:** TRUSTED
+- **Reload required:** yes
+
+## User \`user002\` — Brunhilde
+
+### Identity
+- role: 2 · isGM: no · banned: no
+- active: yes · viewedScene: scene001
+- color: #ff0000 · avatar: icons/avatar.webp · pronouns: he/him 
+- character: actor001 · hotbar slots used: 3
+
+### Flags / Permissions
+- explicit permission overrides: 0
+- flag scopes: 1
+
+### Hotbar
+_Hotbar not requested._"
+`;
+
+exports[`UserTool — characterization > update — color changed 1`] = `
+"User Updated
+
+**Changed fields:** color
+
+## User \`user001\` — GrimmFM
+
+### Identity
+- role: 4 · isGM: yes · banned: no
+- active: yes · viewedScene: scene001
+- color: #0000ff · avatar: icons/avatar.webp · pronouns: he/him 
+- character: actor001 · hotbar slots used: 3
+
+### Flags / Permissions
+- explicit permission overrides: 0
+- flag scopes: 1
+
+### Hotbar
+_Hotbar not requested._"
+`;

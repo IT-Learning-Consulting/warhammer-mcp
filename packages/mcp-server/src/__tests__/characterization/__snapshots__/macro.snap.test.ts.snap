@@ -1,0 +1,184 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`MacroTool — characterization > create — chat macro 1`] = `
+"Macro Created
+
+## Macro \`mac001\` — Roll Initiative
+
+### Settings
+- type: chat · scope: global
+- img: _(none)_ · folder: _(none)_
+- author: user001
+
+### Command
+\`\`\`
+/roll 1d10
+\`\`\`
+
+### Ownership / Flags
+- ownership keys: 2
+- flag keys: 0
+
+**Requested fields:** name, type, command"
+`;
+
+exports[`MacroTool — characterization > delete — no orphan refs 1`] = `
+"Macro Deleted
+
+- **ID:** \`mac001\`
+- **Remaining macros:** 5
+
+_No orphan references found._"
+`;
+
+exports[`MacroTool — characterization > delete — with hotbar orphans 1`] = `
+"Macro Deleted
+
+- **ID:** \`mac001\`
+- **Remaining macros:** 4
+
+### WARN: orphan references (Phase 10 cleanup territory)
+
+**Hotbar slots (1 user(s)):**
+- \`user002\` Brunhilde: slots 3, 7
+
+Use \`/wfrp-user clear-stale-slot\` for single-slot cleanup, \`/wfrp-region deleteBehavior\` for single region cleanup, or \`cross-doc-fk audit-orphans\` for full-world bulk audit."
+`;
+
+exports[`MacroTool — characterization > execute — chat macro result 1`] = `
+"Macro Executed
+
+- **Macro ID:** \`mac001\`
+- **Type:** chat
+- **Executed at:** 2026-06-13T10:00:00.000Z
+- **Elapsed:** 12ms
+- **Threw:** no
+- **ChatMessage ID:** msg001"
+`;
+
+exports[`MacroTool — characterization > execute — script macro with return value 1`] = `
+"Macro Executed
+
+- **Macro ID:** \`mac002\`
+- **Type:** script
+- **Executed at:** 2026-06-13T10:00:01.000Z
+- **Elapsed:** 45ms
+- **Threw:** no
+- **Script return:** \`{"success":true}\`
+
+### Warnings
+- deprecated API used"
+`;
+
+exports[`MacroTool — characterization > execute-by-name — success 1`] = `
+"Macro Executed
+
+- **Macro ID:** \`mac001\`
+- **Type:** chat
+- **Executed at:** 2026-06-13T10:00:02.000Z
+- **Elapsed:** 8ms
+- **Threw:** no
+- **ChatMessage ID:** msg002"
+`;
+
+exports[`MacroTool — characterization > get — fetch by id 1`] = `
+"## Macro \`mac001\` — Roll Initiative
+
+### Settings
+- type: chat · scope: global
+- img: _(none)_ · folder: _(none)_
+- author: user001
+
+### Command
+\`\`\`
+/roll 1d10
+\`\`\`
+
+### Ownership / Flags
+- ownership keys: 2
+- flag keys: 0"
+`;
+
+exports[`MacroTool — characterization > get-execution-target — target read 1`] = `
+"Macro Execution Target
+
+- **Macro:** \`mac001\` Roll Initiative
+- **Target:** runForEveryone
+- **canRunAsGM:** true"
+`;
+
+exports[`MacroTool — characterization > import-from-compendium — macro imported 1`] = `
+"📥 **Macro Imported**
+
+From pack \`wfrp4e-core.macros\`
+
+## Macro \`mac010\` — Core Macro
+
+### Settings
+- type: chat · scope: global
+- img: _(none)_ · folder: _(none)_
+- author: user001
+
+### Command
+\`\`\`
+/roll 1d10
+\`\`\`
+
+### Ownership / Flags
+- ownership keys: 2
+- flag keys: 0"
+`;
+
+exports[`MacroTool — characterization > list — count only 1`] = `
+"Macro count
+
+**Total:** 12
+**Filter applied:** initiative"
+`;
+
+exports[`MacroTool — characterization > list — paginated 1`] = `
+"Macros (page 1 of 1, 10 total)
+
+- \`mac001\` Roll Initiative · type=chat · scope=global · folder=_(none)_ · cmd=\`/roll 1d10\`
+- \`mac002\` Apply Bleed · type=script · scope=actor · folder=_(none)_"
+`;
+
+exports[`MacroTool — characterization > list-world-scripts — scripts found 1`] = `
+"World-script macros (2)
+
+- \`mac003\` Setup Script · hook=setup · cmd=\`game.settings.set(...)\`
+- \`mac004\` Ready Script · hook=ready"
+`;
+
+exports[`MacroTool — characterization > set-execution-target — GM target with warning 1`] = `
+"Macro Execution Target Set
+
+- **Macro:** \`mac001\` Roll Initiative
+- **Target:** GM
+- **canRunAsGM:** false
+
+⚠ **canRunAsGM is false — flag NOT written** — flag NOT written.
+_Author mismatch_"
+`;
+
+exports[`MacroTool — characterization > update — rename 1`] = `
+"Macro Updated
+
+**Changed fields:** name
+
+## Macro \`mac001\` — Roll Initiative v2
+
+### Settings
+- type: chat · scope: global
+- img: _(none)_ · folder: _(none)_
+- author: user001
+
+### Command
+\`\`\`
+/roll 1d10
+\`\`\`
+
+### Ownership / Flags
+- ownership keys: 2
+- flag keys: 0"
+`;

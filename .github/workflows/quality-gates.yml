@@ -1,0 +1,73 @@
+name: Quality Gates
+
+# Tier-A regression gate for the warhammer-mcp stack (MCP Code-Quality Hardening Phase 0, R0.13).
+# Runs the full pure-additive guardrail chain on every PR + push. All gate checks are cross-platform
+# Node .mjs (only deploy/.ps1 are Windows-only and never run here) -> ubuntu-latest, Node 20.
+# Evals are EXCLUDED on purpose: the 860-pair behavioral baseline is Tier B (needs live Foundry; HC3)
+# and runs inside /agent-validate post-restart, never in CI.
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  tier-a:
+    name: Tier-A guardrails
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history — lint ratchet needs the merge-base)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install (all workspaces)
+        run: npm ci --workspaces --include-workspace-root
+
+      - name: Build (6 on-build checks + audit:boundaries + bundles + tool-schema validate + browser-safe)
+        run: npm run build
+
+      - name: Typecheck (all workspaces)
+        run: npm run typecheck
+
+      - name: Test (vitest run — CI=true forces run mode)
+        run: npm test
+
+      - name: Lint (legacy = warn, new files = error via ratchet step)
+        run: npm run lint
+
+      - name: Lint ratchet (changed files at error severity)
+        run: npm run lint:ratchet
+        env:
+          RATCHET_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+
+      - name: Audit — circular deps (madge)
+        run: npm run audit:circular
+
+      - name: Audit — domain boundaries (dependency-cruiser)
+        run: npm run audit:boundaries
+
+      - name: Conformance — tools/list inputSchema draft-07 + baseline diff
+        run: npm run conformance
+
+      - name: Tool-surface snapshot diff (HC6/HC8 drift gate)
+        run: npm run snapshot:tools-list:diff
+
+      - name: Dist freshness (no stale-dist false-greens)
+        run: npm run check:dist-freshness
+
+      - name: Bench diff (perf regression — guarded behind a committed baseline)
+        run: |
+          if [ -f bench/baseline.json ]; then
+            npm run bench:diff
+          else
+            echo "bench/baseline.json absent — skipping perf gate"
+          fi

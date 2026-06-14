@@ -1,0 +1,17 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`DuplicateActorTool — characterization > duplicate-actor — clone with custom newName 1`] = `
+{
+  "id": "clone00234567890",
+  "name": "Ernst the Dockworker",
+  "type": "npc",
+}
+`;
+
+exports[`DuplicateActorTool — characterization > duplicate-actor — clone with default name (source name) 1`] = `
+{
+  "id": "clone00123456789",
+  "name": "Human",
+  "type": "npc",
+}
+`;

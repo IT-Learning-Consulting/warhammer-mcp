@@ -1,0 +1,42 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`FoundryDataAccess.getWorldInfo — characterization > returns full world info with users 1`] = `
+{
+  "foundryVersion": "13.341",
+  "id": "test-world",
+  "system": "wfrp4e",
+  "systemVersion": "6.6.2",
+  "title": "Adventures in the Warhammer World",
+  "users": [
+    {
+      "active": true,
+      "id": "gm-1",
+      "isGM": true,
+      "name": "Game Master",
+    },
+    {
+      "active": true,
+      "id": "player-1",
+      "isGM": false,
+      "name": "Alice",
+    },
+    {
+      "active": false,
+      "id": "player-2",
+      "isGM": false,
+      "name": "Bob",
+    },
+  ],
+}
+`;
+
+exports[`FoundryDataAccess.getWorldInfo — characterization > returns world info with empty users list 1`] = `
+{
+  "foundryVersion": "13.341",
+  "id": "empty-world",
+  "system": "wfrp4e",
+  "systemVersion": "6.6.2",
+  "title": "Empty World",
+  "users": [],
+}
+`;

@@ -1,0 +1,210 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`TileTool — characterization > bring-to-front — tile sort updated 1`] = `
+"🔀 **Tile bring-to-front**
+
+sort now 100
+
+## Tile \`tile-id-001\`
+**Scene:** \`scene-id-001\`
+
+### Geometry
+- x: 200, y: 300, width: 200, height: 200
+- elevation: 0, sort: 100, rotation: 0°, alpha: 1
+
+### Flags
+- hidden: no · locked: no
+
+### Texture
+- src: \`modules/foo/tile.webp\`
+  - anchor: (0.5, 0.5), offset: (0, 0)
+  - scale: (1, 1), rotation: 0°, tint: #ffffff, fit: fill
+
+### Occlusion
+- mode: 0 · alpha: 0
+  (modes: 0=NONE, 1=FADE, 3=RADIAL, 4=VISION — gap at 2)
+
+### Video
+- loop: no · autoplay: no · volume: 0
+  ⚠️ B3: when updating \`video\`, include \`video.volume\` explicitly to preserve its value.
+
+### Restrictions
+- light: pass · weather: pass"
+`;
+
+exports[`TileTool — characterization > create — tile created view 1`] = `
+"🟩 **Tile Created**
+
+## Tile \`tile-id-001\`
+**Scene:** \`scene-id-001\`
+
+### Geometry
+- x: 200, y: 300, width: 200, height: 200
+- elevation: 0, sort: 0, rotation: 0°, alpha: 1
+
+### Flags
+- hidden: no · locked: no
+
+### Texture
+- src: \`modules/foo/tile.webp\`
+  - anchor: (0.5, 0.5), offset: (0, 0)
+  - scale: (1, 1), rotation: 0°, tint: #ffffff, fit: fill
+
+### Occlusion
+- mode: 0 · alpha: 0
+  (modes: 0=NONE, 1=FADE, 3=RADIAL, 4=VISION — gap at 2)
+
+### Video
+- loop: no · autoplay: no · volume: 0
+  ⚠️ B3: when updating \`video\`, include \`video.volume\` explicitly to preserve its value.
+
+### Restrictions
+- light: pass · weather: pass
+
+_Requested fields: width, height, texture_"
+`;
+
+exports[`TileTool — characterization > delete — deleted confirmation 1`] = `
+"🗑️ **Tile Deleted**
+
+**ID:** \`tile-id-001\`
+**Scene:** \`scene-id-001\`
+
+⚠️ Permanent."
+`;
+
+exports[`TileTool — characterization > duplicate — cloned tile with sourceId 1`] = `
+"🧬 **Tile Duplicated**
+
+_From \`tile-id-001\`_
+
+## Tile \`tile-id-002\`
+**Scene:** \`scene-id-001\`
+
+### Geometry
+- x: 200, y: 300, width: 200, height: 200
+- elevation: 0, sort: 0, rotation: 0°, alpha: 1
+
+### Flags
+- hidden: no · locked: no
+
+### Texture
+- src: \`modules/foo/tile.webp\`
+  - anchor: (0.5, 0.5), offset: (0, 0)
+  - scale: (1, 1), rotation: 0°, tint: #ffffff, fit: fill
+
+### Occlusion
+- mode: 0 · alpha: 0
+  (modes: 0=NONE, 1=FADE, 3=RADIAL, 4=VISION — gap at 2)
+
+### Video
+- loop: no · autoplay: no · volume: 0
+  ⚠️ B3: when updating \`video\`, include \`video.volume\` explicitly to preserve its value.
+
+### Restrictions
+- light: pass · weather: pass"
+`;
+
+exports[`TileTool — characterization > get — single tile view 1`] = `
+"## Tile \`tile-id-001\`
+**Scene:** \`scene-id-001\`
+
+### Geometry
+- x: 200, y: 300, width: 200, height: 200
+- elevation: 0, sort: 0, rotation: 0°, alpha: 1
+
+### Flags
+- hidden: no · locked: no
+
+### Texture
+- src: \`modules/foo/tile.webp\`
+  - anchor: (0.5, 0.5), offset: (0, 0)
+  - scale: (1, 1), rotation: 0°, tint: #ffffff, fit: fill
+
+### Occlusion
+- mode: 0 · alpha: 0
+  (modes: 0=NONE, 1=FADE, 3=RADIAL, 4=VISION — gap at 2)
+
+### Video
+- loop: no · autoplay: no · volume: 0
+  ⚠️ B3: when updating \`video\`, include \`video.volume\` explicitly to preserve its value.
+
+### Restrictions
+- light: pass · weather: pass"
+`;
+
+exports[`TileTool — characterization > list — countOnly path 1`] = `
+"🟩 **Tile count**
+
+**Total:** 5"
+`;
+
+exports[`TileTool — characterization > list — paginated tiles 1`] = `
+"🟩 **Tiles** (1)
+
+- \`tile-id-001\` @ scene \`scene-id-001\` · \`modules/foo/tile.webp\`"
+`;
+
+exports[`TileTool — characterization > send-to-back — tile sort updated 1`] = `
+"🔀 **Tile send-to-back**
+
+sort now -1
+
+## Tile \`tile-id-001\`
+**Scene:** \`scene-id-001\`
+
+### Geometry
+- x: 200, y: 300, width: 200, height: 200
+- elevation: 0, sort: -1, rotation: 0°, alpha: 1
+
+### Flags
+- hidden: no · locked: no
+
+### Texture
+- src: \`modules/foo/tile.webp\`
+  - anchor: (0.5, 0.5), offset: (0, 0)
+  - scale: (1, 1), rotation: 0°, tint: #ffffff, fit: fill
+
+### Occlusion
+- mode: 0 · alpha: 0
+  (modes: 0=NONE, 1=FADE, 3=RADIAL, 4=VISION — gap at 2)
+
+### Video
+- loop: no · autoplay: no · volume: 0
+  ⚠️ B3: when updating \`video\`, include \`video.volume\` explicitly to preserve its value.
+
+### Restrictions
+- light: pass · weather: pass"
+`;
+
+exports[`TileTool — characterization > update — changed fields + updated tile view 1`] = `
+"✏️ **Tile Updated**
+
+**Changed fields:** hidden
+
+## Tile \`tile-id-001\`
+**Scene:** \`scene-id-001\`
+
+### Geometry
+- x: 200, y: 300, width: 200, height: 200
+- elevation: 0, sort: 0, rotation: 0°, alpha: 1
+
+### Flags
+- hidden: yes · locked: no
+
+### Texture
+- src: \`modules/foo/tile.webp\`
+  - anchor: (0.5, 0.5), offset: (0, 0)
+  - scale: (1, 1), rotation: 0°, tint: #ffffff, fit: fill
+
+### Occlusion
+- mode: 0 · alpha: 0
+  (modes: 0=NONE, 1=FADE, 3=RADIAL, 4=VISION — gap at 2)
+
+### Video
+- loop: no · autoplay: no · volume: 0
+  ⚠️ B3: when updating \`video\`, include \`video.volume\` explicitly to preserve its value.
+
+### Restrictions
+- light: pass · weather: pass"
+`;

@@ -1,0 +1,41 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`CombatantTool — characterization > clear-initiative — initiative cleared to null 1`] = `"✅ **Initiative Cleared** — \`comb001234567890\` (combat \`combat12345678901\`) → null (unrolled)"`;
+
+exports[`CombatantTool — characterization > get-combatant — combatant snapshot text 1`] = `
+"🎯 **Combatant** — \`comb001234567890\` (combat \`combat12345678901\`)
+
+- **name:** Aldric
+- **initiative:** 35
+- **hidden:** false · **defeated:** false
+- **actorId:** actor001234567890 · **tokenId:** token001234567890"
+`;
+
+exports[`CombatantTool — characterization > reroll-initiative — new roll posted to chat 1`] = `
+"🎲 **Initiative Rerolled** — \`comb001234567890\` → **28**
+
+- **turn pointer stable:** true
+- **current combatant:** _(none)_"
+`;
+
+exports[`CombatantTool — characterization > set-defeated — combatant marked defeated (skull overlay) 1`] = `"✅ **Defeated Set** — \`comb001234567890\` → defeated:true (token skull overlay applied)"`;
+
+exports[`CombatantTool — characterization > set-hidden — combatant hidden 1`] = `"✅ **Hidden Set** — \`comb001234567890\` → hidden:true"`;
+
+exports[`CombatantTool — characterization > set-initiative — initiative set, turn pointer stable 1`] = `
+"✅ **Initiative Set** — \`comb001234567890\` → **42**
+
+- **turn pointer stable:** true
+- **current combatant:** comb001234567890"
+`;
+
+exports[`CombatantTool — characterization > update-combatant — rename, updated snapshot text 1`] = `
+"✅ **Combatant Updated** — \`comb001234567890\` (combat \`combat12345678901\`)
+
+**Changed:** name
+
+- **name:** Slain Goblin
+- **initiative:** 35
+- **hidden:** false · **defeated:** false
+- **actorId:** actor001234567890 · **tokenId:** token001234567890"
+`;

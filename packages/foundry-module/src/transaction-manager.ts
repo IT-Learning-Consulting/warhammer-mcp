@@ -132,8 +132,8 @@ export class TransactionManager {
 
     // Rollback actions in reverse order
     for (let i = transaction.actions.length - 1; i >= 0; i--) {
-      const action = transaction.actions[i];
-      
+      const action = transaction.actions[i]!;
+
       try {
         await this.rollbackAction(action);
       } catch (error) {

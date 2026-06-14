@@ -1,0 +1,21 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ModuleGmtoolkitTool — characterization > MODULE_NOT_ACTIVE — probe inactive branch 1`] = `"module-gmtoolkit failed: MODULE_NOT_ACTIVE: wfrp4e-gm-toolkit is not active"`;
+
+exports[`ModuleGmtoolkitTool — characterization > add-xp — XP awarded 1`] = `"module-gmtoolkit.add-xp: Elspeth — +50 XP (Session end) → total 1050, current 150."`;
+
+exports[`ModuleGmtoolkitTool — characterization > check-conditions — conditions active 1`] = `
+"module-gmtoolkit.check-conditions: Karl — 2 condition(s):
+  • Bleeding (2)
+  • Stunned"
+`;
+
+exports[`ModuleGmtoolkitTool — characterization > check-conditions — no conditions 1`] = `"module-gmtoolkit.check-conditions: Karl — no active conditions."`;
+
+exports[`ModuleGmtoolkitTool — characterization > get-group — empty group 1`] = `"module-gmtoolkit.get-group: "company" — no members."`;
+
+exports[`ModuleGmtoolkitTool — characterization > get-group — party members 1`] = `"module-gmtoolkit.get-group: "party" — 3 member(s): Elspeth, Karl, Gregor."`;
+
+exports[`ModuleGmtoolkitTool — characterization > get-session-info — session data 1`] = `"module-gmtoolkit.get-session-info: session session-42 — 2025-10-15 19:30."`;
+
+exports[`ModuleGmtoolkitTool — characterization > update-advantage — increase (player-owned socket-routed) 1`] = `"module-gmtoolkit.update-advantage: Karl — increase: 1 → 2 (player-owned, socket-routed)."`;

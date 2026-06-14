@@ -1,0 +1,132 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`SceneTool — characterization (read) > get — full scene view without tokens 1`] = `
+"## Red Moon Inn _(active)_
+**ID:** \`scene001\`
+
+### Basics
+- Navigation: on (label: "Tavern")
+- Background: \`worlds/aitww/maps/tavern.webp\`
+  - anchor: (0.5, 0.5), offset: (0, 0)
+  - fit: contain, scale: (1, 1), rotation: 0°
+  - tint: null, alphaThreshold: 0.75
+- Foreground: _(none)_, foregroundElevation: _(default)_
+- Thumbnail: \`worlds/aitww/thumbs/tavern.webp\`
+- Background color: #000000
+- Dimensions: 2048 × 1536 (padding: 0.25)
+- Initial view: x=_(unset)_, y=_(unset)_, scale=_(unset)_
+
+### Grid
+- Type: 1 (SQUARE), size: 100px
+- Distance: 5 yds per square
+- Style: solidLines, thickness: 1
+- Color: #000000, alpha: 0.2
+
+### Lighting / Vision
+- Token vision: on
+- Fog: exploration=on, reset=_(unset)_, overlay=_(none)_
+  - Fog colors: explored=_(default)_, unexplored=_(default)_
+- Darkness: level=0, lock=off, cycle=off
+- Global light: enabled=off, alpha=0.5, bright=off
+  - color=_(default)_, coloration=_(default)_, luminosity=0
+  - saturation=0, contrast=0, shadows=0
+  - darkness threshold: min=0, max=1
+
+### Ambience
+- Journal: _(none)_
+- Journal page: _(none)_
+- Playlist: _(none)_
+- Playlist sound: _(none)_
+- Weather: _(none)_
+
+### Organization
+- Folder: _(none)_, sort: 0
+- Ownership default: 0
+
+### Embedded collections (counts)
+- Tokens: 3 · Walls: 42 · Lights: 5 · Sounds: 2
+- Notes: 0 · Drawings: 0 · Regions: 0 · Templates: 0 · Tiles: 1"
+`;
+
+exports[`SceneTool — characterization (read) > get — with tokens 1`] = `
+"## Red Moon Inn _(active)_
+**ID:** \`scene001\`
+
+### Basics
+- Navigation: on (label: "Tavern")
+- Background: \`worlds/aitww/maps/tavern.webp\`
+  - anchor: (0.5, 0.5), offset: (0, 0)
+  - fit: contain, scale: (1, 1), rotation: 0°
+  - tint: null, alphaThreshold: 0.75
+- Foreground: _(none)_, foregroundElevation: _(default)_
+- Thumbnail: \`worlds/aitww/thumbs/tavern.webp\`
+- Background color: #000000
+- Dimensions: 2048 × 1536 (padding: 0.25)
+- Initial view: x=_(unset)_, y=_(unset)_, scale=_(unset)_
+
+### Grid
+- Type: 1 (SQUARE), size: 100px
+- Distance: 5 yds per square
+- Style: solidLines, thickness: 1
+- Color: #000000, alpha: 0.2
+
+### Lighting / Vision
+- Token vision: on
+- Fog: exploration=on, reset=_(unset)_, overlay=_(none)_
+  - Fog colors: explored=_(default)_, unexplored=_(default)_
+- Darkness: level=0, lock=off, cycle=off
+- Global light: enabled=off, alpha=0.5, bright=off
+  - color=_(default)_, coloration=_(default)_, luminosity=0
+  - saturation=0, contrast=0, shadows=0
+  - darkness threshold: min=0, max=1
+
+### Ambience
+- Journal: _(none)_
+- Journal page: _(none)_
+- Playlist: _(none)_
+- Playlist sound: _(none)_
+- Weather: _(none)_
+
+### Organization
+- Folder: _(none)_, sort: 0
+- Ownership default: 0
+
+### Embedded collections (counts)
+- Tokens: 3 · Walls: 42 · Lights: 5 · Sounds: 2
+- Notes: 0 · Drawings: 0 · Regions: 0 · Templates: 0 · Tiles: 1
+
+### Tokens (2)
+- Hostile: 1, Neutral: 0, Friendly: 1, Unknown: 0
+- Linked: 1, Unlinked: 1
+
+- **Hans Mauer** \`tok1\` @ (500, 300) [1×1, FRIENDLY] → actor \`actor1\`
+- **Goblin** \`tok2\` @ (800, 400) [1×1, HOSTILE, hidden] _(unlinked)_"
+`;
+
+exports[`SceneTool — characterization (read) > list — bare (no pagination) 1`] = `
+"📋 **Scenes** (2)
+
+- **Red Moon Inn** _(active)_ · \`scene001\` · 2048×1536
+- **Bögenhafen Market** · \`scene002\` · 1024×768"
+`;
+
+exports[`SceneTool — characterization (read) > list — countOnly shape 1`] = `
+"📋 **Scene count**
+
+**Total:** 7"
+`;
+
+exports[`SceneTool — characterization (read) > list — paginated shape 1`] = `
+"📋 **Scenes** (page 1 of 3, 5 total)
+
+- **Red Moon Inn** _(active)_ · \`scene001\` · 2048×1536"
+`;
+
+exports[`SceneTool — characterization (read) > thumbnail — data url summary 1`] = `
+"🖼️ **Thumbnail Regenerated**
+
+**Scene:** Red Moon Inn (\`scene001\`)
+**Dimensions:** 300 × 100
+**Format:** webp
+**Data URL (truncated):** \`data:image/webp;base64,AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA...\` (223 chars total)"
+`;

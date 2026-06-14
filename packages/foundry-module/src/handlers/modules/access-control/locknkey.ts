@@ -49,7 +49,7 @@ function getLnKFlags(): any {
   return flags;
 }
 
-const COLLECTION: Record<string, string> = { wall: 'walls', token: 'tokens', tile: 'tiles' };
+const COLLECTION: Record<'wall' | 'token' | 'tile', string> = { wall: 'walls', token: 'tokens', tile: 'tiles' };
 
 /** Resolve a wall/token/tile embedded document by ID, searching the active scene then all scenes. */
 function resolveDoc(documentId: string, documentType: 'wall' | 'token' | 'tile', sceneId?: string): any {

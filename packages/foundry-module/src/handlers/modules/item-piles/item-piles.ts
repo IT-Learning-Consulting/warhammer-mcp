@@ -825,7 +825,7 @@ async function handleRollItemTable(input: RollItemTableInput): Promise<Envelope<
 
   try {
     const API = getItemPilesAPI();
-    const catalog = getActionCatalog()['roll-item-table'];
+    const catalog = getActionCatalog()['roll-item-table']!;
 
     const options: Record<string, unknown> = {
       timesToRoll: input.timesToRoll ?? (catalog.dataDefaults.timesToRoll as number),

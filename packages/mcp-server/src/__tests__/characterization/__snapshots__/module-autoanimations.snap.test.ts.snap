@@ -1,0 +1,27 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ModuleAutoAnimationsTool — characterization > MODULE_NOT_ACTIVE — probe inactive branch 1`] = `"module-autoanimations failed: MODULE_NOT_ACTIVE: autoanimations is not active"`;
+
+exports[`ModuleAutoAnimationsTool — characterization > get-autorec — entry counts 1`] = `
+"module-autoanimations.get-autorec: Autorec entries by category (version 5):
+  melee: 5
+  range: 2
+  ontoken: 0
+  templatefx: 1
+  aura: 0
+  preset: 0
+  aefx: 0"
+`;
+
+exports[`ModuleAutoAnimationsTool — characterization > get-item-animation — flags present 1`] = `"module-autoanimations.get-item-animation: Hand Weapon → version=5, isCustomized=true, menu=weapon, animation=sword."`;
+
+exports[`ModuleAutoAnimationsTool — characterization > get-item-animation — no flags (no customization) 1`] = `"module-autoanimations.get-item-animation: no animation flags on Dagger."`;
+
+exports[`ModuleAutoAnimationsTool — characterization > list-animations — empty keys at root 1`] = `"module-autoanimations.list-animations: (root) → 0 keys — AA not ready."`;
+
+exports[`ModuleAutoAnimationsTool — characterization > list-animations — with keys 1`] = `
+"module-autoanimations.list-animations: melee.weapon → 3 key(s):
+sword, axe, dagger"
+`;
+
+exports[`ModuleAutoAnimationsTool — characterization > set-item-animation — write confirmed 1`] = `"module-autoanimations.set-item-animation: set on Hand Weapon (v5, isCustomized=true, menu=weapon)."`;

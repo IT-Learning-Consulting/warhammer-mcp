@@ -253,7 +253,7 @@ type SetPlaceableInput = Extract<ModuleLevelsInputType, { action: 'set-placeable
 async function handleSetPlaceableRange(input: SetPlaceableInput): Promise<Envelope<unknown>> {
   if (!isGM()) return { success: false, error: 'GM_REQUIRED: only the GM can set placeable range' };
   try {
-    const collectionByType: Record<string, { coll: string; docType: string }> = {
+    const collectionByType: Record<'light' | 'sound' | 'note', { coll: string; docType: string }> = {
       light: { coll: 'lights', docType: 'AmbientLight' },
       sound: { coll: 'sounds', docType: 'AmbientSound' },
       note: { coll: 'notes', docType: 'Note' },

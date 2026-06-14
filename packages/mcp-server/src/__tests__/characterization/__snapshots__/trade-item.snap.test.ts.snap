@@ -1,0 +1,5 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`TradeItemTool — characterization > full item transfer — formatted string with quantity breakdown 1`] = `"Traded **Longsword** from actor-from → actor-to (source: item fully removed (was qty all); destination: qty 1)."`;
+
+exports[`TradeItemTool — characterization > partial quantity transfer — formatted string with remaining quantity 1`] = `"Traded **Arrows** from actor-from → actor-to (source: qty 5 remaining; destination: qty 10)."`;

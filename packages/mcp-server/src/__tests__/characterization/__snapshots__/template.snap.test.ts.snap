@@ -1,0 +1,107 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`TemplateTool — characterization > create — measured template created with requested fields 1`] = `
+"📐 **MeasuredTemplate Created**
+
+## MeasuredTemplate \`tmpl-id-001\`
+**Scene:** \`scene-id-001\`
+
+### Shape
+- type: circle · distance: 10 · direction: 0° · angle: 360° · width: 0
+
+### Position
+- x: 500, y: 300, elevation: 0, sort: 0
+
+### Display
+- borderColor: #ff0000 · fillColor: #ff0000 · texture: _(none)_
+- hidden: no
+
+### Author
+- userId: \`user-id-001\`
+
+_Requested fields: x, y, t, distance, fillColor_"
+`;
+
+exports[`TemplateTool — characterization > delete — deleted confirmation with remaining count 1`] = `
+"🗑️ **MeasuredTemplate Deleted**
+
+**ID:** \`tmpl-id-001\`
+**Scene:** \`scene-id-001\`
+**Remaining templates on scene:** 0
+
+⚠️ Permanent."
+`;
+
+exports[`TemplateTool — characterization > duplicate — cloned template with sourceId 1`] = `
+"🧬 **MeasuredTemplate Duplicated**
+
+_From \`tmpl-id-001\`_
+
+## MeasuredTemplate \`tmpl-id-002\`
+**Scene:** \`scene-id-001\`
+
+### Shape
+- type: circle · distance: 10 · direction: 0° · angle: 360° · width: 0
+
+### Position
+- x: 500, y: 300, elevation: 0, sort: 0
+
+### Display
+- borderColor: #ff0000 · fillColor: #ff0000 · texture: _(none)_
+- hidden: no
+
+### Author
+- userId: \`user-id-001\`"
+`;
+
+exports[`TemplateTool — characterization > get — single template view 1`] = `
+"## MeasuredTemplate \`tmpl-id-001\`
+**Scene:** \`scene-id-001\`
+
+### Shape
+- type: circle · distance: 10 · direction: 0° · angle: 360° · width: 0
+
+### Position
+- x: 500, y: 300, elevation: 0, sort: 0
+
+### Display
+- borderColor: #ff0000 · fillColor: #ff0000 · texture: _(none)_
+- hidden: no
+
+### Author
+- userId: \`user-id-001\`"
+`;
+
+exports[`TemplateTool — characterization > list — countOnly path 1`] = `
+"📐 **MeasuredTemplate count**
+
+**Total:** 3"
+`;
+
+exports[`TemplateTool — characterization > list — paginated templates 1`] = `
+"📐 **MeasuredTemplates** (page 1 of 1, 1 total)
+
+- \`tmpl-id-001\` @ scene \`scene-id-001\` · type=circle dist=10 · author=\`user-id-001\`"
+`;
+
+exports[`TemplateTool — characterization > update — changed fields + updated template view 1`] = `
+"✏️ **MeasuredTemplate Updated**
+
+**Changed fields:** hidden, distance
+
+## MeasuredTemplate \`tmpl-id-001\`
+**Scene:** \`scene-id-001\`
+
+### Shape
+- type: circle · distance: 20 · direction: 0° · angle: 360° · width: 0
+
+### Position
+- x: 500, y: 300, elevation: 0, sort: 0
+
+### Display
+- borderColor: #ff0000 · fillColor: #ff0000 · texture: _(none)_
+- hidden: yes
+
+### Author
+- userId: \`user-id-001\`"
+`;

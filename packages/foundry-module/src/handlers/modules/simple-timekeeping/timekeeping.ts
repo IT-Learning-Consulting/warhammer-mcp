@@ -76,7 +76,7 @@ function moonPhase(ts: number, cycleLength: number): { phase: string; cycleDay: 
   const day = Math.floor(ts / SECONDS_PER_DAY);
   const cycleDay = ((day % cycleLength) + cycleLength) % cycleLength;
   const idx = Math.floor((cycleDay / cycleLength) * MOON_PHASES.length) % MOON_PHASES.length;
-  return { phase: MOON_PHASES[idx], cycleDay };
+  return { phase: MOON_PHASES[idx]!, cycleDay };
 }
 
 /** Best-effort human date text from components + calendar month/weekday names. */

@@ -1,0 +1,57 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ListActorItemsTool — characterization > list all items — raw passthrough 1`] = `
+{
+  "items": [
+    {
+      "id": "item-001",
+      "name": "Longsword",
+      "system": {
+        "advances": {
+          "value": 0,
+        },
+      },
+      "type": "weapon",
+    },
+    {
+      "id": "item-002",
+      "name": "Athletics",
+      "system": {
+        "advances": {
+          "value": 5,
+        },
+      },
+      "type": "skill",
+    },
+    {
+      "id": "item-003",
+      "name": "Strike Mighty Blow",
+      "system": {
+        "advances": {
+          "value": 1,
+        },
+      },
+      "type": "talent",
+    },
+  ],
+  "total": 3,
+}
+`;
+
+exports[`ListActorItemsTool — characterization > list items filtered by type — raw passthrough 1`] = `
+{
+  "items": [
+    {
+      "id": "item-002",
+      "name": "Athletics",
+      "system": {
+        "advances": {
+          "value": 5,
+        },
+      },
+      "type": "skill",
+    },
+  ],
+  "total": 1,
+}
+`;

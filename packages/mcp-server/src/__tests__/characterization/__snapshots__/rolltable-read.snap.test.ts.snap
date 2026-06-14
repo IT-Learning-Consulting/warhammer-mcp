@@ -1,0 +1,68 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`RollTableTool — characterization (read) > draw-many — multiple results 1`] = `
+"🎲 **Draw Many Results** — Random Encounters
+
+**Requested:** 2  **Returned:** 2
+
+1. Wolves [_id: r1] *(drawn)*
+2. Goblin warband [_id: r2] *(drawn)*
+"
+`;
+
+exports[`RollTableTool — characterization (read) > draw-many — pool exhausted 1`] = `
+"🎲 **Draw Many Results** — Random Encounters
+
+**Requested:** 3  **Returned:** 1
+
+1. Wolves [_id: r1] *(drawn)*
+
+⚠️ **Pool exhausted** — only 1 of 3 requested results were available. Call 'reset' to clear drawn flags."
+`;
+
+exports[`RollTableTool — characterization (read) > get — table details with ranged results 1`] = `
+"🎲 **Roll Table Details**
+
+**Name:** Random Encounters
+**ID:** tbl001
+**Formula:** 1d20
+**Description:** Roll for a random encounter.
+
+**Entries:** (2)
+
+1-10: Wolves [_id: r1]
+11-20: Goblin warband [_id: r2]
+"
+`;
+
+exports[`RollTableTool — characterization (read) > list — empty world 1`] = `
+"📋 **No Roll Tables Found**
+
+There are no roll tables in this world yet. Create one using the 'create' action."
+`;
+
+exports[`RollTableTool — characterization (read) > list — tables in world 1`] = `
+"🎲 **Roll Tables** (2)
+
+**Random Encounters**
+   ID: tbl001
+   Formula: 1d20
+   Entries: 2
+
+**Critical Hits**
+   ID: tbl002
+   Formula: 1d100
+   Entries: 0
+
+"
+`;
+
+exports[`RollTableTool — characterization (read) > roll — table result 1`] = `
+"🎲 **Roll Table Result**
+
+**Table:** Random Encounters
+**Roll:** 7
+**Result:** Wolves
+
+Roll mode: public"
+`;

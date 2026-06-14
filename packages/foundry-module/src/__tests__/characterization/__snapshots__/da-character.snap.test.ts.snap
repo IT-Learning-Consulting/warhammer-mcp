@@ -1,0 +1,177 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`FoundryDataAccess.getCharacterInfo — characterization > snapshot: actor with no img, no effects, no items 1`] = `
+{
+  "effects": [],
+  "id": "actor-minimal1234",
+  "items": [],
+  "name": "Minimal NPC",
+  "system": {
+    "status": {
+      "wounds": {
+        "max": 5,
+        "value": 5,
+      },
+    },
+  },
+  "type": "npc",
+}
+`;
+
+exports[`FoundryDataAccess.getCharacterInfo — characterization > snapshot: character found by 16-char ID 1`] = `
+{
+  "effects": [
+    {
+      "disabled": false,
+      "duration": {
+        "duration": 3,
+        "remaining": 2,
+        "type": "rounds",
+      },
+      "flags": {
+        "warhammer-mcp": {
+          "source": "combat",
+        },
+      },
+      "icon": "icons/effects/fatigued.png",
+      "id": "effect-001",
+      "name": "Fatigued",
+      "system": {},
+    },
+  ],
+  "id": "abcdefghijklmnop",
+  "img": "icons/characters/gretchen.png",
+  "items": [
+    {
+      "id": "item-001",
+      "img": "icons/weapons/sword.png",
+      "name": "Sword",
+      "system": {
+        "damage": {
+          "value": "SB+4",
+        },
+        "qualities": {
+          "value": [],
+        },
+      },
+      "type": "weapon",
+    },
+  ],
+  "name": "Gretchen Müller",
+  "system": {
+    "characteristics": {
+      "bs": {
+        "advances": 0,
+        "value": 28,
+      },
+      "ws": {
+        "advances": 5,
+        "value": 35,
+      },
+    },
+    "details": {
+      "career": {
+        "value": "Soldier",
+      },
+      "experience": {
+        "current": 150,
+        "spent": 100,
+        "total": 250,
+      },
+      "species": {
+        "value": "Human",
+      },
+    },
+    "status": {
+      "advantage": {
+        "max": 10,
+        "value": 0,
+      },
+      "wounds": {
+        "max": 12,
+        "value": 12,
+      },
+    },
+  },
+  "type": "character",
+}
+`;
+
+exports[`FoundryDataAccess.getCharacterInfo — characterization > snapshot: full character found by name 1`] = `
+{
+  "effects": [
+    {
+      "disabled": false,
+      "duration": {
+        "duration": 3,
+        "remaining": 2,
+        "type": "rounds",
+      },
+      "flags": {
+        "warhammer-mcp": {
+          "source": "combat",
+        },
+      },
+      "icon": "icons/effects/fatigued.png",
+      "id": "effect-001",
+      "name": "Fatigued",
+      "system": {},
+    },
+  ],
+  "id": "actor-abc1234567890123",
+  "img": "icons/characters/gretchen.png",
+  "items": [
+    {
+      "id": "item-001",
+      "img": "icons/weapons/sword.png",
+      "name": "Sword",
+      "system": {
+        "damage": {
+          "value": "SB+4",
+        },
+        "qualities": {
+          "value": [],
+        },
+      },
+      "type": "weapon",
+    },
+  ],
+  "name": "Gretchen Müller",
+  "system": {
+    "characteristics": {
+      "bs": {
+        "advances": 0,
+        "value": 28,
+      },
+      "ws": {
+        "advances": 5,
+        "value": 35,
+      },
+    },
+    "details": {
+      "career": {
+        "value": "Soldier",
+      },
+      "experience": {
+        "current": 150,
+        "spent": 100,
+        "total": 250,
+      },
+      "species": {
+        "value": "Human",
+      },
+    },
+    "status": {
+      "advantage": {
+        "max": 10,
+        "value": 0,
+      },
+      "wounds": {
+        "max": 12,
+        "value": 12,
+      },
+    },
+  },
+  "type": "character",
+}
+`;

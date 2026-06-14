@@ -1,0 +1,9 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ModuleRobakTool — characterization > MODULE_NOT_ACTIVE — wfrp4e-macros-and-more not active 1`] = `"module-robak failed: MODULE_NOT_ACTIVE: wfrp4e-macros-and-more is not active"`;
+
+exports[`ModuleRobakTool — characterization > roll-skill-silent — failure with difficulty modifier 1`] = `"module-robak.roll-skill-silent: Elspeth von Draken rolled Cool — roll 78, SL -3, failure (silent; posted in rollMode)."`;
+
+exports[`ModuleRobakTool — characterization > roll-skill-silent — partial result (outcome unavailable) 1`] = `"module-robak.roll-skill-silent: Actor.abc123 rolled Dodge — roll ?, SL ?, (outcome unavailable) (silent; posted in rollMode)."`;
+
+exports[`ModuleRobakTool — characterization > roll-skill-silent — success with full fields 1`] = `"module-robak.roll-skill-silent: Elspeth von Draken rolled Perception — roll 42, SL 2, success (silent; posted in rollMode)."`;

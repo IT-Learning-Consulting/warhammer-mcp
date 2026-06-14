@@ -1,0 +1,31 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ModuleSequencerTool — characterization > MODULE_NOT_ACTIVE — get-effects throws → moduleNotActiveContent format 1`] = `"module-sequencer failed: MODULE_NOT_ACTIVE: sequencer is not active"`;
+
+exports[`ModuleSequencerTool — characterization > database-entry-exists — entry found 1`] = `"module-sequencer.database-entry-exists: "autoanimations.melee" → EXISTS"`;
+
+exports[`ModuleSequencerTool — characterization > database-search — search results 1`] = `
+"module-sequencer.database-search: 2 result(s) for "autoanimations.melee".
+
+autoanimations.melee.weapon
+autoanimations.melee.unarmed"
+`;
+
+exports[`ModuleSequencerTool — characterization > end-all-effects — scene-scoped clear 1`] = `"module-sequencer.end-all-effects: ended all effects (scene: scene001)."`;
+
+exports[`ModuleSequencerTool — characterization > end-all-sounds — global clear (Sequencer 4.2.x) 1`] = `"module-sequencer.end-all-sounds: ended all running sounds (all scenes)."`;
+
+exports[`ModuleSequencerTool — characterization > get-effects — active effects list 1`] = `
+"module-sequencer.get-effects: 2 effect(s) running.
+
+- Fireball [jb2a.fireball] persist=true
+- (unnamed) [jb2a.smoke] persist=false"
+`;
+
+exports[`ModuleSequencerTool — characterization > get-effects — no effects running 1`] = `"module-sequencer.get-effects: no effects running."`;
+
+exports[`ModuleSequencerTool — characterization > permission-write — key, value, verified 1`] = `"module-sequencer.permission-write: permissions-effect-create = 1 (verified: 1)"`;
+
+exports[`ModuleSequencerTool — characterization > play-sequence-json — section count result 1`] = `"module-sequencer.play-sequence-json: played 2 section(s). "`;
+
+exports[`ModuleSequencerTool — characterization > play-sound — sound file result 1`] = `"module-sequencer.play-sound: played sounds/effects/fire.ogg"`;

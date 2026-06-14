@@ -394,32 +394,32 @@ class PersistentCreatureIndex {
     // Listen for compendium document changes
     Hooks.on('createDocument', (document: any) => {
       if (document.pack && (document.type === 'npc' || document.type === 'character')) {
-        this.invalidateIndex();
+        void this.invalidateIndex();
       }
     });
 
     Hooks.on('updateDocument', (document: any) => {
       if (document.pack && (document.type === 'npc' || document.type === 'character')) {
-        this.invalidateIndex();
+        void this.invalidateIndex();
       }
     });
 
     Hooks.on('deleteDocument', (document: any) => {
       if (document.pack && (document.type === 'npc' || document.type === 'character')) {
-        this.invalidateIndex();
+        void this.invalidateIndex();
       }
     });
 
     // Listen for pack creation/deletion
     Hooks.on('createCompendium', (pack: any) => {
       if (pack.metadata.type === 'Actor') {
-        this.invalidateIndex();
+        void this.invalidateIndex();
       }
     });
 
     Hooks.on('deleteCompendium', (pack: any) => {
       if (pack.metadata.type === 'Actor') {
-        this.invalidateIndex();
+        void this.invalidateIndex();
       }
     });
 
@@ -2224,7 +2224,7 @@ export class FoundryDataAccess {
     }
 
     // Return best fuzzy match
-    return exactResults.length > 0 ? exactResults[0] : null;
+    return exactResults.length > 0 ? exactResults[0]! : null;
   }
 
   /**
@@ -2694,7 +2694,7 @@ export class FoundryDataAccess {
       const rollUnder = /^1d100<=(\d+)$/.exec(baseFormula);
       const flat = parseInt(modifier, 10);
       if (rollUnder && Number.isFinite(flat)) {
-        baseFormula = `1d100<=${Math.max(0, parseInt(rollUnder[1], 10) + flat)}`;
+        baseFormula = `1d100<=${Math.max(0, parseInt(rollUnder[1]!, 10) + flat)}`;
       } else {
         baseFormula += modifier;
       }
@@ -2970,7 +2970,7 @@ export class FoundryDataAccess {
       return { outcome: 'roll_completed', total: roll.total ?? 0, SL: null, success: null };
     }
     // Target expression may carry appended modifiers ("1d100<=50+10" → 60).
-    const target = targetMatch[1]
+    const target = targetMatch[1]!
       .replace(/\s+/g, '')
       .split(/(?=[+-])/)
       .reduce((sum, term) => sum + (parseInt(term, 10) || 0), 0);
@@ -3033,7 +3033,7 @@ export class FoundryDataAccess {
     try {
       const buttonMessageMap = game.settings.get(MODULE_ID, 'buttonMessageMap') || {};
       buttonMessageMap[buttonId] = messageId;
-      game.settings.set(MODULE_ID, 'buttonMessageMap', buttonMessageMap);
+      void game.settings.set(MODULE_ID, 'buttonMessageMap', buttonMessageMap);
     } catch (error) {
       console.error(`[${MODULE_ID}] Error saving button-message mapping:`, error);
     }
@@ -3554,8 +3554,8 @@ export class FoundryDataAccess {
         const height = (dimensions as any).height || 0;
 
         if (width && height) {
-          // Center the view on the scene
-          await canvas.pan({
+          // Center the view on the scene (canvas.pan is synchronous in v13 — no await)
+          canvas.pan({
             x: width / 2,
             y: height / 2,
             scale: Math.min(

@@ -1,0 +1,183 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`TokenTool — characterization > add — bulk tokens placed 1`] = `
+"🎭 **Tokens Added**
+
+**Scene:** \`scene-id-001\`
+**Placed:** 2 token(s) · **Placement:** random
+
+**Token IDs:**
+  - \`token-id-002\`
+  - \`token-id-003\`"
+`;
+
+exports[`TokenTool — characterization > create — token created view 1`] = `
+"🎭 **Token Created**
+
+## Token \`token-id-001\`
+**Scene:** \`scene-id-001\`
+
+
+### Identity
+- Name: **Goblin** · Disposition: HOSTILE (-1)
+- actorId: \`actor-id-001\` · actorLinked: yes · actorLink: yes
+- delta overrides: no
+
+### Position & Geometry
+- x: 200, y: 300, elevation: 0, sort: 0
+- width: 1, height: 1, shape: 4, rotation: 0°, alpha: 1
+
+### Display
+- displayName: 0 · displayBars: 0
+- hidden: no · locked: no · lockRotation: no
+- bar1: wounds · bar2: _(none)_
+
+### Sight
+- enabled: no · range: _(none)_ · angle: 360°
+- visionMode: basic · color: _(none)_
+- attenuation: 0.1, brightness: 0, saturation: 0, contrast: 0
+
+### Texture
+- src: \`systems/wfrp4e/tokens/goblin.webp\`
+  - anchor: (0.5, 0.5), offset: (0, 0)
+  - scale: (1, 1), rotation: 0°, tint: #ffffff
+
+### Movement
+- movementAction: _(none)_
+
+_Requested fields: name, x, y, actorId, disposition_"
+`;
+
+exports[`TokenTool — characterization > delete — deleted confirmation 1`] = `
+"🗑️ **Token Deleted**
+
+**ID:** \`token-id-001\` · **Name:** Goblin
+**Scene:** \`scene-id-001\` · **Remaining tokens:** 3
+
+⚠️ Permanent."
+`;
+
+exports[`TokenTool — characterization > delete-token — token removed confirmation 1`] = `
+"🗑️ **Token Removed**
+
+**ID:** \`token-id-001\` · **Name:** Goblin
+**Scene:** \`scene-id-001\` · **Remaining tokens:** 2
+
+⚠️ Permanent."
+`;
+
+exports[`TokenTool — characterization > get — single token view (linked actor) 1`] = `
+"## Token \`token-id-001\`
+**Scene:** \`scene-id-001\`
+
+
+### Identity
+- Name: **Goblin** · Disposition: HOSTILE (-1)
+- actorId: \`actor-id-001\` · actorLinked: yes · actorLink: yes
+- delta overrides: no
+
+### Position & Geometry
+- x: 200, y: 300, elevation: 0, sort: 0
+- width: 1, height: 1, shape: 4, rotation: 0°, alpha: 1
+
+### Display
+- displayName: 0 · displayBars: 0
+- hidden: no · locked: no · lockRotation: no
+- bar1: wounds · bar2: _(none)_
+
+### Sight
+- enabled: no · range: _(none)_ · angle: 360°
+- visionMode: basic · color: _(none)_
+- attenuation: 0.1, brightness: 0, saturation: 0, contrast: 0
+
+### Texture
+- src: \`systems/wfrp4e/tokens/goblin.webp\`
+  - anchor: (0.5, 0.5), offset: (0, 0)
+  - scale: (1, 1), rotation: 0°, tint: #ffffff
+
+### Movement
+- movementAction: _(none)_"
+`;
+
+exports[`TokenTool — characterization > get — stale FK token (actorLinked=false) 1`] = `
+"## Token \`token-id-001\`
+**Scene:** \`scene-id-001\`
+
+> ⚠️ **Stale FK:** actorId \`actor-id-001\` no longer exists in game.actors.
+
+### Identity
+- Name: **Goblin** · Disposition: HOSTILE (-1)
+- actorId: \`actor-id-001\` · actorLinked: no · actorLink: no
+- delta overrides: no
+
+### Position & Geometry
+- x: 200, y: 300, elevation: 0, sort: 0
+- width: 1, height: 1, shape: 4, rotation: 0°, alpha: 1
+
+### Display
+- displayName: 0 · displayBars: 0
+- hidden: no · locked: no · lockRotation: no
+- bar1: wounds · bar2: _(none)_
+
+### Sight
+- enabled: no · range: _(none)_ · angle: 360°
+- visionMode: basic · color: _(none)_
+- attenuation: 0.1, brightness: 0, saturation: 0, contrast: 0
+
+### Texture
+- src: \`systems/wfrp4e/tokens/goblin.webp\`
+  - anchor: (0.5, 0.5), offset: (0, 0)
+  - scale: (1, 1), rotation: 0°, tint: #ffffff
+
+### Movement
+- movementAction: _(none)_"
+`;
+
+exports[`TokenTool — characterization > list — countOnly path 1`] = `
+"🎭 **Token count**
+
+**Total:** 5"
+`;
+
+exports[`TokenTool — characterization > list — paginated tokens 1`] = `
+"🎭 **Tokens** (page 1 · 1 of 1 total)
+
+- **Goblin** \`token-id-001\` @ scene \`scene-id-001\` · HOSTILE → actor \`actor-id-001\`"
+`;
+
+exports[`TokenTool — characterization > update — changed fields + updated token view 1`] = `
+"✏️ **Token Updated**
+
+**Changed fields:** hidden, disposition
+
+## Token \`token-id-001\`
+**Scene:** \`scene-id-001\`
+
+
+### Identity
+- Name: **Goblin** · Disposition: NEUTRAL (0)
+- actorId: \`actor-id-001\` · actorLinked: yes · actorLink: yes
+- delta overrides: no
+
+### Position & Geometry
+- x: 200, y: 300, elevation: 0, sort: 0
+- width: 1, height: 1, shape: 4, rotation: 0°, alpha: 1
+
+### Display
+- displayName: 0 · displayBars: 0
+- hidden: yes · locked: no · lockRotation: no
+- bar1: wounds · bar2: _(none)_
+
+### Sight
+- enabled: no · range: _(none)_ · angle: 360°
+- visionMode: basic · color: _(none)_
+- attenuation: 0.1, brightness: 0, saturation: 0, contrast: 0
+
+### Texture
+- src: \`systems/wfrp4e/tokens/goblin.webp\`
+  - anchor: (0.5, 0.5), offset: (0, 0)
+  - scale: (1, 1), rotation: 0°, tint: #ffffff
+
+### Movement
+- movementAction: _(none)_"
+`;

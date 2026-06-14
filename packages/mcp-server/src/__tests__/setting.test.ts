@@ -4,33 +4,25 @@
 // blocklisted key rejection, onChange advisory, round-trip verify,
 // list-world-db enumeration, and happy-path per action.
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { SettingToolInput } from '@foundry-mcp/shared';
 import { SettingTool } from '../tools/setting.js';
+import { makeToolDeps } from './test-utils.js';
 
-function makeLogger(): any {
-  const noop = () => undefined;
-  return { info: noop, warn: noop, error: noop, debug: noop, child: () => makeLogger() };
-}
+const DEFAULT_SETTING = {
+  setting: {
+    namespace: 'warhammer-mcp',
+    key: 'mcpVerboseConsole',
+    fullKey: 'warhammer-mcp.mcpVerboseConsole',
+    value: false,
+    scope: 'world',
+    typeLabel: 'Boolean',
+    hasOnChange: false,
+  },
+};
 
 function makeTool(mockReturn: any = null, mockThrow: string | null = null) {
-  const foundryClient: any = {
-    query: vi.fn(async (_key: string, _args: any) => {
-      if (mockThrow) throw new Error(mockThrow);
-      return mockReturn ?? {
-        setting: {
-          namespace: 'warhammer-mcp',
-          key: 'mcpVerboseConsole',
-          fullKey: 'warhammer-mcp.mcpVerboseConsole',
-          value: false,
-          scope: 'world',
-          typeLabel: 'Boolean',
-          hasOnChange: false,
-        },
-      };
-    }),
-  };
-  return new SettingTool({ foundryClient, logger: makeLogger() });
+  return new SettingTool(makeToolDeps(mockReturn ?? DEFAULT_SETTING, mockThrow));
 }
 
 // ── Schema tests ──────────────────────────────────────────────────────────────

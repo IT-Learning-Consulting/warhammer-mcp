@@ -1,0 +1,115 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`JournalTool — characterization (write) > add-category — category added 1`] = `
+"🗂️ **Category Added**
+
+**Entry:** jrn001
+**Category ID:** cat1
+**Name:** Maps"
+`;
+
+exports[`JournalTool — characterization (write) > add-page — page added summary 1`] = `
+"➕ **Page Added**
+
+**Entry:** jrn001
+**Page ID:** page2
+**Type:** image"
+`;
+
+exports[`JournalTool — characterization (write) > assign-page-to-category — assigned 1`] = `
+"🔗 **Page assigned to category cat1**
+
+**Entry:** jrn001
+**Page:** page1"
+`;
+
+exports[`JournalTool — characterization (write) > assign-page-to-category — unassigned (null) 1`] = `
+"🔗 **Page unassigned from category**
+
+**Entry:** jrn001
+**Page:** page1"
+`;
+
+exports[`JournalTool — characterization (write) > create-entry — id + page counts 1`] = `
+"📓 **Journal Entry Created**
+
+**Name:** Quest: Find the Witch Hunter
+**ID:** jrn001
+**Pages:** 1
+**Categories:** 0"
+`;
+
+exports[`JournalTool — characterization (write) > delete-category — pages uncategorised 1`] = `
+"🗑️ **Category Deleted**
+
+**Entry:** jrn001
+**Category:** cat1
+**Pages uncategorised:** 1 (page2)"
+`;
+
+exports[`JournalTool — characterization (write) > delete-entry — permanent removal 1`] = `
+"🗑️ **Journal Entry Deleted**
+
+**ID:** jrn001
+
+⚠️ Permanent. All pages and categories removed.
+
+### Affected docs (0)
+_(cascade:true ran; no inbound FK references to clear)_"
+`;
+
+exports[`JournalTool — characterization (write) > delete-page — removed 1`] = `
+"🗑️ **Page Deleted**
+
+**Entry:** jrn001
+**Page:** page2
+
+### Affected docs (0)
+_(cascade:true ran; no inbound FK references to clear)_"
+`;
+
+exports[`JournalTool — characterization (write) > duplicate-entry — new entry created 1`] = `
+"📑 **Journal Duplicated**
+
+**New:** Quest: Find the Witch Hunter (Copy) (\`jrn002\`)
+**Source:** \`jrn001\`"
+`;
+
+exports[`JournalTool — characterization (write) > reorder-pages — new order 1`] = `
+"🔀 **Pages Reordered**
+
+**Entry:** jrn001
+**Pages:** 2
+**New order:** page2 → page1"
+`;
+
+exports[`JournalTool — characterization (write) > show-to-players — broadcast confirmed 1`] = `
+"📢 **Shown to Players**
+
+**Entry:** Quest: Find the Witch Hunter (\`jrn001\`)
+
+_(Transient — socket broadcast, no persisted state.)_"
+`;
+
+exports[`JournalTool — characterization (write) > update-category — changed fields 1`] = `
+"✏️ **Category Updated**
+
+**Entry:** jrn001
+**Category:** cat1
+**Changed Fields:** name"
+`;
+
+exports[`JournalTool — characterization (write) > update-entry — changed fields 1`] = `
+"✏️ **Journal Entry Updated**
+
+**ID:** jrn001
+**Changed Fields:** name"
+`;
+
+exports[`JournalTool — characterization (write) > update-page — changed fields 1`] = `
+"✏️ **Page Updated**
+
+**Entry:** jrn001
+**Page:** page1
+**Changed Fields:** text.content"
+`;

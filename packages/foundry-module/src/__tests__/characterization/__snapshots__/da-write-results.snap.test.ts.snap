@@ -1,0 +1,168 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`FoundryDataAccess.applyDamage — characterization > snapshot: IGNORE_ALL damage to head — damageType propagated to result 1`] = `
+{
+  "actorId": "damage-snap-002",
+  "after": {
+    "advantage": {
+      "value": 0,
+    },
+    "conditions": [],
+    "criticalWounds": {
+      "max": 0,
+      "value": 0,
+    },
+    "fate": {
+      "value": 2,
+    },
+    "fortune": {
+      "value": 1,
+    },
+    "wounds": {
+      "max": 10,
+      "value": 0,
+    },
+  },
+  "before": {
+    "advantage": {
+      "value": 0,
+    },
+    "conditions": [],
+    "criticalWounds": {
+      "max": 0,
+      "value": 0,
+    },
+    "fate": {
+      "value": 2,
+    },
+    "fortune": {
+      "value": 1,
+    },
+    "wounds": {
+      "max": 10,
+      "value": 10,
+    },
+  },
+  "damage": {
+    "amount": 10,
+    "damageType": "IGNORE_ALL",
+    "hitLocation": "head",
+  },
+}
+`;
+
+exports[`FoundryDataAccess.applyDamage — characterization > snapshot: NORMAL damage to body — before/after shape 1`] = `
+{
+  "actorId": "damage-snap-001",
+  "after": {
+    "advantage": {
+      "value": 0,
+    },
+    "conditions": [],
+    "criticalWounds": {
+      "max": 0,
+      "value": 0,
+    },
+    "fate": {
+      "value": 2,
+    },
+    "fortune": {
+      "value": 1,
+    },
+    "wounds": {
+      "max": 14,
+      "value": 7,
+    },
+  },
+  "before": {
+    "advantage": {
+      "value": 0,
+    },
+    "conditions": [],
+    "criticalWounds": {
+      "max": 0,
+      "value": 0,
+    },
+    "fate": {
+      "value": 2,
+    },
+    "fortune": {
+      "value": 1,
+    },
+    "wounds": {
+      "max": 14,
+      "value": 14,
+    },
+  },
+  "damage": {
+    "amount": 7,
+    "damageType": "NORMAL",
+    "hitLocation": "body",
+  },
+}
+`;
+
+exports[`FoundryDataAccess.createItem — characterization > snapshot: actor-scope creation returns base shape (no returnFullPayload) 1`] = `
+{
+  "actorId": "actor-snap-create-001",
+  "actorName": "Recruit Hansel",
+  "itemId": "item-snap-001",
+  "itemName": "Hand Weapon",
+  "itemType": "weapon",
+  "scope": "actor",
+  "success": true,
+}
+`;
+
+exports[`FoundryDataAccess.createItem — characterization > snapshot: actor-scope with returnFullPayload=true includes itemData+effectIds 1`] = `
+{
+  "actorId": "actor-snap-create-002",
+  "actorName": "Pistolier Kurt",
+  "effectIds": [],
+  "itemData": {
+    "effects": [],
+    "id": "item-snap-003",
+    "name": "Pistol",
+    "type": "weapon",
+  },
+  "itemId": "item-snap-003",
+  "itemName": "Pistol",
+  "itemType": "weapon",
+  "scope": "actor",
+  "success": true,
+}
+`;
+
+exports[`FoundryDataAccess.createItem — characterization > snapshot: world-scope creation returns folderId + folderPath 1`] = `
+{
+  "folderId": null,
+  "folderPath": [],
+  "itemId": "item-snap-002",
+  "itemName": "Torch",
+  "itemType": "trapping",
+  "scope": "world",
+  "success": true,
+}
+`;
+
+exports[`FoundryDataAccess.updateActor — characterization > snapshot: success result shape for a single-field update 1`] = `
+{
+  "actorId": "actor-snap-001",
+  "actorName": "Sigmar Recruit",
+  "success": true,
+  "updated": [
+    "system.details.career.value",
+  ],
+}
+`;
+
+exports[`FoundryDataAccess.updateActor — characterization > snapshot: success result shape with warnings array 1`] = `
+{
+  "actorId": "actor-snap-002",
+  "actorName": "Veteran Soldier",
+  "success": true,
+  "updated": [
+    "system.characteristics.ws.value",
+  ],
+}
+`;

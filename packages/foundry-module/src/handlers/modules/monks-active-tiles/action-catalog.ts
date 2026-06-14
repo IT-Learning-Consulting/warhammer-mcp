@@ -259,7 +259,7 @@ export function validateSequence(actions: MattActionInput[]): SequenceValidation
       return;
     }
 
-    const spec = ACTION_CATALOG[key];
+    const spec = ACTION_CATALOG[key]!;
     const data = (a.data ?? {}) as Record<string, unknown>;
 
     // Required-field check.

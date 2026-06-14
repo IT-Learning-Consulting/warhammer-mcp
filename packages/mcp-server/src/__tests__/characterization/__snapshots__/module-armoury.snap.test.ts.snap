@@ -1,0 +1,21 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ModuleArmouryTool — characterization > MODULE_NOT_ACTIVE — probe inactive branch 1`] = `"module-armoury failed: MODULE_NOT_ACTIVE: forien-armoury is not active"`;
+
+exports[`ModuleArmouryTool — characterization > check-damage — no damaged items 1`] = `"module-armoury.check-damage: Elspeth — no damaged items."`;
+
+exports[`ModuleArmouryTool — characterization > check-damage — with damaged items 1`] = `
+"module-armoury.check-damage: Elspeth — 2 damaged item(s), total ~6d:
+  • Leather Jack (armour): 2 damage, repair ~4d
+  • Hand Weapon (weapon): 1 damage, repair ~2d"
+`;
+
+exports[`ModuleArmouryTool — characterization > get-me — ME read result 1`] = `"module-armoury.get-me: Elspeth — ME 12/15, regen 3/hr."`;
+
+exports[`ModuleArmouryTool — characterization > get-me — non-caster (virtual ME) 1`] = `"module-armoury.get-me: Karl — ME 0/?, regen ?/hr (no ME history — non-caster)."`;
+
+exports[`ModuleArmouryTool — characterization > repair-item — partial repair 1`] = `"module-armoury.repair-item: "Leather Jack" body damage 2 → 0."`;
+
+exports[`ModuleArmouryTool — characterization > spend-me — endurance test triggered 1`] = `"module-armoury.spend-me: Elspeth — ME 2 → -1 (spent 3). ⚠ Endurance test triggered (ME below 0)"`;
+
+exports[`ModuleArmouryTool — characterization > spend-me — normal spend (no endurance test) 1`] = `"module-armoury.spend-me: Elspeth — ME 12 → 9 (spent 3)."`;

@@ -1,0 +1,138 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`RegionTool — characterization > add-shape — shape appended to region 1`] = `
+"➕ **Shape Added**
+
+**Shapes now:** 2
+
+## Region \`region-id-001\`
+**Scene:** \`scene-id-001\`  **Name:** Danger Zone
+
+### Geometry
+- shapes (2): rectangle, circle
+- elevation: bottom=none, top=none
+
+### Properties
+- color: #ff0000 · visibility: LAYER · locked: no
+- behaviors: 0"
+`;
+
+exports[`RegionTool — characterization > create — region created view 1`] = `
+"🗺️ **Region Created**
+
+## Region \`region-id-001\`
+**Scene:** \`scene-id-001\`  **Name:** Danger Zone
+
+### Geometry
+- shapes (1): rectangle
+- elevation: bottom=none, top=none
+
+### Properties
+- color: #ff0000 · visibility: LAYER · locked: no
+- behaviors: 0
+
+_Requested fields: name, color_"
+`;
+
+exports[`RegionTool — characterization > createBehavior — behavior created on region 1`] = `
+"✅ **RegionBehavior Created**
+
+**Region:** \`region-id-001\`
+
+### Behavior \`behavior-id-001\`
+- type: **pauseGame** · name: Pause on entry · disabled: no
+- system:
+  - once: true"
+`;
+
+exports[`RegionTool — characterization > delete — deleted confirmation 1`] = `
+"🗑️ **Region Deleted**
+
+**ID:** \`region-id-001\`  **Scene:** \`scene-id-001\`
+**Remaining regions:** 0
+
+⚠️ All embedded behaviors were also deleted."
+`;
+
+exports[`RegionTool — characterization > deleteBehavior — behavior deleted from region 1`] = `
+"🗑️ **RegionBehavior Deleted**
+
+**Region:** \`region-id-001\`
+**Deleted ID:** \`behavior-id-001\`
+**Remaining behaviors:** 0
+
+⚠️ Permanent."
+`;
+
+exports[`RegionTool — characterization > get — region with embedded behaviors 1`] = `
+"## Region \`region-id-001\`
+**Scene:** \`scene-id-001\`  **Name:** Danger Zone
+
+### Geometry
+- shapes (1): rectangle
+- elevation: bottom=none, top=none
+
+### Properties
+- color: #ff0000 · visibility: LAYER · locked: no
+- behaviors: 1
+
+### Behaviors
+### Behavior \`behavior-id-001\`
+- type: **pauseGame** · name: Pause on entry · disabled: no
+- system:
+  - once: true"
+`;
+
+exports[`RegionTool — characterization > get — single region view 1`] = `
+"## Region \`region-id-001\`
+**Scene:** \`scene-id-001\`  **Name:** Danger Zone
+
+### Geometry
+- shapes (1): rectangle
+- elevation: bottom=none, top=none
+
+### Properties
+- color: #ff0000 · visibility: LAYER · locked: no
+- behaviors: 0"
+`;
+
+exports[`RegionTool — characterization > list — countOnly path 1`] = `
+"🗺️ **Region count**
+
+**Total:** 2"
+`;
+
+exports[`RegionTool — characterization > list — paginated regions 1`] = `
+"🗺️ **Regions** (page 1 · 1 total)
+
+- \`region-id-001\` **Danger Zone** · shapes=1 · behaviors=0 · vis=LAYER"
+`;
+
+exports[`RegionTool — characterization > update — changed fields + updated region view 1`] = `
+"✏️ **Region Updated**
+
+**Changed fields:** locked
+
+## Region \`region-id-001\`
+**Scene:** \`scene-id-001\`  **Name:** Danger Zone
+
+### Geometry
+- shapes (1): rectangle
+- elevation: bottom=none, top=none
+
+### Properties
+- color: #ff0000 · visibility: LAYER · locked: yes
+- behaviors: 0"
+`;
+
+exports[`RegionTool — characterization > updateBehavior — behavior updated on region 1`] = `
+"✏️ **RegionBehavior Updated**
+
+**Region:** \`region-id-001\`
+**Changed fields:** disabled
+
+### Behavior \`behavior-id-001\`
+- type: **pauseGame** · name: Pause on entry · disabled: yes
+- system:
+  - once: true"
+`;

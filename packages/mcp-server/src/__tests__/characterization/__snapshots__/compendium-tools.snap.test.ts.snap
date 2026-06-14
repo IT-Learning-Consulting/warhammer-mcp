@@ -1,0 +1,172 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`CompendiumTools — characterization > get-compendium-item — compact mode 1`] = `
+{
+  "description": "A sturdy iron sword.",
+  "hasImage": true,
+  "id": "item001",
+  "imageUrl": "icons/sword.webp",
+  "items": [],
+  "mode": "compact",
+  "name": "Sword",
+  "pack": {
+    "id": "wfrp4e-core.items",
+    "label": "WFRP4e Core Items",
+  },
+  "properties": {},
+  "stats": {},
+  "type": "weapon",
+}
+`;
+
+exports[`CompendiumTools — characterization > get-compendium-item — full mode 1`] = `
+{
+  "description": "A wooden shield.",
+  "effects": [],
+  "fullData": {
+    "_id": "item002",
+  },
+  "fullDescription": "A wooden shield.",
+  "hasImage": true,
+  "id": "item002",
+  "imageUrl": "icons/shield.webp",
+  "items": [],
+  "mode": "full",
+  "name": "Shield",
+  "pack": {
+    "id": "wfrp4e-core.items",
+    "label": "WFRP4e Core Items",
+  },
+  "properties": {},
+  "system": {
+    "armor": {
+      "value": 1,
+    },
+  },
+  "type": "armour",
+}
+`;
+
+exports[`CompendiumTools — characterization > list-compendium-packs — all packs 1`] = `
+{
+  "availableTypes": [
+    "Actor",
+    "Item",
+    "RollTable",
+  ],
+  "packs": [
+    {
+      "id": "wfrp4e-core.actors",
+      "label": "Core Actors",
+      "private": false,
+      "system": "wfrp4e",
+      "type": "Actor",
+    },
+    {
+      "id": "wfrp4e-core.items",
+      "label": "Core Items",
+      "private": false,
+      "system": "wfrp4e",
+      "type": "Item",
+    },
+    {
+      "id": "wfrp4e-core.tables",
+      "label": "Core Tables",
+      "private": false,
+      "system": "wfrp4e",
+      "type": "RollTable",
+    },
+  ],
+  "total": 3,
+}
+`;
+
+exports[`CompendiumTools — characterization > list-compendium-packs — filtered by type 1`] = `
+{
+  "availableTypes": [
+    "Actor",
+    "Item",
+  ],
+  "packs": [
+    {
+      "id": "wfrp4e-core.actors",
+      "label": "Core Actors",
+      "private": false,
+      "system": "wfrp4e",
+      "type": "Actor",
+    },
+  ],
+  "total": 1,
+}
+`;
+
+exports[`CompendiumTools — characterization > list-creatures-by-criteria — compact mode 1`] = `
+{
+  "creatures": [
+    {
+      "id": "cre002",
+      "name": "Rat",
+      "pack": "wfrp4e-core.actors",
+      "type": "npc",
+    },
+  ],
+  "criteria": {
+    "limit": 100,
+  },
+  "optimizationNote": "Use creature names to identify suitable options, then call get-compendium-item for final details only",
+  "searchSummary": {
+    "note": "Packs searched in priority order to find most relevant creatures first. WFRP 4e specific.",
+    "packsSearched": 2,
+    "searchStrategy": "Prioritized pack search - WFRP 4e core content first, then modules, then campaign-specific",
+    "topPacks": [
+      "wfrp4e-core.actors",
+    ],
+    "totalCreaturesFound": 1,
+  },
+  "totalCount": 1,
+}
+`;
+
+exports[`CompendiumTools — characterization > list-creatures-by-criteria — full entry mode 1`] = `
+{
+  "creatures": [
+    {
+      "creatureType": "Beastman",
+      "flags": {
+        "beastman": true,
+        "chaos": false,
+        "daemon": false,
+        "greenskin": false,
+        "specialAbilities": true,
+        "spellcaster": false,
+        "undead": false,
+      },
+      "id": "cre001",
+      "name": "Beastman",
+      "pack": {
+        "id": "wfrp4e-core.actors",
+        "label": "WFRP4e Core Actors",
+      },
+      "size": "avg",
+      "threatLevel": 12,
+    },
+  ],
+  "criteria": {
+    "creatureType": "beastman",
+    "limit": 100,
+  },
+  "optimizationNote": "Use creature names to identify suitable options, then call get-compendium-item for final details only",
+  "searchSummary": {
+    "note": "Packs searched in priority order to find most relevant creatures first. WFRP 4e specific.",
+    "packsSearched": 5,
+    "searchStrategy": "Prioritized pack search - WFRP 4e core content first, then modules, then campaign-specific",
+    "topPacks": [
+      "wfrp4e-core.actors",
+    ],
+    "totalCreaturesFound": 1,
+  },
+  "totalCount": 1,
+}
+`;
+
+exports[`CompendiumTools — characterization > search-compendium — actor result set 1`] = `"{"query":"goblin","results":[{"id":"abc123","name":"Goblin","type":"npc","pack":{"id":"wfrp4e-core.actors","label":"WFRP4e Core Actors"},"description":"","hasImage":true,"summary":"npc from WFRP4e Core Actors","stats":{"threatLevel":26,"wounds":{"current":8,"max":12},"toughnessAndArmor":{"toughnessBonus":2,"armorPoints":1},"creatureType":"Goblin"}}],"totalFound":1,"showing":1,"hasMore":false}"`;

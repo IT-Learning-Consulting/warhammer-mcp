@@ -1,0 +1,13 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`NotifyTool — characterization > notify — created severity acknowledged 1`] = `"🔔 **Notification dispatched** (acknowledged) · severity=created"`;
+
+exports[`NotifyTool — characterization > notify — dispatcher threw (acknowledged: false) 1`] = `"⚠️ **Notification dispatcher threw** — see Foundry F12 console · severity=info"`;
+
+exports[`NotifyTool — characterization > notify — error severity acknowledged 1`] = `"🔔 **Notification dispatched** (acknowledged) · severity=error"`;
+
+exports[`NotifyTool — characterization > notify — info severity acknowledged 1`] = `"🔔 **Notification dispatched** (acknowledged) · severity=info"`;
+
+exports[`NotifyTool — characterization > notify — lifecycle/workflow-end acknowledged 1`] = `"🔔 **Notification dispatched** (acknowledged) · severity=lifecycle · event=workflow-end"`;
+
+exports[`NotifyTool — characterization > notify — warn severity acknowledged 1`] = `"🔔 **Notification dispatched** (acknowledged) · severity=warn"`;

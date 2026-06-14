@@ -1,0 +1,54 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`FoundryDataAccess.getCombat — characterization > snapshot: active combat with scene and combatant 1`] = `
+{
+  "active": true,
+  "combatantCount": 2,
+  "currentCombatantId": "combatant-001",
+  "id": "combat-001",
+  "round": 1,
+  "sceneId": "scene-001",
+  "started": true,
+  "turn": 0,
+}
+`;
+
+exports[`FoundryDataAccess.getCombat — characterization > snapshot: combat with no scene or combatant 1`] = `
+{
+  "active": true,
+  "combatantCount": 0,
+  "currentCombatantId": null,
+  "id": "combat-001",
+  "round": 1,
+  "sceneId": null,
+  "started": true,
+  "turn": 0,
+}
+`;
+
+exports[`FoundryDataAccess.getCombat — characterization > snapshot: no combat returns null 1`] = `null`;
+
+exports[`FoundryDataAccess.listCombatants — characterization > snapshot: no combat returns empty array 1`] = `[]`;
+
+exports[`FoundryDataAccess.listCombatants — characterization > snapshot: two combatants with full fields 1`] = `
+[
+  {
+    "actorId": "actor-001",
+    "defeated": false,
+    "hidden": false,
+    "id": "combatant-001",
+    "initiative": 52,
+    "name": "Guard",
+    "tokenId": "token-001",
+  },
+  {
+    "actorId": "actor-002",
+    "defeated": false,
+    "hidden": true,
+    "id": "combatant-002",
+    "initiative": 35,
+    "name": "Villain",
+    "tokenId": "token-002",
+  },
+]
+`;

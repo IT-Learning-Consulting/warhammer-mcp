@@ -66,7 +66,7 @@ function detectMime(buffer: Buffer, filenameHint?: string): string {
     // MP3: ID3 tag (49 44 33) or MPEG sync (FF Fx).
     if (
       (buffer[0] === 0x49 && buffer[1] === 0x44 && buffer[2] === 0x33) ||
-      (buffer[0] === 0xff && (buffer[1] & 0xf0) === 0xf0)
+      (buffer[0] === 0xff && ((buffer[1] ?? 0) & 0xf0) === 0xf0)
     ) {
       return 'audio/mpeg';
     }

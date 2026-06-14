@@ -1,0 +1,67 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`OwnershipTool — characterization > assign — default level update 1`] = `
+"🔒 **Ownership Assigned**
+
+**Document:** journal (jrnl001)
+**Target:** default
+**Permission:** Limited
+
+Can see basic info only"
+`;
+
+exports[`OwnershipTool — characterization > assign — per-user observer grant 1`] = `
+"👁️ **Ownership Assigned**
+
+**Document:** actor (actor001)
+**Target:** user player1
+**Permission:** Observer
+
+Can view full sheet but cannot control or edit"
+`;
+
+exports[`OwnershipTool — characterization > bulk-set — partial success 1`] = `
+"📦 **Bulk Ownership Set** — ⚠️ partial failure
+
+**Target:** user player1
+**Level:** Observer
+
+- **actor**: 2 succeeded, 0 failed
+- **journal**: 0 succeeded, 1 failed
+  - ❌ {"name":"Missing Journal"}: NOT_FOUND
+"
+`;
+
+exports[`OwnershipTool — characterization > list — no ownership map (folder) 1`] = `
+"📋 **Ownership for folder (fld001)**
+
+_Folders do not have per-user ownership_ — folder has no per-user ownership map (ADR-024)."
+`;
+
+exports[`OwnershipTool — characterization > list — with per-user permissions 1`] = `
+"📋 **Ownership for actor (actor001)**
+
+**Default:** None
+
+**Per-user permissions:**
+
+👑 **player1**: Owner
+👁️ **player2**: Observer
+"
+`;
+
+exports[`OwnershipTool — characterization > remove — revoke user access 1`] = `
+"🚫 **Ownership Removed**
+
+**Document:** scene (scene001)
+**User:** player1
+
+No permissions for this user on this document."
+`;
+
+exports[`OwnershipTool — characterization > reset — ownership cleared 1`] = `
+"🔄 **Ownership Reset**
+
+**Document:** rolltable (tbl001)
+All per-user entries cleared; default restored to NONE."
+`;

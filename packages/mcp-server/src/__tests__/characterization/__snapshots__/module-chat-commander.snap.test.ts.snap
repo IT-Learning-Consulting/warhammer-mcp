@@ -1,0 +1,31 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ModuleChatCommanderTool — characterization > MODULE_NOT_ACTIVE — probe inactive branch 1`] = `"module-chat-commander failed: MODULE_NOT_ACTIVE: _chatcommands is not active"`;
+
+exports[`ModuleChatCommanderTool — characterization > get-command — found 1`] = `
+"module-chat-commander.get-command: /roll
+- module: wfrp4e (Warhammer Fantasy Roleplay 4e)
+- aliases: /r
+- requiredRole: NONE · canInvoke: true · closeOnComplete: true
+- description: Roll dice
+- hasCallback: true · hasAutocompleteCallback: false"
+`;
+
+exports[`ModuleChatCommanderTool — characterization > list-commands — commands registered 1`] = `
+"module-chat-commander.list-commands: 2 command(s):
+  • /roll (aliases: /r) [wfrp4e] role=NONE — Roll dice
+  • /effect [chat-commander-wfrp4e] role=GAMEMASTER — Apply an effect"
+`;
+
+exports[`ModuleChatCommanderTool — characterization > list-commands — empty registry 1`] = `"module-chat-commander.list-commands: no commands registered."`;
+
+exports[`ModuleChatCommanderTool — characterization > unregister-command — builtin WFRP warning 1`] = `
+"module-chat-commander.unregister-command: unregistered
+- macroDeleted: false
+- ⚠ This is a built-in chat-commander-wfrp4e command and will re-register on reload."
+`;
+
+exports[`ModuleChatCommanderTool — characterization > unregister-command — success 1`] = `
+"module-chat-commander.unregister-command: unregistered
+- macroDeleted: true (\`Macro.abc123\`)"
+`;

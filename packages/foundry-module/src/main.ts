@@ -480,7 +480,7 @@ class FoundryMCPBridge {
    */
   updateLastActivity(): void {
     this.lastActivity = new Date();
-    this.settings.setSetting('lastActivity', this.lastActivity.toISOString());
+    void this.settings.setSetting('lastActivity', this.lastActivity.toISOString());
   }
 
   /**
@@ -556,7 +556,7 @@ Hooks.once('ready', async () => {
     try {
       const ua = (typeof navigator !== 'undefined' && navigator?.userAgent) || '';
       const m = /Chrome\/(\d+)/.exec(ua);
-      const chromiumMajor = m ? parseInt(m[1], 10) : 0;
+      const chromiumMajor = m ? parseInt(m[1]!, 10) : 0;
       if (chromiumMajor && chromiumMajor < 123) {
         console.warn(`[${MODULE_ID}] Chromium ${chromiumMajor} detected — notify.ts console colors require Chromium 123+ for full theme-safe rendering. Colors will degrade gracefully.`);
       }
@@ -646,6 +646,27 @@ Hooks.once('ready', async () => {
           // No longer needed - ChatMessage.update() automatically syncs across all clients
         }
 
+        // Contract a disease on a patient GM-side (routed from a player's wfrp-test-button click).
+        // Applying it here means wfrp4e's incubation/duration cards and our "contracted" note are
+        // authored by the GM and gmroll-whispered — the player never sees the disease outcome.
+        if (data.type === 'wfrpContractDisease' && data.actorId && data.uuid) {
+          if (game.user?.isGM && (game as any).users?.activeGM?.isSelf) {
+            try {
+              const g = globalThis as any;
+              const actor = game.actors?.get(data.actorId);
+              const src = await g.fromUuid(data.uuid);
+              if (actor && src) {
+                await (actor as any).createEmbeddedDocuments('Item', [src.toObject()]);
+                const gmIds = game.users?.filter((u: any) => u.isGM).map((u: any) => u.id) ?? [];
+                await g.ChatMessage.create({ speaker: { alias: data.alias || 'Disease' }, whisper: gmIds, content: `<div class="grim-gmnote"><b>${actor.name}</b> has <b>contracted ${data.name || src.name}</b>.</div>` });
+              }
+            } catch (e) {
+              console.error(`[${MODULE_ID}] wfrpContractDisease (GM) failed:`, e);
+            }
+          }
+          return;
+        }
+
         // Note: rollStateSaved confirmations removed - not needed since rollStateUpdate handles UI sync
       } catch (error) {
         console.error(`[${MODULE_ID}] Error handling socket message:`, error);
@@ -687,6 +708,151 @@ registerMcpDialogChimeHook();
 
 // Register dialog auto-resolve net — suppresses blocking spec-choice dialogs during MCP requests.
 registerMcpDialogAutoResolve();
+
+// Generic WFRP4e chat "roll-and-react" button. Runs a real wfrp4e test (characteristic or skill)
+// on the CLICKING user's character, then fires outcome-keyed actions. Lives in module code so it is
+// present on every connected client and survives reloads (world-scripts only register at each
+// client's own page-load, so they never reach already-connected players). Posted by world content
+// (e.g. the tavern food-poisoning service).
+//
+// The <button class="wfrp-test-button"> carries ONE attribute, data-wfrp-test, holding a JSON spec:
+//   {
+//     "actorId": "<id>",            // optional; default = clicking user's assigned character
+//     "type": "characteristic"|"skill",   // default "characteristic"
+//     "test": "t" | "Cool",         // characteristic key or skill name
+//     "difficulty": "easy",         // wfrp difficulty key ("easy" = +40), OR
+//     "modifier": 40,               // raw numeric modifier
+//     "label": "Resist Galloping Trots",
+//     "on": {                        // actions to run, by outcome; each is one of the types below
+//       "always":  [ ... ],
+//       "fail":    [ {"action":"contractDisease","uuid":"Compendium...","name":"Galloping Trots"} ],
+//       "success": [ {"action":"chat","text":"You keep it down."} ]
+//     }
+//   }
+// Action types (all owner-safe document ops so they work on a player's client):
+//   contractDisease {uuid,name?} · addItem {uuid,quantity?} · addCondition {key,value?}
+//   removeCondition {key} · damage {amount} (raw wound loss) · chat {text,public?,alias?}
+//   macro {name,args?}  <-- escape hatch; needs the clicking player to have the MACRO_SCRIPT permission
+function attachWfrpTestButtons(html: HTMLElement): void {
+  const g = globalThis as any;
+  const buttons = html.querySelectorAll('button.wfrp-test-button');
+  buttons.forEach((el: any) => {
+    if (el.dataset.bound) return;
+    el.dataset.bound = '1';
+    el.addEventListener('click', async (ev: any) => {
+      ev.preventDefault();
+      if (el.dataset.done) return;
+      const game = g.game; const ui = g.ui;
+      let spec: any = {};
+      try { spec = JSON.parse(el.dataset.wfrpTest || '{}'); }
+      catch (e) { console.error(`[${MODULE_ID}] wfrp-test-button: invalid data-wfrp-test JSON`, e); return; }
+      const actor = spec.actorId ? game.actors?.get(spec.actorId) : game.user?.character;
+      if (!actor) { ui?.notifications?.warn('WFRP test: no character found for this button.'); return; }
+      if (!actor.isOwner) { ui?.notifications?.warn("Only this character's owner (or the GM) can make this test."); return; }
+      el.disabled = true;
+      const gameRef = g.game;
+      const prevRollMode = spec.blind ? gameRef.settings?.get('core', 'rollMode') : null;
+      let rmRestored = false;
+      const restoreRollMode = async () => {
+        if (spec.blind && !rmRestored && prevRollMode != null) {
+          rmRestored = true;
+          try { await gameRef.settings?.set('core', 'rollMode', prevRollMode); } catch (e) { /* ignore */ }
+        }
+      };
+      try {
+        const fields: any = {};
+        if (spec.difficulty) fields.difficulty = spec.difficulty;
+        if (spec.modifier != null) fields.modifier = Number(spec.modifier);
+        const label = spec.label || 'Test';
+        const ctx: any = { fields, skipTargets: true, appendTitle: ` – ${label}` };
+        if (spec.skipDialog) ctx.skipDialog = true;
+        // Blind: the roll result + dice are hidden from the player (gmroll/blind). The test object
+        // still computes pass/fail locally, so the GM-routed consequence (e.g. disease) still fires —
+        // the player simply never sees the outcome.
+        if (spec.blind) await gameRef.settings?.set('core', 'rollMode', 'blindroll');
+        const test = (spec.type === 'skill')
+          ? await actor.setupSkill(spec.test, ctx)
+          : await actor.setupCharacteristic(spec.test || 't', ctx);
+        if (!test) { await restoreRollMode(); el.disabled = false; return; } // dialog cancelled
+        await test.roll();
+        await restoreRollMode();
+        const failed = (test.failed ?? (test.result?.outcome === 'failure')) === true;
+        const scope = { actor, test, outcome: failed ? 'failure' : 'success', failed, succeeded: !failed, sl: test.result?.SL ?? null, args: spec.args ?? {} };
+        const actions: any[] = ([] as any[]).concat(
+          spec.on?.always || [],
+          failed ? (spec.on?.fail || []) : (spec.on?.success || []),
+        );
+        for (const a of actions) await runWfrpTestAction(a, actor, scope, g);
+        el.dataset.done = '1';
+        // Neutral — never reveal pass/fail to the player (the outcome is GM information).
+        el.textContent = '✓ Test made';
+      } catch (err) {
+        console.error(`[${MODULE_ID}] wfrp-test-button error:`, err);
+        await restoreRollMode();
+        el.disabled = false;
+      }
+    });
+  });
+}
+
+// Execute one declarative action from a wfrp-test-button spec. All branches are owner-permitted
+// document operations (the lone exception is `macro`, which needs MACRO_SCRIPT for non-GM clients).
+async function runWfrpTestAction(a: any, actor: any, scope: any, g: any): Promise<void> {
+  const game = g.game;
+  const recipients = game.users.filter((u: any) => u.isGM || actor.testUserPermission(u, 'OWNER')).map((u: any) => u.id);
+  try {
+    switch (a?.action) {
+      case 'contractDisease': {
+        if (!a.uuid) break;
+        // Disease contraction is GM information (the player must not see the "contracted" note or
+        // wfrp4e's incubation/duration timer cards). When a player clicks, route the embed to the
+        // GM so those cards are authored GM-side and gmroll-whispered; the player never sees them.
+        const amActiveGM = game.user?.isGM && game.users?.activeGM?.isSelf;
+        if (game.users?.activeGM && !amActiveGM) {
+          game.socket?.emit('module.warhammer-mcp', { type: 'wfrpContractDisease', actorId: actor.id, uuid: a.uuid, name: a.name, alias: a.alias });
+        } else {
+          // GM client (or no GM online — fallback): apply locally. wfrp4e _onCreate auto-starts incubation.
+          const src = await g.fromUuid(a.uuid);
+          if (src) {
+            await actor.createEmbeddedDocuments('Item', [src.toObject()]);
+            const gmIds = game.users?.filter((u: any) => u.isGM).map((u: any) => u.id) ?? [];
+            await g.ChatMessage.create({ speaker: { alias: a.alias || 'Disease' }, whisper: gmIds, content: `<div class="grim-gmnote"><b>${actor.name}</b> has <b>contracted ${a.name || src.name}</b>.</div>` });
+          }
+        }
+        break;
+      }
+      case 'addItem': {
+        const src = a.uuid ? await g.fromUuid(a.uuid) : null;
+        if (src) {
+          const obj = src.toObject();
+          if (a.quantity != null && obj.system?.quantity) obj.system.quantity.value = Number(a.quantity);
+          await actor.createEmbeddedDocuments('Item', [obj]);
+        }
+        break;
+      }
+      case 'addCondition': { if (actor.addCondition) await actor.addCondition(a.key, a.value ?? 1); break; }
+      case 'removeCondition': { if (actor.removeCondition) await actor.removeCondition(a.key); break; }
+      case 'damage': {
+        const wounds = actor.system?.status?.wounds;
+        if (wounds) await actor.update({ 'system.status.wounds.value': Math.max(0, Number(wounds.value) - Number(a.amount || 0)) });
+        break;
+      }
+      case 'chat': {
+        await g.ChatMessage.create({ speaker: { alias: a.alias || actor.name }, whisper: a.public ? [] : recipients, content: a.text || '' });
+        break;
+      }
+      case 'macro': {
+        const m = game.macros?.getName(a.name);
+        if (m) await m.execute({ actor, ...scope, ...(a.args || {}) });
+        else console.warn(`[${MODULE_ID}] wfrp-test-button: macro "${a.name}" not found`);
+        break;
+      }
+      default: console.warn(`[${MODULE_ID}] wfrp-test-button: unknown action "${a?.action}"`);
+    }
+  } catch (e) {
+    console.error(`[${MODULE_ID}] wfrp-test-button action "${a?.action}" failed:`, e);
+  }
+}
 
 // Global hook to handle MCP roll button rendering and state management
 // Using renderChatMessageHTML for Foundry v13 compatibility (renderChatMessage is deprecated)
@@ -732,8 +898,60 @@ Hooks.on('renderChatMessageHTML', (message: any, html: HTMLElement) => {
         }, 100);
       }
     }
+
+    // Generic WFRP test buttons — independent of the MCP roll-button flow.
+    attachWfrpTestButtons(html);
   } catch (error) {
     console.warn(`[${MODULE_ID}] Error processing roll buttons in chat message:`, error);
+  }
+});
+
+// When a disease's DURATION begins (symptoms manifest), whisper the patient a vague "you feel
+// unwell" omen. Incubation is silent and the disease stays hidden until diagnosed, so the player
+// learns they have caught SOMETHING — never what. Fires once, GM-side, when system.duration.active
+// flips true (wfrp4e DiseaseModel.start("duration")). Player-facing flavor, drawn from a 1d20 table.
+const DISEASE_ONSET_TABLE_ID = '6u30TrMQ0L9ZknvT';
+Hooks.on('updateItem', async (item: any, change: any, _options: any, _userId: string) => {
+  try {
+    if (item?.type !== 'disease') return;
+    const g = globalThis as any;
+    if (g.foundry?.utils?.getProperty(change, 'system.duration.active') !== true) return;
+    // Only the primary active GM posts, so the omen appears exactly once.
+    if (!(game.user?.isGM && (game as any).users?.activeGM?.isSelf)) return;
+    const actor = item.parent;
+    if (!actor) return;
+    const owners = game.users?.filter((u: any) => !u.isGM && actor.testUserPermission?.(u, 'OWNER')).map((u: any) => u.id) ?? [];
+    const gmIds = game.users?.filter((u: any) => u.isGM).map((u: any) => u.id) ?? [];
+    let omen = 'A creeping sickness settles into you — something is not right.';
+    const tbl = game.tables?.get(DISEASE_ONSET_TABLE_ID) || game.tables?.find((t: any) => t.name === 'Disease Onset Omens');
+    if (tbl) {
+      try { const d = await tbl.draw({ displayChat: false }); const r = d?.results?.[0]; const t = (r?.name || r?.text || r?.description || '').toString().trim(); if (t) omen = t; } catch (e) { /* fall back */ }
+    }
+    const card = `<div class="grim-page grim-codex"><div class="grim-header"><div class="grim-eyebrow">&mdash;</div><div class="grim-title">Something Is Wrong</div></div><p style="text-align:center;font-style:italic;">${omen}</p></div>`;
+    await g.ChatMessage.create({ speaker: { alias: actor.name }, whisper: [...new Set([...owners, ...gmIds])], content: card });
+  } catch (e) {
+    console.error(`[${MODULE_ID}] disease-onset omen failed:`, e);
+  }
+});
+
+// Re-enable disease symptoms that were temporarily suppressed by the Treat Disease service.
+// The service disables symptom AEs and stamps flags["warhammer-mcp"].symptomsSuppressedUntil
+// (= worldTime + ~1 day) on the disease item. When that time passes, restore the symptoms.
+Hooks.on('updateWorldTime', async (worldTime: number) => {
+  try {
+    if (!(game.user?.isGM && (game as any).users?.activeGM?.isSelf)) return;
+    const now = Number((game as any).time?.worldTime ?? worldTime ?? 0);
+    for (const actor of (game.actors as any)?.contents ?? []) {
+      for (const d of actor.items?.filter((i: any) => i.type === 'disease') ?? []) {
+        const until = d.getFlag('warhammer-mcp', 'symptomsSuppressedUntil');
+        if (until == null || now < Number(until)) continue;
+        const sym = d.effects?.filter((e: any) => e.getFlag('wfrp4e', 'symptom') && e.disabled) ?? [];
+        if (sym.length) await d.updateEmbeddedDocuments('ActiveEffect', sym.map((e: any) => ({ _id: e.id, disabled: false })));
+        await d.unsetFlag('warhammer-mcp', 'symptomsSuppressedUntil');
+      }
+    }
+  } catch (e) {
+    console.error(`[${MODULE_ID}] symptom re-enable failed:`, e);
   }
 });
 

@@ -1,0 +1,33 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`SettingTool — characterization > get — formatted setting view 1`] = `
+"**warhammer-mcp.mcpVerboseConsole**
+- Scope: world | Type: Boolean
+- Has onChange: no
+- Value: \`false\`"
+`;
+
+exports[`SettingTool — characterization > list — namespace-filtered settings 1`] = `
+"Settings (2 total)
+
+- \`warhammer-mcp.enabled\` [world/Boolean] ⚠ onChange
+- \`warhammer-mcp.auditWritesToChat\` [world/Boolean]"
+`;
+
+exports[`SettingTool — characterization > list-world-db — persisted settings with doc ids 1`] = `
+"Persisted World Settings (2 total)
+
+- \`warhammer-mcp.enabled\` = true (id: \`doc-id-1\`)
+- \`warhammer-mcp.serverPort\` = 31415 (id: \`doc-id-2\`)"
+`;
+
+exports[`SettingTool — characterization > set — round-trip verified view 1`] = `
+"Setting Updated
+
+**warhammer-mcp.auditWritesToChat**
+- Scope: world | Type: Boolean
+- Has onChange: no
+- Value: \`true\`
+
+Verified: yes"
+`;

@@ -18,7 +18,11 @@ describe('system-id guard', () => {
   // handler graph and exceeds the default 5000ms test timeout under parallel
   // suite load (passes standalone in ~611ms). Bumped to 15000ms so the
   // module-graph cold-import has headroom under contention.
-  it('wfrp4e world registers warhammer-mcp handlers', { timeout: 15000 }, async () => {
+  // Phase 0 (mcp_code_quality_hardening v1, 0.7.3, 2026-06-13): 15000ms was itself
+  // exceeded (~19s under load) once the characterization suite added many
+  // data-access.ts-importing files, inflating the parallel collect/transform.
+  // Bumped to 30000ms. Still passes in ~1.6s standalone — pure load headroom.
+  it('wfrp4e world registers warhammer-mcp handlers', { timeout: 30000 }, async () => {
     (globalThis as any).game.system = { id: 'wfrp4e' };
     const { foundryMCPBridge } = await import('../main.js');
     await foundryMCPBridge.initialize();
@@ -29,7 +33,7 @@ describe('system-id guard', () => {
     expect(mcpKeys.length).toBeGreaterThan(0);
   });
 
-  it('dnd5e world registers zero handlers and logs one line', { timeout: 15000 }, async () => {
+  it('dnd5e world registers zero handlers and logs one line', { timeout: 30000 }, async () => {
     (globalThis as any).game.system = { id: 'dnd5e' };
     const { foundryMCPBridge } = await import('../main.js');
     await foundryMCPBridge.initialize();

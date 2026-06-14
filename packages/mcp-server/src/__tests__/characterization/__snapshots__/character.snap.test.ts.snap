@@ -1,0 +1,43 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`CharacterTools — characterization > get-character — full character JSON snapshot (sections omitted) 1`] = `"{"id":"abc1234567890123","name":"Aldric Schwarzmann","type":"character","basicInfo":{"wounds":{"current":12,"max":15},"fortune":2,"fate":3,"resilience":1,"resolve":2,"corruption":{"current":0,"max":3},"criticalWounds":{"count":0,"wounds":[]},"money":{"Gold Crown":5},"toughness":{"bonus":3,"armorPoints":1,"total":4},"species":"Human","hitLocationTable":"hitloc","career":"Guard Career","class":"Warrior","careerLevel":1,"status":"Brass 2","statusTier":1,"statusStanding":2,"experience":{"current":50,"total":200,"spent":150},"biography":{"motivation":"Protect the innocent","shortTermAmbition":"Find the stolen relic","longTermAmbition":"Become a knight","partyAmbitionName":"The Hammer and the Anvil","partyAmbitionShort":"Defeat the Chaos cultists","partyAmbitionLong":"Restore the city"},"movement":4,"gender":"Male","age":"28","height":"5'10\\"","hair":"Brown","eyes":"Green","starSign":"Dragomas the Drake","experienceLog":[]},"stats":{"characteristics":{"WS":{"name":"Weapon Skill","initial":35,"advances":5,"value":40,"bonus":4},"BS":{"name":"Ballistic Skill","initial":30,"advances":0,"value":30,"bonus":3},"S":{"name":"Strength","initial":32,"advances":0,"value":32,"bonus":3},"T":{"name":"Toughness","initial":28,"advances":2,"value":30,"bonus":3},"I":{"name":"Initiative","initial":40,"advances":0,"value":40,"bonus":4},"AG":{"name":"Agility","initial":35,"advances":0,"value":35,"bonus":3},"DEX":{"name":"Dexterity","initial":25,"advances":0,"value":25,"bonus":2},"INT":{"name":"Intelligence","initial":30,"advances":0,"value":30,"bonus":3},"WP":{"name":"Willpower","initial":33,"advances":0,"value":33,"bonus":3},"FEL":{"name":"Fellowship","initial":28,"advances":0,"value":28,"bonus":2}},"skills":{"Melee (Basic)":{"characteristic":"ws","advances":5,"total":45,"modifier":0}},"talents":[{"name":"Strike Mighty Blow","advances":1,"tests":"WS","description":"Add SB to damage rolls."}]},"conditions":{"injuries":[{"name":"Broken Arm","location":"rArm","description":"Fractured."}]},"items":[{"id":"item003","name":"Sword","type":"weapon","quantity":1,"equipped":true,"description":"A standard sword.","hasImage":true}],"effects":[{"id":"effect001","name":"Fatigued","disabled":false,"duration":{"type":"none","remaining":null},"hasIcon":false,"conditionValue":2,"displayName":"Fatigued 2"}],"hasImage":true}"`;
+
+exports[`CharacterTools — characterization > get-character — sections filter (characteristics only) 1`] = `"{"id":"abc1234567890123","name":"Aldric Schwarzmann","type":"character","hasImage":true,"characteristics":{"WS":{"name":"Weapon Skill","initial":35,"advances":5,"value":40,"bonus":4},"BS":{"name":"Ballistic Skill","initial":30,"advances":0,"value":30,"bonus":3},"S":{"name":"Strength","initial":32,"advances":0,"value":32,"bonus":3},"T":{"name":"Toughness","initial":28,"advances":2,"value":30,"bonus":3},"I":{"name":"Initiative","initial":40,"advances":0,"value":40,"bonus":4},"AG":{"name":"Agility","initial":35,"advances":0,"value":35,"bonus":3},"DEX":{"name":"Dexterity","initial":25,"advances":0,"value":25,"bonus":2},"INT":{"name":"Intelligence","initial":30,"advances":0,"value":30,"bonus":3},"WP":{"name":"Willpower","initial":33,"advances":0,"value":33,"bonus":3},"FEL":{"name":"Fellowship","initial":28,"advances":0,"value":28,"bonus":2}}}"`;
+
+exports[`CharacterTools — characterization > get-character — sections filter (vitals + identity) 1`] = `"{"id":"abc1234567890123","name":"Aldric Schwarzmann","type":"character","hasImage":true,"identity":{"species":"Human","career":"Guard Career","class":"Warrior","careerLevel":1,"status":"Brass 2","gender":"Male","age":"28","height":"5'10\\"","hair":"Brown","eyes":"Green","starSign":"Dragomas the Drake","movement":4},"vitals":{"wounds":{"current":12,"max":15},"fortune":2,"fate":3,"resilience":1,"resolve":2,"corruption":{"current":0,"max":3},"toughness":{"bonus":3,"armorPoints":1,"total":4},"money":{"Gold Crown":5},"criticalWounds":{"count":0,"wounds":[]},"hitLocationTable":"hitloc"}}"`;
+
+exports[`CharacterTools — characterization > list-characters — filtered by type=npc 1`] = `
+{
+  "characters": [
+    {
+      "hasImage": false,
+      "id": "npc001abc2345678",
+      "name": "Town Guard",
+      "type": "npc",
+    },
+  ],
+  "filtered": "Filtered by type: npc",
+  "total": 1,
+}
+`;
+
+exports[`CharacterTools — characterization > list-characters — plain object with total count 1`] = `
+{
+  "characters": [
+    {
+      "hasImage": true,
+      "id": "abc1234567890123",
+      "name": "Aldric Schwarzmann",
+      "type": "character",
+    },
+    {
+      "hasImage": false,
+      "id": "def4567890123456",
+      "name": "Brenna Faust",
+      "type": "npc",
+    },
+  ],
+  "filtered": "All characters",
+  "total": 2,
+}
+`;

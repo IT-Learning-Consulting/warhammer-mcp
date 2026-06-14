@@ -841,7 +841,7 @@ async function startBackend(): Promise<void> {
 
 }
 
-(async function main() {
+void (async function main() {
 
   if (!acquireLock()) process.exit(0);
 

@@ -1,0 +1,32 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ModuleCssTool — characterization > MODULE_NOT_ACTIVE — probe inactive branch 1`] = `"module-css failed: MODULE_NOT_ACTIVE: custom-css is not active"`;
+
+exports[`ModuleCssTool — characterization > append — CSS appended 1`] = `"module-css.append: appended 20 chars → total 60 chars. Broadcast to all connected clients."`;
+
+exports[`ModuleCssTool — characterization > get — with user stylesheet 1`] = `
+"module-css.get: world CSS (22 chars):
+
+.dark { color: #fff; }
+
+--- GM user CSS (28 chars, client-scoped) ---
+.editor { font-size: 14px; }
+
+(userStylesheet is client-scoped (LocalStorage) — GM browser only.)"
+`;
+
+exports[`ModuleCssTool — characterization > get — world CSS empty (sentinel) 1`] = `
+"module-css.get: world CSS is empty (sentinel).
+
+"
+`;
+
+exports[`ModuleCssTool — characterization > get — world CSS present 1`] = `
+"module-css.get: world CSS (38 chars):
+
+.grim-page { background: #e8dcc0; }"
+`;
+
+exports[`ModuleCssTool — characterization > reset — world CSS cleared 1`] = `"module-css.reset: world CSS reset to empty sentinel. Broadcast to all connected clients."`;
+
+exports[`ModuleCssTool — characterization > set — world CSS written 1`] = `"module-css.set: world CSS written (38 chars). Broadcast to all connected clients."`;

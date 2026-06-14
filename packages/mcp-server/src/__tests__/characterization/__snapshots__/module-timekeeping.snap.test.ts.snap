@@ -1,0 +1,42 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ModuleTimekeepingTool — characterization > MODULE_NOT_ACTIVE — get-time throws → moduleNotActiveContent format 1`] = `"module-timekeeping failed: MODULE_NOT_ACTIVE: simple-timekeeping is not active"`;
+
+exports[`ModuleTimekeepingTool — characterization > add-event — new calendar event registered 1`] = `
+"module-timekeeping.add-event: Witchnight Ceremony
+- page: \`JournalEntry.abc.JournalEntryPage.p003\` [Calendar Events]
+- eventTime: 259200 (5d) repeat=year"
+`;
+
+exports[`ModuleTimekeepingTool — characterization > advance — time advanced with previousWorldTime 1`] = `
+"module-timekeeping: 4th of Nachexen, 2512 IC — 08:00
+- worldTime: 28800 (was 14400)
+- dayTimePercent: 33.3% · season: Winter
+- Mannslieb: Full (day 15) · Morrslieb: Waxing (day 7)
+- advanced: 14400s"
+`;
+
+exports[`ModuleTimekeepingTool — characterization > get-config — configuration summary 1`] = `
+"module-timekeeping.get-config: 3 configuration key(s)
+- activeCalendar: imperial · auto-clock paused: false
+- weather: Rain · darknessSync: true"
+`;
+
+exports[`ModuleTimekeepingTool — characterization > get-time — full clock + moon phase output 1`] = `
+"module-timekeeping: 4th of Nachexen, 2512 IC — 04:00
+- worldTime: 14400
+- dayTimePercent: 16.7% · season: Winter
+- Mannslieb: Full (day 15) · Morrslieb: New (day 0)"
+`;
+
+exports[`ModuleTimekeepingTool — characterization > list-events — events with repeat and expiry 1`] = `
+"module-timekeeping.list-events: 2 event(s):
+  • Market Day @ 86400 (3d) repeat=week [Calendar Events]
+  • Dead Night Watch @ 50000–54000 (0d) [expired] [Calendar Events]"
+`;
+
+exports[`ModuleTimekeepingTool — characterization > list-events — no events 1`] = `"module-timekeeping.list-events: no events."`;
+
+exports[`ModuleTimekeepingTool — characterization > set-scene-sync — darknessSync set on scene 1`] = `"module-timekeeping.set-scene-sync: "Market Square" darknessSync = sync"`;
+
+exports[`ModuleTimekeepingTool — characterization > set-weather — generic ok result (GenericOkResult path) 1`] = `"module-timekeeping.set-weather: label=Heavy Rain · color=#334466 · applied=true"`;

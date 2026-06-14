@@ -1,0 +1,93 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`LightTool — characterization > create — ambient light created with requested fields 1`] = `
+"💡 **AmbientLight Created**
+
+## AmbientLight \`light-id-001\`
+**Scene:** \`scene-id-001\`
+
+### Position
+- x: 500, y: 300, elevation: 0, rotation: 0°
+
+### Flags
+- walls: on · vision: off · hidden: no · isGlobal: no
+
+### Light Config
+- dim: 20, bright: 10, angle: 360°
+- color: #ffaa00, alpha: 0.5, coloration: 1
+- luminosity: 0.5, saturation: 0, contrast: 0, shadows: 0
+- attenuation: 0.5, priority: 0, negative: no
+- darkness threshold: min=0, max=1
+- animation: type=torch, speed=5, intensity=5, reverse=no
+
+_Requested fields: x, y, config_"
+`;
+
+exports[`LightTool — characterization > delete — deleted confirmation with remaining count 1`] = `
+"🗑️ **AmbientLight Deleted**
+
+**ID:** \`light-id-001\`
+**Remaining lights on scene:** 2
+
+⚠️ Permanent."
+`;
+
+exports[`LightTool — characterization > get — single light view 1`] = `
+"## AmbientLight \`light-id-001\`
+**Scene:** \`scene-id-001\`
+
+### Position
+- x: 500, y: 300, elevation: 0, rotation: 0°
+
+### Flags
+- walls: on · vision: off · hidden: no · isGlobal: no
+
+### Light Config
+- dim: 20, bright: 10, angle: 360°
+- color: #ffaa00, alpha: 0.5, coloration: 1
+- luminosity: 0.5, saturation: 0, contrast: 0, shadows: 0
+- attenuation: 0.5, priority: 0, negative: no
+- darkness threshold: min=0, max=1
+- animation: type=torch, speed=5, intensity=5, reverse=no"
+`;
+
+exports[`LightTool — characterization > list — bare list of lights 1`] = `
+"💡 **AmbientLights** (1)
+
+- \`light-id-001\` @ scene \`scene-id-001\` · dim=20 bright=10 · isGlobal=no · hidden=no"
+`;
+
+exports[`LightTool — characterization > list — countOnly path 1`] = `
+"💡 **AmbientLight count**
+
+**Total:** 4"
+`;
+
+exports[`LightTool — characterization > list — paginated lights 1`] = `
+"💡 **AmbientLights** (page 1 of 1, 5 total)
+
+- \`light-id-001\` @ scene \`scene-id-001\` · dim=20 bright=10 · isGlobal=no · hidden=no"
+`;
+
+exports[`LightTool — characterization > update — changed fields + updated light view 1`] = `
+"✏️ **AmbientLight Updated**
+
+**Changed fields:** hidden
+
+## AmbientLight \`light-id-001\`
+**Scene:** \`scene-id-001\`
+
+### Position
+- x: 500, y: 300, elevation: 0, rotation: 0°
+
+### Flags
+- walls: on · vision: off · hidden: yes · isGlobal: no
+
+### Light Config
+- dim: 20, bright: 10, angle: 360°
+- color: #ffaa00, alpha: 0.5, coloration: 1
+- luminosity: 0.5, saturation: 0, contrast: 0, shadows: 0
+- attenuation: 0.5, priority: 0, negative: no
+- darkness threshold: min=0, max=1
+- animation: type=torch, speed=5, intensity=5, reverse=no"
+`;

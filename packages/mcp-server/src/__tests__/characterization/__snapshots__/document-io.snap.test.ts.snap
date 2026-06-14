@@ -1,0 +1,71 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`DocumentIoTool — characterization > export — full toObject JSON output 1`] = `
+"## Exported Actor \`oldActor1\`
+
+The toObject() payload is below. Pass it to action:"import-as-new" with confirm:true to create a clone.
+
+\`\`\`json
+{
+  "_id": "oldActor1",
+  "name": "Hans Mauer",
+  "type": "character",
+  "system": {
+    "characteristics": {}
+  },
+  "items": [],
+  "effects": []
+}
+\`\`\`"
+`;
+
+exports[`DocumentIoTool — characterization > import-as-new — clone created with id map 1`] = `
+"## Imported Actor (new id: \`newActor2\`)
+**Old id:** \`oldActor1\` → **New id:** \`newActor2\`
+
+**Id map:**
+  - \`oldActor1\` → \`newActor2\`
+  - \`item-a\` → \`item-b\`
+
+**Warnings:**
+_(none)_"
+`;
+
+exports[`DocumentIoTool — characterization > import-as-new — with warnings 1`] = `
+"## Imported Scene (new id: \`newScene9\`)
+**Old id:** \`oldScene1\` → **New id:** \`newScene9\`
+
+**Id map:**
+  - \`oldScene1\` → \`newScene9\`
+
+**Warnings:**
+- @UUID[JournalEntry.jrn001] links reference old id — re-link manually."
+`;
+
+exports[`DocumentIoTool — characterization > preview — in-memory analysis 1`] = `
+"## Preview — Actor: "Hans Mauer"
+**Embedded counts:**
+  - items: 3
+  - effects: 0
+**Has folder:** no · **Has custom ownership:** no
+**@UUID links:** 0
+
+_This is a preview only — no document was created._
+
+**Warnings:**
+_(none)_"
+`;
+
+exports[`DocumentIoTool — characterization > preview — with warnings and uuid links 1`] = `
+"## Preview — JournalEntry: "Quest: Find the Witch Hunter"
+**Embedded counts:**
+  - pages: 2
+  - categories: 1
+**Has folder:** yes · **Has custom ownership:** yes
+**@UUID links:** 5
+
+_This is a preview only — no document was created._
+
+**Warnings:**
+- @UUID links found — will need re-linking after import."
+`;

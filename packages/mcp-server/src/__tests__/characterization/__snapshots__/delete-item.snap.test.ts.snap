@@ -1,0 +1,17 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`DeleteItemTool — characterization > delete actor-embedded item by id — raw passthrough 1`] = `
+{
+  "actorId": "actor-xyz789",
+  "deleted": true,
+  "itemId": "item-abc123",
+}
+`;
+
+exports[`DeleteItemTool — characterization > delete world-scope item by name — raw passthrough 1`] = `
+{
+  "deleted": true,
+  "itemId": "item-world-001",
+  "itemName": "Old Sword",
+}
+`;

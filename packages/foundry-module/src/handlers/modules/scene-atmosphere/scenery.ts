@@ -140,7 +140,7 @@ function findVariation(
     if (variationIndex < 0 || variationIndex >= data.variations.length) {
       throw new Error(`VARIATION_NOT_FOUND: Index ${variationIndex} out of range (have ${data.variations.length} variations)`);
     }
-    return { index: variationIndex, variation: data.variations[variationIndex] };
+    return { index: variationIndex, variation: data.variations[variationIndex]! };
   }
   if (variationName !== undefined) {
     const idx = data.variations.findIndex((v) => v.name === variationName);
@@ -148,7 +148,7 @@ function findVariation(
       const names = data.variations.map((v) => `"${v.name}"`).join(', ');
       throw new Error(`VARIATION_NOT_FOUND: No variation named "${variationName}". Available: ${names}`);
     }
-    return { index: idx, variation: data.variations[idx] };
+    return { index: idx, variation: data.variations[idx]! };
   }
   throw new Error('VARIATION_TARGET_REQUIRED: Provide variationIndex or variationName');
 }
@@ -232,7 +232,7 @@ export async function handleGetActiveVariation(input: GetActiveVariationInput): 
     }
 
     const activeIdx = Math.min(data.activeVariationIndex, data.variations.length - 1);
-    const v = data.variations[activeIdx];
+    const v = data.variations[activeIdx]!;
 
     return {
       success: true,

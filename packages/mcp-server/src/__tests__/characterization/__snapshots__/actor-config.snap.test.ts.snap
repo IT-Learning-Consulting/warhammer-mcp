@@ -1,0 +1,57 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ActorConfigTool — characterization > get-art (actor target) — actor img + prototype token src 1`] = `
+"🖼️ **Actor Art** — \`actor-abc123\`
+
+- **actor.img:** systems/wfrp4e/tokens/human.png
+- **prototypeToken.texture.src:** systems/wfrp4e/tokens/human.png"
+`;
+
+exports[`ActorConfigTool — characterization > get-art (item target) — item img 1`] = `
+"🖼️ **Item Art** — \`item-xyz789\`
+
+- **item.img:** systems/wfrp4e/icons/weapons/sword.png"
+`;
+
+exports[`ActorConfigTool — characterization > get-prototype-token — formatted prototype token view 1`] = `
+"🎭 **Prototype Token** — Hans Gruber (\`actor-abc123\`)
+
+\`\`\`json
+{
+  "name": "Hans Gruber",
+  "actorLink": true,
+  "width": 1,
+  "height": 1,
+  "disposition": -1,
+  "displayName": 20,
+  "displayBars": 20,
+  "texture": {
+    "src": "icons/svg/mystery-man.svg",
+    "scaleX": 1,
+    "scaleY": 1
+  }
+}
+\`\`\`"
+`;
+
+exports[`ActorConfigTool — characterization > set-art (actor, both) — art set confirmation with resolved paths 1`] = `
+"✅ **Art Set** — actor \`actor-abc123\`
+
+- **src:** \`systems/wfrp4e/tokens/soldier.png\`
+- **Written fields:** img, prototypeToken.texture.src
+- **Resolved:** img=\`systems/wfrp4e/tokens/soldier.png\`, prototypeToken.texture.src=\`systems/wfrp4e/tokens/soldier.png\`"
+`;
+
+exports[`ActorConfigTool — characterization > set-art (clear) — art cleared to default 1`] = `
+"✅ **Art Cleared** — actor \`actor-abc123\`
+
+- **src:** _(cleared → reset to default)_
+- **Written fields:** img
+- **Resolved:** img=\`icons/svg/mystery-man.svg\`"
+`;
+
+exports[`ActorConfigTool — characterization > update-prototype-token — changed fields summary 1`] = `
+"✅ **Prototype Token Updated** — Hans Gruber (\`actor-abc123\`)
+
+**Changed fields:** disposition, displayName"
+`;

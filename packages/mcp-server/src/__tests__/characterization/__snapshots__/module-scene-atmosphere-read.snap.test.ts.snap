@@ -1,0 +1,68 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ModuleSceneAtmosphereTool (read) — characterization > MODULE_NOT_ACTIVE — throws → moduleNotActiveContent format 1`] = `"module-scene-atmosphere failed: MODULE_NOT_ACTIVE: fxmaster is not active"`;
+
+exports[`ModuleSceneAtmosphereTool (read) — characterization > get-active-variation — active variation details 1`] = `
+"scenery: get-active-variation — "Dungeon Hall" (scene001) active index=1.
+Name: "Ruined"
+GM background: modules/bg/ruined.webp
+Player background: (none)
+Has sceneData: true"
+`;
+
+exports[`ModuleSceneAtmosphereTool (read) — characterization > get-bundle-status — all members listed with active/inactive state 1`] = `
+"module-scene-atmosphere bundle status: 3/6 members active.
+
+- fxmaster (FXMaster v8.1.0): ACTIVE
+- tokenmagic (Token Magic FX v4.0.0): ACTIVE
+- scenery (Scenery): INACTIVE
+- scene-transitions (Scene Transitions): INACTIVE
+- multiface-tiles (Multiface Tiles v1.2.0): ACTIVE
+- dynamic-soundscapes (Dynamic Soundscapes): INACTIVE"
+`;
+
+exports[`ModuleSceneAtmosphereTool (read) — characterization > get-mood — mood read with explicit flag note 1`] = `
+"dynamic-soundscapes: get-mood — "Tavern Ambience" (playlist001): mood=moodB (explicit flag).
+Note: Mood flag set explicitly on playlist."
+`;
+
+exports[`ModuleSceneAtmosphereTool (read) — characterization > list-active-presets — active presets on scene 1`] = `
+"fxmaster: list-active-presets — 1 active on scene-abc123.
+Active: rain"
+`;
+
+exports[`ModuleSceneAtmosphereTool (read) — characterization > list-presets — preset name list with counts 1`] = `
+"fxmaster: list-presets — 4 presets registered.
+hasFxmasterPlus: false | hasFxmaster: true
+Presets: rain, snow, fog, thunderstorm
+Note: Free presets only (fxmaster-plus not active)"
+`;
+
+exports[`ModuleSceneAtmosphereTool (read) — characterization > list-soundscapes — soundscape list with playing status 1`] = `
+"dynamic-soundscapes: list-soundscapes — 2 soundscape(s) in folder "Soundscapes" (folder001).
+Playing: playlist001
+  - "Tavern Ambience" (playlist001) [PLAYING] | mood=moodA | blocks=2 sounds=5
+  - "Combat" (playlist002) | mood=moodB | blocks=1 sounds=3"
+`;
+
+exports[`ModuleSceneAtmosphereTool (read) — characterization > list-tile-faces — tile with original + alt images 1`] = `
+"multiface-tiles: list-tile-faces — tile tile001 — 3 face(s).
+Active face (alt[0]): modules/tiles/door-open.webp
+Original image: modules/tiles/door-closed.webp
+  original: modules/tiles/door-closed.webp
+  alt[0]: modules/tiles/door-open.webp [ACTIVE]
+  alt[1]: modules/tiles/door-broken.webp"
+`;
+
+exports[`ModuleSceneAtmosphereTool (read) — characterization > list-valid-presets — valid preset names for current modules 1`] = `
+"fxmaster: list-valid-presets — 3 valid (topDown=false).
+Valid: rain, snow, fog
+Note: Only free presets — fxmaster-plus not active"
+`;
+
+exports[`ModuleSceneAtmosphereTool (read) — characterization > list-variations — multiple named variations 1`] = `
+"scenery: list-variations — 2 variation(s) on "Dungeon Hall" (scene001).
+Active index: 1
+  [0] "Default"
+  [1] [ACTIVE] "Ruined" +sceneData"
+`;

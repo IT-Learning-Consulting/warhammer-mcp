@@ -1,0 +1,274 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`SceneTool — characterization (write) > activate — sets world-active scene 1`] = `
+"▶️ **Scene Activated**
+
+**Name:** Red Moon Inn
+**ID:** \`scene001\`
+**Previous active:** \`scene000\`"
+`;
+
+exports[`SceneTool — characterization (write) > clear-layer — dryRun preview 1`] = `
+"🔎 **Clear-layer preview — lights**
+
+**Would delete 3 doc(s)** on scene \`scene001\`:
+- \`light1\` Torch
+- \`light2\` Lantern
+- \`light3\` _(unnamed)_
+
+_Re-run with \`dryRun:false\` + \`confirm:true\` to delete._"
+`;
+
+exports[`SceneTool — characterization (write) > clear-layer — execute delete 1`] = `
+"🧹 **Layer cleared — lights**
+
+Deleted **3** doc(s) on scene \`scene001\`."
+`;
+
+exports[`SceneTool — characterization (write) > clone — source + clone view 1`] = `
+"🪞 **Scene Cloned**
+
+**Source:** Red Moon Inn (\`scene001\`)
+
+## Red Moon Inn (Copy)
+**ID:** \`scene002\`
+
+### Basics
+- Navigation: on
+- Background: \`worlds/aitww/maps/tavern.webp\`
+  - anchor: (0.5, 0.5), offset: (0, 0)
+  - fit: contain, scale: (1, 1), rotation: 0°
+  - tint: null, alphaThreshold: 0.75
+- Foreground: _(none)_, foregroundElevation: _(default)_
+- Thumbnail: _(auto-generated)_
+- Background color: #000000
+- Dimensions: 2048 × 1536 (padding: 0.25)
+- Initial view: x=_(unset)_, y=_(unset)_, scale=_(unset)_
+
+### Grid
+- Type: 1 (SQUARE), size: 100px
+- Distance: 5 yds per square
+- Style: solidLines, thickness: 1
+- Color: #000000, alpha: 0.2
+
+### Lighting / Vision
+- Token vision: on
+- Fog: exploration=on, reset=_(unset)_, overlay=_(none)_
+  - Fog colors: explored=_(default)_, unexplored=_(default)_
+- Darkness: level=0, lock=off, cycle=off
+- Global light: enabled=off, alpha=0.5, bright=off
+  - color=_(default)_, coloration=_(default)_, luminosity=0
+  - saturation=0, contrast=0, shadows=0
+  - darkness threshold: min=0, max=1
+
+### Ambience
+- Journal: _(none)_
+- Journal page: _(none)_
+- Playlist: _(none)_
+- Playlist sound: _(none)_
+- Weather: _(none)_
+
+### Organization
+- Folder: _(none)_, sort: 0
+- Ownership default: 0
+
+### Embedded collections (counts)
+- Tokens: 0 · Walls: 0 · Lights: 0 · Sounds: 0
+- Notes: 0 · Drawings: 0 · Regions: 0 · Templates: 0 · Tiles: 0"
+`;
+
+exports[`SceneTool — characterization (write) > create — full scene view 1`] = `
+"🎬 **Scene Created**
+
+## Red Moon Inn
+**ID:** \`scene001\`
+
+### Basics
+- Navigation: on
+- Background: \`worlds/aitww/maps/tavern.webp\`
+  - anchor: (0.5, 0.5), offset: (0, 0)
+  - fit: contain, scale: (1, 1), rotation: 0°
+  - tint: null, alphaThreshold: 0.75
+- Foreground: _(none)_, foregroundElevation: _(default)_
+- Thumbnail: _(auto-generated)_
+- Background color: #000000
+- Dimensions: 2048 × 1536 (padding: 0.25)
+- Initial view: x=_(unset)_, y=_(unset)_, scale=_(unset)_
+
+### Grid
+- Type: 1 (SQUARE), size: 100px
+- Distance: 5 yds per square
+- Style: solidLines, thickness: 1
+- Color: #000000, alpha: 0.2
+
+### Lighting / Vision
+- Token vision: on
+- Fog: exploration=on, reset=_(unset)_, overlay=_(none)_
+  - Fog colors: explored=_(default)_, unexplored=_(default)_
+- Darkness: level=0, lock=off, cycle=off
+- Global light: enabled=off, alpha=0.5, bright=off
+  - color=_(default)_, coloration=_(default)_, luminosity=0
+  - saturation=0, contrast=0, shadows=0
+  - darkness threshold: min=0, max=1
+
+### Ambience
+- Journal: _(none)_
+- Journal page: _(none)_
+- Playlist: _(none)_
+- Playlist sound: _(none)_
+- Weather: _(none)_
+
+### Organization
+- Folder: _(none)_, sort: 0
+- Ownership default: 0
+
+### Embedded collections (counts)
+- Tokens: 0 · Walls: 0 · Lights: 0 · Sounds: 0
+- Notes: 0 · Drawings: 0 · Regions: 0 · Templates: 0 · Tiles: 0
+
+_Requested fields: name, background_"
+`;
+
+exports[`SceneTool — characterization (write) > delete — permanent removal 1`] = `
+"🗑️ **Scene Deleted**
+
+**Name:** Red Moon Inn
+**ID:** \`scene001\`
+**Remaining scenes:** 4
+
+⚠️ Permanent. All embedded tokens/walls/lights/notes/regions/sounds/drawings/templates/tiles removed.
+
+### Affected docs (0)
+_(cascade:true ran; no inbound FK references to clear)_"
+`;
+
+exports[`SceneTool — characterization (write) > import-from-compendium — imported scene view 1`] = `
+"📥 **Scene Imported**
+
+From pack \`wfrp4e-core.scenes\`
+
+## Bögenhafen
+**ID:** \`scene999\`
+
+### Basics
+- Navigation: on
+- Background: \`worlds/aitww/maps/tavern.webp\`
+  - anchor: (0.5, 0.5), offset: (0, 0)
+  - fit: contain, scale: (1, 1), rotation: 0°
+  - tint: null, alphaThreshold: 0.75
+- Foreground: _(none)_, foregroundElevation: _(default)_
+- Thumbnail: _(auto-generated)_
+- Background color: #000000
+- Dimensions: 2048 × 1536 (padding: 0.25)
+- Initial view: x=_(unset)_, y=_(unset)_, scale=_(unset)_
+
+### Grid
+- Type: 1 (SQUARE), size: 100px
+- Distance: 5 yds per square
+- Style: solidLines, thickness: 1
+- Color: #000000, alpha: 0.2
+
+### Lighting / Vision
+- Token vision: on
+- Fog: exploration=on, reset=_(unset)_, overlay=_(none)_
+  - Fog colors: explored=_(default)_, unexplored=_(default)_
+- Darkness: level=0, lock=off, cycle=off
+- Global light: enabled=off, alpha=0.5, bright=off
+  - color=_(default)_, coloration=_(default)_, luminosity=0
+  - saturation=0, contrast=0, shadows=0
+  - darkness threshold: min=0, max=1
+
+### Ambience
+- Journal: _(none)_
+- Journal page: _(none)_
+- Playlist: _(none)_
+- Playlist sound: _(none)_
+- Weather: _(none)_
+
+### Organization
+- Folder: _(none)_, sort: 0
+- Ownership default: 0
+
+### Embedded collections (counts)
+- Tokens: 0 · Walls: 0 · Lights: 0 · Sounds: 0
+- Notes: 0 · Drawings: 0 · Regions: 0 · Templates: 0 · Tiles: 0"
+`;
+
+exports[`SceneTool — characterization (write) > lighting-transition — darkness persisted 1`] = `
+"🌗 **Lighting transition**
+
+Scene \`scene001\` — darknessLevel now **0** (target day)."
+`;
+
+exports[`SceneTool — characterization (write) > preload — push to clients 1`] = `
+"⏬ **Scene preloaded**
+
+**Red Moon Inn** (\`scene001\`) pushed to all clients. _(Transient — no persisted state.)_"
+`;
+
+exports[`SceneTool — characterization (write) > reset-fog — fog docs cleared 1`] = `
+"🌫️ **Fog reset**
+
+Scene \`scene001\` — FogExploration docs remaining: **0**."
+`;
+
+exports[`SceneTool — characterization (write) > update — changed fields + scene view 1`] = `
+"✏️ **Scene Updated**
+
+**Changed fields:** name
+
+## Tavern Renamed
+**ID:** \`scene001\`
+
+### Basics
+- Navigation: on
+- Background: \`worlds/aitww/maps/tavern.webp\`
+  - anchor: (0.5, 0.5), offset: (0, 0)
+  - fit: contain, scale: (1, 1), rotation: 0°
+  - tint: null, alphaThreshold: 0.75
+- Foreground: _(none)_, foregroundElevation: _(default)_
+- Thumbnail: _(auto-generated)_
+- Background color: #000000
+- Dimensions: 2048 × 1536 (padding: 0.25)
+- Initial view: x=_(unset)_, y=_(unset)_, scale=_(unset)_
+
+### Grid
+- Type: 1 (SQUARE), size: 100px
+- Distance: 5 yds per square
+- Style: solidLines, thickness: 1
+- Color: #000000, alpha: 0.2
+
+### Lighting / Vision
+- Token vision: on
+- Fog: exploration=on, reset=_(unset)_, overlay=_(none)_
+  - Fog colors: explored=_(default)_, unexplored=_(default)_
+- Darkness: level=0, lock=off, cycle=off
+- Global light: enabled=off, alpha=0.5, bright=off
+  - color=_(default)_, coloration=_(default)_, luminosity=0
+  - saturation=0, contrast=0, shadows=0
+  - darkness threshold: min=0, max=1
+
+### Ambience
+- Journal: _(none)_
+- Journal page: _(none)_
+- Playlist: _(none)_
+- Playlist sound: _(none)_
+- Weather: _(none)_
+
+### Organization
+- Folder: _(none)_, sort: 0
+- Ownership default: 0
+
+### Embedded collections (counts)
+- Tokens: 0 · Walls: 0 · Lights: 0 · Sounds: 0
+- Notes: 0 · Drawings: 0 · Regions: 0 · Templates: 0 · Tiles: 0"
+`;
+
+exports[`SceneTool — characterization (write) > view — local camera switch 1`] = `
+"👁️ **Scene Viewed (local user)**
+
+**Name:** Red Moon Inn
+**ID:** \`scene001\`
+
+_(World-active state unchanged. Use 'activate' to set the game-wide active scene.)_"
+`;

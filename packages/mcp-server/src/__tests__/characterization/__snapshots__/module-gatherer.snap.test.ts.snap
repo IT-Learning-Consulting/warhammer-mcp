@@ -1,0 +1,36 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ModuleGathererTool — characterization > MODULE_NOT_ACTIVE — probe inactive branch 1`] = `"module-gatherer failed: MODULE_NOT_ACTIVE: gatherer is not active"`;
+
+exports[`ModuleGathererTool — characterization > configure-spot — fields written 1`] = `
+"module-gatherer.configure-spot: Mushroom Patch
+- written: tableUuid, draws"
+`;
+
+exports[`ModuleGathererTool — characterization > gather — direct draw 1`] = `"module-gatherer.gather: drew from JournalEntry.x.JournalEntryPage.y → Actor.z"`;
+
+exports[`ModuleGathererTool — characterization > gather — minigame opened 1`] = `
+"module-gatherer.gather: interactive minigame OPENED for JournalEntry.x.JournalEntryPage.y → Actor.z
+- 🎰 Minigame dialog opened on GM client. Complete the minigame to receive items."
+`;
+
+exports[`ModuleGathererTool — characterization > get-spot-status — available spot 1`] = `
+"module-gatherer.get-spot-status: Mushroom Patch
+- draws: 1/3 used (2 remaining)
+- table: RollTable.abc · reset: 24h (in 86400s)"
+`;
+
+exports[`ModuleGathererTool — characterization > get-spot-status — exhausted spot with minigame warning 1`] = `
+"module-gatherer.get-spot-status: Herb Garden
+- draws: 5/5 used (0 remaining)
+- table: RollTable.def · reset: manual
+- ⚠ This spot uses a minigame; gather returns minigame:"opened" (fire-and-forget)."
+`;
+
+exports[`ModuleGathererTool — characterization > list-spots — no spots 1`] = `"module-gatherer.list-spots: no gather sources."`;
+
+exports[`ModuleGathererTool — characterization > list-spots — spots returned 1`] = `
+"module-gatherer.list-spots: 2 spot(s):
+  • Mushroom Patch — 2 draws [Herbalism Guide] (JournalEntry.x.JournalEntryPage.y)
+  • Herb Garden — 0 draws [Herbalism Guide] [exhausted] ⚠minigame (JournalEntry.x.JournalEntryPage.z)"
+`;

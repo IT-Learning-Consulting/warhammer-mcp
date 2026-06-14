@@ -1,0 +1,36 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`PlaylistTool — characterization (read) > get-playlist — full playlist view 1`] = `
+"## Playlist \`pl001\` — Tavern Ambience
+**Description:** Cozy tavern sounds.
+### Settings
+- channel: environment · mode: shuffle · sorting: a · sort: 0
+- playing: yes · fade: 2000ms · seed: 42
+- folder: _(none)_
+### Sounds (1)
+  - \`snd001\` Crowd Murmur · worlds/aitww/audio/tavern-crowd.ogg · vol=0.4 · repeat=yes · playing=yes · fade=inherit · channel=inherit
+### Ownership / Flags
+- ownership keys: 1
+- flags keys: 0"
+`;
+
+exports[`PlaylistTool — characterization (read) > list-playlists — bare list 1`] = `
+"Playlists (2)
+
+- \`pl001\` Tavern Ambience · sounds=3 · mode=shuffle · channel=environment · playing=yes · folder=_(none)_
+- \`pl002\` Battle Music · sounds=1 · mode=simultaneous · channel=music · playing=no · folder=_(none)_"
+`;
+
+exports[`PlaylistTool — characterization (read) > list-playlists — countOnly 1`] = `
+"Playlist count
+
+**Total:** 8"
+`;
+
+exports[`PlaylistTool — characterization (read) > list-playlists — empty world 1`] = `"No Playlists found."`;
+
+exports[`PlaylistTool — characterization (read) > list-playlists — paginated shape 1`] = `
+"Playlists (page 1 of 2, 10 total)
+
+- \`pl001\` Tavern Ambience · sounds=3 · mode=shuffle · channel=environment · playing=yes · folder=_(none)_"
+`;

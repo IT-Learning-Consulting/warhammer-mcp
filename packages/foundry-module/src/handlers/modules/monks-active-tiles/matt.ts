@@ -138,7 +138,7 @@ function normalizeActionData(action: string, raw: Record<string, unknown> | unde
   // Quote bare identifiers so the comparison actually evaluates.
   if (action === 'checkvariable' && typeof data.value === 'string') {
     const m = /^(==|!=)\s*([A-Za-z_][A-Za-z0-9_-]*)$/.exec((data.value as string).trim());
-    if (m && !['true', 'false', 'null', 'undefined', 'NaN'].includes(m[2])) {
+    if (m && !['true', 'false', 'null', 'undefined', 'NaN'].includes(m[2]!)) {
       data.value = `${m[1]} "${m[2]}"`;
     }
   }
@@ -222,7 +222,7 @@ export async function resolveTaggerSelectorsInSequence(
   const warnings: string[] = [];
 
   for (let i = 0; i < actions.length; i++) {
-    const data = actions[i].data ?? {};
+    const data = actions[i]!.data ?? {};
     for (const field of ['entity', 'location', 'target'] as const) {
       const value = data[field as string];
 
@@ -758,7 +758,7 @@ async function handleReplaceActionSequence(input: ReplaceSeqInput): Promise<Enve
 async function handleAddAction(input: AddActionInput): Promise<Envelope<unknown>> {
   const { scene, tile } = getTileByUuidOrThrow(input.tileUuid);
   const current = readActions(tile);
-  const added = normalizeActions([input.mattAction], scene.id)[0];
+  const added = normalizeActions([input.mattAction], scene.id)[0]!;
   return writeActions(scene, tile, [...current, added], input.confirm, `added action "${added.action}"`, { actionId: added.id });
 }
 
@@ -768,7 +768,7 @@ async function handleInsertAction(input: InsertActionInput): Promise<Envelope<un
   if (input.index > current.length) {
     return { success: false, error: `MATT_INDEX_OUT_OF_RANGE: index ${input.index} > length ${current.length}` };
   }
-  const inserted = normalizeActions([input.mattAction], scene.id)[0];
+  const inserted = normalizeActions([input.mattAction], scene.id)[0]!;
   const next = [...current];
   next.splice(input.index, 0, inserted);
   return writeActions(scene, tile, next, input.confirm, `inserted action "${inserted.action}" at ${input.index}`, { actionId: inserted.id });
@@ -782,12 +782,12 @@ async function handleUpdateAction(input: UpdateActionInput): Promise<Envelope<un
     return { success: false, error: `MATT_ACTION_NOT_FOUND: no action with id "${input.actionId}"` };
   }
   const next = [...current];
-  const mergedKey = input.newActionKey ?? current[idx].action;
+  const mergedKey = input.newActionKey ?? current[idx]!.action;
   next[idx] = {
     id: input.actionId,
     action: mergedKey,
     // BUG-310: merge so unspecified keys (entity refs, delays, etc.) are preserved
-    data: normalizeActionData(mergedKey, { ...current[idx].data, ...input.data }, scene.id),
+    data: normalizeActionData(mergedKey, { ...current[idx]!.data, ...input.data }, scene.id),
   };
   return writeActions(scene, tile, next, input.confirm, `updated action ${input.actionId}`, { actionId: input.actionId });
 }
@@ -825,8 +825,8 @@ async function handleDuplicateAction(input: DuplicateActionInput): Promise<Envel
   }
   const clone: StoredAction = {
     id: makeMattId(),
-    action: current[idx].action,
-    data: JSON.parse(JSON.stringify(current[idx].data ?? {})),
+    action: current[idx]!.action,
+    data: JSON.parse(JSON.stringify(current[idx]!.data ?? {})),
   };
   const next = [...current];
   next.splice(idx + 1, 0, clone);

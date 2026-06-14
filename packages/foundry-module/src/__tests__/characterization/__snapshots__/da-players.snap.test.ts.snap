@@ -1,0 +1,78 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`FoundryDataAccess.findActor — characterization > finds actor by exact id 1`] = `
+{
+  "id": "actor-1",
+  "name": "Sigmar the Great",
+}
+`;
+
+exports[`FoundryDataAccess.findActor — characterization > finds actor by partial name match 1`] = `
+{
+  "id": "actor-2",
+  "name": "Brunhilde the Bold",
+}
+`;
+
+exports[`FoundryDataAccess.findActor — characterization > returns null when actor is not found 1`] = `null`;
+
+exports[`FoundryDataAccess.findPlayers — characterization > finds a player by exact user name 1`] = `
+[
+  {
+    "id": "player-1",
+    "name": "Alice",
+  },
+]
+`;
+
+exports[`FoundryDataAccess.findPlayers — characterization > finds player via owned character name when user name does not match 1`] = `
+[
+  {
+    "id": "player-1",
+    "name": "Alice",
+  },
+]
+`;
+
+exports[`FoundryDataAccess.findPlayers — characterization > returns empty array when no match is found 1`] = `[]`;
+
+exports[`FoundryDataAccess.getConnectedPlayers — characterization > returns active non-GM users 1`] = `
+[
+  {
+    "id": "player-1",
+    "name": "Alice",
+  },
+  {
+    "id": "player-3",
+    "name": "Carol",
+  },
+]
+`;
+
+exports[`FoundryDataAccess.getConnectedPlayers — characterization > returns empty array when no players are connected 1`] = `[]`;
+
+exports[`FoundryDataAccess.getFriendlyNPCs — characterization > returns empty array when no active scene exists 1`] = `[]`;
+
+exports[`FoundryDataAccess.getFriendlyNPCs — characterization > returns friendly tokens from active scene 1`] = `
+[
+  {
+    "id": "actor-npc-1",
+    "name": "Village Elder",
+  },
+]
+`;
+
+exports[`FoundryDataAccess.getPartyCharacters — characterization > returns empty array when no player-owned characters exist 1`] = `[]`;
+
+exports[`FoundryDataAccess.getPartyCharacters — characterization > returns player-owned character actors 1`] = `
+[
+  {
+    "id": "pc-1",
+    "name": "Brunhilde",
+  },
+  {
+    "id": "pc-2",
+    "name": "Otto",
+  },
+]
+`;

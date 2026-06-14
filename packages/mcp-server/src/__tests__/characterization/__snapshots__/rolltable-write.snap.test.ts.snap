@@ -1,0 +1,80 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`RollTableTool — characterization (write) > add-results — results appended 1`] = `
+"➕ **Results Added**
+
+**Table ID:** tbl001
+**Added:** 2 results"
+`;
+
+exports[`RollTableTool — characterization (write) > create — table created 1`] = `
+"🎲 **Roll Table Created**
+
+**Name:** Random Encounters
+**Formula:** 1d20
+**Entries:** 1
+**ID:** tbl001
+
+✅ Roll table is ready to use. Use the 'roll' action to roll on this table."
+`;
+
+exports[`RollTableTool — characterization (write) > delete — confirm required guard fires 1`] = `
+"❌ **rolltable.delete failed**
+
+ROLLTABLE_DELETE_NOT_CONFIRMED: delete requires confirm: true"
+`;
+
+exports[`RollTableTool — characterization (write) > delete — confirmed delete 1`] = `
+"🗑️ **Roll Table Deleted**
+
+The roll table has been permanently removed from the world."
+`;
+
+exports[`RollTableTool — characterization (write) > delete-results — results removed 1`] = `
+"🗑️ **Table Results Deleted**
+
+**Table ID:** tbl001
+**Deleted:** 2 results
+
+⚠️ This operation is permanent and cannot be undone."
+`;
+
+exports[`RollTableTool — characterization (write) > import-from-compendium — table imported 1`] = `
+"📦 **Table Imported**
+
+**New Table ID:** tbl999
+**Name:** Warpstone Events
+**Normalized:** yes"
+`;
+
+exports[`RollTableTool — characterization (write) > normalize — ranges recalculated 1`] = `
+"📐 **Roll Table Normalized**
+
+**Table ID:** tbl001
+**Results:** 5
+
+⚠️ All result ranges have been recalculated from weights — any manually-set ranges have been overwritten."
+`;
+
+exports[`RollTableTool — characterization (write) > reset — drawn flags cleared 1`] = `
+"🔄 **Roll Table Reset**
+
+**Table ID:** tbl001
+**Results:** 5
+
+All drawn flags cleared — all results are available to draw again."
+`;
+
+exports[`RollTableTool — characterization (write) > update — fields changed 1`] = `
+"✏️ **Roll Table Updated**
+
+**Table ID:** tbl001
+**Changed Fields:** name, formula"
+`;
+
+exports[`RollTableTool — characterization (write) > update-results — results updated 1`] = `
+"✏️ **Table Results Updated**
+
+**Table ID:** tbl001
+**Updated:** 1 result"
+`;

@@ -1,0 +1,62 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ModuleSceneAtmosphereTool (write) — characterization > clear-effects — nuclear clear confirmation with verify fields 1`] = `
+"fxmaster: clear-effects OK — cleared: particles, filters (target=both).
+Verify — effectsFlag: null OK
+Verify — filtersFlag: null OK
+Verify — stackFlag: null OK"
+`;
+
+exports[`ModuleSceneAtmosphereTool (write) — characterization > play-particles — particle effect ids and type list 1`] = `
+"fxmaster: play-particles OK — 1 effect(s): rain.
+IDs: {"rain":"fx-id-001"}
+Verified effects flag: set"
+`;
+
+exports[`ModuleSceneAtmosphereTool (write) — characterization > play-preset — preset play confirmation 1`] = `
+"fxmaster: play-preset "rain" OK.
+Options: {"topDown":false,"density":"medium"}
+Now active: rain"
+`;
+
+exports[`ModuleSceneAtmosphereTool (write) — characterization > set-active-variation — switches scene variation 1`] = `
+"scenery: set-active-variation OK — "Dungeon Hall" (scene001).
+Previous: 0 → Active: 1 ("Ruined")
+Verified activeVariationIndex: 1
+Note: Element restore skipped (no sceneData stored)."
+`;
+
+exports[`ModuleSceneAtmosphereTool (write) — characterization > set-mood — mood updated with verify 1`] = `
+"dynamic-soundscapes: set-mood OK — "Tavern Ambience" (playlist001) mood=moodB.
+Verified: OK
+Note: Mood B = tension/fight."
+`;
+
+exports[`ModuleSceneAtmosphereTool (write) — characterization > set-soundscape — activates soundscape playlist 1`] = `
+"dynamic-soundscapes: set-soundscape OK — playlist "Tavern Ambience" (playlist001).
+Setting verified: OK
+Note: Audio output starts on GM client when RandomSoundController fires (~<1s delay)."
+`;
+
+exports[`ModuleSceneAtmosphereTool (write) — characterization > stop-preset — preset stop with remaining active list 1`] = `
+"fxmaster: stop-preset "rain" OK (stopped=true).
+Now active: (none)"
+`;
+
+exports[`ModuleSceneAtmosphereTool (write) — characterization > switch-tile-face — face changed with verify match 1`] = `
+"multiface-tiles: switch-tile-face OK — tile tile001 (Door).
+Previous: modules/tiles/door-closed.webp → New: modules/tiles/door-open.webp
+Verified face: modules/tiles/door-open.webp | Match: true"
+`;
+
+exports[`ModuleSceneAtmosphereTool (write) — characterization > tokenmagic-apply — filter applied to token with verify count 1`] = `
+"tokenmagic: apply OK — 1 filter(s) on Token:token001.
+Filters: glow(filter-id-001)
+Verified total filter count: 1"
+`;
+
+exports[`ModuleSceneAtmosphereTool (write) — characterization > tokenmagic-wound-create — wound filter applied 1`] = `
+"tokenmagic-wounds: wound-create OK — token "Goblin" (token001).
+Damage fraction: 0.60
+Verified wound filter count: 1"
+`;

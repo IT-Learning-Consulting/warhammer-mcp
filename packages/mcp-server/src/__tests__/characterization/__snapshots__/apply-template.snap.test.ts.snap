@@ -1,0 +1,9 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ApplyTemplateTool — characterization > basic template application — summary line with counts 1`] = `"Applied template Scout to Goblin Skirmisher: 3 skills, 2 talents, 0 spells, 4 trappings."`;
+
+exports[`ApplyTemplateTool — characterization > template with no name — falls back to templateId in summary 1`] = `"Applied template template-noname99 to actor-npc01: 1 skills, 0 talents, 0 spells, 0 trappings."`;
+
+exports[`ApplyTemplateTool — characterization > template with spells — wizard template summary 1`] = `"Applied template Apprentice Wizard to Human Wizard: 4 skills, 1 talents, 3 spells, 2 trappings."`;
+
+exports[`ApplyTemplateTool — characterization > template with zero items applied — all-zero summary 1`] = `"Applied template Empty Template to Test Actor: 0 skills, 0 talents, 0 spells, 0 trappings."`;

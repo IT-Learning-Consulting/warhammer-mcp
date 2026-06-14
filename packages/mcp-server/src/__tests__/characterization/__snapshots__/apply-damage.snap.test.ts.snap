@@ -1,0 +1,190 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ApplyDamageTool — characterization > IGNORE_ALL damage with head location — raw passthrough 1`] = `
+{
+  "actorId": "actor-abc123",
+  "after": {
+    "advantage": {
+      "value": 0,
+    },
+    "conditions": [],
+    "criticalWounds": {
+      "max": 0,
+      "value": 0,
+    },
+    "fate": {
+      "value": 2,
+    },
+    "fortune": {
+      "value": 2,
+    },
+    "resilience": {
+      "value": 1,
+    },
+    "resolve": {
+      "value": 1,
+    },
+    "wounds": {
+      "max": 15,
+      "value": 3,
+    },
+  },
+  "before": {
+    "advantage": {
+      "value": 0,
+    },
+    "conditions": [],
+    "criticalWounds": {
+      "max": 0,
+      "value": 0,
+    },
+    "fate": {
+      "value": 2,
+    },
+    "fortune": {
+      "value": 2,
+    },
+    "resilience": {
+      "value": 1,
+    },
+    "resolve": {
+      "value": 1,
+    },
+    "wounds": {
+      "max": 15,
+      "value": 10,
+    },
+  },
+  "damage": {
+    "amount": 7,
+    "damageType": "IGNORE_ALL",
+    "hitLocation": "head",
+  },
+}
+`;
+
+exports[`ApplyDamageTool — characterization > NORMAL damage — raw passthrough 1`] = `
+{
+  "actorId": "actor-abc123",
+  "after": {
+    "advantage": {
+      "value": 0,
+    },
+    "conditions": [],
+    "criticalWounds": {
+      "max": 0,
+      "value": 0,
+    },
+    "fate": {
+      "value": 2,
+    },
+    "fortune": {
+      "value": 2,
+    },
+    "resilience": {
+      "value": 1,
+    },
+    "resolve": {
+      "value": 1,
+    },
+    "wounds": {
+      "max": 15,
+      "value": 10,
+    },
+  },
+  "before": {
+    "advantage": {
+      "value": 0,
+    },
+    "conditions": [],
+    "criticalWounds": {
+      "max": 0,
+      "value": 0,
+    },
+    "fate": {
+      "value": 2,
+    },
+    "fortune": {
+      "value": 2,
+    },
+    "resilience": {
+      "value": 1,
+    },
+    "resolve": {
+      "value": 1,
+    },
+    "wounds": {
+      "max": 15,
+      "value": 15,
+    },
+  },
+  "damage": {
+    "amount": 5,
+    "damageType": "NORMAL",
+    "hitLocation": "body",
+  },
+}
+`;
+
+exports[`ApplyDamageTool — characterization > zero-amount dry-run — raw passthrough 1`] = `
+{
+  "actorId": "actor-abc123",
+  "after": {
+    "advantage": {
+      "value": 0,
+    },
+    "conditions": [],
+    "criticalWounds": {
+      "max": 0,
+      "value": 0,
+    },
+    "fate": {
+      "value": 2,
+    },
+    "fortune": {
+      "value": 2,
+    },
+    "resilience": {
+      "value": 1,
+    },
+    "resolve": {
+      "value": 1,
+    },
+    "wounds": {
+      "max": 15,
+      "value": 10,
+    },
+  },
+  "before": {
+    "advantage": {
+      "value": 0,
+    },
+    "conditions": [],
+    "criticalWounds": {
+      "max": 0,
+      "value": 0,
+    },
+    "fate": {
+      "value": 2,
+    },
+    "fortune": {
+      "value": 2,
+    },
+    "resilience": {
+      "value": 1,
+    },
+    "resolve": {
+      "value": 1,
+    },
+    "wounds": {
+      "max": 15,
+      "value": 10,
+    },
+  },
+  "damage": {
+    "amount": 5,
+    "damageType": "NORMAL",
+    "hitLocation": "body",
+  },
+}
+`;

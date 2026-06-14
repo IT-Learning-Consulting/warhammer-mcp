@@ -1,0 +1,35 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ManageCharacterTool — characterization > add-skill-talent — talent added (no advances) 1`] = `"✅ Added **Lightning Reflexes** (talent) to Aldric"`;
+
+exports[`ManageCharacterTool — characterization > add-xp-log — earned, log-only (no total update) 1`] = `"✅ Added XP log for **Aldric**: +50 XP - Defeated the ogre chieftain"`;
+
+exports[`ManageCharacterTool — characterization > add-xp-log — spent with updateTotal=true 1`] = `"✅ Added XP log for **Aldric**: -30 XP - Bought Strike Mighty Blow (total → 170)"`;
+
+exports[`ManageCharacterTool — characterization > update-notes — biography append 1`] = `"✅ Appended to biography for **Aldric**"`;
+
+exports[`ManageCharacterTool — characterization > update-notes — gmnotes set (non-append) 1`] = `"✅ Updated gmnotes for **Aldric**"`;
+
+exports[`ManageCharacterTool — characterization > update-skill-talent — melee advances updated 1`] = `
+"✅ Updated **Melee (Basic)** for Aldric
+- Advances: 8
+"
+`;
+
+exports[`ManageCharacterTool — characterization > update-stats — formatted confirmation string (character type) 1`] = `
+"✅ Updated stats for **Aldric** (actorType: character)
+
+**Changes:**
+- weaponSkill: 40
+- fortune: 3
+"
+`;
+
+exports[`ManageCharacterTool — characterization > update-stats — npc type with species + size 1`] = `
+"✅ Updated stats for **Aldric** (actorType: npc)
+
+**Changes:**
+- species: Goblin
+- size: sml
+"
+`;

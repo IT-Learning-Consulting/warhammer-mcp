@@ -1,0 +1,124 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ManageCombatTools — characterization > add-combatants — two actors added 1`] = `
+{
+  "added": [
+    "comb001",
+    "comb002",
+  ],
+  "combatId": "combat12345678901",
+}
+`;
+
+exports[`ManageCombatTools — characterization > advance-combat — next turn 1`] = `
+{
+  "currentCombatantId": "comb002",
+  "round": 2,
+  "turn": 2,
+}
+`;
+
+exports[`ManageCombatTools — characterization > advance-combat — rollNPC initiative 1`] = `
+{
+  "rolled": [
+    "comb002",
+  ],
+  "round": 1,
+}
+`;
+
+exports[`ManageCombatTools — characterization > end-combat — combat deleted 1`] = `
+{
+  "combatId": "combat12345678901",
+  "deleted": true,
+}
+`;
+
+exports[`ManageCombatTools — characterization > get-combat — active combat state 1`] = `
+{
+  "active": true,
+  "combatants": [
+    {
+      "defeated": false,
+      "hidden": false,
+      "id": "comb001",
+      "initiative": 35,
+      "name": "Aldric",
+    },
+    {
+      "defeated": false,
+      "hidden": false,
+      "id": "comb002",
+      "initiative": 12,
+      "name": "Goblin Snag",
+    },
+  ],
+  "id": "combat12345678901",
+  "round": 2,
+  "started": true,
+  "turn": 1,
+}
+`;
+
+exports[`ManageCombatTools — characterization > get-combat — no active combat (null) 1`] = `null`;
+
+exports[`ManageCombatTools — characterization > list-combatants — envelope wrapping (array from Foundry) 1`] = `
+{
+  "combatId": "combat12345678901",
+  "combatants": [
+    {
+      "actorId": "actor001",
+      "defeated": false,
+      "hidden": false,
+      "id": "comb001",
+      "initiative": 35,
+      "name": "Aldric",
+      "tokenId": "token001",
+    },
+    {
+      "actorId": "actor002",
+      "defeated": false,
+      "hidden": false,
+      "id": "comb002",
+      "initiative": 12,
+      "name": "Goblin Snag",
+      "tokenId": "token002",
+    },
+  ],
+}
+`;
+
+exports[`ManageCombatTools — characterization > list-combatants — object passthrough (already wrapped) 1`] = `
+{
+  "combatId": "combat12345678901",
+  "combatants": [
+    {
+      "actorId": "actor001",
+      "defeated": false,
+      "hidden": false,
+      "id": "comb001",
+      "initiative": 35,
+      "name": "Aldric",
+      "tokenId": "token001",
+    },
+    {
+      "actorId": "actor002",
+      "defeated": false,
+      "hidden": false,
+      "id": "comb002",
+      "initiative": 12,
+      "name": "Goblin Snag",
+      "tokenId": "token002",
+    },
+  ],
+}
+`;
+
+exports[`ManageCombatTools — characterization > remove-combatants — one combatant removed 1`] = `
+{
+  "combatId": "combat12345678901",
+  "removed": [
+    "comb002",
+  ],
+}
+`;

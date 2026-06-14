@@ -27,7 +27,7 @@ function toCanonicalKey(raw: string): string {
   const trimmed = raw.trim();
   if (!trimmed) return '';
   const words = trimmed.toLowerCase().split(/\s+/);
-  return words[0] + words.slice(1).map(w => (w ? w[0].toUpperCase() + w.slice(1) : '')).join('');
+  return words[0]! + words.slice(1).map(w => (w ? w[0]!.toUpperCase() + w.slice(1) : '')).join('');
 }
 
 function parseQualityEntry(raw: string): { name: string; value: number | null } | null {
@@ -35,7 +35,7 @@ function parseQualityEntry(raw: string): { name: string; value: number | null } 
   if (!s) return null;
   // Trailing integer → numeric quality (Fine 2, Repeater 3, Reload 9)
   const m = s.match(/^(.+?)\s+(\d+)$/);
-  if (m) return { name: toCanonicalKey(m[1]), value: parseInt(m[2], 10) };
+  if (m) return { name: toCanonicalKey(m[1]!), value: parseInt(m[2]!, 10) };
   return { name: toCanonicalKey(s), value: null };
 }
 

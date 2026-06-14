@@ -1,0 +1,17 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ModuleProbeTool — characterization > is-active — error branch 1`] = `"module-probe/is-active failed: Foundry connection lost"`;
+
+exports[`ModuleProbeTool — characterization > is-active — module active 1`] = `"Module "monks-active-tiles" (Monk's Active Tiles v12.15): ACTIVE"`;
+
+exports[`ModuleProbeTool — characterization > is-active — module inactive / not installed 1`] = `"Module "some-missing-module": INACTIVE/NOT INSTALLED"`;
+
+exports[`ModuleProbeTool — characterization > list-active — multiple modules 1`] = `
+"Active modules (3):
+
+- wfrp4e (Warhammer Fantasy Roleplay 4th Edition) v7.4.0
+- monks-active-tiles (Monk's Active Tiles) v12.15
+- simple-timekeeping (Simple Timekeeping) v1.3.0"
+`;
+
+exports[`ModuleProbeTool — characterization > list-active — no active modules 1`] = `"No active modules found."`;

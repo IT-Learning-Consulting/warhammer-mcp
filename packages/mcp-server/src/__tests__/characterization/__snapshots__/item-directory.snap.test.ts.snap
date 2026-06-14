@@ -1,0 +1,68 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ItemDirectoryTool — characterization > duplicate — cloned item summary 1`] = `
+"✅ **Item Duplicated**
+
+- **New id:** \`item-clone-001\`
+- **Name:** My Custom Longsword
+- **Type:** weapon
+- **Source id:** \`item-001\`"
+`;
+
+exports[`ItemDirectoryTool — characterization > get — full serialized world item 1`] = `
+"📦 **World Item** \`item-001\`
+
+- **Name:** Longsword
+- **Type:** weapon
+- **img:** icons/weapons/sword.png
+- **folderId:** _(root)_
+
+**Full serialized item:**
+\`\`\`json
+{
+  "id": "item-001",
+  "name": "Longsword",
+  "type": "weapon",
+  "img": "icons/weapons/sword.png",
+  "folderId": null,
+  "system": {
+    "damage": {
+      "value": "SB+4"
+    },
+    "reach": {
+      "value": "average"
+    }
+  },
+  "flags": {}
+}
+\`\`\`"
+`;
+
+exports[`ItemDirectoryTool — characterization > import-from-compendium — imported item with preserved id 1`] = `
+"✅ **Item Imported from Compendium**
+
+- **World id:** \`gxdjLQoQUTYgD6fm\`
+- **Name:** Hand Weapon
+- **Type:** weapon
+- **Pack:** wfrp4e-core.items
+- **Compendium id:** \`gxdjLQoQUTYgD6fm\` _(preserved — Foundry v13 keeps the compendium id on import)_"
+`;
+
+exports[`ItemDirectoryTool — characterization > list — filtered by type 1`] = `
+"📦 **World Items** (page 1 · 1 of 1 total · type: weapon)
+
+- **Longsword** \`item-001\` · type: weapon"
+`;
+
+exports[`ItemDirectoryTool — characterization > list — world items page view 1`] = `
+"📦 **World Items** (page 1 · 2 of 2 total)
+
+- **Longsword** \`item-001\` · type: weapon · img: \`icons/weapons/sword.png\`
+- **Mail Coat** \`item-002\` · type: armour · folder: \`folder-01\`"
+`;
+
+exports[`ItemDirectoryTool — characterization > search — name substring results 1`] = `
+"📦 **Item Search** (1 results · query: "Healing")
+
+- **Healing Draught** \`item-003\` · type: trapping"
+`;

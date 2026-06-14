@@ -1,0 +1,137 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`NoteTool — characterization > create — auto-link branch with journalEntry in response 1`] = `
+"📌 **Note Created**
+
+## Note \`note-id-001\`
+**Scene:** \`scene-id-001\`
+
+### Journal Link (B5-aware)
+- Entry: \`auto-journal-id\` · entryLinked=true
+- Page:  \`auto-page-id\` · pageLinked=true
+
+### Position
+- x: 500, y: 300, elevation: 0, sort: 0
+
+### Appearance
+- iconSize: 40px · global: no
+- text: "Tavern"
+- font: Signika 32px · anchor: 2 · color: #ffffff
+- texture: \`icons/svg/book.svg\`
+  - anchor: (0.5, 0.5), scale: (1, 1)
+  - rotation: 0°, tint: #ffffff, fit: fill
+
+_Requested fields: x, y_
+
+🔗 **Auto-linked Journal Entry:** \`auto-journal-id\` (first page: \`auto-page-id\`)"
+`;
+
+exports[`NoteTool — characterization > create — note created with journal link 1`] = `
+"📌 **Note Created**
+
+## Note \`note-id-001\`
+**Scene:** \`scene-id-001\`
+
+### Journal Link (B5-aware)
+- Entry: \`journal-id-001\` · entryLinked=true
+- Page:  \`page-id-001\` · pageLinked=true
+
+### Position
+- x: 500, y: 300, elevation: 0, sort: 0
+
+### Appearance
+- iconSize: 40px · global: no
+- text: "Tavern"
+- font: Signika 32px · anchor: 2 · color: #ffffff
+- texture: \`icons/svg/book.svg\`
+  - anchor: (0.5, 0.5), scale: (1, 1)
+  - rotation: 0°, tint: #ffffff, fit: fill
+
+_Requested fields: x, y, entryId, pageId, text_"
+`;
+
+exports[`NoteTool — characterization > delete — deleted confirmation with remaining count 1`] = `
+"🗑️ **Note Deleted**
+
+**ID:** \`note-id-001\`
+**Scene:** \`scene-id-001\`
+**Remaining notes on scene:** 2
+
+⚠️ Permanent."
+`;
+
+exports[`NoteTool — characterization > get — single note view (B5-aware FK display) 1`] = `
+"## Note \`note-id-001\`
+**Scene:** \`scene-id-001\`
+
+### Journal Link (B5-aware)
+- Entry: \`journal-id-001\` · entryLinked=true
+- Page:  \`page-id-001\` · pageLinked=true
+
+### Position
+- x: 500, y: 300, elevation: 0, sort: 0
+
+### Appearance
+- iconSize: 40px · global: no
+- text: "Tavern"
+- font: Signika 32px · anchor: 2 · color: #ffffff
+- texture: \`icons/svg/book.svg\`
+  - anchor: (0.5, 0.5), scale: (1, 1)
+  - rotation: 0°, tint: #ffffff, fit: fill"
+`;
+
+exports[`NoteTool — characterization > get — stale FK note (entryLinked=false) 1`] = `
+"## Note \`note-id-001\`
+**Scene:** \`scene-id-001\`
+
+### Journal Link (B5-aware)
+- Entry: \`journal-id-001\` ⚠️ _(stale FK — linked doc no longer exists)_ · entryLinked=false
+- Page:  \`page-id-001\` ⚠️ _(stale FK — linked doc no longer exists)_ · pageLinked=false
+
+### Position
+- x: 500, y: 300, elevation: 0, sort: 0
+
+### Appearance
+- iconSize: 40px · global: no
+- text: "Tavern"
+- font: Signika 32px · anchor: 2 · color: #ffffff
+- texture: \`icons/svg/book.svg\`
+  - anchor: (0.5, 0.5), scale: (1, 1)
+  - rotation: 0°, tint: #ffffff, fit: fill"
+`;
+
+exports[`NoteTool — characterization > list — countOnly path 1`] = `
+"📌 **Note count**
+
+**Total:** 4"
+`;
+
+exports[`NoteTool — characterization > list — paginated notes 1`] = `
+"📌 **Notes** (1)
+
+- \`note-id-001\` @ scene \`scene-id-001\` · "Tavern" · ✓ entry+page linked"
+`;
+
+exports[`NoteTool — characterization > update — changed fields + updated note view 1`] = `
+"✏️ **Note Updated**
+
+**Changed fields:** text, global
+
+## Note \`note-id-001\`
+**Scene:** \`scene-id-001\`
+
+### Journal Link (B5-aware)
+- Entry: \`journal-id-001\` · entryLinked=true
+- Page:  \`page-id-001\` · pageLinked=true
+
+### Position
+- x: 500, y: 300, elevation: 0, sort: 0
+
+### Appearance
+- iconSize: 40px · global: yes
+- text: "Updated Tavern"
+- font: Signika 32px · anchor: 2 · color: #ffffff
+- texture: \`icons/svg/book.svg\`
+  - anchor: (0.5, 0.5), scale: (1, 1)
+  - rotation: 0°, tint: #ffffff, fit: fill"
+`;

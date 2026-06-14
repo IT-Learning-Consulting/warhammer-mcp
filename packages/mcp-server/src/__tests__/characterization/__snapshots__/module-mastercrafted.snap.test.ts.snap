@@ -1,0 +1,33 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ModuleMastercraftedTool — characterization > MODULE_NOT_ACTIVE — mastercrafted not active 1`] = `"module-mastercrafted failed: MODULE_NOT_ACTIVE: mastercrafted is not active"`;
+
+exports[`ModuleMastercraftedTool — characterization > check-craftable — can craft 1`] = `"module-mastercrafted.check-craftable: Iron Dagger — canCraft=true"`;
+
+exports[`ModuleMastercraftedTool — characterization > execute-craft — instant craft 1`] = `
+"module-mastercrafted.execute-craft: Iron Dagger → crafted (instant)
+- products: Dagger
+- NOTE: set customQuantityPath = "quantity.value" for correct WFRP4e stacking"
+`;
+
+exports[`ModuleMastercraftedTool — characterization > get-recipe — populated recipe 1`] = `
+"module-mastercrafted.get-recipe: Iron Dagger [Blacksmith Recipes]
+- time: 30m
+- ingredients: Iron Bar
+- products: Dagger"
+`;
+
+exports[`ModuleMastercraftedTool — characterization > grant-recipe-discovery — observer grant 1`] = `"module-mastercrafted.grant-recipe-discovery: Iron Dagger → user User.player1 level 1 (Observer)"`;
+
+exports[`ModuleMastercraftedTool — characterization > list-pending-crafts — pending craft ready 1`] = `
+"module-mastercrafted.list-pending-crafts: 1 pending:
+  • Grumbar the Smith: Dagger — READY"
+`;
+
+exports[`ModuleMastercraftedTool — characterization > list-recipes — no recipes 1`] = `"module-mastercrafted.list-recipes: no recipes."`;
+
+exports[`ModuleMastercraftedTool — characterization > list-recipes — recipes found 1`] = `
+"module-mastercrafted.list-recipes: 2 recipe(s):
+  • Iron Dagger (30m) [Blacksmith Recipes] — Iron Bar → Dagger (\`JournalEntry.abc.JournalEntryPage.def\`)
+  • Healing Draught [Alchemist Compendium] — Mandrake Root+Spring Water → Healing Potion (\`JournalEntry.ghi.JournalEntryPage.jkl\`)"
+`;

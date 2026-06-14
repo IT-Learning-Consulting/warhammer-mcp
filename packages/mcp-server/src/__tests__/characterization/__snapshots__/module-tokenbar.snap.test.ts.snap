@@ -1,0 +1,11 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ModuleTokenbarTool — characterization > MODULE_NOT_ACTIVE — monks-tokenbar not active 1`] = `"module-tokenbar failed: MODULE_NOT_ACTIVE: monks-tokenbar is not active"`;
+
+exports[`ModuleTokenbarTool — characterization > change-movement — combat mode no-op (no active combat) 1`] = `"module-tokenbar.change-movement: no change — no active combat."`;
+
+exports[`ModuleTokenbarTool — characterization > change-movement — global free 1`] = `"module-tokenbar.change-movement: global movement → "free"."`;
+
+exports[`ModuleTokenbarTool — characterization > change-movement — global none (full lockdown) 1`] = `"module-tokenbar.change-movement: global movement → "none"."`;
+
+exports[`ModuleTokenbarTool — characterization > change-movement — per-token override 1`] = `"module-tokenbar.change-movement: set movement "free" on 1 token(s)."`;

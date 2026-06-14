@@ -1,0 +1,53 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`JournalTool — characterization (read) > get-entry — deep shape with text pages 1`] = `
+"📖 **Journal Entry**
+
+**Name:** Quest: Find the Witch Hunter
+**ID:** jrn001
+**Pages:** 2
+**Categories:** 1
+
+**Categories:**
+- Maps [_id: cat1]
+
+**Pages:**
+- Briefing (text) [_id: page1, sort: 100000]
+  Content (format 1):
+  \`\`\`
+<p>The Witch Hunter was last seen in the docks district.</p>
+  \`\`\`
+- Map (image) [_id: page2, sort: 200000 · category: cat1]
+  src: worlds/aitww/images/dock-map.webp
+"
+`;
+
+exports[`JournalTool — characterization (read) > get-entry — shallow shape 1`] = `
+"📖 **Journal Entry (shallow)**
+
+**Name:** Quest: Find the Witch Hunter
+**ID:** jrn001
+**Pages:** 2
+**Categories:** 1
+**Page IDs:** page1, page2"
+`;
+
+exports[`JournalTool — characterization (read) > list-entries — bare list 1`] = `
+"📋 **Journals** (2)
+
+- Quest: Find the Witch Hunter · jrn001 · 2 pages
+- Session Log 1 · jrn002 · 1 page"
+`;
+
+exports[`JournalTool — characterization (read) > list-entries — empty result 1`] = `
+"📋 **No Journals Found**
+
+No entries match the filter."
+`;
+
+exports[`JournalTool — characterization (read) > list-entries — with includeContent 1`] = `
+"📋 **Journals** (1)
+
+- Quest: Find the Witch Hunter · jrn001 · 2 pages
+  Content: <p>Find the Witch Hunter in Bögenhafen before the Schaffenfest.</p>"
+`;

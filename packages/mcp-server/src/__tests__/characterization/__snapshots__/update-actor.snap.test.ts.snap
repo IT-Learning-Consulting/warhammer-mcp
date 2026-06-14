@@ -1,0 +1,25 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`UpdateActorTool — characterization > update characteristics advance — raw passthrough 1`] = `
+{
+  "actorId": "actor-001",
+  "updated": true,
+  "verified": true,
+}
+`;
+
+exports[`UpdateActorTool — characterization > update experience spent — raw passthrough 1`] = `
+{
+  "actorId": "actor-002",
+  "updated": true,
+  "verified": true,
+}
+`;
+
+exports[`UpdateActorTool — characterization > update with verifyPersistence false — raw passthrough 1`] = `
+{
+  "actorId": "actor-003",
+  "updated": true,
+  "verified": false,
+}
+`;

@@ -1,0 +1,213 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`FoundryDataAccess.getActiveEffectByName — characterization > snapshot: actor scope (item-parented), found by effectName 1`] = `
+{
+  "actorId": "actor-004",
+  "effect": {
+    "changes": [
+      {
+        "key": "system.status.wounds.value",
+        "mode": 2,
+        "priority": null,
+        "value": "-1",
+      },
+    ],
+    "disabled": false,
+    "duration": {
+      "rounds": null,
+      "seconds": null,
+      "turns": null,
+    },
+    "id": "eff-item-007",
+    "img": "icons/svg/aura.svg",
+    "name": "Burning",
+    "origin": null,
+    "statuses": [
+      "burning",
+    ],
+  },
+  "effectId": "eff-item-007",
+  "effectName": "Burning",
+  "itemId": "item-007",
+  "itemName": "Torch",
+  "parentId": "item-007",
+  "parentName": "Torch",
+  "parentType": "Item",
+  "scope": "actor",
+  "success": true,
+}
+`;
+
+exports[`FoundryDataAccess.getActiveEffectByName — characterization > snapshot: actor-direct scope, found by effectId 1`] = `
+{
+  "actorId": "actor-003",
+  "effect": {
+    "changes": [
+      {
+        "key": "system.status.corruption.value",
+        "mode": 2,
+        "priority": null,
+        "value": "1",
+      },
+    ],
+    "disabled": false,
+    "duration": {
+      "rounds": null,
+      "seconds": null,
+      "turns": null,
+    },
+    "id": "eff-direct-001",
+    "img": "icons/svg/aura.svg",
+    "name": "Warpstone Corruption",
+    "origin": "Actor.actor-003",
+    "statuses": [],
+  },
+  "effectId": "eff-direct-001",
+  "effectName": "Warpstone Corruption",
+  "itemId": null,
+  "itemName": null,
+  "parentId": "actor-003",
+  "parentName": "Tainted One",
+  "parentType": "Actor",
+  "scope": "actor-direct",
+  "success": true,
+}
+`;
+
+exports[`FoundryDataAccess.listActiveEffects — characterization > snapshot: filter=all with two actor AEs 1`] = `
+[
+  {
+    "changes": [
+      {
+        "key": "system.status.fate.value",
+        "mode": 2,
+        "priority": null,
+        "value": "1",
+      },
+    ],
+    "disabled": false,
+    "duration": {
+      "rounds": null,
+      "seconds": null,
+      "turns": null,
+    },
+    "id": "eff-001",
+    "img": "icons/svg/aura.svg",
+    "name": "Blessed",
+    "origin": "Actor.actor-001",
+    "parentId": "actor-001",
+    "parentName": "Wilhelm",
+    "parentType": "Actor",
+    "statuses": [],
+  },
+  {
+    "changes": [],
+    "disabled": false,
+    "duration": {
+      "rounds": null,
+      "seconds": null,
+      "turns": null,
+    },
+    "id": "eff-002",
+    "img": "icons/svg/aura.svg",
+    "name": "Stunned",
+    "origin": null,
+    "parentId": "actor-001",
+    "parentName": "Wilhelm",
+    "parentType": "Actor",
+    "statuses": [
+      "stunned",
+    ],
+  },
+]
+`;
+
+exports[`FoundryDataAccess.listActiveEffects — characterization > snapshot: filter=applied excludes disabled AEs 1`] = `
+[
+  {
+    "changes": [],
+    "disabled": false,
+    "duration": {
+      "rounds": null,
+      "seconds": null,
+      "turns": null,
+    },
+    "id": "eff-001",
+    "img": "icons/svg/aura.svg",
+    "name": "Active Buff",
+    "origin": null,
+    "parentId": "actor-001",
+    "parentName": "Wilhelm",
+    "parentType": "Actor",
+    "statuses": [],
+  },
+]
+`;
+
+exports[`FoundryDataAccess.listActiveEffects — characterization > snapshot: filter=temporary — only AEs with duration.rounds set 1`] = `
+[
+  {
+    "changes": [],
+    "disabled": false,
+    "duration": {
+      "rounds": 3,
+      "seconds": null,
+      "turns": null,
+    },
+    "id": "eff-001",
+    "img": "icons/svg/aura.svg",
+    "name": "Timed Boost",
+    "origin": null,
+    "parentId": "actor-001",
+    "parentName": "Greta",
+    "parentType": "Actor",
+    "statuses": [],
+  },
+]
+`;
+
+exports[`FoundryDataAccess.listActiveEffects — characterization > snapshot: includeItemAEs=true adds item-level effects 1`] = `
+[
+  {
+    "changes": [],
+    "disabled": false,
+    "duration": {
+      "rounds": null,
+      "seconds": null,
+      "turns": null,
+    },
+    "id": "eff-actor-001",
+    "img": "icons/svg/aura.svg",
+    "name": "Actor Buff",
+    "origin": null,
+    "parentId": "actor-001",
+    "parentName": "Kurt",
+    "parentType": "Actor",
+    "statuses": [],
+  },
+  {
+    "changes": [
+      {
+        "key": "system.characteristics.ws.value",
+        "mode": 2,
+        "priority": null,
+        "value": "5",
+      },
+    ],
+    "disabled": false,
+    "duration": {
+      "rounds": null,
+      "seconds": null,
+      "turns": null,
+    },
+    "id": "eff-item-001",
+    "img": "icons/svg/aura.svg",
+    "name": "Sword Enchant",
+    "origin": null,
+    "parentId": "item-001",
+    "parentName": "Runefang",
+    "parentType": "Item",
+    "statuses": [],
+  },
+]
+`;
