@@ -50,3 +50,37 @@ export function verifyDocWrite(
     );
   }
 }
+
+/**
+ * R2.5 — verify a single flag write persisted. Flags live under
+ * `flags.<scope>.<key>` and round-trip through `doc.getFlag(scope, key)` (the raw
+ * stored value — no Color/TextureData derived-getter F08 hazard, so a flat _source
+ * dot-path is unnecessary and a hyphenated scope key would mis-split anyway). Throws
+ * errorToken on drift; idempotent no-ops (already-equal) pass.
+ *
+ * Co-located with verifyDocWrite (its sibling) rather than a separate postVerify.ts —
+ * the planned `withPostVerify` re-fetch wrapper found zero genuine adopters (every
+ * direct-write site holds a live in-memory Document and calls verifyDocWrite directly),
+ * so only this flag-compare cleared the HC11 ≥2-site bar (patrol enable/resume).
+ *
+ * @param doc        The (already re-read / live) Foundry Document carrying the flag.
+ * @param scope      Flag scope (module / system id).
+ * @param key        Flag key.
+ * @param expected   Expected flag value.
+ * @param errorToken Error prefix, e.g. 'PATROL_FLAG_NOT_PERSISTED'.
+ */
+export function verifyFlagWrite(
+  doc: unknown,
+  scope: string,
+  key: string,
+  expected: unknown,
+  errorToken: string,
+): void {
+  const actual = (doc as any)?.getFlag?.(scope, key);
+  if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+    throw new Error(
+      `${errorToken}: flag "${scope}.${key}" did not persist. ` +
+        `expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`,
+    );
+  }
+}

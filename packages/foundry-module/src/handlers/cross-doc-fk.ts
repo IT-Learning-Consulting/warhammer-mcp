@@ -28,6 +28,7 @@ import {
     type CrossDocFkDocTypeType,
     type FkOrphanEntry,
     type FkOrphanRefType,
+    type FkAffectedDocEntry,
     type AuditOrphansResponse,
     type AuditDocumentResponse,
     type RepairOrphansResponse,
@@ -649,4 +650,37 @@ export async function walkInboundFor(
  */
 export async function clearOrphanRef(ref: FkOrphanRefType): Promise<void> {
     await clearOrphan(ref);
+}
+
+/**
+ * R2.3: clear EVERY inbound orphan FK pointing at a doc that is ABOUT to be
+ * deleted, returning the cleared sources as FkAffectedDocEntry[]. Extracts the
+ * byte-identical `walkInboundFor → for(clearOrphanRef + affectedDocs.push)` loop
+ * that the Phase 4/10 cascade-on-delete pre-steps duplicated across the
+ * scene/journal/rolltable/playlist handlers. Behaviour-identical to the inlined
+ * loops. Caller is responsible for wrapping in wrappedWrite + post-verify
+ * (mirrors clearOrphanRef's contract).
+ */
+export async function clearInboundOrphansFor(
+    targetDocType: CrossDocFkDocTypeType,
+    targetDocId: string,
+): Promise<FkAffectedDocEntry[]> {
+    const inbound = await walkInboundFor(targetDocType, targetDocId);
+    const affectedDocs: FkAffectedDocEntry[] = [];
+    for (const ref of inbound) {
+        await clearOrphanRef({
+            sourceDocType: ref.sourceDocType,
+            sourceDocId: ref.sourceDocId,
+            sourceField: ref.sourceField,
+            refDocType: ref.refDocType,
+            refId: ref.refId,
+        });
+        affectedDocs.push({
+            type: ref.sourceDocType,
+            id: ref.sourceDocId,
+            name: ref.sourceDocName,
+            fkField: ref.sourceField,
+        });
+    }
+    return affectedDocs;
 }

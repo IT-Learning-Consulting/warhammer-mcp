@@ -6,7 +6,7 @@
 //
 // Anchors:
 //   - DP-15: typed this.query<T> — never <any> on the response.
-//   - CCR-G2: errorContent is module-local (not on BaseTool).
+//   - R2.4: errors route through the shared BaseTool.errorResponse (was a module-local errorContent helper).
 //   - dossier CommunityLighting.md §5.1 (return shape).
 
 import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
@@ -29,12 +29,6 @@ interface ListAnimationsResult {
 
 // ── Inline error helper (CCR-G2) ──────────────────────────────────────────────
 
-function errorContent(action: string, message: string) {
-  return {
-    content: [{ type: 'text' as const, text: `module-lighting/${action} failed: ${message}` }],
-    isError: true,
-  };
-}
 
 // ── Format helper ─────────────────────────────────────────────────────────────
 
@@ -113,7 +107,7 @@ Examples:
       if (msg.includes('MODULE_NOT_ACTIVE')) {
         return moduleNotActiveContent('module-lighting', msg);
       }
-      return errorContent(action, msg);
+      return this.errorResponse(action, msg);
     }
   }
 }

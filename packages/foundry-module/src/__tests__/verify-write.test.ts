@@ -4,7 +4,7 @@
 // .-= marker skip.  Includes the idempotent-no-op pin.
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { verifyDocWrite } from '../utils/verifyWrite.js';
+import { verifyDocWrite, verifyFlagWrite } from '../utils/verifyWrite.js';
 
 function installFoundryUtils() {
   (globalThis as any).foundry = {
@@ -87,5 +87,55 @@ describe('verifyDocWrite (DP-16 / CCR-1)', () => {
         { skipPaths: ['mode'] },
       ),
     ).not.toThrow();
+  });
+});
+
+// R2.5 — verifyFlagWrite: flags read back via doc.getFlag(scope, key). WHY it matters:
+// a silently-dropped setFlag leaves the flag-driven behavior (patrol mode, queued craft)
+// permanently inert while the write returned success — exactly the BUG-070 silent-drop class.
+describe('verifyFlagWrite (DP-16 / R2.5)', () => {
+  /** Stub Document whose getFlag resolves from a nested flags bag. */
+  function makeFlagDoc(flags: Record<string, Record<string, unknown>>): unknown {
+    return {
+      getFlag(scope: string, key: string) {
+        return flags?.[scope]?.[key];
+      },
+    };
+  }
+
+  it('happy path: flag read-back equals expected — no throw', () => {
+    const doc = makeFlagDoc({ patrol: { makePatroller: true } });
+    expect(() =>
+      verifyFlagWrite(doc, 'patrol', 'makePatroller', true, 'PATROL_FLAG_NOT_PERSISTED'),
+    ).not.toThrow();
+  });
+
+  it('drift: flag read-back mismatches expected — throws errorToken with scope.key', () => {
+    const doc = makeFlagDoc({ patrol: { enablePatrol: false } });
+    expect(() =>
+      verifyFlagWrite(doc, 'patrol', 'enablePatrol', true, 'PATROL_FLAG_NOT_PERSISTED'),
+    ).toThrow(/PATROL_FLAG_NOT_PERSISTED: flag "patrol\.enablePatrol"/);
+  });
+
+  it('silent drop: flag absent after write — getFlag undefined ≠ expected → throws', () => {
+    const doc = makeFlagDoc({ patrol: {} }); // setFlag silently no-op'd
+    expect(() =>
+      verifyFlagWrite(doc, 'patrol', 'pathNodeIndex', 3, 'PATROL_FLAG_NOT_PERSISTED'),
+    ).toThrow(/PATROL_FLAG_NOT_PERSISTED/);
+  });
+
+  it('object value: deep-equal via JSON compare — matching object passes', () => {
+    const pending = { time: 1200, items: [{ name: 'Sword' }] };
+    const doc = makeFlagDoc({ mastercrafted: { abc123: pending } });
+    expect(() =>
+      verifyFlagWrite(doc, 'mastercrafted', 'abc123', { time: 1200, items: [{ name: 'Sword' }] }, 'MASTERCRAFTED_PENDING_CRAFT_NOT_PERSISTED'),
+    ).not.toThrow();
+  });
+
+  it('object value drift: changed nested field throws', () => {
+    const doc = makeFlagDoc({ mastercrafted: { abc123: { time: 1200, items: [] } } });
+    expect(() =>
+      verifyFlagWrite(doc, 'mastercrafted', 'abc123', { time: 9999, items: [] }, 'MASTERCRAFTED_PENDING_CRAFT_NOT_PERSISTED'),
+    ).toThrow(/MASTERCRAFTED_PENDING_CRAFT_NOT_PERSISTED/);
   });
 });

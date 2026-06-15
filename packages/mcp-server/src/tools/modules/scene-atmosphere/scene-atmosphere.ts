@@ -10,7 +10,7 @@
 //
 // Anchors:
 //   - DP-15: typed this.query<T> — never <any>.
-//   - CCR-G2: errorContent is module-local (not on BaseTool).
+//   - R2.4: errors route through the shared BaseTool.errorResponse (was a module-local errorContent helper).
 //   - Phase-5 F03: formatter emits EVERY field each handler returns (no silent drops).
 //   - Phase 6 plan §2.1 + fxmaster audit.md §API Surface.
 
@@ -766,14 +766,6 @@ type SceneAtmosphereResult =
   | MultifaceTilesResult
   | DynamicSoundscapesResult;
 
-// ── Error helper (CCR-G2 — NOT on BaseTool) ───────────────────────────────────
-
-function errorContent(action: string, message: string) {
-  return {
-    content: [{ type: 'text' as const, text: `${TOOL_NAME}/${action} failed: ${message}` }],
-    isError: true,
-  };
-}
 
 // ── Format helpers (Phase-5 F03 — emit every returned field) ─────────────────
 
@@ -1957,7 +1949,7 @@ Examples:
       ) {
         return moduleNotActiveContent(TOOL_NAME, msg);
       }
-      return errorContent(action, msg);
+      return this.errorResponse(`${TOOL_NAME}/${action}`, msg);
     }
   }
 

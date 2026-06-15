@@ -6,7 +6,7 @@
 //
 // Anchors:
 //   - DP-15: typed this.query<T> — never <any> on response.
-//   - CCR-G2: errorContent is module-local (not on BaseTool).
+//   - R2.4: errors route through the shared BaseTool.errorResponse (was a module-local errorContent helper).
 //   - Phase 5 module_integration_v1 acceptance criteria #1–4.
 
 import { z } from 'zod';
@@ -54,12 +54,6 @@ type TaggerResult = TaggerWriteResult | TaggerQueryResult | TaggerCheckResult;
 
 // ── Inline error helper (CCR-G2) ──────────────────────────────────────────────
 
-function errorContent(action: string, message: string) {
-  return {
-    content: [{ type: 'text' as const, text: `module-tagger/${action} failed: ${message}` }],
-    isError: true,
-  };
-}
 
 // ── Format helpers ────────────────────────────────────────────────────────────
 
@@ -211,7 +205,7 @@ Examples:
       if (msg.includes('MODULE_NOT_ACTIVE')) {
         return moduleNotActiveContent('module-tagger', msg);
       }
-      return errorContent(action, msg);
+      return this.errorResponse(action, msg);
     }
   }
 }

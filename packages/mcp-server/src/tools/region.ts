@@ -6,7 +6,7 @@
 //
 // **CCR-Envelope-Consumer:** every handler uses a concrete typed generic on
 // `this.query<...>` — no `<any>`. Each handler wraps its query call in
-// try/catch and routes errors through errorContent().
+// try/catch and routes errors through this.errorResponse().
 //
 // **BUG-069 compliance:** this.query<T> returns BARE unwrapped data; never check
 // the success field on the return value; never use this.query<any>.
@@ -79,12 +79,6 @@ interface RegionAddShapeResponse {
 
 // ── Utilities ────────────────────────────────────────────────────────────────
 
-function errorContent(action: string, message: string) {
-  return {
-    content: [{ type: 'text' as const, text: `❌ **region/${action} failed**\n\n${message}` }],
-    isError: true,
-  };
-}
 
 function formatBehavior(b: RegionBehaviorSummary): string {
   const systemLines = Object.entries(b.system)
@@ -292,7 +286,7 @@ export class RegionTool extends BaseTool {
         `_Requested fields: ${Object.keys(data.requestedChanges).filter((k) => k !== 'action' && k !== 'sceneId').join(', ') || '(name only)'}_`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('create', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('create', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -303,7 +297,7 @@ export class RegionTool extends BaseTool {
         `✏️ **Region Updated**\n\n**Changed fields:** ${data.changedFields.join(', ')}\n\n${formatRegionView(data.region)}`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('update', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('update', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -314,7 +308,7 @@ export class RegionTool extends BaseTool {
         `🗑️ **Region Deleted**\n\n**ID:** \`${data.deletedId}\`  **Scene:** \`${data.sceneId}\`\n**Remaining regions:** ${data.remainingRegions}\n\n⚠️ All embedded behaviors were also deleted.`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('delete', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('delete', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -323,7 +317,7 @@ export class RegionTool extends BaseTool {
       const data = await this.query<RegionGetResponse>('region', args);
       return { content: [{ type: 'text' as const, text: formatRegionView(data.region) }] };
     } catch (e) {
-      return errorContent('get', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('get', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -345,7 +339,7 @@ export class RegionTool extends BaseTool {
       const text = `🗺️ **Regions** (${pageInfo})\n\n${lines.join('\n')}`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('list', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('list', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -356,7 +350,7 @@ export class RegionTool extends BaseTool {
         `✅ **RegionBehavior Created**\n\n**Region:** \`${data.regionId}\`\n\n${formatBehavior(data.behavior)}`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('createBehavior', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('createBehavior', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -367,7 +361,7 @@ export class RegionTool extends BaseTool {
         `✏️ **RegionBehavior Updated**\n\n**Region:** \`${data.regionId}\`\n**Changed fields:** ${data.changedFields.join(', ')}\n\n${formatBehavior(data.behavior)}`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('updateBehavior', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('updateBehavior', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -378,7 +372,7 @@ export class RegionTool extends BaseTool {
         `🗑️ **RegionBehavior Deleted**\n\n**Region:** \`${data.regionId}\`\n**Deleted ID:** \`${data.deletedBehaviorId}\`\n**Remaining behaviors:** ${data.remainingBehaviors}\n\n⚠️ Permanent.`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('deleteBehavior', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('deleteBehavior', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -389,7 +383,7 @@ export class RegionTool extends BaseTool {
         `➕ **Shape Added**\n\n**Shapes now:** ${data.shapeCount}\n\n${formatRegionView(data.region)}`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('add-shape', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('add-shape', e instanceof Error ? e.message : String(e));
     }
   }
 }

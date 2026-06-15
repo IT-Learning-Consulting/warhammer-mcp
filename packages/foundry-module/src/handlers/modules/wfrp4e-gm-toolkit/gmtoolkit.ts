@@ -29,6 +29,7 @@
 import { requireModuleActive } from '../_shared/require-module-active.js';
 import { ModuleGmtoolkitInput, type ModuleGmtoolkitInputType } from './schemas.js';
 import { notify } from '../../../notify.js';
+import { verifyDocWrite } from '../../../utils/verifyWrite.js';
 
 type Envelope<T> = { success: true; data: T } | { success: false; error: string };
 
@@ -329,7 +330,14 @@ async function handleToggleSceneLight(input: ToggleSceneLightInput): Promise<Env
   if (Object.keys(patch).length === 0) {
     return { success: false, error: 'GMTOOLKIT_NO_FIELDS: toggle-scene-light requires tokenVision and/or globalLight' };
   }
+  // R2.5 DP-16: snapshot the flat _source dot-paths BEFORE scene.update — v13 update()
+  // expands flat dot-keys (e.g. 'environment.globalLight.enabled') into nested form in
+  // place, so reusing `patch` would make verifyDocWrite compare a partial sub-object
+  // against the full persisted field and false-throw. `scene` is the live in-memory doc;
+  // its _source reflects the update without a re-fetch.
+  const verifyFields = { ...patch };
   await scene.update(patch);
+  verifyDocWrite(scene, verifyFields, 'GMTOOLKIT_SCENE_LIGHT_NOT_PERSISTED');
   notify.updated('gmtoolkit', scene.name ?? input.sceneId ?? '(active scene)', { summary: `scene light/vision: ${Object.keys(patch).join(', ')}` });
   return {
     success: true,

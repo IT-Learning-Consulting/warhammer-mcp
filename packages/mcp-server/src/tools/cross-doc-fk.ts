@@ -23,12 +23,6 @@ import { BaseTool, BaseToolOptions } from '../base-tool.js';
 type CrossDocFkArgs = z.infer<typeof CrossDocFkInput>;
 type ArgsFor<A extends CrossDocFkArgs['action']> = Extract<CrossDocFkArgs, { action: A }>;
 
-function errorContent(action: string, message: string) {
-    return {
-        content: [{ type: 'text' as const, text: `cross-doc-fk/${action} failed: ${message}` }],
-        isError: true,
-    };
-}
 
 // ============================================================================
 // Formatters
@@ -286,7 +280,7 @@ Examples:
             const data = await this.query<AuditOrphansResponse>('cross-doc-fk', args);
             return { content: [{ type: 'text' as const, text: formatAuditOrphansResponse(data) }] };
         } catch (e) {
-            return errorContent('audit-orphans', e instanceof Error ? e.message : String(e));
+            return this.errorResponse('audit-orphans', e instanceof Error ? e.message : String(e));
         }
     }
 
@@ -295,7 +289,7 @@ Examples:
             const data = await this.query<AuditDocumentResponse>('cross-doc-fk', args);
             return { content: [{ type: 'text' as const, text: formatAuditDocumentResponse(data) }] };
         } catch (e) {
-            return errorContent('audit-document', e instanceof Error ? e.message : String(e));
+            return this.errorResponse('audit-document', e instanceof Error ? e.message : String(e));
         }
     }
 
@@ -304,7 +298,7 @@ Examples:
             const data = await this.query<RepairOrphansResponse>('cross-doc-fk', args);
             return { content: [{ type: 'text' as const, text: formatRepairOrphansResponse(data) }] };
         } catch (e) {
-            return errorContent('repair-orphans', e instanceof Error ? e.message : String(e));
+            return this.errorResponse('repair-orphans', e instanceof Error ? e.message : String(e));
         }
     }
 }

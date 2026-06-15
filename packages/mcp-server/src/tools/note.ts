@@ -6,7 +6,7 @@
 //
 // **CCR-Envelope-Consumer:** every handler uses a concrete typed generic on
 // `this.query<...>` — no `<any>`. Each handler wraps its query call in
-// try/catch and routes errors through errorContent().
+// try/catch and routes errors through this.errorResponse().
 //
 // **BUG-069 compliance:** this.query<T> returns BARE unwrapped data; never check
 // the success field on the return value; never use this.query<any>.
@@ -61,12 +61,6 @@ interface NoteListResponse {
 
 // ── Utilities ────────────────────────────────────────────────────────────────
 
-function errorContent(action: string, message: string) {
-  return {
-    content: [{ type: 'text' as const, text: `❌ **note/${action} failed**\n\n${message}` }],
-    isError: true,
-  };
-}
 
 /**
  * Format a FK link field for display.
@@ -258,7 +252,7 @@ export class NoteTool extends BaseTool {
           : '');
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('create', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('create', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -269,7 +263,7 @@ export class NoteTool extends BaseTool {
         `✏️ **Note Updated**\n\n**Changed fields:** ${data.changedFields.join(', ')}\n\n${formatNoteView(data.note)}`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('update', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('update', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -280,7 +274,7 @@ export class NoteTool extends BaseTool {
         `🗑️ **Note Deleted**\n\n**ID:** \`${data.deletedId}\`\n**Scene:** \`${data.sceneId}\`\n**Remaining notes on scene:** ${data.remainingNotes}\n\n⚠️ Permanent.`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('delete', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('delete', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -289,7 +283,7 @@ export class NoteTool extends BaseTool {
       const data = await this.query<NoteGetResponse>('note', args);
       return { content: [{ type: 'text' as const, text: formatNoteView(data.note) }] };
     } catch (e) {
-      return errorContent('get', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('get', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -314,7 +308,7 @@ export class NoteTool extends BaseTool {
       const text = `📌 **Notes**${pageInfo}\n${filterNote}\n${lines.join('\n')}`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('list', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('list', e instanceof Error ? e.message : String(e));
     }
   }
 }

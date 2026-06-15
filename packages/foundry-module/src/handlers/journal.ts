@@ -60,6 +60,8 @@ import {
 } from '@foundry-mcp/shared';
 import { wrappedWrite } from '../transaction-manager.js';
 import { notify } from '../notify.js';
+// R2.2 dedup: canonical deepStripUndefined (was a local byte-identical copy).
+import { deepStripUndefined } from '../utils/embeddedCRUDFactory.js';
 
 // ── Local types ──────────────────────────────────────────────────────────────
 
@@ -82,21 +84,6 @@ function validateGMAccess(): AccessGate {
 function stripUndefined<T extends Record<string, any>>(obj: T): T {
   Object.keys(obj).forEach((k) => obj[k] === undefined && delete obj[k]);
   return obj;
-}
-
-function deepStripUndefined<T>(value: T): T {
-  if (Array.isArray(value)) {
-    return value.map(deepStripUndefined) as any;
-  }
-  if (value && typeof value === 'object') {
-    const out: Record<string, any> = {};
-    for (const [k, v] of Object.entries(value as Record<string, any>)) {
-      if (v === undefined) continue;
-      out[k] = deepStripUndefined(v);
-    }
-    return out as any;
-  }
-  return value;
 }
 
 // Normalise a PageInputType into the shape Foundry's createEmbeddedDocuments
@@ -429,28 +416,14 @@ export async function deleteEntry(
     // need explicit cascade only if cascade:true.
     let affectedDocs: import('@foundry-mcp/shared').FkAffectedDocEntry[] | undefined;
     if (input.cascade === true) {
-      const { walkInboundFor, clearOrphanRef } = await import('./cross-doc-fk.js');
-      const inbound = await walkInboundFor('JournalEntry', input.entryId);
-      // Also clear inbound refs to each contained page.
-      const pageInbounds = await Promise.all(
-        (entry.pages?.contents ?? []).map((p: any) => walkInboundFor('JournalEntryPage', p.id)),
-      );
-      const all = [...inbound, ...pageInbounds.flat()];
-      affectedDocs = [];
-      for (const ref of all) {
-        await clearOrphanRef({
-          sourceDocType: ref.sourceDocType,
-          sourceDocId: ref.sourceDocId,
-          sourceField: ref.sourceField,
-          refDocType: ref.refDocType,
-          refId: ref.refId,
-        });
-        affectedDocs.push({
-          type: ref.sourceDocType,
-          id: ref.sourceDocId,
-          name: ref.sourceDocName,
-          fkField: ref.sourceField,
-        });
+      // R2.3: helper per sub-walk; compound fan-out (JournalEntry + each contained
+      // page) preserved. affectedDocs order is identical to the prior inlined loop
+      // (entry refs first, then page refs in page order) — targets are disjoint so
+      // the cleared set/order is unchanged.
+      const { clearInboundOrphansFor } = await import('./cross-doc-fk.js');
+      affectedDocs = await clearInboundOrphansFor('JournalEntry', input.entryId);
+      for (const p of (entry.pages?.contents ?? []) as any[]) {
+        affectedDocs.push(...(await clearInboundOrphansFor('JournalEntryPage', p.id)));
       }
     }
 
@@ -726,24 +699,9 @@ export async function deletePage(
     // Phase 10 cross-doc-fk cascade: clear inbound JournalEntryPage FKs before delete.
     let affectedDocs: import('@foundry-mcp/shared').FkAffectedDocEntry[] | undefined;
     if (input.cascade === true) {
-      const { walkInboundFor, clearOrphanRef } = await import('./cross-doc-fk.js');
-      const inbound = await walkInboundFor('JournalEntryPage', input.pageId);
-      affectedDocs = [];
-      for (const ref of inbound) {
-        await clearOrphanRef({
-          sourceDocType: ref.sourceDocType,
-          sourceDocId: ref.sourceDocId,
-          sourceField: ref.sourceField,
-          refDocType: ref.refDocType,
-          refId: ref.refId,
-        });
-        affectedDocs.push({
-          type: ref.sourceDocType,
-          id: ref.sourceDocId,
-          name: ref.sourceDocName,
-          fkField: ref.sourceField,
-        });
-      }
+      // R2.3: extracted byte-identical walkInboundFor→clearOrphanRef→affectedDocs loop.
+      const { clearInboundOrphansFor } = await import('./cross-doc-fk.js');
+      affectedDocs = await clearInboundOrphansFor('JournalEntryPage', input.pageId);
     }
 
     await entry.deleteEmbeddedDocuments('JournalEntryPage', [input.pageId]);

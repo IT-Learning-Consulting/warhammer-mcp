@@ -6,7 +6,7 @@
 //
 // Anchors:
 //   - DP-15: typed this.query<T> — never <any> on response path.
-//   - CCR-G2: errorContent is module-local (not on BaseTool).
+//   - R2.4: errors route through the shared BaseTool.errorResponse (was a module-local errorContent helper).
 //   - phase5 carry-forward F03: formatters emit EVERY return field.
 //   - Phase 3 module_integration_v1 acceptance criteria #1–12.
 
@@ -34,12 +34,6 @@ import type {
 
 // ── Inline error helper (CCR-G2) ──────────────────────────────────────────────
 
-function errorContent(action: string, message: string) {
-  return {
-    content: [{ type: 'text' as const, text: `module-itempiles/${action} failed: ${message}` }],
-    isError: true,
-  };
-}
 
 // ── Format helpers (F03: emit every return field) ─────────────────────────────
 
@@ -467,7 +461,7 @@ GM required for all write actions.`,
           break;
         }
         default:
-          return errorContent(action, `Unknown action "${action}"`);
+          return this.errorResponse(action, `Unknown action "${action}"`);
       }
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
@@ -475,7 +469,7 @@ GM required for all write actions.`,
       if (msg.includes('MODULE_NOT_ACTIVE') || msg.includes('MODULE_DEPENDENCY_NOT_ACTIVE')) {
         return moduleNotActiveContent('module-itempiles', msg);
       }
-      return errorContent(action, msg);
+      return this.errorResponse(action, msg);
     }
   }
 }

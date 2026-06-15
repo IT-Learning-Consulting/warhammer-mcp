@@ -335,28 +335,14 @@ export async function deletePlaylist(data: unknown): Promise<Envelope<any>> {
     // FKs targeting this playlist (and its embedded sounds) BEFORE delete.
     let affectedDocs: import('@foundry-mcp/shared').FkAffectedDocEntry[] | undefined;
     if (input.cascade === true) {
-      const { walkInboundFor, clearOrphanRef } = await import('./cross-doc-fk.js');
-      const inbound = await walkInboundFor('Playlist', input.playlistId);
-      // Also clear inbound refs to each embedded sound.
-      const soundInbounds = await Promise.all(
-        (playlist.sounds?.contents ?? []).map((s: any) => walkInboundFor('PlaylistSound', s.id)),
-      );
-      const all = [...inbound, ...soundInbounds.flat()];
-      affectedDocs = [];
-      for (const ref of all) {
-        await clearOrphanRef({
-          sourceDocType: ref.sourceDocType,
-          sourceDocId: ref.sourceDocId,
-          sourceField: ref.sourceField,
-          refDocType: ref.refDocType,
-          refId: ref.refId,
-        });
-        affectedDocs.push({
-          type: ref.sourceDocType,
-          id: ref.sourceDocId,
-          name: ref.sourceDocName,
-          fkField: ref.sourceField,
-        });
+      // R2.3: helper per sub-walk; compound fan-out (Playlist + each embedded
+      // sound) preserved. affectedDocs order is identical to the prior inlined loop
+      // (playlist refs first, then sound refs in sound order) — targets are disjoint
+      // so the cleared set/order is unchanged.
+      const { clearInboundOrphansFor } = await import('./cross-doc-fk.js');
+      affectedDocs = await clearInboundOrphansFor('Playlist', input.playlistId);
+      for (const s of (playlist.sounds?.contents ?? []) as any[]) {
+        affectedDocs.push(...(await clearInboundOrphansFor('PlaylistSound', s.id)));
       }
     }
 
@@ -576,34 +562,19 @@ export async function deletePlaylistSound(data: unknown): Promise<Envelope<any>>
     return soundFactoryHandlers.delete(data);
   }
 
-  // Cascade path: walk inbound FKs first, then delegate to factory for the actual delete.
-  const { walkInboundFor, clearOrphanRef } = await import('./cross-doc-fk.js');
-  const inbound = await walkInboundFor('PlaylistSound', input.soundId);
+  // Cascade path: clear inbound FKs first, then delegate to factory for the actual delete.
+  const { clearInboundOrphansFor } = await import('./cross-doc-fk.js');
 
-  // BUG-306: only the FK-clear loop runs under this transaction —
-  // clearOrphanRef's contract makes the caller responsible for wrapping.
+  // BUG-306: only the FK-clear runs under this transaction —
+  // clearInboundOrphansFor's contract makes the caller responsible for wrapping.
   // The factory delete below runs its own wrappedWrite; nesting it here
   // created a second independent transaction that committed even when the
   // outer one later failed (transactions don't join), so it now runs after.
-  const affectedDocs = await wrappedWrite('playlist.deletePlaylistSound.cascade', async () => {
-    const docs: import('@foundry-mcp/shared').FkAffectedDocEntry[] = [];
-    for (const ref of inbound) {
-      await clearOrphanRef({
-        sourceDocType: ref.sourceDocType,
-        sourceDocId: ref.sourceDocId,
-        sourceField: ref.sourceField,
-        refDocType: ref.refDocType,
-        refId: ref.refId,
-      });
-      docs.push({
-        type: ref.sourceDocType,
-        id: ref.sourceDocId,
-        name: ref.sourceDocName,
-        fkField: ref.sourceField,
-      });
-    }
-    return docs;
-  });
+  // R2.3: helper is the wrappedWrite body (the read-only walk now runs inside the
+  // same transaction — no writes precede it, so the cleared set is unchanged).
+  const affectedDocs = await wrappedWrite('playlist.deletePlaylistSound.cascade', () =>
+    clearInboundOrphansFor('PlaylistSound', input.soundId),
+  );
 
   // Factory delete handles the actual deleteEmbeddedDocuments + post-verify
   // (and wraps itself in wrappedWrite).

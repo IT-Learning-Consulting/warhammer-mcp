@@ -47,12 +47,6 @@ interface SettingListWorldDbResponse {
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
-function errorContent(action: string, message: string) {
-    return {
-        content: [{ type: 'text' as const, text: `Setting/${action} failed: ${message}` }],
-        isError: true,
-    };
-}
 
 function formatSettingView(s: SettingViewModel): string {
     return [
@@ -186,7 +180,7 @@ Examples:
             const data = await this.query<SettingGetResponse>('setting', args);
             return { content: [{ type: 'text' as const, text: formatSettingView(data.setting) }] };
         } catch (e) {
-            return errorContent('get', e instanceof Error ? e.message : String(e));
+            return this.errorResponse('get', e instanceof Error ? e.message : String(e));
         }
     }
 
@@ -202,7 +196,7 @@ Examples:
             ].join('\n');
             return { content: [{ type: 'text' as const, text }] };
         } catch (e) {
-            return errorContent('set', e instanceof Error ? e.message : String(e));
+            return this.errorResponse('set', e instanceof Error ? e.message : String(e));
         }
     }
 
@@ -219,7 +213,7 @@ Examples:
             const text = `Settings (${data.total} total)\n\n${lines.join('\n')}`;
             return { content: [{ type: 'text' as const, text }] };
         } catch (e) {
-            return errorContent('list', e instanceof Error ? e.message : String(e));
+            return this.errorResponse('list', e instanceof Error ? e.message : String(e));
         }
     }
 
@@ -236,7 +230,7 @@ Examples:
             const text = `Persisted World Settings (${data.total} total)\n\n${lines.join('\n')}`;
             return { content: [{ type: 'text' as const, text }] };
         } catch (e) {
-            return errorContent('list-world-db', e instanceof Error ? e.message : String(e));
+            return this.errorResponse('list-world-db', e instanceof Error ? e.message : String(e));
         }
     }
 }

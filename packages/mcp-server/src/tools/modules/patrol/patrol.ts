@@ -26,12 +26,6 @@ import type {
 
 const text = (s: string) => ({ content: [{ type: 'text' as const, text: s }] });
 
-function errorContent(action: string, message: string) {
-  return {
-    content: [{ type: 'text' as const, text: `module-patrol/${action} failed: ${message}` }],
-    isError: true,
-  };
-}
 
 function itemLine(r: EnableTokenItem): string {
   return r.ok ? `  ✓ ${r.tokenName ?? r.tokenUuid}${r.mode ? ` (${r.mode})` : ''}` : `  ✗ ${r.tokenUuid}: ${r.error}`;
@@ -184,7 +178,7 @@ Example: { action: "enable-token", tokenUuids: ["Scene.x.Token.y"], mode: "wande
       case 'remap-paths':
         return this.run<GenericPatrolResult>(action, rawArgs, formatGenericPatrol(action));
       default:
-        return errorContent('unknown', `unknown action: ${action}`);
+        return this.errorResponse('unknown', `unknown action: ${action}`);
     }
   }
 
@@ -195,7 +189,7 @@ Example: { action: "enable-token", tokenUuids: ["Scene.x.Token.y"], mode: "wande
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (msg.includes('MODULE_NOT_ACTIVE')) return moduleNotActiveContent('module-patrol', msg);
-      return errorContent(action, msg);
+      return this.errorResponse(action, msg);
     }
   }
 }

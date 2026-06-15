@@ -24,12 +24,6 @@ import type {
 
 const text = (s: string) => ({ content: [{ type: 'text' as const, text: s }] });
 
-function errorContent(action: string, message: string) {
-  return {
-    content: [{ type: 'text' as const, text: `module-timekeeping/${action} failed: ${message}` }],
-    isError: true,
-  };
-}
 
 // ── Per-action formatters (surface every handler-returned field) ─────────────
 
@@ -204,7 +198,7 @@ Example: { action: "advance", hours: 4 }`,
       case 'set-macro-triggers':
         return this.run<GenericOkResult>(action, rawArgs, formatGeneric(action));
       default:
-        return errorContent('unknown', `unknown action: ${action}`);
+        return this.errorResponse('unknown', `unknown action: ${action}`);
     }
   }
 
@@ -215,7 +209,7 @@ Example: { action: "advance", hours: 4 }`,
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (msg.includes('MODULE_NOT_ACTIVE')) return moduleNotActiveContent('module-timekeeping', msg);
-      return errorContent(action, msg);
+      return this.errorResponse(action, msg);
     }
   }
 }

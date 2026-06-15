@@ -59,12 +59,6 @@ interface CombatantDefeatedResponse {
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
 
-function errorContent(action: string, message: string) {
-  return {
-    content: [{ type: 'text' as const, text: `❌ **combatant/${action} failed**\n\n${message}` }],
-    isError: true,
-  };
-}
 
 function snapshotLines(d: CombatantSnapshot): string {
   return (
@@ -198,7 +192,7 @@ export class CombatantTool extends BaseTool {
       const text = `🎯 **Combatant** — \`${d.id}\` (combat \`${d.combatId}\`)\n\n${snapshotLines(d)}`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('get-combatant', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('get-combatant', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -211,7 +205,7 @@ export class CombatantTool extends BaseTool {
         `**Changed:** ${changed}\n\n${snapshotLines(d)}`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('update-combatant', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('update-combatant', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -224,7 +218,7 @@ export class CombatantTool extends BaseTool {
         `- **current combatant:** ${d.currentCombatantId ?? '_(none)_'}`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('set-initiative', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('set-initiative', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -234,7 +228,7 @@ export class CombatantTool extends BaseTool {
       const text = `✅ **Initiative Cleared** — \`${d.combatantId}\` (combat \`${d.combatId}\`) → null (unrolled)`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('clear-initiative', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('clear-initiative', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -247,7 +241,7 @@ export class CombatantTool extends BaseTool {
         `- **current combatant:** ${d.currentCombatantId ?? '_(none)_'}`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('reroll-initiative', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('reroll-initiative', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -257,7 +251,7 @@ export class CombatantTool extends BaseTool {
       const text = `✅ **Hidden ${d.hidden ? 'Set' : 'Cleared'}** — \`${d.combatantId}\` → hidden:${d.hidden}`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('set-hidden', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('set-hidden', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -269,7 +263,7 @@ export class CombatantTool extends BaseTool {
         (d.defeated ? ' (token skull overlay applied)' : '');
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('set-defeated', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('set-defeated', e instanceof Error ? e.message : String(e));
     }
   }
 }

@@ -14,12 +14,6 @@ import {
 type KeybindingArgs = z.infer<typeof KeybindingToolInput>;
 type KeybindingArgsFor<A extends KeybindingArgs['action']> = Extract<KeybindingArgs, { action: A }>;
 
-function keybindingErrorContent(action: string, message: string) {
-  return {
-    content: [{ type: 'text' as const, text: `❌ **keybinding/${action} failed**\n\n${message}` }],
-    isError: true,
-  };
-}
 
 function fmtBindings(bindings: Array<{ key: string; modifiers: string[] }>): string {
   if (!bindings.length) return '_(unbound)_';
@@ -122,9 +116,9 @@ export class KeybindingTools extends BaseTool {
     } catch (error) {
       if (error instanceof z.ZodError) {
         const messages = error.errors.map((e) => `${e.path.join('.') || '(root)'}: ${e.message}`);
-        return keybindingErrorContent('keybinding', messages.join('; '));
+        return this.errorResponse('keybinding', messages.join('; '));
       }
-      return keybindingErrorContent('keybinding', error instanceof Error ? error.message : String(error));
+      return this.errorResponse('keybinding', error instanceof Error ? error.message : String(error));
     }
 
     switch (params.action) {
@@ -154,7 +148,7 @@ export class KeybindingTools extends BaseTool {
         `⌨️ **Keybindings**${scope} — ${data.total} action(s)\n\n${lines || '_(none)_'}`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return keybindingErrorContent('list', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('list', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -169,7 +163,7 @@ export class KeybindingTools extends BaseTool {
         (data.hint ? `\n- **Hint:** ${data.hint}` : '');
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return keybindingErrorContent('get', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('get', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -179,7 +173,7 @@ export class KeybindingTools extends BaseTool {
       const text = `⌨️ **Set** \`${data.id}\` → ${fmtBindings(data.bindings)} _(client only)_`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return keybindingErrorContent('set', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('set', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -189,7 +183,7 @@ export class KeybindingTools extends BaseTool {
       const text = `⌨️ **Reset** \`${data.id}\` → ${fmtBindings(data.bindings)} _(defaults, client only)_`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return keybindingErrorContent('reset-action', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('reset-action', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -207,7 +201,7 @@ export class KeybindingTools extends BaseTool {
       const text = `⌨️ **Reset-all** — restored ${data.count} action(s) to defaults _(client only)_`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return keybindingErrorContent('reset-all', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('reset-all', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -226,7 +220,7 @@ export class KeybindingTools extends BaseTool {
         `⌨️ **Keybinding conflicts**${scope} — ${data.total} collision(s)\n\n${lines || '_(none)_'}`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return keybindingErrorContent('find-conflicts', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('find-conflicts', e instanceof Error ? e.message : String(e));
     }
   }
 }

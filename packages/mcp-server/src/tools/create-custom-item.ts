@@ -257,6 +257,8 @@ Security: script / preApplyScript / enableScript fields are executed by Foundry 
 
     let prose: string;
     const structured: any = {
+      // R2.1/D1 ALLOWLIST: grandfathered wire field (snapshot-locked, TOOL-IDEA-010 structuredContent).
+      // `data.success` is the unwrapped domain result's own field, not an envelope-consumer guard; kept verbatim.
       success: data.success !== false,
       scope,
       itemId: data.itemId ?? null,

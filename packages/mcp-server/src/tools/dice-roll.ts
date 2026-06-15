@@ -54,13 +54,6 @@ interface DiceRollSimulateResponse {
   mean: number;
 }
 
-function diceErrorContent(action: string, message: string) {
-  return {
-    content: [{ type: 'text' as const, text: `❌ **dice-roll/${action} failed**\n\n${message}` }],
-    isError: true,
-  };
-}
-
 export class DiceRollTools extends BaseTool {
   constructor(options: BaseToolOptions) {
     super(options);
@@ -256,9 +249,9 @@ export class DiceRollTools extends BaseTool {
     } catch (error) {
       if (error instanceof z.ZodError) {
         const messages = error.errors.map((e) => `${e.path.join('.') || '(root)'}: ${e.message}`);
-        return diceErrorContent('dice-roll', messages.join('; '));
+        return this.errorResponse('dice-roll', messages.join('; '));
       }
-      return diceErrorContent('dice-roll', error instanceof Error ? error.message : String(error));
+      return this.errorResponse('dice-roll', error instanceof Error ? error.message : String(error));
     }
 
     switch (params.action) {
@@ -285,7 +278,7 @@ export class DiceRollTools extends BaseTool {
       if (data.messageId) text += `\n- **Message:** \`${data.messageId}\``;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return diceErrorContent('roll', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('roll', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -295,7 +288,7 @@ export class DiceRollTools extends BaseTool {
       const text = `🎲 **Validate** \`${data.formula}\`\n\n- **Valid:** ${data.valid ? '✅ yes' : '❌ no'}`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return diceErrorContent('validate', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('validate', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -309,7 +302,7 @@ export class DiceRollTools extends BaseTool {
         `- **Max:** ${data.max}`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return diceErrorContent('simulate', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('simulate', e instanceof Error ? e.message : String(e));
     }
   }
 }

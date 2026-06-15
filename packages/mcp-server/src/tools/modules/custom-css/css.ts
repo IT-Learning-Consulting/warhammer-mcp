@@ -5,7 +5,7 @@
 //
 // Anchors:
 //   - DP-15: typed this.query<T> — never <any> on response.
-//   - CCR-G2: errorContent is module-local (not on BaseTool).
+//   - R2.4: errors route through the shared BaseTool.errorResponse (was a module-local errorContent helper).
 //   - Phase-5 F03 lesson: the formatter MUST surface worldStylesheet text on `get`,
 //     otherwise the caller receives an empty success message and never sees the CSS.
 
@@ -46,12 +46,6 @@ function truncate(css: string): string {
 
 // ── Inline error helper (CCR-G2) ──────────────────────────────────────────────
 
-function errorContent(action: string, message: string) {
-  return {
-    content: [{ type: 'text' as const, text: `module-css/${action} failed: ${message}` }],
-    isError: true,
-  };
-}
 
 // ── Format helpers ────────────────────────────────────────────────────────────
 
@@ -180,7 +174,7 @@ Examples:
       if (msg.includes('MODULE_NOT_ACTIVE')) {
         return moduleNotActiveContent('module-css', msg);
       }
-      return errorContent(action, msg);
+      return this.errorResponse(action, msg);
     }
   }
 }

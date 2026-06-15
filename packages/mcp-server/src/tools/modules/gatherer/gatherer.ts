@@ -24,12 +24,6 @@ import type {
 
 const text = (s: string) => ({ content: [{ type: 'text' as const, text: s }] });
 
-function errorContent(action: string, message: string) {
-  return {
-    content: [{ type: 'text' as const, text: `module-gatherer/${action} failed: ${message}` }],
-    isError: true,
-  };
-}
 
 function formatStatus(d: SpotStatusResult): string {
   const lines = [
@@ -168,7 +162,7 @@ Example: { action: "gather", pageUuid: "JournalEntry.x.JournalEntryPage.y", acto
       case 'configure-settings':
         return this.run<GenericGathererResult>(action, rawArgs, formatGenericGatherer(action));
       default:
-        return errorContent('unknown', `unknown action: ${action}`);
+        return this.errorResponse('unknown', `unknown action: ${action}`);
     }
   }
 
@@ -179,7 +173,7 @@ Example: { action: "gather", pageUuid: "JournalEntry.x.JournalEntryPage.y", acto
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (msg.includes('MODULE_NOT_ACTIVE')) return moduleNotActiveContent('module-gatherer', msg);
-      return errorContent(action, msg);
+      return this.errorResponse(action, msg);
     }
   }
 }

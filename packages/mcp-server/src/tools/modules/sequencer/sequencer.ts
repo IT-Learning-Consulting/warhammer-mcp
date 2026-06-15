@@ -6,7 +6,7 @@
 //
 // Anchors:
 //   - DP-15: typed this.query<T> — never <any>.
-//   - CCR-G2: errorContent module-local.
+//   - R2.4: errors route through the shared BaseTool.errorResponse.
 //   - Phase 5 module_integration_v1 acceptance criteria #2.
 
 import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
@@ -65,12 +65,6 @@ type SequencerResult = SequencerPlayResult | SequencerEffectsResult | DatabaseRe
 
 // ── Error helper ──────────────────────────────────────────────────────────────
 
-function errorContent(action: string, message: string) {
-  return {
-    content: [{ type: 'text' as const, text: `module-sequencer/${action} failed: ${message}` }],
-    isError: true,
-  };
-}
 
 // ── Format helpers ────────────────────────────────────────────────────────────
 
@@ -231,7 +225,7 @@ Examples:
       if (msg.includes('MODULE_NOT_ACTIVE')) {
         return moduleNotActiveContent('module-sequencer', msg);
       }
-      return errorContent(action, msg);
+      return this.errorResponse(action, msg);
     }
   }
 }

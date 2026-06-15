@@ -52,5 +52,30 @@ export abstract class BaseTool {
     return this.foundryClient.query<T>(`warhammer-mcp.${action}`, args);
   }
 
+  /**
+   * R2.4 — canonical MCP tool error envelope. Replaces the 48 per-file
+   * `errorContent` / `diceErrorContent` / `keybindingErrorContent` helpers (which
+   * carried 4 divergent text formats) with a single shared method. The JSON shape
+   * and `isError: true` flag are byte-identical to every prior variant — so the MCP
+   * protocol and the HC8 success-path wire contract are unaffected; only the
+   * human-readable error PROSE is standardized (journal ADR + deliberate error-path
+   * snapshot update, Phase 2.4 / D2).
+   *
+   * `action` is the failing action label. Tools that disambiguate by tool name fold
+   * the prefix into `action` themselves (e.g. `this.errorResponse(`${TOOL_NAME}/${action}`, msg)`).
+   *
+   * The explicit literal return type narrows `type`/`isError` so the object satisfies
+   * the SDK `CallToolResult` shape without `as const` at the 248 call sites.
+   */
+  protected errorResponse(
+    action: string,
+    message: string,
+  ): { content: [{ type: 'text'; text: string }]; isError: true } {
+    return {
+      content: [{ type: 'text', text: `❌ **${action} failed**\n\n${message}` }],
+      isError: true,
+    };
+  }
+
   abstract getToolDefinitions(): any[];
 }

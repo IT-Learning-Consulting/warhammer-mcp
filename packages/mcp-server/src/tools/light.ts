@@ -6,7 +6,7 @@
 //
 // **CCR-Envelope-Consumer:** every handler uses a concrete typed generic on
 // `this.query<...>` — no `<any>`. Each handler wraps its query call in
-// try/catch and routes errors through errorContent().
+// try/catch and routes errors through this.errorResponse().
 //
 // **BUG-069 compliance:** this.query<T> returns BARE unwrapped data; never check
 // the success field on the return value; never use this.query<any>.
@@ -58,12 +58,6 @@ type LightListResponse = LightListBareResponse | LightListPaginatedResponse | Li
 
 // ── Utilities ────────────────────────────────────────────────────────────────
 
-function errorContent(action: string, message: string) {
-  return {
-    content: [{ type: 'text' as const, text: `❌ **light/${action} failed**\n\n${message}` }],
-    isError: true,
-  };
-}
 
 function formatLightView(l: LightViewModel): string {
   const cfg = l.config;
@@ -210,7 +204,7 @@ export class LightTool extends BaseTool {
         `_Requested fields: ${Object.keys(data.requestedChanges).filter((k) => k !== 'action' && k !== 'sceneId').join(', ') || '(x/y only)'}_`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('create', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('create', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -221,7 +215,7 @@ export class LightTool extends BaseTool {
         `✏️ **AmbientLight Updated**\n\n**Changed fields:** ${data.changedFields.join(', ')}\n\n${formatLightView(data.light)}`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('update', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('update', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -232,7 +226,7 @@ export class LightTool extends BaseTool {
         `🗑️ **AmbientLight Deleted**\n\n**ID:** \`${data.deletedId}\`\n**Remaining lights on scene:** ${data.remainingLights}\n\n⚠️ Permanent.`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('delete', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('delete', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -241,7 +235,7 @@ export class LightTool extends BaseTool {
       const data = await this.query<LightGetResponse>('light', args);
       return { content: [{ type: 'text' as const, text: formatLightView(data.light) }] };
     } catch (e) {
-      return errorContent('get', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('get', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -270,7 +264,7 @@ export class LightTool extends BaseTool {
       const text = `💡 **AmbientLights** (${bare.lights.length})\n\n${lines.join('\n')}`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('list', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('list', e instanceof Error ? e.message : String(e));
     }
   }
 }

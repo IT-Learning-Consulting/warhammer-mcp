@@ -433,24 +433,9 @@ export async function deleteRollTable(data: unknown): Promise<Envelope<{ tableId
     // TableResult.documentUuid lives on individual results, not the table itself.
     let affectedDocs: import('@foundry-mcp/shared').FkAffectedDocEntry[] | undefined;
     if ((input as any).cascade === true) {
-      const { walkInboundFor, clearOrphanRef } = await import('./cross-doc-fk.js');
-      const inbound = await walkInboundFor('RollTable', input.tableId);
-      affectedDocs = [];
-      for (const ref of inbound) {
-        await clearOrphanRef({
-          sourceDocType: ref.sourceDocType,
-          sourceDocId: ref.sourceDocId,
-          sourceField: ref.sourceField,
-          refDocType: ref.refDocType,
-          refId: ref.refId,
-        });
-        affectedDocs.push({
-          type: ref.sourceDocType,
-          id: ref.sourceDocId,
-          name: ref.sourceDocName,
-          fkField: ref.sourceField,
-        });
-      }
+      // R2.3: extracted byte-identical walkInboundFor→clearOrphanRef→affectedDocs loop.
+      const { clearInboundOrphansFor } = await import('./cross-doc-fk.js');
+      affectedDocs = await clearInboundOrphansFor('RollTable', input.tableId);
     }
 
     await table.delete();

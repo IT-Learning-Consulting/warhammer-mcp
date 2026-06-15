@@ -36,12 +36,6 @@ interface PreviewResponse { success: true; documentType: string; name: string; e
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
 
-function errorContent(action: string, message: string) {
-  return {
-    content: [{ type: 'text' as const, text: `**document-io/${action} failed**\n\n${message}` }],
-    isError: true,
-  };
-}
 
 function formatExport(r: DocumentIoExportResult): string {
   const dataStr = JSON.stringify(r.data, null, 2);
@@ -191,20 +185,20 @@ IMPORTANT: This tool implements CLONE / TEMPLATE semantics, NOT backup/restore.
     try {
       const data = await this.query<ExportResponse>('document-io', args);
       return { content: [{ type: 'text' as const, text: formatExport(data) }] };
-    } catch (e) { return errorContent('export', e instanceof Error ? e.message : String(e)); }
+    } catch (e) { return this.errorResponse('export', e instanceof Error ? e.message : String(e)); }
   }
 
   private async handleImportAsNew(args: ArgsFor<'import-as-new'>) {
     try {
       const data = await this.query<ImportResponse>('document-io', args);
       return { content: [{ type: 'text' as const, text: formatImport(data) }] };
-    } catch (e) { return errorContent('import-as-new', e instanceof Error ? e.message : String(e)); }
+    } catch (e) { return this.errorResponse('import-as-new', e instanceof Error ? e.message : String(e)); }
   }
 
   private async handlePreview(args: ArgsFor<'preview'>) {
     try {
       const data = await this.query<PreviewResponse>('document-io', args);
       return { content: [{ type: 'text' as const, text: formatPreview(data) }] };
-    } catch (e) { return errorContent('preview', e instanceof Error ? e.message : String(e)); }
+    } catch (e) { return this.errorResponse('preview', e instanceof Error ? e.message : String(e)); }
   }
 }

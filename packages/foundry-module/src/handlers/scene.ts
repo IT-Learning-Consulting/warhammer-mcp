@@ -68,6 +68,8 @@ import {
 } from '@foundry-mcp/shared';
 import { wrappedWrite, transactionManager } from '../transaction-manager.js';
 import { notify } from '../notify.js';
+// R2.2 dedup: canonical deepStripUndefined (was a local byte-identical copy).
+import { deepStripUndefined } from '../utils/embeddedCRUDFactory.js';
 
 // ── Local types ──────────────────────────────────────────────────────────────
 
@@ -112,21 +114,6 @@ function validateGMAccess(): AccessGate {
 function stripUndefined<T extends Record<string, any>>(obj: T): T {
   Object.keys(obj).forEach((k) => obj[k] === undefined && delete obj[k]);
   return obj;
-}
-
-function deepStripUndefined<T>(value: T): T {
-  if (Array.isArray(value)) {
-    return value.map(deepStripUndefined) as any;
-  }
-  if (value && typeof value === 'object') {
-    const out: Record<string, any> = {};
-    for (const [k, v] of Object.entries(value as Record<string, any>)) {
-      if (v === undefined) continue;
-      out[k] = deepStripUndefined(v);
-    }
-    return out as any;
-  }
-  return value;
 }
 
 function getSceneOrThrow(sceneId: string): any {
@@ -518,24 +505,9 @@ export async function deleteScene(data: unknown): Promise<Envelope<SceneDeleteRe
     // Stale FK is less corrupt than orphan FK if delete throws after clears.
     let affectedDocs: import('@foundry-mcp/shared').FkAffectedDocEntry[] | undefined;
     if (input.cascade === true) {
-      const { walkInboundFor, clearOrphanRef } = await import('./cross-doc-fk.js');
-      const inbound = await walkInboundFor('Scene', input.sceneId);
-      affectedDocs = [];
-      for (const ref of inbound) {
-        await clearOrphanRef({
-          sourceDocType: ref.sourceDocType,
-          sourceDocId: ref.sourceDocId,
-          sourceField: ref.sourceField,
-          refDocType: ref.refDocType,
-          refId: ref.refId,
-        });
-        affectedDocs.push({
-          type: ref.sourceDocType,
-          id: ref.sourceDocId,
-          name: ref.sourceDocName,
-          fkField: ref.sourceField,
-        });
-      }
+      // R2.3: extracted byte-identical walkInboundFor→clearOrphanRef→affectedDocs loop.
+      const { clearInboundOrphansFor } = await import('./cross-doc-fk.js');
+      affectedDocs = await clearInboundOrphansFor('Scene', input.sceneId);
     }
 
     await scene.delete();

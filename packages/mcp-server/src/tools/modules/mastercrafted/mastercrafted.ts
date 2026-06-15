@@ -28,12 +28,6 @@ import type {
 
 const text = (s: string) => ({ content: [{ type: 'text' as const, text: s }] });
 
-function errorContent(action: string, message: string) {
-  return {
-    content: [{ type: 'text' as const, text: `module-mastercrafted/${action} failed: ${message}` }],
-    isError: true,
-  };
-}
 
 function recipeLine(r: RecipeSummary): string {
   const t = r.time ? ` (${r.time}m)` : '';
@@ -225,7 +219,7 @@ Example: { action: "execute-craft", pageUuid: "JournalEntry.x.JournalEntryPage.y
       case 'delete-recipe-book':
         return this.run<GenericMastercraftedResult>(action, rawArgs, formatGenericMc(action));
       default:
-        return errorContent('unknown', `unknown action: ${action}`);
+        return this.errorResponse('unknown', `unknown action: ${action}`);
     }
   }
 
@@ -236,7 +230,7 @@ Example: { action: "execute-craft", pageUuid: "JournalEntry.x.JournalEntryPage.y
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (msg.includes('MODULE_NOT_ACTIVE')) return moduleNotActiveContent('module-mastercrafted', msg);
-      return errorContent(action, msg);
+      return this.errorResponse(action, msg);
     }
   }
 }

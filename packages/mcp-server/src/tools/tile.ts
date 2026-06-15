@@ -6,7 +6,7 @@
 //
 // **CCR-Envelope-Consumer:** every handler uses a concrete typed generic on
 // `this.query<...>` — no `<any>`. Each handler wraps its query call in
-// try/catch and routes errors through errorContent().
+// try/catch and routes errors through this.errorResponse().
 //
 // **BUG-069 compliance:** this.query<T> returns BARE unwrapped data; never check
 // the success field on the return value; never use this.query<any>.
@@ -65,12 +65,6 @@ interface TileListResponse {
 
 // ── Utilities ────────────────────────────────────────────────────────────────
 
-function errorContent(action: string, message: string) {
-  return {
-    content: [{ type: 'text' as const, text: `❌ **tile/${action} failed**\n\n${message}` }],
-    isError: true,
-  };
-}
 
 function formatTileView(t: TileViewModel): string {
   return [
@@ -251,7 +245,7 @@ export class TileTool extends BaseTool {
       const text = `🧬 **Tile Duplicated**\n\n_From \`${data.sourceId}\`_\n\n${formatTileView(data.tile)}`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('duplicate', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('duplicate', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -261,7 +255,7 @@ export class TileTool extends BaseTool {
       const text = `🔀 **Tile ${action}**\n\nsort now ${data.tile.sort}\n\n${formatTileView(data.tile)}`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent(action, e instanceof Error ? e.message : String(e));
+      return this.errorResponse(action, e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -276,7 +270,7 @@ export class TileTool extends BaseTool {
         `_Requested fields: ${changedKeys}_`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('create', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('create', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -287,7 +281,7 @@ export class TileTool extends BaseTool {
         `✏️ **Tile Updated**\n\n**Changed fields:** ${data.changedFields.join(', ')}\n\n${formatTileView(data.tile)}`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('update', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('update', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -298,7 +292,7 @@ export class TileTool extends BaseTool {
         `🗑️ **Tile Deleted**\n\n**ID:** \`${data.deletedId}\`\n**Scene:** \`${data.sceneId}\`\n\n⚠️ Permanent.`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('delete', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('delete', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -307,7 +301,7 @@ export class TileTool extends BaseTool {
       const data = await this.query<TileGetResponse>('tile', args);
       return { content: [{ type: 'text' as const, text: formatTileView(data.tile) }] };
     } catch (e) {
-      return errorContent('get', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('get', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -331,7 +325,7 @@ export class TileTool extends BaseTool {
       const text = `🟩 **Tiles**${pageInfo}\n\n${lines.join('\n')}`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('list', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('list', e instanceof Error ? e.message : String(e));
     }
   }
 }

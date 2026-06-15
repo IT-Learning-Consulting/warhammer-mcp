@@ -402,13 +402,6 @@ export class OwnershipTool extends BaseTool {
     }
   }
 
-  private errorResponse(action: string, error: string) {
-    return {
-      content: [{ type: "text", text: `❌ **ownership.${action} failed**\n\n${error}` }],
-      isError: true,
-    };
-  }
-
   private getLevelName(level: number): string {
     switch (level) {
       case -1: return "Inherit";

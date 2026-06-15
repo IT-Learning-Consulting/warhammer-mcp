@@ -23,12 +23,6 @@ import { BaseTool, BaseToolOptions } from '../base-tool.js';
 type DiseaseArgs = z.infer<typeof DiseaseToolInput>;
 type ArgsFor<A extends DiseaseArgs['action']> = Extract<DiseaseArgs, { action: A }>;
 
-function errorContent(action: string, message: string) {
-  return {
-    content: [{ type: 'text' as const, text: `❌ **disease/${action} failed**\n\n${message}` }],
-    isError: true,
-  };
-}
 
 export interface DiseaseToolOptions extends BaseToolOptions {}
 
@@ -130,7 +124,7 @@ export class DiseaseTool extends BaseTool {
         ],
       };
     } catch (e) {
-      return errorContent('list', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('list', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -164,7 +158,7 @@ export class DiseaseTool extends BaseTool {
         ],
       };
     } catch (e) {
-      return errorContent('contract', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('contract', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -183,7 +177,7 @@ export class DiseaseTool extends BaseTool {
         ],
       };
     } catch (e) {
-      return errorContent('start', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('start', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -201,7 +195,7 @@ export class DiseaseTool extends BaseTool {
         ],
       };
     } catch (e) {
-      return errorContent('increment', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('increment', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -219,7 +213,7 @@ export class DiseaseTool extends BaseTool {
         ],
       };
     } catch (e) {
-      return errorContent('decrement', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('decrement', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -237,7 +231,7 @@ export class DiseaseTool extends BaseTool {
       }
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('finish-duration', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('finish-duration', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -256,7 +250,7 @@ export class DiseaseTool extends BaseTool {
         ],
       };
     } catch (e) {
-      return errorContent('apply-symptom', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('apply-symptom', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -272,7 +266,7 @@ export class DiseaseTool extends BaseTool {
         ],
       };
     } catch (e) {
-      return errorContent('cure', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('cure', e instanceof Error ? e.message : String(e));
     }
   }
 }

@@ -56,12 +56,6 @@ interface ActorConfigSetArtResponse {
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
 
-function errorContent(action: string, message: string) {
-  return {
-    content: [{ type: 'text' as const, text: `❌ **actor-config/${action} failed**\n\n${message}` }],
-    isError: true,
-  };
-}
 
 // ── Tool class ────────────────────────────────────────────────────────────────
 
@@ -186,7 +180,7 @@ Use extraFields for any unmodeled field.
         `\`\`\`json\n${JSON.stringify(data.prototypeToken, null, 2)}\n\`\`\``;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('get-prototype-token', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('get-prototype-token', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -202,7 +196,7 @@ Use extraFields for any unmodeled field.
           : '');
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('update-prototype-token', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('update-prototype-token', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -222,7 +216,7 @@ Use extraFields for any unmodeled field.
       }
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('get-art', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('get-art', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -245,7 +239,7 @@ Use extraFields for any unmodeled field.
       }
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('set-art', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('set-art', e instanceof Error ? e.message : String(e));
     }
   }
 }

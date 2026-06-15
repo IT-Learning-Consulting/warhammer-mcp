@@ -8,7 +8,7 @@
 // (register-command [HIGH — callbackBody is arbitrary JS; DEPENDENCY_GATED on advanced-macros],
 // unregister-command [MEDIUM — deletes the backing macro]).
 //
-// Anchors: DP-15 (concrete this.query<T> per action — never <any>); CCR-G2 (errorContent module-local).
+// Anchors: DP-15 (concrete this.query<T> per action — never <any>); R2.4 (errors via BaseTool.errorResponse).
 
 import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
 import { moduleNotActiveContent } from '../_shared/module-guard.js';
@@ -22,12 +22,6 @@ import type {
 
 const text = (s: string) => ({ content: [{ type: 'text' as const, text: s }] });
 
-function errorContent(action: string, message: string) {
-  return {
-    content: [{ type: 'text' as const, text: `module-chat-commander/${action} failed: ${message}` }],
-    isError: true,
-  };
-}
 
 // ── Per-action formatters (surface every handler-returned field) ─────────────
 
@@ -150,11 +144,11 @@ Example: { action: "list-commands", filter: { module: "chat-commander-wfrp4e" } 
       case 'register-command': return this.run<RegisterCommandResult>(action, rawArgs, formatRegister);
       case 'unregister-command': return this.run<UnregisterCommandResult>(action, rawArgs, formatUnregister);
       default:
-        return errorContent('unknown', `unknown action: ${action}`);
+        return this.errorResponse('unknown', `unknown action: ${action}`);
     }
   }
 
-  /** Run one action: typed query + format, intercept MODULE_NOT_ACTIVE, else errorContent. */
+  /** Run one action: typed query + format, intercept MODULE_NOT_ACTIVE, else BaseTool.errorResponse. */
   private async run<T>(action: string, args: Record<string, unknown>, fmt: (d: T) => string) {
     try {
       const data = await this.query<T>('module-chat-commander', args);
@@ -162,7 +156,7 @@ Example: { action: "list-commands", filter: { module: "chat-commander-wfrp4e" } 
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (msg.includes('MODULE_NOT_ACTIVE')) return moduleNotActiveContent('module-chat-commander', msg);
-      return errorContent(action, msg);
+      return this.errorResponse(action, msg);
     }
   }
 }

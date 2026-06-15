@@ -43,13 +43,6 @@ const JSON_VALUE_INPUT_SCHEMA = {
     description: '[flag-set] JSON-serializable value to store.',
 };
 
-function errorContent(action: string, message: string) {
-    return {
-        content: [{ type: 'text' as const, text: `User/${action} failed: ${message}` }],
-        isError: true,
-    };
-}
-
 function formatUserListItem(user: UserListItem): string {
     return (
         `- \`${user.id}\` ${user.name}` +
@@ -268,7 +261,7 @@ Examples:
             const text = `Users (${data.items.length} of ${data.total})\n\n- **Offset:** ${data.offset}\n- **Limit:** ${data.limit}\n\n${lines.join('\n')}`;
             return { content: [{ type: 'text' as const, text }] };
         } catch (e) {
-            return errorContent('list', e instanceof Error ? e.message : String(e));
+            return this.errorResponse('list', e instanceof Error ? e.message : String(e));
         }
     }
 
@@ -277,7 +270,7 @@ Examples:
             const data = await this.query<UserGetResponse>('user', args);
             return { content: [{ type: 'text' as const, text: formatUserView(data.user, data.hotbar) }] };
         } catch (e) {
-            return errorContent('get', e instanceof Error ? e.message : String(e));
+            return this.errorResponse('get', e instanceof Error ? e.message : String(e));
         }
     }
 
@@ -285,7 +278,7 @@ Examples:
         const provided = ['name', 'color', 'avatar', 'pronouns', 'character', 'permissions']
             .filter((key) => Object.prototype.hasOwnProperty.call(args, key));
         if (provided.length === 0) {
-            return errorContent('update', 'USER_EMPTY_PAYLOAD: update requires at least one writable field');
+            return this.errorResponse('update', 'USER_EMPTY_PAYLOAD: update requires at least one writable field');
         }
 
         try {
@@ -293,7 +286,7 @@ Examples:
             const text = `User Updated\n\n**Changed fields:** ${data.changedFields.join(', ')}\n\n${formatUserView(data.user, null)}`;
             return { content: [{ type: 'text' as const, text }] };
         } catch (e) {
-            return errorContent('update', e instanceof Error ? e.message : String(e));
+            return this.errorResponse('update', e instanceof Error ? e.message : String(e));
         }
     }
 
@@ -312,7 +305,7 @@ Examples:
             ].join('\n');
             return { content: [{ type: 'text' as const, text }] };
         } catch (e) {
-            return errorContent('set-role', e instanceof Error ? e.message : String(e));
+            return this.errorResponse('set-role', e instanceof Error ? e.message : String(e));
         }
     }
 
@@ -321,7 +314,7 @@ Examples:
             const data = await this.query<UserHotbarListResponse>('user', args);
             return { content: [{ type: 'text' as const, text: formatHotbarList(data) }] };
         } catch (e) {
-            return errorContent('hotbar-list', e instanceof Error ? e.message : String(e));
+            return this.errorResponse('hotbar-list', e instanceof Error ? e.message : String(e));
         }
     }
 
@@ -340,7 +333,7 @@ Examples:
             ].join('\n');
             return { content: [{ type: 'text' as const, text }] };
         } catch (e) {
-            return errorContent('hotbar-assign', e instanceof Error ? e.message : String(e));
+            return this.errorResponse('hotbar-assign', e instanceof Error ? e.message : String(e));
         }
     }
 
@@ -358,7 +351,7 @@ Examples:
             ].join('\n');
             return { content: [{ type: 'text' as const, text }] };
         } catch (e) {
-            return errorContent('hotbar-clear', e instanceof Error ? e.message : String(e));
+            return this.errorResponse('hotbar-clear', e instanceof Error ? e.message : String(e));
         }
     }
 
@@ -375,7 +368,7 @@ Examples:
             ].join('\n');
             return { content: [{ type: 'text' as const, text }] };
         } catch (e) {
-            return errorContent('flag-set', e instanceof Error ? e.message : String(e));
+            return this.errorResponse('flag-set', e instanceof Error ? e.message : String(e));
         }
     }
 
@@ -391,7 +384,7 @@ Examples:
             ].join('\n');
             return { content: [{ type: 'text' as const, text }] };
         } catch (e) {
-            return errorContent('flag-clear', e instanceof Error ? e.message : String(e));
+            return this.errorResponse('flag-clear', e instanceof Error ? e.message : String(e));
         }
     }
 }

@@ -5,7 +5,7 @@
 //
 // Anchors:
 //   - DP-15: typed this.query<T> — never <any> on response.
-//   - CCR-G2: errorContent is module-local (not on BaseTool).
+//   - R2.4: errors route through the shared BaseTool.errorResponse (was a module-local errorContent helper).
 //   - Phase 9 module_integration_v1 — dossier §3 (CAP-01) + §5.
 
 import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
@@ -14,12 +14,6 @@ import type { RobakRollResult } from './schemas.js';
 
 // ── Inline error helper (CCR-G2) ──────────────────────────────────────────────
 
-function errorContent(action: string, message: string) {
-  return {
-    content: [{ type: 'text' as const, text: `module-robak/${action} failed: ${message}` }],
-    isError: true,
-  };
-}
 
 function formatRoll(r: RobakRollResult): string {
   const sl = r.sl ?? '?';
@@ -123,7 +117,7 @@ Example:
       if (msg.includes('MODULE_NOT_ACTIVE')) {
         return moduleNotActiveContent('module-robak', msg);
       }
-      return errorContent(action, msg);
+      return this.errorResponse(action, msg);
     }
   }
 }

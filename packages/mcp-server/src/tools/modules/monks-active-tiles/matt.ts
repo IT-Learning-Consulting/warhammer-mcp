@@ -2,7 +2,7 @@
 //
 // Always-registered umbrella. The foundry-module handler guards on monks-active-tiles being
 // active; when inactive it returns MODULE_NOT_ACTIVE which BaseTool.query() converts to a throw →
-// errorContent(). Use module-probe.is-active to pre-flight.
+// this.errorResponse(). Use module-probe.is-active to pre-flight.
 //
 // 19 actions: reads (get-capabilities/get-trigger-tile/list-trigger-tiles/validate-sequence),
 // authoring (create-trigger-tile/update-trigger-config), sequence editing (replace/add/insert/
@@ -11,7 +11,7 @@
 //
 // Anchors:
 //   - DP-15: concrete this.query<T> per action — never <any>.
-//   - CCR-G2 (mcp-builder): errorContent is module-local (not on BaseTool).
+//   - R2.4 (mcp-builder): errors route through the shared BaseTool.errorResponse.
 //   - CCR-G9: tool name = 'module-matt'; description documents conditionality + pre-flight.
 
 import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
@@ -179,12 +179,6 @@ interface LinkRegionResponse {
 
 // ── Inline error helper (CCR-G2 — NOT on BaseTool) ───────────────────────────
 
-function errorContent(action: string, message: string) {
-  return {
-    content: [{ type: 'text' as const, text: `module-matt/${action} failed: ${message}` }],
-    isError: true,
-  };
-}
 
 const text = (s: string) => ({ content: [{ type: 'text' as const, text: s }] });
 
@@ -445,12 +439,12 @@ Examples:
         return this.run<LinkRegionResponse>('link-region-trigger', args, formatLinkRegion);
       default: {
         const _exhaustive: never = args;
-        return errorContent('unknown', `unknown action: ${String((_exhaustive as any)?.action)}`);
+        return this.errorResponse('unknown', `unknown action: ${String((_exhaustive as any)?.action)}`);
       }
     }
   }
 
-  /** Run one action: typed query + format, or errorContent on throw. */
+  /** Run one action: typed query + format, or BaseTool.errorResponse on throw. */
   private async run<T>(
     action: string,
     args: Record<string, unknown>,
@@ -460,7 +454,7 @@ Examples:
       const data = await this.query<T>('module-matt', args);
       return text(fmt(data));
     } catch (e) {
-      return errorContent(action, e instanceof Error ? e.message : String(e));
+      return this.errorResponse(action, e instanceof Error ? e.message : String(e));
     }
   }
 }

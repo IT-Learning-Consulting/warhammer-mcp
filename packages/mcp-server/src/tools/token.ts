@@ -6,7 +6,7 @@
 //
 // **CCR-Envelope-Consumer:** every handler uses a concrete typed generic on
 // `this.query<...>` — no `<any>`. Each handler wraps its query call in
-// try/catch and routes errors through errorContent().
+// try/catch and routes errors through this.errorResponse().
 //
 // **BUG-069 compliance:** this.query<T> returns BARE unwrapped data; never check
 // the success field on the return value; never use this.query<any>.
@@ -64,12 +64,6 @@ interface TokenAddResponse {
 
 // ── Utilities ────────────────────────────────────────────────────────────────
 
-function errorContent(action: string, message: string) {
-  return {
-    content: [{ type: 'text' as const, text: `❌ **token/${action} failed**\n\n${message}` }],
-    isError: true,
-  };
-}
 
 const DISPOSITION_LABEL: Record<number, string> = {
   [-2]: 'SECRET',
@@ -314,7 +308,7 @@ export class TokenTool extends BaseTool {
         `_Requested fields: ${reqFields}_`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('create', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('create', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -325,7 +319,7 @@ export class TokenTool extends BaseTool {
         `✏️ **Token Updated**\n\n**Changed fields:** ${data.changedFields.join(', ')}\n\n${formatTokenView(data.token)}`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('update', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('update', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -339,7 +333,7 @@ export class TokenTool extends BaseTool {
         `⚠️ Permanent.`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('delete', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('delete', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -348,7 +342,7 @@ export class TokenTool extends BaseTool {
       const data = await this.query<TokenGetResponse>('token', args);
       return { content: [{ type: 'text' as const, text: formatTokenView(data.token) }] };
     } catch (e) {
-      return errorContent('get', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('get', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -370,7 +364,7 @@ export class TokenTool extends BaseTool {
       const text = `🎭 **Tokens** (${pageInfo})\n\n${lines.join('\n')}`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('list', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('list', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -387,7 +381,7 @@ export class TokenTool extends BaseTool {
         `**Token IDs:**\n${idList}`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('add', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('add', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -401,7 +395,7 @@ export class TokenTool extends BaseTool {
         `⚠️ Permanent.`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('delete-token', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('delete-token', e instanceof Error ? e.message : String(e));
     }
   }
 }

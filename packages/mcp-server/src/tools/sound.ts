@@ -6,7 +6,7 @@
 //
 // **CCR-Envelope-Consumer:** every handler uses a concrete typed generic on
 // `this.query<...>` — no `<any>`. Each handler wraps its query call in
-// try/catch and routes errors through errorContent().
+// try/catch and routes errors through this.errorResponse().
 //
 // **BUG-069 compliance:** this.query<T> returns BARE unwrapped data; never check
 // the success field on the return value; never use this.query<any>.
@@ -62,12 +62,6 @@ type SoundListResponse = SoundListBareResponse | SoundListPaginatedResponse | So
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
 
-function errorContent(action: string, message: string) {
-  return {
-    content: [{ type: 'text' as const, text: `❌ **sound/${action} failed**\n\n${message}` }],
-    isError: true,
-  };
-}
 
 function formatSoundView(s: SoundViewModel): string {
   return [
@@ -225,7 +219,7 @@ export class SoundTool extends BaseTool {
       const text = `🧬 **AmbientSound Duplicated**\n\n_From \`${data.sourceId}\`_\n\n${formatSoundView(data.sound)}`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('duplicate', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('duplicate', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -237,7 +231,7 @@ export class SoundTool extends BaseTool {
         `_Requested fields: ${Object.keys(data.requestedChanges).filter((k) => k !== 'action' && k !== 'sceneId').join(', ') || '(x/y only)'}_`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('create', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('create', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -248,7 +242,7 @@ export class SoundTool extends BaseTool {
         `✏️ **AmbientSound Updated**\n\n**Changed fields:** ${data.changedFields.join(', ')}\n\n${formatSoundView(data.sound)}`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('update', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('update', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -259,7 +253,7 @@ export class SoundTool extends BaseTool {
         `🗑️ **AmbientSound Deleted**\n\n**ID:** \`${data.deletedId}\`\n**Remaining sounds on scene:** ${data.remainingSounds}\n\n⚠️ Permanent.`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('delete', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('delete', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -268,7 +262,7 @@ export class SoundTool extends BaseTool {
       const data = await this.query<SoundGetResponse>('sound', args);
       return { content: [{ type: 'text' as const, text: formatSoundView(data.sound) }] };
     } catch (e) {
-      return errorContent('get', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('get', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -297,7 +291,7 @@ export class SoundTool extends BaseTool {
       const text = `🔊 **AmbientSounds** (${bare.sounds.length})\n\n${lines.join('\n')}`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('list', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('list', e instanceof Error ? e.message : String(e));
     }
   }
 }

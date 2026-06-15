@@ -12,7 +12,7 @@
 //
 // Anchors:
 //   - DP-15: typed this.query<T> — never <any>.
-//   - CCR-G2: errorContent is module-local (not on BaseTool).
+//   - R2.4: errors route through the shared BaseTool.errorResponse (was a module-local errorContent helper).
 //   - F03: generic formatter emits the full returned payload (no silent field drops).
 //   - dossiers/access-control.md + modules-docs/{LocknKey,LockView}/capability-manifest.json.
 
@@ -25,14 +25,6 @@ const TOOL_NAME = 'module-access-control' as const;
 // heterogeneous payload per action; a permissive record keeps the contract typed while
 // the generic formatter emits every field (F03).
 type AccessControlResult = Record<string, unknown>;
-
-// ── Error helper (CCR-G2 — NOT on BaseTool) ───────────────────────────────────
-function errorContent(action: string, message: string) {
-  return {
-    content: [{ type: 'text' as const, text: `${TOOL_NAME}/${action} failed: ${message}` }],
-    isError: true,
-  };
-}
 
 export interface ModuleAccessControlToolOptions extends BaseToolOptions {}
 
@@ -201,7 +193,7 @@ GM required for all write actions. Forced-viewport + circumvent + transfer requi
       if (msg.includes('MODULE_NOT_ACTIVE') || msg.includes('MODULE_DEPENDENCY_NOT_ACTIVE')) {
         return moduleNotActiveContent(TOOL_NAME, msg);
       }
-      return errorContent(action, msg);
+      return this.errorResponse(`${TOOL_NAME}/${action}`, msg);
     }
   }
 

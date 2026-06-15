@@ -568,10 +568,4 @@ export class JournalTool extends BaseTool {
     }
   }
 
-  private errorResponse(action: string, error: string) {
-    return {
-      content: [{ type: 'text' as const, text: `❌ **journal.${action} failed**\n\n${error}` }],
-      isError: true,
-    };
-  }
 }

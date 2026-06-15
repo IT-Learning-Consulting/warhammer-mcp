@@ -7,7 +7,7 @@
 // 8 actions: reads (list, get) + GM-gated writes (set-value, increment, decrement, update-meta) +
 // confirm-gated writes (create, delete).
 //
-// Anchors: DP-15 (concrete this.query<T> per action — never <any>); CCR-G2 (errorContent module-local).
+// Anchors: DP-15 (concrete this.query<T> per action — never <any>); R2.4 (errors via BaseTool.errorResponse).
 
 import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
 import { moduleNotActiveContent } from '../_shared/module-guard.js';
@@ -25,12 +25,6 @@ import type {
 
 const text = (s: string) => ({ content: [{ type: 'text' as const, text: s }] });
 
-function errorContent(action: string, message: string) {
-  return {
-    content: [{ type: 'text' as const, text: `module-party-resources/${action} failed: ${message}` }],
-    isError: true,
-  };
-}
 
 // ── Per-action formatters (surface every handler-returned field — Phase-6 drift lesson) ─────
 
@@ -139,11 +133,11 @@ Example: { action: "create", resourceId: "doom_track", name: "Doom", value: 0, m
       case 'create': return this.run<PartyCreateResult>(action, rawArgs, formatCreate);
       case 'delete': return this.run<PartyDeleteResult>(action, rawArgs, formatDelete);
       default:
-        return errorContent('unknown', `unknown action: ${action}`);
+        return this.errorResponse('unknown', `unknown action: ${action}`);
     }
   }
 
-  /** Run one action: typed query + format, intercept MODULE_NOT_ACTIVE, else errorContent. */
+  /** Run one action: typed query + format, intercept MODULE_NOT_ACTIVE, else BaseTool.errorResponse. */
   private async run<T>(action: string, args: Record<string, unknown>, fmt: (d: T) => string) {
     try {
       const data = await this.query<T>('module-party-resources', args);
@@ -151,7 +145,7 @@ Example: { action: "create", resourceId: "doom_track", name: "Doom", value: 0, m
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (msg.includes('MODULE_NOT_ACTIVE')) return moduleNotActiveContent('module-party-resources', msg);
-      return errorContent(action, msg);
+      return this.errorResponse(action, msg);
     }
   }
 }

@@ -1,6 +1,10 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`ModuleProbeTool — characterization > is-active — error branch 1`] = `"module-probe/is-active failed: Foundry connection lost"`;
+exports[`ModuleProbeTool — characterization > is-active — error branch 1`] = `
+"❌ **is-active failed**
+
+Foundry connection lost"
+`;
 
 exports[`ModuleProbeTool — characterization > is-active — module active 1`] = `"Module "monks-active-tiles" (Monk's Active Tiles v12.15): ACTIVE"`;
 

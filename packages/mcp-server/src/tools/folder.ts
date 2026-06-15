@@ -68,12 +68,6 @@ interface FolderListContentsResponse {
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
-function errorContent(action: string, message: string) {
-    return {
-        content: [{ type: 'text' as const, text: `Folder/${action} failed: ${message}` }],
-        isError: true,
-    };
-}
 
 function formatFolderView(folder: FolderViewModel): string {
     return [
@@ -277,7 +271,7 @@ Examples:
             ].join('\n');
             return { content: [{ type: 'text' as const, text }] };
         } catch (e) {
-            return errorContent('create', e instanceof Error ? e.message : String(e));
+            return this.errorResponse('create', e instanceof Error ? e.message : String(e));
         }
     }
 
@@ -293,7 +287,7 @@ Examples:
             ].join('\n');
             return { content: [{ type: 'text' as const, text }] };
         } catch (e) {
-            return errorContent('update', e instanceof Error ? e.message : String(e));
+            return this.errorResponse('update', e instanceof Error ? e.message : String(e));
         }
     }
 
@@ -308,7 +302,7 @@ Examples:
             ].join('\n');
             return { content: [{ type: 'text' as const, text }] };
         } catch (e) {
-            return errorContent('delete', e instanceof Error ? e.message : String(e));
+            return this.errorResponse('delete', e instanceof Error ? e.message : String(e));
         }
     }
 
@@ -317,7 +311,7 @@ Examples:
             const data = await this.query<FolderGetResponse>('folder', args);
             return { content: [{ type: 'text' as const, text: formatFolderView(data.folder) }] };
         } catch (e) {
-            return errorContent('get', e instanceof Error ? e.message : String(e));
+            return this.errorResponse('get', e instanceof Error ? e.message : String(e));
         }
     }
 
@@ -339,7 +333,7 @@ Examples:
             const text = `Folders${paginationNote}\n\n${lines.join('\n')}`;
             return { content: [{ type: 'text' as const, text }] };
         } catch (e) {
-            return errorContent('list', e instanceof Error ? e.message : String(e));
+            return this.errorResponse('list', e instanceof Error ? e.message : String(e));
         }
     }
 
@@ -356,7 +350,7 @@ Examples:
             const text = `Folder Contents — "${data.folderName}"${recursiveNote}\n\n${lines.join('\n')}\n\nTotal: ${data.count}`;
             return { content: [{ type: 'text' as const, text }] };
         } catch (e) {
-            return errorContent('list-contents', e instanceof Error ? e.message : String(e));
+            return this.errorResponse('list-contents', e instanceof Error ? e.message : String(e));
         }
     }
 }

@@ -6,7 +6,7 @@
 //
 // Anchors:
 //   - DP-15: typed this.query<T> — never <any> on response.
-//   - CCR-G2: errorContent is module-local.
+//   - R2.4: errors route through the shared BaseTool.errorResponse.
 //   - F03: the formatter emits every field the handler returns.
 
 import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
@@ -53,12 +53,6 @@ type LevelsResult = LevelsCapabilities | LevelsElevationData | RegionElevationRe
 
 // ── Inline error helper (CCR-G2) ──────────────────────────────────────────────
 
-function errorContent(action: string, message: string) {
-  return {
-    content: [{ type: 'text' as const, text: `module-levels/${action} failed: ${message}` }],
-    isError: true,
-  };
-}
 
 // ── Format helpers (F03 — emit every returned field) ──────────────────────────
 
@@ -223,7 +217,7 @@ Examples:
       if (msg.includes('MODULE_NOT_ACTIVE') || msg.includes('MODULE_DEPENDENCY_NOT_ACTIVE')) {
         return moduleNotActiveContent('module-levels', msg);
       }
-      return errorContent(action, msg);
+      return this.errorResponse(action, msg);
     }
   }
 }

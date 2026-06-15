@@ -8,7 +8,7 @@
 // (run-group-test, update-advantage, adjust-status, toggle-scene-light, pull-to-scene,
 // toggle-compendium-visibility, roll-d100) + confirm-gated writes (session-turnover, add-xp).
 //
-// Anchors: DP-15 (concrete this.query<T> per action — never <any>); CCR-G2 (errorContent local).
+// Anchors: DP-15 (concrete this.query<T> per action — never <any>); R2.4 (errors via BaseTool.errorResponse).
 
 import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
 import { moduleNotActiveContent } from '../_shared/module-guard.js';
@@ -29,12 +29,6 @@ import type {
 
 const text = (s: string) => ({ content: [{ type: 'text' as const, text: s }] });
 
-function errorContent(action: string, message: string) {
-  return {
-    content: [{ type: 'text' as const, text: `module-gmtoolkit/${action} failed: ${message}` }],
-    isError: true,
-  };
-}
 
 // ── Per-action formatters (surface every handler-returned field — Phase-6 drift lesson) ─────
 
@@ -176,11 +170,11 @@ Example: { action: "update-advantage", mode: "increase", tokenId: "Scene.x.Token
       case 'session-turnover': return this.run<GmtoolkitSessionTurnoverResult>(action, rawArgs, formatSessionTurnover);
       case 'add-xp': return this.run<GmtoolkitAddXpResult>(action, rawArgs, formatAddXp);
       default:
-        return errorContent('unknown', `unknown action: ${action}`);
+        return this.errorResponse('unknown', `unknown action: ${action}`);
     }
   }
 
-  /** Run one action: typed query + format, intercept MODULE_NOT_ACTIVE, else errorContent. */
+  /** Run one action: typed query + format, intercept MODULE_NOT_ACTIVE, else BaseTool.errorResponse. */
   private async run<T>(action: string, args: Record<string, unknown>, fmt: (d: T) => string) {
     try {
       const data = await this.query<T>('module-gmtoolkit', args);
@@ -188,7 +182,7 @@ Example: { action: "update-advantage", mode: "increase", tokenId: "Scene.x.Token
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (msg.includes('MODULE_NOT_ACTIVE')) return moduleNotActiveContent('module-gmtoolkit', msg);
-      return errorContent(action, msg);
+      return this.errorResponse(action, msg);
     }
   }
 }

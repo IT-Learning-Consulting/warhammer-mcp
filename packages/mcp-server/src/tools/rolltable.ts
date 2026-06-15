@@ -796,10 +796,4 @@ export class RollTableTool extends BaseTool {
         }
     }
 
-    private errorResponse(action: string, error: string) {
-        return {
-            content: [{ type: "text" as const, text: `❌ **rolltable.${action} failed**\n\n${error}` }],
-            isError: true,
-        };
-    }
 }

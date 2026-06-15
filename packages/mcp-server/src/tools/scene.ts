@@ -44,12 +44,6 @@ import { formatAffectedDocs } from './format-affected-docs.js';
 type SceneArgs = z.infer<typeof SceneToolInput>;
 type ArgsFor<A extends SceneArgs['action']> = Extract<SceneArgs, { action: A }>;
 
-function errorContent(action: string, message: string) {
-  return {
-    content: [{ type: 'text' as const, text: `❌ **scene/${action} failed**\n\n${message}` }],
-    isError: true,
-  };
-}
 
 function fmtFK(linked: boolean, raw: string | null): string {
   if (!raw) return '_(none)_';
@@ -320,7 +314,7 @@ export class SceneTool extends BaseTool {
       }_`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('create', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('create', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -330,7 +324,7 @@ export class SceneTool extends BaseTool {
       const text = `✏️ **Scene Updated**\n\n**Changed fields:** ${data.changedFields.join(', ')}\n\n${formatSceneView(data.scene)}`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('update', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('update', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -340,7 +334,7 @@ export class SceneTool extends BaseTool {
       const text = `🗑️ **Scene Deleted**\n\n**Name:** ${data.deletedName}\n**ID:** \`${data.deletedId}\`\n**Remaining scenes:** ${data.remainingScenes}\n\n⚠️ Permanent. All embedded tokens/walls/lights/notes/regions/sounds/drawings/templates/tiles removed.${formatAffectedDocs(data.affectedDocs)}`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('delete', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('delete', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -350,7 +344,7 @@ export class SceneTool extends BaseTool {
       const text = `🪞 **Scene Cloned**\n\n**Source:** ${data.source.name} (\`${data.source.id}\`)\n\n${formatSceneView(data.clone)}`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('clone', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('clone', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -362,7 +356,7 @@ export class SceneTool extends BaseTool {
       }`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('activate', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('activate', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -372,7 +366,7 @@ export class SceneTool extends BaseTool {
       const text = `👁️ **Scene Viewed (local user)**\n\n**Name:** ${data.viewedName}\n**ID:** \`${data.viewedId}\`\n\n_(World-active state unchanged. Use 'activate' to set the game-wide active scene.)_`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('view', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('view', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -382,7 +376,7 @@ export class SceneTool extends BaseTool {
       const text = `🖼️ **Thumbnail Regenerated**\n\n**Scene:** ${data.sceneName} (\`${data.sceneId}\`)\n**Dimensions:** ${data.width} × ${data.height}\n**Format:** ${data.format}\n**Data URL (truncated):** \`${data.thumbDataUrl.slice(0, 60)}...\` (${data.thumbDataUrl.length} chars total)`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('thumbnail', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('thumbnail', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -402,7 +396,7 @@ export class SceneTool extends BaseTool {
       }
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('get', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('get', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -439,7 +433,7 @@ export class SceneTool extends BaseTool {
       const text = `📋 **Scenes** (${bare.scenes.length})\n\n${lines.join('\n')}`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('list', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('list', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -460,7 +454,7 @@ export class SceneTool extends BaseTool {
       const text = `🧹 **Layer cleared — ${data.layer}**\n\nDeleted **${data.count}** doc(s) on scene \`${data.sceneId}\`.`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('clear-layer', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('clear-layer', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -470,7 +464,7 @@ export class SceneTool extends BaseTool {
       const text = `🌫️ **Fog reset**\n\nScene \`${data.sceneId}\` — FogExploration docs remaining: **${data.fogDocsRemaining}**.`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('reset-fog', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('reset-fog', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -480,7 +474,7 @@ export class SceneTool extends BaseTool {
       const text = `🌗 **Lighting transition**\n\nScene \`${data.sceneId}\` — darknessLevel now **${data.darknessLevel}** (target ${data.target}).`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('lighting-transition', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('lighting-transition', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -490,7 +484,7 @@ export class SceneTool extends BaseTool {
       const text = `⏬ **Scene preloaded**\n\n**${data.sceneName}** (\`${data.sceneId}\`) pushed to all clients. _(Transient — no persisted state.)_`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('preload', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('preload', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -500,7 +494,7 @@ export class SceneTool extends BaseTool {
       const text = `📥 **Scene Imported**\n\nFrom pack \`${data.sourcePack}\`\n\n${formatSceneView(data.scene)}`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('import-from-compendium', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('import-from-compendium', e instanceof Error ? e.message : String(e));
     }
   }
 

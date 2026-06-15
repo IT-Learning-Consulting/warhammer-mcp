@@ -7,7 +7,7 @@
 //
 // Anchors:
 //   - DP-15: typed this.query<T> — never <any>.
-//   - CCR-G2: errorContent module-local.
+//   - R2.4: errors route through the shared BaseTool.errorResponse.
 //   - F03 (Phase 5 carry-forward): the formatter must emit EVERY data field the
 //       handler returns — a field computed but not surfaced is invisible to callers.
 
@@ -51,12 +51,6 @@ type AAResult = AAItemResult | AAListResult | AAAutorecResult | AAPlayResult;
 
 // ── Error helper (CCR-G2) ────────────────────────────────────────────────────
 
-function errorContent(action: string, message: string) {
-  return {
-    content: [{ type: 'text' as const, text: `module-autoanimations/${action} failed: ${message}` }],
-    isError: true,
-  };
-}
 
 // ── Format helpers (F03 — emit every field) ──────────────────────────────────
 
@@ -189,7 +183,7 @@ Examples:
       if (msg.includes('MODULE_NOT_ACTIVE') || msg.includes('MODULE_DEPENDENCY_NOT_ACTIVE')) {
         return moduleNotActiveContent('module-autoanimations', msg);
       }
-      return errorContent(action, msg);
+      return this.errorResponse(action, msg);
     }
   }
 }

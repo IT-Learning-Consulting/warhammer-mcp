@@ -35,6 +35,8 @@
 import { z } from 'zod';
 import { wrappedWrite } from '../transaction-manager.js';
 import { notify, type NotifyKind } from '../notify.js';
+// R2.2 dedup: the single canonical deepStripUndefined lives in embeddedCRUDFactory.
+import { deepStripUndefined } from './embeddedCRUDFactory.js';
 
 // ── Shared envelope types ───────────────────────────────────────────────────
 export type EnvelopeOK<T> = { success: true; data: T };
@@ -42,27 +44,16 @@ export type EnvelopeErr = { success: false; error: string };
 export type Envelope<T> = EnvelopeOK<T> | EnvelopeErr;
 
 // ── Shared utilities ────────────────────────────────────────────────────────
-// Re-exported from embeddedCRUDFactory's local copies. Kept duplicate-free at the
-// usage-site level (callers import either factory, not both helpers directly).
+// R2.2 dedup: deepStripUndefined is the SINGLE canonical copy in
+// embeddedCRUDFactory.ts — imported above (used at the update site below) and
+// re-exported here so existing consumers (flatWorldCRUDFactory, handlers) that
+// import it from this module keep resolving. validateGMAccess stays a local
+// copy (trivial 3-line GM gate; not in R2.2 deepStripUndefined scope).
+export { deepStripUndefined };
 
 export function validateGMAccess(): { allowed: boolean } {
   if (!(game as any).user?.isGM) return { allowed: false };
   return { allowed: true };
-}
-
-export function deepStripUndefined<T>(value: T): T {
-  if (Array.isArray(value)) {
-    return value.map(deepStripUndefined) as any;
-  }
-  if (value && typeof value === 'object') {
-    const out: Record<string, any> = {};
-    for (const [k, v] of Object.entries(value as Record<string, any>)) {
-      if (v === undefined) continue;
-      out[k] = deepStripUndefined(v);
-    }
-    return out as any;
-  }
-  return value;
 }
 
 /**

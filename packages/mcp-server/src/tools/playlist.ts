@@ -120,12 +120,6 @@ interface PlaylistStopResponse {
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
 
-function errorContent(action: string, message: string) {
-  return {
-    content: [{ type: 'text' as const, text: `Playlist/${action} failed: ${message}` }],
-    isError: true,
-  };
-}
 
 function modeName(mode: number): string {
   switch (mode) {
@@ -385,7 +379,7 @@ export class PlaylistTool extends BaseTool {
       const text = `🧬 **Playlist Duplicated**\n\n**New:** ${data.name} (\`${data.id}\`)\n\n${formatPlaylistView(data.playlist)}`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('duplicate-playlist', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('duplicate-playlist', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -395,7 +389,7 @@ export class PlaylistTool extends BaseTool {
       const text = `⏸️ **Sound Paused**\n\n${formatPlaylistSoundView(data.sound)}`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('pause-sound', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('pause-sound', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -405,7 +399,7 @@ export class PlaylistTool extends BaseTool {
       const text = `📦 **Bulk Import**\n\nImported **${data.imported}** sound(s) into playlist \`${data.playlistId}\`:\n${data.files.map((f) => `- \`${f}\``).join('\n')}`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('bulk-import-sounds', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('bulk-import-sounds', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -415,7 +409,7 @@ export class PlaylistTool extends BaseTool {
       const text = `⏬ **Sound Preloaded**\n\n\`${data.src}\` pushed to all clients. _(Transient — no persisted state.)_`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('preload-sound', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('preload-sound', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -429,7 +423,7 @@ export class PlaylistTool extends BaseTool {
         `**Requested fields:** ${reqKeys || '(name only)'}`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('create-playlist', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('create-playlist', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -440,7 +434,7 @@ export class PlaylistTool extends BaseTool {
         `Playlist Updated\n\n**Changed fields:** ${data.changedFields.join(', ')}\n\n${formatPlaylistView(data.playlist)}`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('update-playlist', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('update-playlist', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -451,7 +445,7 @@ export class PlaylistTool extends BaseTool {
         `Playlist Deleted\n\n**ID:** \`${data.playlistId}\`\n**Cascaded sounds:** ${data.deletedSoundCount}\n\nPermanent — recovery requires journal restore or fresh creation.${formatAffectedDocs(data.affectedDocs)}`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('delete-playlist', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('delete-playlist', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -460,7 +454,7 @@ export class PlaylistTool extends BaseTool {
       const data = await this.query<PlaylistGetPlaylistResponse>('playlist', args);
       return { content: [{ type: 'text' as const, text: formatPlaylistView(data.playlist) }] };
     } catch (e) {
-      return errorContent('get-playlist', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('get-playlist', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -489,7 +483,7 @@ export class PlaylistTool extends BaseTool {
       const text = `Playlists (${bare.playlists.length})\n\n${lines.join('\n')}`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('list-playlists', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('list-playlists', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -501,7 +495,7 @@ export class PlaylistTool extends BaseTool {
         `PlaylistSound Added\n\n${formatPlaylistSoundView(data.sound)}\n\n**Requested fields:** ${reqKeys || '(path only)'}`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('add-sound', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('add-sound', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -512,7 +506,7 @@ export class PlaylistTool extends BaseTool {
         `PlaylistSound Updated\n\n**Changed fields:** ${data.changedFields.join(', ')}\n\n${formatPlaylistSoundView(data.sound)}`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('update-sound', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('update-sound', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -523,7 +517,7 @@ export class PlaylistTool extends BaseTool {
         `PlaylistSound Deleted\n\n**ID:** \`${data.deletedId}\`\n**Playlist:** \`${data.playlistId}\`\n**Remaining sounds:** ${data.remainingSoundCount}${formatAffectedDocs(data.affectedDocs)}`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('delete-sound', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('delete-sound', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -537,7 +531,7 @@ export class PlaylistTool extends BaseTool {
       }
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('play', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('play', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -548,7 +542,7 @@ export class PlaylistTool extends BaseTool {
         `Playlist Stopped\n\n**Playlist:** \`${data.playlistId}\`\n**Playing:** ${data.playing ? 'yes' : 'no'}`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('stop', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('stop', e instanceof Error ? e.message : String(e));
     }
   }
 }

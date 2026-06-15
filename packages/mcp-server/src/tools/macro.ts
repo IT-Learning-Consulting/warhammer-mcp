@@ -87,12 +87,6 @@ type MacroListResponse =
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
 
-function errorContent(action: string, message: string) {
-  return {
-    content: [{ type: 'text' as const, text: `Macro/${action} failed: ${message}` }],
-    isError: true,
-  };
-}
 
 function commandPreview(cmd: string, max = 200): string {
   if (!cmd) return '_(empty)_';
@@ -421,7 +415,7 @@ export class MacroTool extends BaseTool {
       const data = await this.query<SetExecutionTargetResponse>('macro', args);
       return { content: [{ type: 'text' as const, text: formatSetExecutionTarget(data) }] };
     } catch (e) {
-      return errorContent('set-execution-target', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('set-execution-target', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -430,7 +424,7 @@ export class MacroTool extends BaseTool {
       const data = await this.query<ListWorldScriptsResponse>('macro', args);
       return { content: [{ type: 'text' as const, text: formatListWorldScripts(data) }] };
     } catch (e) {
-      return errorContent('list-world-scripts', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('list-world-scripts', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -439,7 +433,7 @@ export class MacroTool extends BaseTool {
       const data = await this.query<GetExecutionTargetResponse>('macro', args);
       return { content: [{ type: 'text' as const, text: formatGetExecutionTarget(data) }] };
     } catch (e) {
-      return errorContent('get-execution-target', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('get-execution-target', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -450,7 +444,7 @@ export class MacroTool extends BaseTool {
       const data = await this.query<MacroExecuteResponse>('macro', args);
       return { content: [{ type: 'text' as const, text: formatExecuteResult(data) }] };
     } catch (e) {
-      return errorContent('execute-by-name', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('execute-by-name', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -460,7 +454,7 @@ export class MacroTool extends BaseTool {
       const text = `📥 **Macro Imported**\n\nFrom pack \`${data.sourcePack}\`\n\n${formatMacroView(data.macro)}`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('import-from-compendium', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('import-from-compendium', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -472,7 +466,7 @@ export class MacroTool extends BaseTool {
         `Macro Created\n\n${formatMacroView(data.macro)}\n\n**Requested fields:** ${reqKeys || '(name/type only)'}`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('create', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('create', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -483,19 +477,19 @@ export class MacroTool extends BaseTool {
         `Macro Updated\n\n**Changed fields:** ${data.changedFields.join(', ')}\n\n${formatMacroView(data.macro)}`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('update', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('update', e instanceof Error ? e.message : String(e));
     }
   }
 
   private async handleDelete(args: ArgsFor<'delete'>) {
     if (!args.confirm) {
-      return errorContent('delete', 'MACRO_DELETE_NOT_CONFIRMED: delete requires confirm: true');
+      return this.errorResponse('delete', 'MACRO_DELETE_NOT_CONFIRMED: delete requires confirm: true');
     }
     try {
       const data = await this.query<MacroDeleteResponse>('macro', args);
       return { content: [{ type: 'text' as const, text: formatDeleteResponse(data) }] };
     } catch (e) {
-      return errorContent('delete', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('delete', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -504,7 +498,7 @@ export class MacroTool extends BaseTool {
       const data = await this.query<MacroGetResponse>('macro', args);
       return { content: [{ type: 'text' as const, text: formatMacroView(data.macro) }] };
     } catch (e) {
-      return errorContent('get', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('get', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -534,13 +528,13 @@ export class MacroTool extends BaseTool {
       const text = `Macros (${bare.items.length})\n\n${lines.join('\n')}`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('list', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('list', e instanceof Error ? e.message : String(e));
     }
   }
 
   private async handleExecute(args: ArgsFor<'execute'>) {
     if (args.confirmedExecution !== true) {
-      return errorContent(
+      return this.errorResponse(
         'execute',
         'MACRO_EXECUTE_NOT_CONFIRMED: execute requires confirmedExecution: true (CCR-Trust)',
       );
@@ -549,7 +543,7 @@ export class MacroTool extends BaseTool {
       const data = await this.query<MacroExecuteResponse>('macro', args);
       return { content: [{ type: 'text' as const, text: formatExecuteResult(data) }] };
     } catch (e) {
-      return errorContent('execute', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('execute', e instanceof Error ? e.message : String(e));
     }
   }
 }

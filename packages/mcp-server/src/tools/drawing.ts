@@ -6,7 +6,7 @@
 //
 // **CCR-Envelope-Consumer / BUG-069:** every handler uses a concrete typed generic on
 // `this.query<...>` — never `<any>`. The query returns BARE unwrapped data; never re-check
-// a success field on the return value. Each handler wraps its call in try/catch → errorContent.
+// a success field on the return value. Each handler wraps its call in try/catch → BaseTool.errorResponse.
 //
 // shape is Foundry v13 flat ShapeData {type, width, height, radius, points}. type ∈
 // {rectangle, circle, ellipse, polygon}. "Freehand" = polygon + bezierFactor>0; "text" is an
@@ -64,12 +64,6 @@ interface DrawingDuplicateResponse {
 
 // ── Utilities ────────────────────────────────────────────────────────────────
 
-function errorContent(action: string, message: string) {
-  return {
-    content: [{ type: 'text' as const, text: `**drawing/${action} failed**\n\n${message}` }],
-    isError: true,
-  };
-}
 
 function formatDrawingView(d: DrawingViewModel): string {
   return [
@@ -256,7 +250,7 @@ export class DrawingTool extends BaseTool {
       const text = `**Drawing Created**\n\n${formatDrawingView(data.drawing)}`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('create', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('create', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -267,7 +261,7 @@ export class DrawingTool extends BaseTool {
         `**Drawing Updated**\n\n**Changed fields:** ${data.changedFields.join(', ')}\n\n${formatDrawingView(data.drawing)}`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('update', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('update', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -278,7 +272,7 @@ export class DrawingTool extends BaseTool {
         `**Drawing Deleted**\n\n**ID:** \`${data.deletedId}\`\n**Scene:** \`${data.sceneId}\`\n**Remaining drawings:** ${data.remainingDrawings}\n\n⚠️ Permanent.`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('delete', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('delete', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -287,7 +281,7 @@ export class DrawingTool extends BaseTool {
       const data = await this.query<DrawingGetResponse>('drawing', args);
       return { content: [{ type: 'text' as const, text: formatDrawingView(data.drawing) }] };
     } catch (e) {
-      return errorContent('get', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('get', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -311,7 +305,7 @@ export class DrawingTool extends BaseTool {
       const text = `**Drawings**${pageInfo}\n\n${lines.join('\n')}`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('list', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('list', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -322,7 +316,7 @@ export class DrawingTool extends BaseTool {
         `**Drawing Duplicated**\n\n**Source:** \`${data.sourceId}\` → **New:** \`${data.drawing.id}\`\n\n${formatDrawingView(data.drawing)}`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('duplicate', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('duplicate', e instanceof Error ? e.message : String(e));
     }
   }
 }

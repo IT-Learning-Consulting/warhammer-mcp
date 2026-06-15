@@ -8,7 +8,7 @@
 // read-combat-fatigue, add-species-career-content) + GM-gated writes (spend-me, create-scroll,
 // create-grimoire, equip-grimoire, repair-item, configure-integration, cantrip).
 //
-// Anchors: DP-15 (concrete this.query<T> per action — never <any>); CCR-G2 (errorContent module-local).
+// Anchors: DP-15 (concrete this.query<T> per action — never <any>); R2.4 (errors via BaseTool.errorResponse).
 
 import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
 import { moduleNotActiveContent } from '../_shared/module-guard.js';
@@ -29,12 +29,6 @@ import type {
 
 const text = (s: string) => ({ content: [{ type: 'text' as const, text: s }] });
 
-function errorContent(action: string, message: string) {
-  return {
-    content: [{ type: 'text' as const, text: `module-armoury/${action} failed: ${message}` }],
-    isError: true,
-  };
-}
 
 // ── Per-action formatters ─────────────────────────────────────────────────────
 
@@ -175,11 +169,11 @@ Example: { action: "get-me", actorId: "Actor.abc123" }`,
       case 'configure-integration': return this.run<ArmouryIntegrationResult>(action, rawArgs, formatIntegration);
       case 'cantrip': return this.run<ArmouryCantripResult>(action, rawArgs, formatCantrip);
       default:
-        return errorContent('unknown', `unknown action: ${action}`);
+        return this.errorResponse('unknown', `unknown action: ${action}`);
     }
   }
 
-  /** Run one action: typed query + format, intercept MODULE_NOT_ACTIVE, else errorContent. */
+  /** Run one action: typed query + format, intercept MODULE_NOT_ACTIVE, else BaseTool.errorResponse. */
   private async run<T>(action: string, args: Record<string, unknown>, fmt: (d: T) => string) {
     try {
       const data = await this.query<T>('module-armoury', args);
@@ -187,7 +181,7 @@ Example: { action: "get-me", actorId: "Actor.abc123" }`,
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (msg.includes('MODULE_NOT_ACTIVE')) return moduleNotActiveContent('module-armoury', msg);
-      return errorContent(action, msg);
+      return this.errorResponse(action, msg);
     }
   }
 }

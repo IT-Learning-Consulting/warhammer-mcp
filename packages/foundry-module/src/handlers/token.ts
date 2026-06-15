@@ -49,6 +49,8 @@ import {
 import { wrappedWrite } from '../transaction-manager.js';
 import { getEmbeddedOrThrow } from '../utils/getEmbeddedOrThrow.js';
 import { notify } from '../notify.js';
+// R2.2 dedup: canonical deepStripUndefined (was a local byte-identical copy).
+import { deepStripUndefined } from '../utils/embeddedCRUDFactory.js';
 
 // ── Local types ──────────────────────────────────────────────────────────────
 
@@ -131,20 +133,6 @@ function validateGMAccess(): AccessGate {
   return { allowed: true };
 }
 
-function deepStripUndefined<T>(value: T): T {
-  if (Array.isArray(value)) {
-    return value.map(deepStripUndefined) as any;
-  }
-  if (value && typeof value === 'object') {
-    const out: Record<string, any> = {};
-    for (const [k, v] of Object.entries(value as Record<string, any>)) {
-      if (v === undefined) continue;
-      out[k] = deepStripUndefined(v);
-    }
-    return out as any;
-  }
-  return value;
-}
 
 function getSceneOrThrow(sceneId: string): any {
   const scene = (game as any).scenes?.get(sceneId);

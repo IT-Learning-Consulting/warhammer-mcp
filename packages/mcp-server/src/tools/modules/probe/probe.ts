@@ -2,7 +2,7 @@
 //
 // Always-registered umbrella (no MODULE_NOT_ACTIVE guard — the probe always
 // succeeds, it just reports whether a module is active). Mirrors setting.ts
-// structure: local errorContent helper, typed query<T>, execute() switch.
+// structure: BaseTool.errorResponse, typed query<T>, execute() switch.
 //
 // Two actions:
 //   is-active  { moduleId: string } — { id, active, title?, version? }
@@ -12,7 +12,7 @@
 //
 // Anchors:
 //   - DP-15: typed query<T>; no <any> on response side.
-//   - CCR-G2 (mcp-builder): errorContent is module-local (not on BaseTool).
+//   - R2.4 (mcp-builder): errors route through the shared BaseTool.errorResponse.
 //   - Phase 1 module_integration_v1 acceptance criterion #1.
 
 import { z } from 'zod';
@@ -41,12 +41,6 @@ interface ProbeListActiveResponse {
 
 // ── Inline error helper (CCR-G2 — NOT on BaseTool) ───────────────────────────
 
-function errorContent(action: string, message: string) {
-    return {
-        content: [{ type: 'text' as const, text: `module-probe/${action} failed: ${message}` }],
-        isError: true,
-    };
-}
 
 // ── Format helpers ────────────────────────────────────────────────────────────
 
@@ -128,7 +122,7 @@ Examples:
             const data = await this.query<ProbeIsActiveResponse>('module-probe', args);
             return { content: [{ type: 'text' as const, text: formatIsActive(data) }] };
         } catch (e) {
-            return errorContent('is-active', e instanceof Error ? e.message : String(e));
+            return this.errorResponse('is-active', e instanceof Error ? e.message : String(e));
         }
     }
 
@@ -137,7 +131,7 @@ Examples:
             const data = await this.query<ProbeListActiveResponse>('module-probe', args);
             return { content: [{ type: 'text' as const, text: formatListActive(data) }] };
         } catch (e) {
-            return errorContent('list-active', e instanceof Error ? e.message : String(e));
+            return this.errorResponse('list-active', e instanceof Error ? e.message : String(e));
         }
     }
 }

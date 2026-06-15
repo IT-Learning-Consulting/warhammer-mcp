@@ -76,12 +76,6 @@ interface ItemDirectoryImportResponse {
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
 
-function errorContent(action: string, message: string) {
-  return {
-    content: [{ type: 'text' as const, text: `❌ **item-directory/${action} failed**\n\n${message}` }],
-    isError: true,
-  };
-}
 
 function formatWorldItem(item: WorldItemSummary): string {
   return (
@@ -229,7 +223,7 @@ export class ItemDirectoryTool extends BaseTool {
       const text = `📦 **World Items** (${pageInfo}${filterNote})\n\n${lines.join('\n')}`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('list', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('list', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -257,7 +251,7 @@ export class ItemDirectoryTool extends BaseTool {
         `**Full serialized item:**\n\`\`\`json\n${JSON.stringify(fullDoc, null, 2)}\n\`\`\``;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('get', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('get', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -273,7 +267,7 @@ export class ItemDirectoryTool extends BaseTool {
         lines.join('\n');
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('search', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('search', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -288,7 +282,7 @@ export class ItemDirectoryTool extends BaseTool {
         `- **Source id:** \`${data.sourceId}\``;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('duplicate', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('duplicate', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -305,7 +299,7 @@ export class ItemDirectoryTool extends BaseTool {
         (data.idMatchesCompendium ? ` _(preserved — Foundry v13 keeps the compendium id on import)_` : ` _(re-keyed to a new world id)_`);
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('import-from-compendium', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('import-from-compendium', e instanceof Error ? e.message : String(e));
     }
   }
 }

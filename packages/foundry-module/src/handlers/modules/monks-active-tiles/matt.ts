@@ -31,6 +31,8 @@ import {
 } from './action-catalog.js';
 import { notify } from '../../../notify.js';
 import { verifyDocWrite } from '../../../utils/verifyWrite.js';
+// R2.2 dedup: canonical deepStripUndefined (was a local byte-identical copy; browser-safe — tree-shaken, same bundle as verifyWrite/notify).
+import { deepStripUndefined } from '../../../utils/embeddedCRUDFactory.js';
 
 const MATT_MODULE_ID = 'monks-active-tiles';
 const MATT_FLAG = 'monks-active-tiles';
@@ -44,18 +46,6 @@ function isGM(): boolean {
   return Boolean((globalThis as any).game?.user?.isGM);
 }
 
-function deepStripUndefined<T>(value: T): T {
-  if (Array.isArray(value)) return value.map(deepStripUndefined) as any;
-  if (value && typeof value === 'object') {
-    const out: Record<string, any> = {};
-    for (const [k, v] of Object.entries(value as Record<string, any>)) {
-      if (v === undefined) continue;
-      out[k] = deepStripUndefined(v);
-    }
-    return out as any;
-  }
-  return value;
-}
 
 function getSceneOrThrow(sceneId: string): any {
   const scene = (globalThis as any).game?.scenes?.get(sceneId);

@@ -29,14 +29,6 @@ import {
 type FilePickerArgs = z.infer<typeof FilePickerToolInput>;
 type ArgsFor<A extends FilePickerArgs['action']> = Extract<FilePickerArgs, { action: A }>;
 
-function errorContent(action: string, message: string) {
-  return {
-    content: [
-      { type: 'text' as const, text: `❌ **filepicker/${action} failed**\n\n${message}` },
-    ],
-    isError: true,
-  };
-}
 
 export interface FilePickerToolOptions extends BaseToolOptions {}
 
@@ -152,7 +144,7 @@ export class FilePickerTool extends BaseTool {
       const text = `📂 **Directory Created**\n\n- Source: \`${data.source}\`\n- Path: \`${data.path}\``;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent('create-directory', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('create-directory', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -229,7 +221,7 @@ export class FilePickerTool extends BaseTool {
         structuredContent: response,
       };
     } catch (e) {
-      return errorContent('upload', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('upload', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -259,7 +251,7 @@ export class FilePickerTool extends BaseTool {
         structuredContent: data,
       };
     } catch (e) {
-      return errorContent('list', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('list', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -323,7 +315,7 @@ export class FilePickerTool extends BaseTool {
         structuredContent: response,
       };
     } catch (e) {
-      return errorContent('convert', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('convert', e instanceof Error ? e.message : String(e));
     }
   }
 }

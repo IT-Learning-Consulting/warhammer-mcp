@@ -611,11 +611,4 @@ export class DiagnosticTool extends BaseTool {
     }
   }
 
-  // Per-tool error envelope — mirrors handlers/journal.ts:523.
-  private errorResponse(action: string, error: string) {
-    return {
-      content: [{ type: 'text' as const, text: `❌ **diagnostic.${action} failed**\n\n${error}` }],
-      isError: true,
-    };
-  }
 }

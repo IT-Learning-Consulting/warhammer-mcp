@@ -405,7 +405,9 @@ export class ActorCreationTools extends BaseTool {
 
     return {
       summary,
-      success: result.success,
+      // R2.1/D1: wire field preserved; re-sourced from the count (totalCreated === createdActors.length)
+      // so the value is byte-identical to the domain `success` (createdActors.length > 0) without reading `.success`.
+      success: result.totalCreated > 0,
       details: {
         actors: result.actors,
         sourceEntry: {

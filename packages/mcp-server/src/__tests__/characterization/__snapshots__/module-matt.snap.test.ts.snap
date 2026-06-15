@@ -1,6 +1,10 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`ModuleMattTool — characterization > MODULE_NOT_ACTIVE — get-capabilities throws → errorContent format 1`] = `"module-matt/get-capabilities failed: MODULE_NOT_ACTIVE: monks-active-tiles is not active"`;
+exports[`ModuleMattTool — characterization > MODULE_NOT_ACTIVE — get-capabilities throws → errorContent format 1`] = `
+"❌ **get-capabilities failed**
+
+MODULE_NOT_ACTIVE: monks-active-tiles is not active"
+`;
 
 exports[`ModuleMattTool — characterization > create-trigger-tile — formats uuid, scene, trigger, actionCount 1`] = `"Created MATT tile "Ambush Tile" (Scene.abc123.Tile.tile003) on scene abc123 — trigger=[enter], 1 action(s)."`;
 

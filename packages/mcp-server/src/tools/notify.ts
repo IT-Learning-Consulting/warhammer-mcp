@@ -19,12 +19,6 @@ import { BaseTool, BaseToolOptions } from '../base-tool.js';
 
 type NotifyArgs = z.infer<typeof NotifyToolInput>;
 
-function errorContent(action: string, message: string) {
-  return {
-    content: [{ type: 'text' as const, text: `❌ **notify/${action} failed**\n\n${message}` }],
-    isError: true,
-  };
-}
 
 export interface NotifyToolOptions extends BaseToolOptions {}
 
@@ -118,7 +112,7 @@ export class NotifyTool extends BaseTool {
         : `⚠️ **Notification dispatcher threw** — see Foundry F12 console · severity=${args.severity}`;
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
-      return errorContent(args.severity, e instanceof Error ? e.message : String(e));
+      return this.errorResponse(args.severity, e instanceof Error ? e.message : String(e));
     }
   }
 }

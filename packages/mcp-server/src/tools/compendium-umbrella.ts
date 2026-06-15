@@ -144,12 +144,6 @@ interface CompendiumReadDocumentResponse {
 
 // ── Utilities ─────────────────────────────────────────────────────────────
 
-function errorContent(action: string, message: string) {
-  return {
-    content: [{ type: 'text' as const, text: `Compendium/${action} failed: ${message}` }],
-    isError: true,
-  };
-}
 
 function formatPackMetadata(m: PackMetadataView): string {
   return [
@@ -512,7 +506,7 @@ export class CompendiumUmbrellaTools extends BaseTool {
       const data = await this.query<CompendiumCreatePackResponse>('compendium', args);
       return { content: [{ type: 'text' as const, text: formatCreatePackResponse(data) }] };
     } catch (e) {
-      return errorContent('create-pack', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('create-pack', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -521,7 +515,7 @@ export class CompendiumUmbrellaTools extends BaseTool {
       const data = await this.query<CompendiumUpdatePackResponse>('compendium', args);
       return { content: [{ type: 'text' as const, text: formatUpdatePackResponse(data) }] };
     } catch (e) {
-      return errorContent('update-pack', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('update-pack', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -530,7 +524,7 @@ export class CompendiumUmbrellaTools extends BaseTool {
       const data = await this.query<CompendiumReadPackResponse>('compendium', args);
       return { content: [{ type: 'text' as const, text: formatReadPackResponse(data) }] };
     } catch (e) {
-      return errorContent('read-pack', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('read-pack', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -539,7 +533,7 @@ export class CompendiumUmbrellaTools extends BaseTool {
       const data = await this.query<CompendiumAddDocumentResponse>('compendium', args);
       return { content: [{ type: 'text' as const, text: formatAddDocumentResponse(data) }] };
     } catch (e) {
-      return errorContent('add-document-to-pack', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('add-document-to-pack', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -548,7 +542,7 @@ export class CompendiumUmbrellaTools extends BaseTool {
       const data = await this.query<CompendiumUpdateDocumentResponse>('compendium', args);
       return { content: [{ type: 'text' as const, text: formatUpdateDocumentResponse(data) }] };
     } catch (e) {
-      return errorContent('update-document-in-pack', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('update-document-in-pack', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -557,7 +551,7 @@ export class CompendiumUmbrellaTools extends BaseTool {
       const data = await this.query<CompendiumReadDocumentResponse>('compendium', args);
       return { content: [{ type: 'text' as const, text: formatReadDocumentResponse(data) }] };
     } catch (e) {
-      return errorContent('read-document-from-pack', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('read-document-from-pack', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -566,7 +560,7 @@ export class CompendiumUmbrellaTools extends BaseTool {
       const data = await this.query<CompendiumCreateFolderInPackResponse>('compendium', args);
       return { content: [{ type: 'text' as const, text: formatCreateFolderInPackResponse(data) }] };
     } catch (e) {
-      return errorContent('create-folder-in-pack', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('create-folder-in-pack', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -575,7 +569,7 @@ export class CompendiumUmbrellaTools extends BaseTool {
       const data = await this.query<CompendiumListFoldersInPackResponse>('compendium', args);
       return { content: [{ type: 'text' as const, text: formatListFoldersInPackResponse(data) }] };
     } catch (e) {
-      return errorContent('list-folders-in-pack', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('list-folders-in-pack', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -584,7 +578,7 @@ export class CompendiumUmbrellaTools extends BaseTool {
       const data = await this.query<CompendiumUpdateFolderInPackResponse>('compendium', args);
       return { content: [{ type: 'text' as const, text: formatUpdateFolderInPackResponse(data) }] };
     } catch (e) {
-      return errorContent('update-folder-in-pack', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('update-folder-in-pack', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -593,7 +587,7 @@ export class CompendiumUmbrellaTools extends BaseTool {
       const data = await this.query<CompendiumDeleteFolderInPackResponse>('compendium', args);
       return { content: [{ type: 'text' as const, text: formatDeleteFolderInPackResponse(data) }] };
     } catch (e) {
-      return errorContent('delete-folder-in-pack', e instanceof Error ? e.message : String(e));
+      return this.errorResponse('delete-folder-in-pack', e instanceof Error ? e.message : String(e));
     }
   }
 }

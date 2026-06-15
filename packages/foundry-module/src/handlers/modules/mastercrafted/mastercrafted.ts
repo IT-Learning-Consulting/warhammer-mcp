@@ -26,6 +26,7 @@
 import { requireModuleActive } from '../_shared/require-module-active.js';
 import { ModuleMastercraftedInput, type ModuleMastercraftedInputType } from './schemas.js';
 import { notify } from '../../../notify.js';
+import { verifyDocWrite, verifyFlagWrite } from '../../../utils/verifyWrite.js';
 
 type Envelope<T> = { success: true; data: T } | { success: false; error: string };
 
@@ -374,9 +375,31 @@ async function handleExecuteCraft(input: ExecuteInput): Promise<Envelope<unknown
       }
     }
   }
-  if (updates.length) await inventoryActor.updateEmbeddedDocuments('Item', updates);
-  if (toDelete.length) await inventoryActor.deleteEmbeddedDocuments('Item', toDelete);
-  if (Object.keys(actorUpdates).length) await inventoryActor.update(actorUpdates);
+  // R2.5 DP-16: a silent drop on ingredient consumption = free crafting (economy exploit).
+  // Count-based verify on the consume writes; field verify on the actor (currency) update.
+  if (updates.length) {
+    const updated = await inventoryActor.updateEmbeddedDocuments('Item', updates);
+    if ((updated?.length ?? 0) !== updates.length) {
+      throw new Error(
+        `MASTERCRAFTED_CONSUME_NOT_PERSISTED: updated ${updated?.length ?? 0}/${updates.length} ingredient stack(s)`,
+      );
+    }
+  }
+  if (toDelete.length) {
+    const deleted = await inventoryActor.deleteEmbeddedDocuments('Item', toDelete);
+    if ((deleted?.length ?? 0) !== toDelete.length) {
+      throw new Error(
+        `MASTERCRAFTED_CONSUME_NOT_PERSISTED: deleted ${deleted?.length ?? 0}/${toDelete.length} consumed ingredient stack(s)`,
+      );
+    }
+  }
+  if (Object.keys(actorUpdates).length) {
+    // R2.5 DP-16: snapshot flat _source dot-paths before update() expands them in place
+    // (else verifyDocWrite compares a partial sub-object against the full persisted field).
+    const verifyFields = { ...actorUpdates };
+    await inventoryActor.update(actorUpdates);
+    verifyDocWrite(inventoryActor, verifyFields, 'MASTERCRAFTED_CONSUME_NOT_PERSISTED');
+  }
 
   // 5. Deliver — instant (time 0/null→book default 0) creates items now; timed (>0) queues a pending flag.
   const bookTime = recipeFlags(page.parent)?.time;
@@ -385,14 +408,23 @@ async function handleExecuteCraft(input: ExecuteInput): Promise<Envelope<unknown
   let isTimed = false;
   if (effTime > 0) {
     const pendingId = randomId();
-    await actor.setFlag(MODULE_ID, pendingId, {
+    const pendingValue = {
       time: Number((globalThis as any).game?.time?.worldTime ?? 0) + effTime * 60,
       items: productData,
-    });
+    };
+    await actor.setFlag(MODULE_ID, pendingId, pendingValue);
+    // R2.5 DP-16: a silent drop loses the queued craft (player never gets the item).
+    verifyFlagWrite(actor, MODULE_ID, pendingId, pendingValue, 'MASTERCRAFTED_PENDING_CRAFT_NOT_PERSISTED');
     newPending.push(pendingId);
     isTimed = true;
   } else if (productData.length) {
-    await actor.createEmbeddedDocuments('Item', productData);
+    const created = await actor.createEmbeddedDocuments('Item', productData);
+    // R2.5 DP-16: confirm every crafted product item actually landed on the actor.
+    if ((created?.length ?? 0) !== productData.length) {
+      throw new Error(
+        `MASTERCRAFTED_PRODUCT_NOT_PERSISTED: created ${created?.length ?? 0}/${productData.length} crafted item(s)`,
+      );
+    }
   }
 
   notify.updated('mastercrafted', page.name, { summary: isTimed ? 'craft queued (timed)' : 'crafted (instant)' });

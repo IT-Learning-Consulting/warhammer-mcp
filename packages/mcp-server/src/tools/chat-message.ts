@@ -74,12 +74,6 @@ interface ChatMessageListResponse {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function errorContent(action: string, message: string) {
-    return {
-        content: [{ type: 'text' as const, text: `ChatMessage/${action} failed: ${message}` }],
-        isError: true,
-    };
-}
 
 function formatChatMessageView(msg: ChatMessageViewModel): string {
     const whisperNote = msg.whisper.length > 0
@@ -348,7 +342,7 @@ Examples:
             const text = `📜 **Chat Log Export** (${data.format}, ${data.messageCount} messages)\n\n${data.content || '_(no messages)_'}`;
             return { content: [{ type: 'text' as const, text }] };
         } catch (e) {
-            return errorContent('export-chat-log', e instanceof Error ? e.message : String(e));
+            return this.errorResponse('export-chat-log', e instanceof Error ? e.message : String(e));
         }
     }
 
@@ -362,7 +356,7 @@ Examples:
             const text = `🧹 **Chat log cleared**\n\nDeleted **${data.deletedCount}** message(s) (public ${data.byVisibility.public} / GM ${data.byVisibility.gmOnly} / whisper ${data.byVisibility.whispered}).`;
             return { content: [{ type: 'text' as const, text }] };
         } catch (e) {
-            return errorContent('clear-chat-log', e instanceof Error ? e.message : String(e));
+            return this.errorResponse('clear-chat-log', e instanceof Error ? e.message : String(e));
         }
     }
 
@@ -384,7 +378,7 @@ Examples:
             ].filter(Boolean).join('\n');
             return { content: [{ type: 'text' as const, text }] };
         } catch (e) {
-            return errorContent('create', e instanceof Error ? e.message : String(e));
+            return this.errorResponse('create', e instanceof Error ? e.message : String(e));
         }
     }
 
@@ -400,7 +394,7 @@ Examples:
             ].join('\n');
             return { content: [{ type: 'text' as const, text }] };
         } catch (e) {
-            return errorContent('update', e instanceof Error ? e.message : String(e));
+            return this.errorResponse('update', e instanceof Error ? e.message : String(e));
         }
     }
 
@@ -415,7 +409,7 @@ Examples:
             ].join('\n');
             return { content: [{ type: 'text' as const, text }] };
         } catch (e) {
-            return errorContent('delete', e instanceof Error ? e.message : String(e));
+            return this.errorResponse('delete', e instanceof Error ? e.message : String(e));
         }
     }
 
@@ -424,7 +418,7 @@ Examples:
             const data = await this.query<ChatMessageGetResponse>('chat-message', args);
             return { content: [{ type: 'text' as const, text: formatChatMessageView(data.message) }] };
         } catch (e) {
-            return errorContent('get', e instanceof Error ? e.message : String(e));
+            return this.errorResponse('get', e instanceof Error ? e.message : String(e));
         }
     }
 
@@ -440,7 +434,7 @@ Examples:
             const text = `Chat Messages${paginationNote}\n\n${lines.join('\n')}`;
             return { content: [{ type: 'text' as const, text }] };
         } catch (e) {
-            return errorContent('list', e instanceof Error ? e.message : String(e));
+            return this.errorResponse('list', e instanceof Error ? e.message : String(e));
         }
     }
 }
