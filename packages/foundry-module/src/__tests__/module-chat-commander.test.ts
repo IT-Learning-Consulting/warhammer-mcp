@@ -164,15 +164,17 @@ describe('dispatchModuleChatCommander', () => {
 
   it('lists registered commands (deduped by primary name) with a module filter', async () => {
     const cc = new FakeChatCommands();
-    cc.register({ name: '/table', module: 'chat-commander-wfrp4e', aliases: ['/t'] });
-    cc.register({ name: '/cond', module: 'chat-commander-wfrp4e' });
+    // BUG-383 (live-verified): the built-in wfrp4e commands register under the SYSTEM id "wfrp4e",
+    // NOT the module id "chat-commander-wfrp4e" — use the real id so this guards the actual detection.
+    cc.register({ name: '/table', module: 'wfrp4e', aliases: ['/t'] });
+    cc.register({ name: '/cond', module: 'wfrp4e' });
     setGame({ active: true, chatCommands: cc });
-    const r = await dispatchModuleChatCommander({ action: 'list-commands', filter: { module: 'chat-commander-wfrp4e' } });
+    const r = await dispatchModuleChatCommander({ action: 'list-commands', filter: { module: 'wfrp4e' } });
     expect(r.success).toBe(true);
     // /table has an alias mapping to the same instance → must NOT double-count.
     expect((r as any).data.count).toBe(2);
-    // BUG-383: result includes chat-commander-wfrp4e built-ins → the advisory must be surfaced so
-    // a caller doesn't try to permanently unregister commands that re-register on every reload.
+    // The advisory must be surfaced so a caller doesn't try to permanently unregister commands that
+    // re-register on every reload.
     expect((r as any).data.builtinWfrpWarning).toMatch(/re-register on every world reload/);
   });
 

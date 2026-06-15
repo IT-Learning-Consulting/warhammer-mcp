@@ -29,7 +29,14 @@ type Envelope<T> = { success: true; data: T } | { success: false; error: string 
 
 const MODULE_ID = '_chatcommands';
 const ADV_MACROS = 'advanced-macros';
-const WFRP_COMMANDS_MODULE = 'chat-commander-wfrp4e';
+// BUG-383 (live-smoke correction): the built-in WFRP4e chat commands (/avail, /char, /cond,
+// /corruption, /credit, /exp, /fear, /name, /pay, /prop, /table, /terror, /trade, /travel) are
+// contributed by the chat-commander-wfrp4e MODULE but REGISTER under the system id "wfrp4e"
+// (verified live — that is the `module` value on each command). Matching only "chat-commander-wfrp4e"
+// detected nothing. They re-register on every world reload → unregister is session-only for them.
+// Match either id to be safe.
+const WFRP_COMMANDS_MODULES = new Set(['wfrp4e', 'chat-commander-wfrp4e']);
+const isWfrpBuiltinModule = (m: unknown): boolean => WFRP_COMMANDS_MODULES.has(String(m));
 
 // ── Local helpers ──────────────────────────────────────────────────────────────
 
@@ -158,7 +165,7 @@ async function handleListCommands(input: ListInput): Promise<Envelope<unknown>> 
   // BUG-383: surface the built-in advisory when the result includes chat-commander-wfrp4e
   // commands — they re-register on every world reload, so unregister-command is session-only
   // for them (consistent with the warning unregister-command already returns).
-  const hasBuiltinWfrp = commands.some((c) => String(c.module) === WFRP_COMMANDS_MODULE);
+  const hasBuiltinWfrp = commands.some((c) => isWfrpBuiltinModule(c.module));
   return {
     success: true,
     data: {
@@ -309,7 +316,7 @@ async function handleUnregisterCommand(input: UnregisterInput): Promise<Envelope
   const api = getChatCommandsApi();
   const lookup = input.name.toLowerCase();
   const existing = api.commands?.get?.(lookup);
-  const isBuiltinWfrp = existing && String(existing.module) === WFRP_COMMANDS_MODULE;
+  const isBuiltinWfrp = !!existing && isWfrpBuiltinModule(existing.module);
 
   const immediateUnregister = input.immediateUnregister !== false; // default true
   const deleteWorldScript = input.deleteWorldScript !== false; // default true

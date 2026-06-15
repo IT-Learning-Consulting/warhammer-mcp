@@ -239,6 +239,52 @@ describe('FoundryDataAccess.getCompendiumDocumentFull — characterization', () 
     expect(result).toMatchSnapshot();
   });
 
+  it('BUG-386: preserves the `key` field on ActiveEffect changes (sanitizer must not strip it)', async () => {
+    const docId = 'talent-key-00001';
+    const doc = {
+      id: docId,
+      name: 'Strong-Backed',
+      type: 'talent',
+      system: {},
+      toObject: () => ({
+        _id: docId,
+        name: 'Strong-Backed',
+        type: 'talent',
+        effects: [
+          {
+            _id: 'eff-key-001',
+            name: 'Strong-Backed AE',
+            changes: [
+              { key: 'system.characteristics.s.initial', value: '5', mode: 2, priority: null },
+              { key: 'system.characteristics.t.initial', value: '5', mode: 2, priority: null },
+            ],
+          },
+        ],
+      }),
+    };
+    const pack = {
+      metadata: { id: 'nations-of-mankind-wfrp4e.talents-nom', label: 'NoM Talents', type: 'Item' },
+      getDocument: async (_id: string) => doc,
+    };
+    (globalThis as any).game = {
+      ...(globalThis as any).game,
+      packs: new Map([['nations-of-mankind-wfrp4e.talents-nom', pack]]),
+    };
+
+    const da = makeDA();
+    const result: any = await da.getCompendiumDocumentFull('nations-of-mankind-wfrp4e.talents-nom', docId);
+
+    // WHY: the AE change `key` is the target attribute path — load-bearing data, NOT a credential.
+    // Stripping it (BUG-386) made correctly-keyed changes project as keyless and nearly caused 15
+    // destructive "fixes". The full change tuple, key included, must survive sanitization in fullData.
+    const changes = result.fullData.effects[0].changes;
+    expect(changes).toHaveLength(2);
+    expect(changes[0].key).toBe('system.characteristics.s.initial');
+    expect(changes[1].key).toBe('system.characteristics.t.initial');
+    expect(changes[0].value).toBe('5');
+    expect(changes[0].mode).toBe(2);
+  });
+
   it('snapshot: item document (no items/effects collections)', async () => {
     const docId = 'sword-item-00001';
     const doc = {

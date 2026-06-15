@@ -492,8 +492,14 @@ export class FoundryDataAccess {
    * Check if a field should be excluded from sanitized output
    */
   private isSensitiveOrProblematicField(key: string): boolean {
+    // BUG-386: 'key' removed from this list. In Foundry persisted document data the field literally
+    // named `key` is legitimate, load-bearing data — most notably the ActiveEffect change target path
+    // ({ key: "system.characteristics.s.initial", value, mode }) — never a credential. Stripping it
+    // made correctly-keyed AE changes project as keyless, producing a false "BROKEN/keyless" diagnosis
+    // that nearly triggered 15 destructive "fixes" on a locked pack. Foundry documents carry no secret
+    // `key`; genuine credentials are covered by 'password'/'token'/'secret'/'auth'/'credential'/'session'.
     const sensitiveKeys = [
-      'password', 'token', 'secret', 'key', 'auth',
+      'password', 'token', 'secret', 'auth',
       'credential', 'session', 'cookie', 'private'
     ];
 
