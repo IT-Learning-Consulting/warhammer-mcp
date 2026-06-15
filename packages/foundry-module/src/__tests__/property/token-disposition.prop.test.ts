@@ -1,7 +1,7 @@
 // fast-check property tests — getTokenDisposition + getWFRPCharacteristicCode invariants (Phase 0 R0.2)
 //
 // Sites: FoundryDataAccess.getTokenDisposition  (data-access.ts ~1715, private)
-//         FoundryDataAccess.getWFRPCharacteristicCode (data-access.ts ~2709, private)
+//         FoundryDataAccess.getWFRPCharacteristicCode (data-access.ts ~1529, private)
 //
 // Both are pure mapping / clamp helpers that never touch Foundry globals.
 // We access them via (da as any).<method>() after stubbing validateFoundryState.
@@ -142,25 +142,13 @@ describe('getTokenDisposition — output is always a number', () => {
 // getWFRPCharacteristicCode properties
 // ---------------------------------------------------------------------------
 
-// Prototype-property names that escape the charMap via Object.prototype lookup:
-// charMap is a plain `{}` literal (not null-prototype), so keys matching
-// Object.prototype properties (constructor, __proto__, toString, etc.) return
-// the prototype value rather than undefined, bypassing the `|| 'ws'` fallback.
-// These inputs are excluded from the "output in valid code set" property;
-// they are documented as a known source limitation (see potentialBugs).
-const PROTO_ESCAPE_NAMES = new Set([
-  '__proto__', 'constructor', 'tostring', 'valueof', 'hasownproperty',
-  'isprototypeof', 'propertyisenumerable', 'tolocalestring',
-]);
-
-const safeCharInput = fc.string().filter(
-  (s) => !PROTO_ESCAPE_NAMES.has(s.toLowerCase().replace(/\s+/g, ''))
-);
-
 describe('getWFRPCharacteristicCode — output in valid code set', () => {
-  it('any non-prototype-polluting string input produces a code in the known set', () => {
+  // BUG-377 fix: the hasOwnProperty guard means prototype-key inputs (constructor,
+  // __proto__, toString, ...) now fall back to 'ws' like any other unknown input,
+  // so this arbitrary covers ALL strings — no exclusion list needed.
+  it('any string input produces a code in the known set', () => {
     fc.assert(
-      fc.property(safeCharInput, (charName) => {
+      fc.property(fc.string(), (charName) => {
         const code: unknown = da.getWFRPCharacteristicCode(charName);
         return VALID_CHAR_CODES.has(code as string);
       }),
@@ -195,29 +183,21 @@ describe('getWFRPCharacteristicCode — case and whitespace insensitivity', () =
 });
 
 describe('getWFRPCharacteristicCode — unknown input defaults to ws', () => {
-  // Strings that contain none of the canonical key substrings AND are not
-  // prototype-property names (constructor/toString/valueOf/__proto__/hasOwnProperty etc.).
-  // The charMap is a plain object literal without a null prototype, so keys like
-  // "constructor" hit Object.prototype and return a truthy non-string value,
-  // bypassing the `|| 'ws'` fallback — this is a known source limitation
-  // (see potentialBugs entry in the Phase 0 R0.2 authoring report).
-  const PROTO_NAMES = new Set([
-    'constructor', 'tostring', 'valueof', '__proto__', 'hasownproperty',
-    'isprototypeof', 'propertyisenumerable', 'tolocalestring',
-  ]);
-
+  // BUG-377 fix: prototype-property names (constructor/toString/valueOf/__proto__/...)
+  // no longer escape via Object.prototype — the hasOwnProperty guard makes them
+  // unknown inputs that default to 'ws', so they need no special exclusion here.
   const unknownStr = fc
     .string({ minLength: 1 })
     .filter((s) => {
       const n = s.toLowerCase().replace(/\s+/g, '');
-      // Exclude both canonical char keys AND Object.prototype pollution names.
+      // Exclude only the canonical char keys; everything else (incl. prototype names) → 'ws'.
       return !['ws', 'bs', 's', 't', 'i', 'ag', 'dex', 'int', 'wp', 'fel',
         'weaponskill', 'ballisticskill', 'strength', 'toughness', 'initiative',
         'agility', 'dexterity', 'intelligence', 'willpower', 'fellowship',
-      ].includes(n) && !PROTO_NAMES.has(n);
+      ].includes(n);
     });
 
-  it('unrecognised string (excluding prototype names) defaults to "ws"', () => {
+  it('unrecognised string defaults to "ws"', () => {
     fc.assert(
       fc.property(unknownStr, (name) => da.getWFRPCharacteristicCode(name) === 'ws'),
       { numRuns: 1000 }

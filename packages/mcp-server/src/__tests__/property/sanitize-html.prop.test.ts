@@ -18,20 +18,13 @@ import fc from 'fast-check';
 import { sanitizeHtml } from '../../utils/sanitize-html.js';
 
 describe('sanitizeHtml — property', () => {
-  // Invariant 1 + 2: always returns string and never throws for any
-  // string | null | undefined input (the declared type signature).
-  // Note: sanitizeHtml(input: string | null | undefined) — we test within
-  // that declared domain. Arbitrary objects outside the signature may throw
-  // (e.g. { toString: [] } causes String() to throw); that is an out-of-contract
-  // call and is documented as a potential finding separately.
-  it('always returns a string and never throws for string | null | undefined inputs', () => {
+  // Invariant 1 + 2: always returns a string and never throws for ANY input —
+  // including truthy non-string objects (e.g. { toString: [] }) that an `as any`
+  // caller could pass. The typeof guard (BUG-378 fix) makes this total.
+  it('always returns a string and never throws for any input', () => {
     fc.assert(
       fc.property(
-        fc.oneof(
-          fc.string(),
-          fc.constant(null),
-          fc.constant(undefined),
-        ),
+        fc.anything(),
         (input) => {
           try {
             const result = sanitizeHtml(input as any);

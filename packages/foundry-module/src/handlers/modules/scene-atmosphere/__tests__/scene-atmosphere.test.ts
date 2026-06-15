@@ -270,6 +270,41 @@ describe('Guard routing', () => {
   });
 });
 
+// ── 3i. BUG-381: mood no-soundscape fallback ──────────────────────────────────
+//
+// Why: get-mood/set-mood must not error (NO_PLAYING_SOUNDSCAPE) merely because no soundscape is
+// playing and no playlistId was given — callers need a usable shape back (sibling-consistency with
+// the other soundscape actions, BUG-355). get-mood returns the module default; set-mood soft no-ops.
+
+describe('mood no-soundscape fallback (BUG-381)', () => {
+  function gameWithNoSoundscape() {
+    return {
+      modules: makeModulesMap(['dynamic-soundscapes']),
+      user: { isGM: true },
+      settings: { get: () => '' },         // getPlayingPlaylistId → '' (nothing playing)
+      playlists: { get: () => undefined },  // no playlist resolvable
+    };
+  }
+
+  it('get-mood returns a soft default (moodA, isFlagExplicit:false) instead of NO_PLAYING_SOUNDSCAPE', async () => {
+    (globalThis as any).game = gameWithNoSoundscape();
+    const result: any = await dispatchModuleSceneAtmosphere({ action: 'get-mood' });
+    expect(result.success).toBe(true);
+    expect(result.data.mood).toBe('moodA');
+    expect(result.data.isFlagExplicit).toBe(false);
+    expect(result.data.noSoundscapeNote).toMatch(/no soundscape/i);
+  });
+
+  it('set-mood returns a soft no-op (moodSet:false) instead of NO_PLAYING_SOUNDSCAPE', async () => {
+    (globalThis as any).game = gameWithNoSoundscape();
+    const result: any = await dispatchModuleSceneAtmosphere({ action: 'set-mood', mood: 'moodB' });
+    expect(result.success).toBe(true);
+    expect(result.data.mood).toBe('moodB');
+    expect(result.data.moodSet).toBe(false);
+    expect(result.data.noSoundscapeNote).toMatch(/no soundscape/i);
+  });
+});
+
 // ── 4. ACTION_MEMBER_MAP completeness ─────────────────────────────────────────
 //
 // Why this test matters: every action that is NOT in ACTION_MEMBER_MAP will fall

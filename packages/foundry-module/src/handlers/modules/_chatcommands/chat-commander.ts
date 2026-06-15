@@ -155,7 +155,20 @@ async function handleListCommands(input: ListInput): Promise<Envelope<unknown>> 
     }
   }
   commands.sort((a, b) => a.name.localeCompare(b.name));
-  return { success: true, data: { count: commands.length, commands } };
+  // BUG-383: surface the built-in advisory when the result includes chat-commander-wfrp4e
+  // commands — they re-register on every world reload, so unregister-command is session-only
+  // for them (consistent with the warning unregister-command already returns).
+  const hasBuiltinWfrp = commands.some((c) => String(c.module) === WFRP_COMMANDS_MODULE);
+  return {
+    success: true,
+    data: {
+      count: commands.length,
+      commands,
+      builtinWfrpWarning: hasBuiltinWfrp
+        ? 'Result includes chat-commander-wfrp4e built-in commands (registered under module id "wfrp4e"). These re-register on every world reload; unregister-command is session-only for them.'
+        : undefined,
+    },
+  };
 }
 
 type GetInput = Extract<ModuleChatCommanderInputType, { action: 'get-command' }>;

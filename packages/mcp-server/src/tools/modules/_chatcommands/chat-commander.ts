@@ -33,7 +33,9 @@ function cmdLine(c: ChatCommandItem): string {
 
 function formatList(d: ListCommandsResult): string {
   if (!d.count) return 'module-chat-commander.list-commands: no commands registered.';
-  return `module-chat-commander.list-commands: ${d.count} command(s):\n${d.commands.map(cmdLine).join('\n')}`;
+  const lines = [`module-chat-commander.list-commands: ${d.count} command(s):`, ...d.commands.map(cmdLine)];
+  if (d.builtinWfrpWarning) lines.push(`- ⚠ ${d.builtinWfrpWarning}`);
+  return lines.join('\n');
 }
 
 function formatGet(d: GetCommandResult): string {

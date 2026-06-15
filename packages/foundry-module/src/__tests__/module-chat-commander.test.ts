@@ -171,6 +171,18 @@ describe('dispatchModuleChatCommander', () => {
     expect(r.success).toBe(true);
     // /table has an alias mapping to the same instance → must NOT double-count.
     expect((r as any).data.count).toBe(2);
+    // BUG-383: result includes chat-commander-wfrp4e built-ins → the advisory must be surfaced so
+    // a caller doesn't try to permanently unregister commands that re-register on every reload.
+    expect((r as any).data.builtinWfrpWarning).toMatch(/re-register on every world reload/);
+  });
+
+  it('omits builtinWfrpWarning when no chat-commander-wfrp4e commands are present (BUG-383)', async () => {
+    const cc = new FakeChatCommands();
+    cc.register({ name: '/loot', module: 'my-module' });
+    setGame({ active: true, chatCommands: cc });
+    const r = await dispatchModuleChatCommander({ action: 'list-commands' });
+    expect(r.success).toBe(true);
+    expect((r as any).data.builtinWfrpWarning).toBeUndefined();
   });
 
   it('gets a command by name and returns null for an unknown name', async () => {

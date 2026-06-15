@@ -373,6 +373,55 @@ describe('vault fit-check gate', () => {
   });
 });
 
+// ── BUG-380: per-actor price-modifier read scope ─────────────────────────────
+
+describe('get-modifiers per-actor scope (BUG-380)', () => {
+  it('forwards targetActorUuid as the actor option so the per-actor override resolves (not the global)', async () => {
+    const perActor = { buyPriceModifier: 1.2, sellPriceModifier: 0.9 };
+    const merchantGlobal = { buyPriceModifier: 1.0, sellPriceModifier: 1.0 };
+    const getMods = vi.fn((_target: string, opts: { actor?: unknown } = {}) =>
+      opts.actor ? perActor : merchantGlobal,
+    );
+    const api = makeRealItemPilesAPI({
+      isItemPileMerchant: vi.fn().mockReturnValue(true),
+      getMerchantPriceModifiers: getMods,
+    });
+    (globalThis as any).game = makeGame({ 'item-piles': { active: true } }, api);
+
+    const result = await dispatchModuleItempiles({
+      action: 'update-price-modifiers',
+      subAction: 'get-modifiers',
+      actorUuid: 'Actor.merchant',
+      targetActorUuid: 'Actor.buyer',
+    });
+
+    expect(result.success).toBe(true);
+    // WHY: without the actor option the API returns the merchant GLOBAL (1.0); the per-actor override
+    // that update-price-modifiers persists (1.2) is only resolved when targetActorUuid is forwarded.
+    expect(getMods).toHaveBeenCalledWith('Actor.merchant', { actor: 'Actor.buyer' });
+    expect((result as any).data.modifiers.buyPriceModifier).toBe(1.2);
+  });
+
+  it('passes actor:false when no targetActorUuid → merchant global', async () => {
+    const merchantGlobal = { buyPriceModifier: 1.0, sellPriceModifier: 1.0 };
+    const getMods = vi.fn().mockReturnValue(merchantGlobal);
+    const api = makeRealItemPilesAPI({
+      isItemPileMerchant: vi.fn().mockReturnValue(true),
+      getMerchantPriceModifiers: getMods,
+    });
+    (globalThis as any).game = makeGame({ 'item-piles': { active: true } }, api);
+
+    const result = await dispatchModuleItempiles({
+      action: 'update-price-modifiers',
+      subAction: 'get-modifiers',
+      actorUuid: 'Actor.merchant',
+    });
+
+    expect(result.success).toBe(true);
+    expect(getMods).toHaveBeenCalledWith('Actor.merchant', { actor: false });
+  });
+});
+
 // ── API instance shape verification ──────────────────────────────────────────
 
 describe('API instance shape (phase5 lesson)', () => {

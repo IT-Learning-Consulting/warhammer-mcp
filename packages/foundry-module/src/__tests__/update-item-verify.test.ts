@@ -232,4 +232,50 @@ describe('updateItem verify-block (MCP Completion v1 Phase 1 R1.2)', () => {
 
     expect(res.success).toBe(true);
   });
+
+  it('BUG-385: injects skipExperienceChecks:true into item.update (bypasses the advancement dialog)', async () => {
+    const item = makeItem('i1', 'Melee (Basic)', { advances: { value: 0 } });
+    let capturedOptions: any;
+    item.update = vi.fn(async (_payload: any, options: any) => {
+      capturedOptions = options;
+      item.system.advances.value = 5;
+      return item;
+    });
+    const actor = makeActor('a1', 'Hans', [item]);
+    setupGame({ actors: [actor] });
+    const da = makeDA();
+
+    await da.updateItem({
+      actorId: 'a1',
+      itemId: 'i1',
+      updateData: { 'system.advances.value': 5 }, // no options passed — must still inject
+    });
+
+    // WHY: a character skill item's advances change opens SkillModel._preUpdate → advancementDialog,
+    // a DialogV2 that deadlocks the headless MCP await. skipExperienceChecks:true bypasses it.
+    expect(capturedOptions?.skipExperienceChecks).toBe(true);
+  });
+
+  it('BUG-385: injected skipExperienceChecks always wins, even over a caller-supplied false', async () => {
+    const item = makeItem('i1', 'Rapier', { advances: { value: 3 } });
+    let capturedOptions: any;
+    item.update = vi.fn(async (_payload: any, options: any) => {
+      capturedOptions = options;
+      item.system.advances.value = 4;
+      return item;
+    });
+    const actor = makeActor('a1', 'Hans', [item]);
+    setupGame({ actors: [actor] });
+    const da = makeDA();
+
+    await da.updateItem({
+      actorId: 'a1',
+      itemId: 'i1',
+      updateData: { 'system.advances.value': 4 },
+      options: { skipExperienceChecks: false },
+    });
+
+    // The dialog must NEVER open on a programmatic update, so the injected true overrides the caller.
+    expect(capturedOptions?.skipExperienceChecks).toBe(true);
+  });
 });

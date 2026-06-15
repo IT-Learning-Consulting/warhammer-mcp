@@ -399,7 +399,61 @@ async function finishDiseaseDuration(input: {
 
   // BUG-295: wrapped
   const { after, resolved, newDisease } = await wrappedWrite('disease.finish-duration', async () => {
-    await item.system.finishDuration();
+    // BUG-385: wfrp4e's item.system.finishDuration() (wfrp4e.js ~27339) opens a SkillDialog for the
+    // Lingering Endurance test with NO skipDialog, deadlocking the MCP await until a human clicks.
+    // Re-implement its Lingering branch headlessly. Faithful to the wfrp4e source EXCEPT:
+    //   (a) skipDialog + skipTargets go in the setupSkill CONTEXT (2nd) arg — warhammer-lib
+    //       _setupTest reads `context.skipDialog` (_setupTest:5677), i.e. setupSkill's 2nd arg, NOT
+    //       the 3rd ("options") arg. wfrp4e's own call omits skipDialog entirely (hence the dialog).
+    //   (b) GM feedback routes through notify.* below, never ChatMessage.create (module contract).
+    // The Festering/Rot compendium UUIDs + SL thresholds are copied verbatim from the wfrp4e source.
+    const g = game as any;
+    const symptoms = String(item.system?.symptoms?.value ?? '').toLowerCase();
+    let removeDisease = true;
+    if (symptoms.includes(g.i18n.localize('NAME.Lingering').toLowerCase())) {
+      const lingering = item.effects?.find(
+        (e: any) => e.name?.includes(g.i18n.localize('WFRP4E.Symptom.Lingering')),
+      );
+      if (lingering) {
+        const difficulty =
+          (globalThis as any).warhammer?.utility?.findKey?.(
+            (lingering as any).specifier,
+            g.wfrp4e?.config?.difficultyNames,
+            { caseInsensitive: true },
+          ) || 'challenging';
+        const test = await actor.setupSkill(
+          g.i18n.localize('NAME.Endurance'),
+          { appendTitle: ` - ${g.i18n.localize('NAME.Lingering')}`, fields: { difficulty }, skipTargets: true, skipDialog: true },
+          { skipTargets: true },
+        );
+        await test.roll();
+        if (test.failed) {
+          const negSL = Math.abs(test.result?.SL ?? 0);
+          if (negSL <= 1) {
+            // Lingering extended: persist a fresh 1d10 duration (the wfrp4e source mutates in memory).
+            const rollObj = new ((globalThis as any).Roll)('1d10');
+            const roll = (await rollObj.roll({ allowInteractive: false })).total as number;
+            await item.update({ 'system.duration.value': roll });
+            removeDisease = false;
+          } else {
+            // negSL 2–5 → Festering; 6+ → Rot (wfrp4e-core compendium UUIDs, treated as stable constants).
+            const uuid = negSL <= 5
+              ? 'Compendium.wfrp4e-core.items.kKccDTGzWzSXCBOb'
+              : 'Compendium.wfrp4e-core.items.M8XyRs9DN12XsFTQ';
+            const template = await (globalThis as any).fromUuid(uuid);
+            if (template) {
+              const diseaseData = template.toObject();
+              diseaseData.system.incubation.value = 0;
+              diseaseData.system.duration.active = true;
+              await (globalThis as any).Item.create(diseaseData, { parent: actor });
+            }
+          }
+        }
+      }
+    }
+    if (removeDisease) {
+      await item.delete();
+    }
 
     // Infer outcome from post-call state
     const fresh = actor.items.get(input.diseaseItemId);

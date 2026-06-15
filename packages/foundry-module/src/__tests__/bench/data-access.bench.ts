@@ -62,16 +62,18 @@ const sampleCreature = {
   hasSpecialAbilities: false,
 };
 
+// Phase 3 (R3.2): passesEnhancedCriteria moved into CompendiumSearchService; reached via the injected
+// `compendiumSearch` field on the same FoundryDataAccess instance. Same method, same inputs benched.
 bench('passesEnhancedCriteria — no filters (pass-through)', () => {
-  (daForCriteria as any).passesEnhancedCriteria(sampleCreature, {});
+  (daForCriteria as any).compendiumSearch.passesEnhancedCriteria(sampleCreature, {});
 });
 
 bench('passesEnhancedCriteria — numeric threatLevel match', () => {
-  (daForCriteria as any).passesEnhancedCriteria(sampleCreature, { threatLevel: 4 });
+  (daForCriteria as any).compendiumSearch.passesEnhancedCriteria(sampleCreature, { threatLevel: 4 });
 });
 
 bench('passesEnhancedCriteria — range threatLevel + creatureType + size', () => {
-  (daForCriteria as any).passesEnhancedCriteria(sampleCreature, {
+  (daForCriteria as any).compendiumSearch.passesEnhancedCriteria(sampleCreature, {
     threatLevel: { min: 1, max: 10 },
     creatureType: 'beast',
     size: 'small',
@@ -79,7 +81,7 @@ bench('passesEnhancedCriteria — range threatLevel + creatureType + size', () =
 });
 
 bench('passesEnhancedCriteria — all filters (early-exit on first mismatch)', () => {
-  (daForCriteria as any).passesEnhancedCriteria(sampleCreature, {
+  (daForCriteria as any).compendiumSearch.passesEnhancedCriteria(sampleCreature, {
     threatLevel: { min: 1, max: 3 }, // fails here; rest short-circuits
     creatureType: 'beast',
     size: 'small',

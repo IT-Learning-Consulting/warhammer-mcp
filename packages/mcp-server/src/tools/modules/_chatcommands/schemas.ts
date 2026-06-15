@@ -22,6 +22,7 @@ export interface ChatCommandItem {
 export interface ListCommandsResult {
   count: number;
   commands: ChatCommandItem[];
+  builtinWfrpWarning?: string;
 }
 
 export type GetCommandResult = ChatCommandItem | null;

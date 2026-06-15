@@ -19,6 +19,12 @@ exports[`ModuleChatCommanderTool — characterization > list-commands — comman
 
 exports[`ModuleChatCommanderTool — characterization > list-commands — empty registry 1`] = `"module-chat-commander.list-commands: no commands registered."`;
 
+exports[`ModuleChatCommanderTool — characterization > list-commands — with builtin WFRP advisory (BUG-383) 1`] = `
+"module-chat-commander.list-commands: 1 command(s):
+  • /effect [chat-commander-wfrp4e] role=GAMEMASTER — Apply an effect
+- ⚠ Result includes chat-commander-wfrp4e built-in commands (registered under module id "wfrp4e"). These re-register on every world reload; unregister-command is session-only for them."
+`;
+
 exports[`ModuleChatCommanderTool — characterization > unregister-command — builtin WFRP warning 1`] = `
 "module-chat-commander.unregister-command: unregistered
 - macroDeleted: false

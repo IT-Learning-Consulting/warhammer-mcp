@@ -30,6 +30,18 @@ describe('ModuleChatCommanderTool — characterization', () => {
     expect((r as any).content[0].text).toMatchSnapshot();
   });
 
+  it('list-commands — with builtin WFRP advisory (BUG-383)', async () => {
+    const r = await tool({
+      count: 1,
+      commands: [
+        { name: '/effect', aliases: [], module: 'chat-commander-wfrp4e', requiredRole: 'GAMEMASTER', description: 'Apply an effect' },
+      ],
+      builtinWfrpWarning:
+        'Result includes chat-commander-wfrp4e built-in commands (registered under module id "wfrp4e"). These re-register on every world reload; unregister-command is session-only for them.',
+    }).execute({ action: 'list-commands' });
+    expect((r as any).content[0].text).toMatchSnapshot();
+  });
+
   it('get-command — found', async () => {
     const r = await tool({
       name: '/roll',

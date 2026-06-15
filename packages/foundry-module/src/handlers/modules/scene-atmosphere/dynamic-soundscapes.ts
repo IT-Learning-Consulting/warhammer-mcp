@@ -96,36 +96,9 @@ function getPlayingPlaylistId(): string {
   }
 }
 
-/**
- * Find (or resolve) a playlist for mood operations.
- * If playlistId is provided, use it. Otherwise fall back to the currently playing playlist.
- * Throws PLAYLIST_NOT_FOUND if neither can be resolved.
- */
-function resolvePlaylistForMood(playlistId?: string): any {
-  const game = getGame();
-  if (playlistId) {
-    const pl = game?.playlists?.get?.(playlistId);
-    if (!pl) {
-      throw new Error(`PLAYLIST_NOT_FOUND: No playlist with id "${playlistId}".`);
-    }
-    return pl;
-  }
-  const playingId = getPlayingPlaylistId();
-  if (!playingId) {
-    throw new Error(
-      'NO_PLAYING_SOUNDSCAPE: No soundscape is currently playing and no playlistId was provided. ' +
-      'Pass a playlistId explicitly or start a soundscape with set-soundscape first.',
-    );
-  }
-  const pl = game?.playlists?.get?.(playingId);
-  if (!pl) {
-    throw new Error(
-      `PLAYLIST_NOT_FOUND: Playing playlist id "${playingId}" not found. ` +
-      'It may have been deleted; set-soundscape with a valid id to recover.',
-    );
-  }
-  return pl;
-}
+// BUG-381: handleGetMood / handleSetMood now inline their explicit-id > playing > no-soundscape
+// fallback resolution (returning a soft success instead of throwing NO_PLAYING_SOUNDSCAPE), so the
+// former shared `resolvePlaylistForMood` helper was removed as dead code.
 
 /**
  * Find the "Soundscapes" folder. Returns null if not found.
@@ -262,7 +235,41 @@ export async function handleStopSoundscape(_input: StopSoundscapeInput): Promise
 
 export async function handleSetMood(input: SetMoodInput): Promise<Envelope<unknown>> {
   try {
-    const playlist = resolvePlaylistForMood(input.playlistId);
+    // BUG-381: resolve explicit id > playing soundscape > no-soundscape fallback (no throw).
+    const game = getGame();
+    let playlist: any = null;
+    if (input.playlistId) {
+      playlist = game?.playlists?.get?.(input.playlistId);
+      if (!playlist) {
+        return { success: false, error: `SET_MOOD_ERROR: PLAYLIST_NOT_FOUND: No playlist with id "${input.playlistId}".` };
+      }
+    } else {
+      const playingId = getPlayingPlaylistId();
+      if (playingId) playlist = game?.playlists?.get?.(playingId);
+    }
+
+    // No-soundscape fallback: a flag can't be written without a target playlist. Return an
+    // informative soft no-op (success:true, moodSet:false) instead of erroring — mirrors get-mood
+    // so callers get a usable shape rather than NO_PLAYING_SOUNDSCAPE.
+    if (!playlist) {
+      return {
+        success: true,
+        data: {
+          playlistId: null,
+          playlistName: null,
+          mood: input.mood,
+          verifiedMood: null,
+          moodMatch: false,
+          moodSet: false,
+          noSoundscapeNote:
+            'No soundscape is currently playing and no playlistId was provided. Mood cannot be ' +
+            'written without a target playlist. Pass a playlistId explicitly or start a soundscape ' +
+            'with set-soundscape first.',
+          moodNote:
+            'moodA is the module default (absent flag == moodA). Condition re-evaluation fires on the updatePlaylist hook.',
+        },
+      };
+    }
 
     await playlist.setFlag(MODULE_ID, 'mood', input.mood);
 
@@ -281,6 +288,7 @@ export async function handleSetMood(input: SetMoodInput): Promise<Envelope<unkno
         mood: input.mood,
         verifiedMood: verified,
         moodMatch: verified === input.mood,
+        moodSet: true,
         moodNote:
           'moodA is the module default (absent flag == moodA). Writing moodA is a no-op unless ' +
           'reverting from moodB or moodC. Condition re-evaluation fires on the updatePlaylist hook.',
@@ -295,7 +303,38 @@ export async function handleSetMood(input: SetMoodInput): Promise<Envelope<unkno
 
 export async function handleGetMood(input: GetMoodInput): Promise<Envelope<unknown>> {
   try {
-    const playlist = resolvePlaylistForMood(input.playlistId);
+    // BUG-381: resolve explicit id > playing soundscape > no-soundscape fallback (no throw).
+    const game = getGame();
+    let playlist: any = null;
+    if (input.playlistId) {
+      playlist = game?.playlists?.get?.(input.playlistId);
+      if (!playlist) {
+        return { success: false, error: `GET_MOOD_ERROR: PLAYLIST_NOT_FOUND: No playlist with id "${input.playlistId}".` };
+      }
+    } else {
+      const playingId = getPlayingPlaylistId();
+      if (playingId) playlist = game?.playlists?.get?.(playingId);
+    }
+
+    // No-soundscape fallback: return the module default mood instead of erroring, so callers
+    // get a usable shape rather than NO_PLAYING_SOUNDSCAPE.
+    if (!playlist) {
+      return {
+        success: true,
+        data: {
+          playlistId: null,
+          playlistName: null,
+          mood: 'moodA',
+          isFlagExplicit: false,
+          noSoundscapeNote:
+            'No soundscape is currently playing and no playlistId was provided. Returning the ' +
+            'module default mood (moodA). Pass a playlistId or start a soundscape with set-soundscape.',
+          moodNote:
+            'moodA is the module default when the flag is absent. ' +
+            'isFlagExplicit=false means the mood flag has not been written yet.',
+        },
+      };
+    }
 
     const rawFlag = playlist.getFlag(MODULE_ID, 'mood');
     // Absent flag == moodA (module default: `mood === "moodA" || !flag`)

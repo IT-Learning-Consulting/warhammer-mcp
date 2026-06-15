@@ -1,6 +1,8 @@
 // fast-check property tests — passesEnhancedCriteria invariants (Phase 0 R0.2)
 //
-// Site: FoundryDataAccess.passesEnhancedCriteria (data-access.ts ~1273, private)
+// Site: CompendiumSearchService.passesEnhancedCriteria (services/compendium-search.ts, private).
+// Phase 3 (R3.2): the method moved off FoundryDataAccess into the extracted service; reached here via
+// the same FoundryDataAccess instance's injected `compendiumSearch` field. Invariants unchanged.
 //
 // Contract:
 //   1. TOTALITY: never throws for any well-shaped EnhancedCreatureIndex + criteria.
@@ -28,7 +30,7 @@ const da = (() => {
 })();
 
 function passes(creature: any, criteria: any): boolean {
-  return (da as any).passesEnhancedCriteria(creature, criteria);
+  return (da as any).compendiumSearch.passesEnhancedCriteria(creature, criteria);
 }
 
 // ---------------------------------------------------------------------------

@@ -1029,8 +1029,12 @@ async function handleUpdatePriceModifiers(input: UpdatePriceModifiersInput): Pro
       if (!API.isItemPileMerchant(input.actorUuid)) {
         return { success: false, error: 'INVALID_PILE_TYPE: actor is not an item pile merchant' };
       }
-      const modifiers = API.getMerchantPriceModifiers(input.actorUuid);
-      return { success: true, data: { actorUuid: input.actorUuid, modifiers } };
+      // BUG-380: forward targetActorUuid as the `actor` option so getMerchantPriceModifiers
+      // resolves the per-actor override from actorPriceModifiers. Without it the API returns
+      // only the merchant global default (1.0), never the per-actor value update-modifiers wrote.
+      const actorOpt = input.targetActorUuid ?? false;
+      const modifiers = API.getMerchantPriceModifiers(input.actorUuid, { actor: actorOpt });
+      return { success: true, data: { actorUuid: input.actorUuid, targetActorUuid: input.targetActorUuid ?? null, modifiers } };
     }
 
     // update-modifiers
@@ -1063,10 +1067,12 @@ async function handleUpdatePriceModifiers(input: UpdatePriceModifiersInput): Pro
       return { success: false, error: 'NO_ACTIVE_GM: item-piles socket returned false — GM may have disconnected' };
     }
 
-    // DP-16: post-write verify
-    const afterModifiers = API.getMerchantPriceModifiers(input.actorUuid);
+    // DP-16: post-write verify — read back at the SAME scope we wrote (targetUuid, which is
+    // the per-actor target when given, else the merchant's own uuid), so the verify reflects
+    // the actual write rather than the unchanged merchant global (BUG-380).
+    const afterModifiers = API.getMerchantPriceModifiers(input.actorUuid, { actor: targetUuid });
     notify.updated('item-piles', `Updated price modifiers for ${input.actorUuid}`, {});
-    return { success: true, data: { actorUuid: input.actorUuid, subAction: 'update-modifiers', modifiers: afterModifiers } };
+    return { success: true, data: { actorUuid: input.actorUuid, subAction: 'update-modifiers', targetActorUuid: input.targetActorUuid ?? null, modifiers: afterModifiers } };
   } catch (e) {
     return { success: false, error: `UPDATE_PRICE_MODIFIERS_ERROR: ${e instanceof Error ? e.message : String(e)}` };
   }

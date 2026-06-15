@@ -5,8 +5,11 @@ const EVENT_HANDLER_PATTERN = /\s+on[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]*)/gi;
 const JAVASCRIPT_URL_PATTERN = /(?:href|src)\s*=\s*(?:"javascript:[^"]*"|'javascript:[^']*')/gi;
 
 export function sanitizeHtml(input: string | null | undefined): string {
-  if (!input) return '';
-  return String(input)
+  // BUG-378: `!input` only catches falsy values; a truthy non-string (e.g. { toString: [] })
+  // passed via an `as any` caller would make String(input) throw. Guard on the type instead,
+  // which covers null/undefined AND any out-of-contract non-string, and makes String() redundant.
+  if (typeof input !== 'string') return '';
+  return input
     .replace(SCRIPT_PATTERN, '')
     .replace(EVENT_HANDLER_PATTERN, '')
     .replace(JAVASCRIPT_URL_PATTERN, '');

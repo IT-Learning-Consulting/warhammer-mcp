@@ -252,6 +252,9 @@ export async function handleConfigureLpAttempts(input: ConfigureLpAttemptsInput)
         documentType: input.documentType,
         applied,
         verifiedAttempts: (() => { try { return flags.LPAttemptsLeft?.(doc); } catch { return null; } })(),
+        // BUG-382: read back the configured max so callers can verify attemptsMax round-trips
+        // (was absent, leaving verifiedAttempts:null with no way to confirm the max was written).
+        verifiedMaxAttempts: doc.getFlag?.('LocknKey', 'LPAttemptsMaxFlag') ?? null,
         verifiedRequiredSuccesses: doc.getFlag?.('LocknKey', 'requiredLPsuccessFlag') ?? null,
       },
     };
