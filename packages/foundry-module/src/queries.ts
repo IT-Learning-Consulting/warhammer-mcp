@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { MODULE_ID } from './constants.js';
 import { FoundryDataAccess } from './data-access.js';
+// Phase 4 (R3.3): QueryHandlers owns the extracted creature-index + compendium-search services.
+import { PersistentCreatureIndex, CompendiumSearchService } from './services/index.js';
 import { wrappedWrite } from './transaction-manager.js';
 import { notify } from './notify.js';
 // Phase 1 mcp_crud_expansion — polymorphic ownership handlers.
@@ -208,9 +210,16 @@ function rethrowAsInvalidInput(error: unknown): void {
 
 export class QueryHandlers {
   public dataAccess: FoundryDataAccess;
+  // Phase 4 (R3.3): QueryHandlers owns the creature index + search service (they left FoundryDataAccess).
+  // The search service receives the index directly (PersistentCreatureIndex implements CreatureIndexReader);
+  // FoundryDataAccess gets the service injected for its one residual caller (createActorFromCompendium).
+  public creatureIndex: PersistentCreatureIndex;
+  public compendiumSearch: CompendiumSearchService;
 
   constructor() {
-    this.dataAccess = new FoundryDataAccess();
+    this.creatureIndex = new PersistentCreatureIndex();
+    this.compendiumSearch = new CompendiumSearchService(MODULE_ID, this.creatureIndex);
+    this.dataAccess = new FoundryDataAccess(this.compendiumSearch);
   }
 
   /**
@@ -462,7 +471,7 @@ export class QueryHandlers {
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
       const parsed = SearchCompendiumInput.strict().parse(data ?? {});
-      return { success: true, data: await this.dataAccess.searchCompendium(parsed.query, parsed.packType, parsed.filters, parsed.itemType) };
+      return { success: true, data: await this.compendiumSearch.searchCompendium(parsed.query, parsed.packType, parsed.filters, parsed.itemType) };
     } catch (error) {
       rethrowAsInvalidInput(error);
       throw new Error(`Failed to search compendium: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -515,7 +524,7 @@ export class QueryHandlers {
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
       const parsed = ListCreaturesByCriteriaInput.strict().parse(data ?? {});
-      const result = await this.dataAccess.listCreaturesByCriteria(parsed);
+      const result = await this.compendiumSearch.listCreaturesByCriteria(parsed);
       return { success: true, data: result };
     } catch (error) {
       rethrowAsInvalidInput(error);

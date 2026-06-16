@@ -71,6 +71,19 @@ function makeEslint() {
         rules: CAP_ERROR,
       },
       { files: ['**/*.{mjs,cjs,js}'], rules: CAP_ERROR },
+      // Phase 4 (D4): grandfather services/ to mirror eslint.config.mjs block 9. The code-quality
+      // extractions (Phases 3-7) move large methods VERBATIM (zero behavioral change), so the per-function
+      // caps cannot apply without breaking that mandate; services keep a real 600-line file cap instead.
+      {
+        files: ['**/services/**/*.ts'],
+        rules: {
+          'max-lines-per-function': 'off',
+          complexity: 'off',
+          'max-depth': 'off',
+          'max-params': 'off',
+          'max-lines': ['error', 600],
+        },
+      },
       { files: TEST_GLOBS, rules: Object.fromEntries(CAP_RULES.map((r) => [r, 'off'])) },
     ],
   });

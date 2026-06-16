@@ -7,11 +7,19 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { FoundryDataAccess } from '../../data-access.js';
+// Phase 4 (R3.3): searchCompendium lives on the service now — pierce it directly (describe/it names kept
+// verbatim so those snapshots stay byte-identical). getAvailablePacks + getCompendiumDocumentFull stay on da.
+import { CompendiumSearchService } from '../../services/index.js';
+import { MODULE_ID } from '../../constants.js';
 
 function makeDA() {
   const da = new FoundryDataAccess();
   (da as any).validateFoundryState = () => {};
   return da;
+}
+
+function makeSearch() {
+  return new CompendiumSearchService(MODULE_ID, { getEnhancedIndex: async () => [] });
 }
 
 let randomCounter = 0;
@@ -118,8 +126,8 @@ describe('FoundryDataAccess.searchCompendium — characterization', () => {
       packs: new Map([['wfrp4e-core.bestiary', pack]]),
     };
 
-    const da = makeDA();
-    const result = await da.searchCompendium('goblin');
+    const search = makeSearch();
+    const result = await search.searchCompendium('goblin');
     expect(result).toMatchSnapshot();
   });
 
@@ -142,8 +150,8 @@ describe('FoundryDataAccess.searchCompendium — characterization', () => {
       packs: new Map([['wfrp4e-core.bestiary', pack]]),
     };
 
-    const da = makeDA();
-    const result = await da.searchCompendium('dragon');
+    const search = makeSearch();
+    const result = await search.searchCompendium('dragon');
     expect(result).toMatchSnapshot();
   });
 
@@ -167,8 +175,8 @@ describe('FoundryDataAccess.searchCompendium — characterization', () => {
       packs: new Map([['wfrp4e-core.items', pack]]),
     };
 
-    const da = makeDA();
-    const result = await da.searchCompendium('sword', undefined, undefined, 'weapon');
+    const search = makeSearch();
+    const result = await search.searchCompendium('sword', undefined, undefined, 'weapon');
     expect(result).toMatchSnapshot();
   });
 });

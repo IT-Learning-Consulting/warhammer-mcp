@@ -20,6 +20,9 @@
 import { describe, it } from 'vitest';
 import fc from 'fast-check';
 import { FoundryDataAccess } from '../../data-access.js';
+// Phase 4 (R4.1): getWFRPCharacteristicCode moved to RollRequestService; pierce it there. getTokenDisposition
+// stays on FoundryDataAccess.
+import { RollRequestService } from '../../services/index.js';
 
 // ---------------------------------------------------------------------------
 // Test rig
@@ -33,6 +36,8 @@ function makeDA(): any {
 }
 
 const da = makeDA();
+// getWFRPCharacteristicCode is private on RollRequestService; reach it via an `any` cast on the instance.
+const charSvc: any = new RollRequestService(() => {});
 
 // ---------------------------------------------------------------------------
 // Known constants from constants.ts
@@ -149,7 +154,7 @@ describe('getWFRPCharacteristicCode — output in valid code set', () => {
   it('any string input produces a code in the known set', () => {
     fc.assert(
       fc.property(fc.string(), (charName) => {
-        const code: unknown = da.getWFRPCharacteristicCode(charName);
+        const code: unknown = charSvc.getWFRPCharacteristicCode(charName);
         return VALID_CHAR_CODES.has(code as string);
       }),
       { numRuns: 2000 }
@@ -162,7 +167,7 @@ describe('getWFRPCharacteristicCode — canonical names map correctly', () => {
     it(`"${input}" → "${expected}"`, () => {
       fc.assert(
         fc.property(fc.constant(input), (name) => {
-          return da.getWFRPCharacteristicCode(name) === expected;
+          return charSvc.getWFRPCharacteristicCode(name) === expected;
         }),
         { numRuns: 1 }
       );
@@ -175,7 +180,7 @@ describe('getWFRPCharacteristicCode — case and whitespace insensitivity', () =
     fc.assert(
       fc.property(
         fc.constantFrom('Weapon Skill', 'WEAPON SKILL', 'weapon skill', 'WeaponSkill'),
-        (name) => da.getWFRPCharacteristicCode(name) === 'ws'
+        (name) => charSvc.getWFRPCharacteristicCode(name) === 'ws'
       ),
       { numRuns: 4 }
     );
@@ -199,7 +204,7 @@ describe('getWFRPCharacteristicCode — unknown input defaults to ws', () => {
 
   it('unrecognised string defaults to "ws"', () => {
     fc.assert(
-      fc.property(unknownStr, (name) => da.getWFRPCharacteristicCode(name) === 'ws'),
+      fc.property(unknownStr, (name) => charSvc.getWFRPCharacteristicCode(name) === 'ws'),
       { numRuns: 1000 }
     );
   });
@@ -211,7 +216,7 @@ describe('getWFRPCharacteristicCode — totality', () => {
       fc.property(fc.string(), (charName) => {
         let threw = false;
         try {
-          da.getWFRPCharacteristicCode(charName);
+          charSvc.getWFRPCharacteristicCode(charName);
         } catch {
           threw = true;
         }

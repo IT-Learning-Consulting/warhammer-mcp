@@ -17,20 +17,18 @@
 
 import { describe, it } from 'vitest';
 import fc from 'fast-check';
-import { FoundryDataAccess } from '../../data-access.js';
+// Phase 4 (R3.3): passesEnhancedCriteria lives on the service; construct it directly (it left FoundryDataAccess).
+import { CompendiumSearchService } from '../../services/index.js';
+import { MODULE_ID } from '../../constants.js';
 
 // ---------------------------------------------------------------------------
 // Test rig
 // ---------------------------------------------------------------------------
 
-const da = (() => {
-  const inst = new FoundryDataAccess();
-  (inst as any).validateFoundryState = () => {};
-  return inst;
-})();
+const svc = new CompendiumSearchService(MODULE_ID, { getEnhancedIndex: async () => [] });
 
 function passes(creature: any, criteria: any): boolean {
-  return (da as any).compendiumSearch.passesEnhancedCriteria(creature, criteria);
+  return (svc as any).passesEnhancedCriteria(creature, criteria);
 }
 
 // ---------------------------------------------------------------------------

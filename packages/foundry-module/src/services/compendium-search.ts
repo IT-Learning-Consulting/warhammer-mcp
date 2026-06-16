@@ -64,6 +64,33 @@ export class CompendiumSearchService {
   }
 
   /**
+   * Find best matching compendium entry for creature type.
+   * Phase 4 (R3.3 / D3): relocated verbatim from FoundryDataAccess — it IS compendium-matching logic and
+   * its only caller (createActorFromCompendium) now reaches it through the injected service.
+   */
+  async findBestCompendiumMatch(creatureType: string, packPreference?: string): Promise<CompendiumSearchResult | null> {
+    // First try exact search
+    const exactResults = await this.searchCompendium(creatureType, 'Actor');
+
+    // Look for exact name match first
+    const exactMatch = exactResults.find(result =>
+      result.name.toLowerCase() === creatureType.toLowerCase()
+    );
+    if (exactMatch) return exactMatch;
+
+    // Look for partial matches, preferring specified pack
+    if (packPreference) {
+      const packMatch = exactResults.find(result =>
+        result.pack === packPreference
+      );
+      if (packMatch) return packMatch;
+    }
+
+    // Return best fuzzy match
+    return exactResults.length > 0 ? exactResults[0]! : null;
+  }
+
+  /**
    * Enhanced creature-index search path. Returns mapped results, or null to fall through to the basic
    * name-index scan (when the filter/packType preconditions aren't met, the setting is off, or the
    * enhanced lookup throws). Behavior preserved verbatim from the inline block.

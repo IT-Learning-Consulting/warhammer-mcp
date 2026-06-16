@@ -58,6 +58,29 @@ export class PersistentCreatureIndex implements CreatureIndexReader {
     return await this.buildEnhancedIndex(true);
   }
 
+  /**
+   * Force rebuild with a structured result envelope (success / totalCreatures / message).
+   * Phase 4 (R3.3): the wrapper moved verbatim off FoundryDataAccess.rebuildEnhancedCreatureIndex so the
+   * Settings-UI button + the ready hook can call the index directly (bridge.creatureIndex.rebuildEnhancedIndex()).
+   */
+  async rebuildEnhancedIndex(): Promise<{ success: boolean; totalCreatures: number; message: string }> {
+    try {
+      const creatures = await this.rebuildIndex();
+      return {
+        success: true,
+        totalCreatures: creatures.length,
+        message: `Enhanced creature index rebuilt: ${creatures.length} creatures indexed from all packs`
+      };
+    } catch (error) {
+      console.error(`[${this.moduleId}] Failed to rebuild enhanced creature index:`, error);
+      return {
+        success: false,
+        totalCreatures: 0,
+        message: `Failed to rebuild index: ${error instanceof Error ? error.message : 'Unknown error'}`
+      };
+    }
+  }
+
   /** Load persisted index from JSON file */
   private async loadPersistedIndex(): Promise<PersistentEnhancedIndex | null> {
     try {

@@ -13,6 +13,9 @@
 
 import { bench, beforeEach } from 'vitest';
 import { FoundryDataAccess } from '../../data-access.js';
+// Phase 4 (R3.3): the search service left FoundryDataAccess — bench it directly.
+import { CompendiumSearchService } from '../../services/index.js';
+import { MODULE_ID } from '../../constants.js';
 
 // ---------------------------------------------------------------------------
 // Shared fixture helpers
@@ -46,7 +49,7 @@ function makeActor(id = 'actor-bench00000', name = 'Bench Actor') {
 // calling any async path.  The method reads no globals and performs only
 // numeric/string comparisons — the ideal in-process bench target.
 
-const daForCriteria = makeDA();
+const searchForCriteria = new CompendiumSearchService(MODULE_ID, { getEnhancedIndex: async () => [] });
 const sampleCreature = {
   id: 'c1',
   name: 'Rat',
@@ -62,18 +65,18 @@ const sampleCreature = {
   hasSpecialAbilities: false,
 };
 
-// Phase 3 (R3.2): passesEnhancedCriteria moved into CompendiumSearchService; reached via the injected
-// `compendiumSearch` field on the same FoundryDataAccess instance. Same method, same inputs benched.
+// Phase 4 (R3.3): passesEnhancedCriteria lives on CompendiumSearchService; benched on the service directly
+// (it left FoundryDataAccess in the Contract step). Same method, same inputs benched.
 bench('passesEnhancedCriteria — no filters (pass-through)', () => {
-  (daForCriteria as any).compendiumSearch.passesEnhancedCriteria(sampleCreature, {});
+  (searchForCriteria as any).passesEnhancedCriteria(sampleCreature, {});
 });
 
 bench('passesEnhancedCriteria — numeric threatLevel match', () => {
-  (daForCriteria as any).compendiumSearch.passesEnhancedCriteria(sampleCreature, { threatLevel: 4 });
+  (searchForCriteria as any).passesEnhancedCriteria(sampleCreature, { threatLevel: 4 });
 });
 
 bench('passesEnhancedCriteria — range threatLevel + creatureType + size', () => {
-  (daForCriteria as any).compendiumSearch.passesEnhancedCriteria(sampleCreature, {
+  (searchForCriteria as any).passesEnhancedCriteria(sampleCreature, {
     threatLevel: { min: 1, max: 10 },
     creatureType: 'beast',
     size: 'small',
@@ -81,7 +84,7 @@ bench('passesEnhancedCriteria — range threatLevel + creatureType + size', () =
 });
 
 bench('passesEnhancedCriteria — all filters (early-exit on first mismatch)', () => {
-  (daForCriteria as any).compendiumSearch.passesEnhancedCriteria(sampleCreature, {
+  (searchForCriteria as any).passesEnhancedCriteria(sampleCreature, {
     threatLevel: { min: 1, max: 3 }, // fails here; rest short-circuits
     creatureType: 'beast',
     size: 'small',
@@ -145,10 +148,10 @@ beforeEach(() => {
 });
 
 bench('searchCompendium — empty packs (no match)', async () => {
-  const da = makeDA();
+  const search = new CompendiumSearchService(MODULE_ID, { getEnhancedIndex: async () => [] });
   try {
     // Query is valid (>=2 chars); packs are empty so result should be []
-    await da.searchCompendium('rat');
+    await search.searchCompendium('rat');
   } catch {
     // Some code paths throw on empty packs; timing includes the error path
   }

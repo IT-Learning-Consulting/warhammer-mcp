@@ -3,7 +3,8 @@
 // Items (not system.* D&D-5e paths) and sums armour from equipped armour Items.
 
 import { describe, it, expect } from 'vitest';
-import { FoundryDataAccess } from '../data-access.js';
+// Phase 4 (R3.3): the index left FoundryDataAccess — pierce the service directly.
+import { PersistentCreatureIndex } from '../services/index.js';
 
 const pack = { metadata: { id: 'test.pack', label: 'Test Pack' } };
 
@@ -24,8 +25,8 @@ function make(items: any[], extra: any = {}) {
 }
 
 describe('creature index — WFRP primitives', () => {
-  const da = new FoundryDataAccess();
-  const extract = (doc: any) => (da as any).persistentIndex.extractEnhancedCreatureData(doc, pack);
+  const index = new PersistentCreatureIndex();
+  const extract = (doc: any) => (index as any).extractEnhancedCreatureData(doc, pack);
 
   it('wfrp-caster: spell/prayer/trait Items → hasSpells, hasSpecialAbilities', () => {
     const doc = make([

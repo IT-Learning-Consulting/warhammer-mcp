@@ -1,8 +1,8 @@
 import { MODULE_ID, ERROR_MESSAGES, TOKEN_DISPOSITIONS } from './constants.js';
 import { notify } from './notify.js';
 import { verifyDocWrite } from './utils/verifyWrite.js';
-import { PersistentCreatureIndex, CompendiumSearchService } from './services/index.js';
-import type { CompendiumSearchResult, EnhancedCreatureIndex, CreatureIndexReader } from './service-interfaces.js';
+import { RollRequestService, RollButtonService, PlayerLookupService, type CompendiumSearchService } from './services/index.js';
+import { findActorByIdentifier } from './utils/actor-lookup.js';
 // Local type definitions to avoid shared package import issues
 interface CharacterInfo {
   id: string;
@@ -169,44 +169,30 @@ interface TokenPlacementResult {
   errors?: string[] | undefined;
 }
 
-// Phase 3 (R3.1): PersistentCreatureIndex extracted verbatim to ./services/creature-index.ts.
-// FoundryDataAccess keeps a same-named `persistentIndex` field (the zero-diff hinge — two characterization
-// tests pierce `(da as any).persistentIndex`). The Contract step (deleting facade delegates) is Phase 4.
+// Phase 4 (R3.3): Contract step. The persistent creature index + the compendium-search cluster have fully
+// left FoundryDataAccess — QueryHandlers (the composition layer) now owns the creature index + search
+// service, and the index rebuild wrapper lives on the index service's own rebuildEnhancedIndex() method.
+// The only residual coupling is an injected CompendiumSearchService used by createActorFromCompendium.
 
 export class FoundryDataAccess {
   private moduleId: string = MODULE_ID;
-  private persistentIndex: PersistentCreatureIndex = new PersistentCreatureIndex();
-  // Phase 3 (R3.2): search cluster extracted to ./services/compendium-search.ts. Injected with an adapter
-  // that resolves the LIVE persistentIndex field at call time (NOT the by-value reference), so the
-  // da-creatures.snap test's post-construction `(da as any).persistentIndex = {...}` stub is honoured.
-  private compendiumSearch: CompendiumSearchService = new CompendiumSearchService(
-    this.moduleId,
-    { getEnhancedIndex: (): Promise<EnhancedCreatureIndex[]> => this.persistentIndex.getEnhancedIndex() } satisfies CreatureIndexReader,
-  );
+  // Injected by QueryHandlers (the owner of the creature index + search service). Optional so the many
+  // `new FoundryDataAccess()` test constructions that never touch compendium matching keep compiling.
+  private compendiumSearch: CompendiumSearchService | undefined;
+  // Phase 4 (R4.1): the player-rolls + roll-button + player-lookup cluster moved to dedicated services
+  // (three-file split, D1). FoundryDataAccess constructs them with a validateFoundryState callback and keeps
+  // thin facade delegates below so existing callers/tests keep resolving (Contract deferred to Phase 5, R4.3).
+  private readonly rollRequest: RollRequestService;
+  private readonly rollButton: RollButtonService;
+  private readonly playerLookup: PlayerLookupService;
 
-  constructor() { }
-
-  /**
-   * Force rebuild of enhanced creature index
-   */
-  async rebuildEnhancedCreatureIndex(): Promise<{ success: boolean; totalCreatures: number; message: string }> {
-    try {
-      const creatures = await this.persistentIndex.rebuildIndex();
-      return {
-        success: true,
-        totalCreatures: creatures.length,
-        message: `Enhanced creature index rebuilt: ${creatures.length} creatures indexed from all packs`
-      };
-    } catch (error) {
-      console.error(`[${this.moduleId}] Failed to rebuild enhanced creature index:`, error);
-      return {
-        success: false,
-        totalCreatures: 0,
-        message: `Failed to rebuild index: ${error instanceof Error ? error.message : 'Unknown error'}`
-      };
-    }
+  constructor(compendiumSearch?: CompendiumSearchService) {
+    this.compendiumSearch = compendiumSearch;
+    const validateState = (): void => this.validateFoundryState();
+    this.rollRequest = new RollRequestService(validateState);
+    this.rollButton = new RollButtonService(validateState);
+    this.playerLookup = new PlayerLookupService(validateState);
   }
-
 
   /**
    * Get character/actor information by name or ID
@@ -230,7 +216,7 @@ export class FoundryDataAccess {
     // findActorByIdentifier so manage-inventory + similar callers accept short forms
     // like "Lupus" for "Lupus Leonard Joachim Rohrig".
     if (!actor) {
-      actor = this.findActorByIdentifier(identifier);
+      actor = findActorByIdentifier(identifier);
     }
 
     if (!actor) {
@@ -269,35 +255,6 @@ export class FoundryDataAccess {
     };
 
     return characterData;
-  }
-
-  /**
-   * Search compendium packs for items matching query with optional filters.
-   * Phase 3 (R3.2): delegates to the extracted CompendiumSearchService (branch-by-abstraction facade;
-   * the Contract step that deletes this delegate is Phase 4 per R3.3/HC1).
-   */
-  async searchCompendium(query: string, packType?: string | undefined, filters?: {
-    challengeRating?: number | { min?: number | undefined; max?: number | undefined } | undefined;
-    creatureType?: string | undefined;
-    size?: string | undefined;
-    spellcaster?: boolean | undefined;
-  } | undefined, itemType?: string | undefined): Promise<CompendiumSearchResult[]> {
-    return this.compendiumSearch.searchCompendium(query, packType, filters, itemType);
-  }
-
-  /**
-   * List creatures by criteria using enhanced persistent index - optimized for instant filtering.
-   * Phase 3 (R3.2): delegates to the extracted CompendiumSearchService (facade; Contract is Phase 4).
-   */
-  async listCreaturesByCriteria(criteria: {
-    threatLevel?: number | { min?: number | undefined; max?: number | undefined } | undefined;
-    creatureType?: string | undefined;
-    size?: string | undefined;
-    hasSpells?: boolean | undefined;
-    hasSpecialAbilities?: boolean | undefined;
-    limit?: number | undefined;
-  }): Promise<{ creatures: any[], searchSummary: any }> {
-    return this.compendiumSearch.listCreaturesByCriteria(criteria);
   }
 
   /**
@@ -638,8 +595,11 @@ export class FoundryDataAccess {
     const quantity = Math.min(request.quantity || 1, maxActors);
 
     try {
-      // Find matching compendium entry
-      const compendiumEntry = await this.findBestCompendiumMatch(request.creatureType, request.packPreference);
+      // Find matching compendium entry (delegated to the injected CompendiumSearchService — Phase 4 R3.3)
+      if (!this.compendiumSearch) {
+        throw new Error('CompendiumSearchService not provided to FoundryDataAccess');
+      }
+      const compendiumEntry = await this.compendiumSearch.findBestCompendiumMatch(request.creatureType, request.packPreference);
       if (!compendiumEntry) {
         throw new Error(`No compendium entry found for "${request.creatureType}"`);
       }
@@ -1029,31 +989,6 @@ export class FoundryDataAccess {
   }
 
   /**
-   * Find best matching compendium entry for creature type
-   */
-  private async findBestCompendiumMatch(creatureType: string, packPreference?: string): Promise<CompendiumSearchResult | null> {
-    // First try exact search
-    const exactResults = await this.searchCompendium(creatureType, 'Actor');
-
-    // Look for exact name match first
-    const exactMatch = exactResults.find(result =>
-      result.name.toLowerCase() === creatureType.toLowerCase()
-    );
-    if (exactMatch) return exactMatch;
-
-    // Look for partial matches, preferring specified pack
-    if (packPreference) {
-      const packMatch = exactResults.find(result =>
-        result.pack === packPreference
-      );
-      if (packMatch) return packMatch;
-    }
-
-    // Return best fuzzy match
-    return exactResults.length > 0 ? exactResults[0]! : null;
-  }
-
-  /**
    * Create actor from source document with custom name
    */
   private async createActorFromSource(sourceDoc: CompendiumEntryFull, customName: string): Promise<any> {
@@ -1151,7 +1086,8 @@ export class FoundryDataAccess {
   }
 
   /**
-   * Request player rolls - creates interactive roll buttons in chat
+   * Request player rolls — creates interactive roll buttons in chat.
+   * Phase 4 (R4.1): facade delegate to RollRequestService (Contract deferred to Phase 5, R4.3).
    */
   async requestPlayerRolls(data: {
     rollType: string;
@@ -1161,897 +1097,64 @@ export class FoundryDataAccess {
     rollModifier: string;
     flavor: string;
   }): Promise<{ success: boolean; requestId?: string; message: string; error?: string }> {
-    this.validateFoundryState();
-
-    try {
-      // Resolve target player from character name or player name with enhanced error handling
-      const playerInfo = this.resolveTargetPlayer(data.targetPlayer);
-      if (!playerInfo.found) {
-        // Provide structured error message for MCP that Claude Desktop can understand
-        const errorMessage = playerInfo.errorMessage || `Could not find player or character: ${data.targetPlayer}`;
-
-        return {
-          success: false,
-          message: '',
-          error: errorMessage
-        };
-      }
-
-      // Build roll formula based on type and target
-      const rollFormula = this.buildRollFormula(data.rollType, data.rollTarget, data.rollModifier, playerInfo.character);
-
-      // Generate roll button HTML
-      const buttonId = (foundry.utils as any).randomID();
-      const requestId = (foundry.utils as any).randomID();
-      const buttonLabel = this.buildRollButtonLabel(data.rollType, data.rollTarget, data.isPublic);
-
-      // Check if this type of roll was already performed (optional: could check for duplicate recent rolls)
-      // For now, we'll just create the button and let the rendering logic handle the state restoration
-
-
-      const rollButtonHtml = `
-        <div class="mcp-roll-request" style="margin: 12px 0; padding: 12px; border: 1px solid #ccc; border-radius: 8px; background: #f9f9f9;">
-          <p><strong>Roll Request:</strong> ${buttonLabel}</p>
-          <p><strong>Target:</strong> ${playerInfo.targetName} ${playerInfo.character ? `(${playerInfo.character.name})` : ''}</p>
-          ${data.flavor ? `<p><strong>Context:</strong> ${data.flavor}</p>` : ''}
-
-          <div style="text-align: center; margin-top: 8px;">
-            <!-- Single Roll Button (clickable by both character owner and GM) -->
-            <button class="mcp-roll-button mcp-button-active"
-                    data-button-id="${buttonId}"
-                    data-roll-formula="${rollFormula}"
-                    data-roll-label="${buttonLabel}"
-                    data-is-public="${data.isPublic}"
-                    data-character-id="${playerInfo.character?.id || ''}"
-                    data-target-user-id="${playerInfo.user?.id || ''}"
-                    data-request-id="${requestId}">
-              🎲 ${buttonLabel}
-            </button>
-          </div>
-        </div>
-      `;
-
-      // Create chat message with roll button
-      // For PUBLIC rolls: both roll request and results visible to all players
-      // For PRIVATE rolls: both roll request and results visible to target player + GM only
-      const whisperTargets: string[] = [];
-
-      if (!data.isPublic) {
-        // Private roll request: whisper to target player + GM only
-
-        // Always whisper to the character owner if they exist
-        if (playerInfo.user?.id) {
-          whisperTargets.push(playerInfo.user.id);
-        }
-
-        // Also send to GM (GMs can see all whispered messages anyway, but this ensures they see it)
-        const gmUsers = game.users?.filter((u: User) => u.isGM && u.active);
-        if (gmUsers) {
-          for (const gm of gmUsers) {
-            if (gm.id && !whisperTargets.includes(gm.id)) {
-              whisperTargets.push(gm.id);
-            }
-          }
-        }
-      } else {
-        // Public roll request: visible to all players (empty whisperTargets array)
-      }
-
-      const messageData = {
-        content: rollButtonHtml,
-        // BUG-267: game.user is a User, not an Actor; use the user's assigned character instead.
-        speaker: ChatMessage.getSpeaker({ actor: (game.user as any)?.character ?? null }),
-        style: (CONST as any).CHAT_MESSAGE_STYLES?.OTHER || 0, // Use style instead of deprecated type
-        whisper: whisperTargets,
-        flags: {
-          [MODULE_ID]: {
-            requestId,
-            rollButtons: {
-              [buttonId]: {
-                rolled: false,
-                rollFormula: rollFormula,
-                rollLabel: buttonLabel,
-                isPublic: data.isPublic,
-                characterId: playerInfo.character?.id || '',
-                targetUserId: playerInfo.user?.id || ''
-              }
-            }
-          }
-        }
-      };
-
-      const chatMessage = await ChatMessage.create(messageData);
-
-      // Store message ID for later updates
-      this.saveRollButtonMessageId(buttonId, chatMessage.id);
-
-      // Note: Click handlers are attached globally via renderChatMessageHTML hook in main.ts
-      // This ensures all users get the handlers when they see the message
-
-      notify.created('mcp', 'Roll request', {
-        summary: `to ${data.targetPlayer}: ${data.rollType}`,
-      });
-
-      return {
-        success: true,
-        requestId,
-        message: `Roll request sent to ${playerInfo.targetName}. ${data.isPublic ? 'Public roll' : 'Private roll'} button created in chat.`
-      };
-
-    } catch (error) {
-      notify.error('Failed to create roll request', error instanceof Error ? error : new Error(String(error)));
-      return {
-        success: false,
-        message: '',
-        error: error instanceof Error ? error.message : 'Unknown error creating roll request'
-      };
-    }
+    return this.rollRequest.requestPlayerRolls(data);
   }
 
   /**
-   * Enhanced player resolution with offline/non-existent player detection
-   * Supports partial matching and provides structured error messages for MCP
+   * Attach click handlers to roll buttons and handle visibility.
+   * Called by the global renderChatMessageHTML hook in main.ts.
+   * Phase 4 (R4.1): facade delegate to RollButtonService (Contract deferred to Phase 5, R4.3).
    */
-  private resolveTargetPlayer(targetPlayer: string): {
-    found: boolean;
-    user?: User;
-    character?: Actor;
-    targetName: string;
-    errorType?: 'PLAYER_OFFLINE' | 'PLAYER_NOT_FOUND' | 'CHARACTER_NOT_FOUND';
-    errorMessage?: string;
-  } {
-    const searchTerm = targetPlayer.toLowerCase().trim();
-
-
-    // FIRST: Check all registered users (both active and inactive) for player name match
-    const allUsers = Array.from(game.users?.values() || []);
-
-    // Try exact player name match first (active and inactive users)
-    let user = allUsers.find((u: User) =>
-      u.name?.toLowerCase() === searchTerm
-    );
-
-    if (user) {
-      const isActive = user.active;
-
-      if (!isActive) {
-        // Player exists but is offline
-        return {
-          found: false,
-          user,
-          targetName: user.name || 'Unknown Player',
-          errorType: 'PLAYER_OFFLINE',
-          errorMessage: `Player "${user.name}" is registered but not currently logged in. They need to be online to receive roll requests.`
-        };
-      }
-
-      // Find the player's character for roll calculations
-      const playerCharacter = game.actors?.find((actor: Actor) => {
-        if (!user) return false;
-        return actor.testUserPermission(user, 'OWNER') && !user.isGM;
-      });
-
-      return {
-        found: true,
-        user,
-        ...(playerCharacter && { character: playerCharacter }), // Include character only if found
-        targetName: user.name || 'Unknown Player'
-      };
-    }
-
-    // Try partial player name match (active and inactive users)
-    if (!user) {
-      user = allUsers.find((u: User) => {
-        return Boolean(u.name && u.name.toLowerCase().includes(searchTerm));
-      });
-
-      if (user) {
-        const isActive = user.active;
-
-        if (!isActive) {
-          // Player exists but is offline
-          return {
-            found: false,
-            user,
-            targetName: user.name || 'Unknown Player',
-            errorType: 'PLAYER_OFFLINE',
-            errorMessage: `Player "${user.name}" is registered but not currently logged in. They need to be online to receive roll requests.`
-          };
-        }
-
-        // Find the player's character for roll calculations
-        const playerCharacter = game.actors?.find((actor: Actor) => {
-          if (!user) return false;
-          return actor.testUserPermission(user, 'OWNER') && !user.isGM;
-        });
-
-        return {
-          found: true,
-          user,
-          ...(playerCharacter && { character: playerCharacter }), // Include character only if found
-          targetName: user.name || 'Unknown Player'
-        };
-      }
-    }
-
-    // SECOND: Try to find by character name (exact match, then partial match)
-    let character = game.actors?.find((actor: Actor) =>
-      actor.name?.toLowerCase() === searchTerm && actor.hasPlayerOwner
-    );
-
-    if (character) {
-    }
-
-    // If no exact character match, try partial match
-    if (!character) {
-      character = game.actors?.find((actor: Actor) => {
-        return Boolean(actor.name && actor.name.toLowerCase().includes(searchTerm) && actor.hasPlayerOwner);
-      });
-
-      if (character) {
-      }
-    }
-
-    if (character) {
-      // Find the actual player owner (not GM) of this character
-      const ownerUser = allUsers.find((u: User) =>
-        character.testUserPermission(u, 'OWNER') && !u.isGM
-      );
-
-      if (ownerUser) {
-        const isOwnerActive = ownerUser.active;
-
-        if (!isOwnerActive) {
-          // Character owner exists but is offline
-          return {
-            found: false,
-            user: ownerUser,
-            character,
-            targetName: ownerUser.name || 'Unknown Player',
-            errorType: 'PLAYER_OFFLINE',
-            errorMessage: `Player "${ownerUser.name}" (owner of character "${character.name}") is registered but not currently logged in. They need to be online to receive roll requests.`
-          };
-        }
-
-        return {
-          found: true,
-          user: ownerUser,
-          character,
-          targetName: ownerUser.name || 'Unknown Player'
-        };
-      } else {
-        // No player owner found - character is GM-only controlled
-        // Still return found=true but without user, GM can still roll for it
-        return {
-          found: true,
-          character,
-          targetName: character.name || 'Unknown Character'
-          // user is omitted (undefined) for GM-only characters
-        };
-      }
-    }
-
-    // THIRD: Check if the search term might be a character that exists but has no player owner
-    const anyCharacter = game.actors?.find((actor: Actor) => {
-      if (!actor.name) return false;
-      return actor.name.toLowerCase() === searchTerm ||
-        actor.name.toLowerCase().includes(searchTerm);
-    });
-
-    if (anyCharacter && !anyCharacter.hasPlayerOwner) {
-      return {
-        found: true,
-        character: anyCharacter,
-        targetName: anyCharacter.name || 'Unknown Character'
-        // No user for GM-controlled characters
-      };
-    }
-
-    // No player or character found at all
-
-    return {
-      found: false,
-      targetName: targetPlayer,
-      errorType: 'PLAYER_NOT_FOUND',
-      errorMessage: `No player or character named "${targetPlayer}" found. Available players: ${allUsers.filter(u => !u.isGM).map(u => u.name).join(', ') || 'none'}`
-    };
+  public attachRollButtonHandlers(html: any, signal?: AbortSignal): void {
+    return this.rollButton.attachRollButtonHandlers(html, signal);
   }
 
   /**
-   * Build roll formula based on roll type and target using Foundry's roll data system
-   * WFRP 4e specific implementation
-   */
-  private buildRollFormula(rollType: string, rollTarget: string, rollModifier: string, character?: Actor): string {
-    let baseFormula = '1d100<=50';
-
-    // Only support WFRP 4e
-    const gameSystem = game.system?.id || '';
-    const isWFRP = gameSystem.includes('wfrp');
-
-    if (!isWFRP) {
-      console.warn(`[${MODULE_ID}] Non-WFRP system detected. This module only supports WFRP 4e.`);
-      return '1d100<=50';
-    }
-
-    if (character) {
-      // Use Foundry's getRollData() to get calculated modifiers including active effects
-      const rollData = character.getRollData() as any; // Type assertion for Foundry's dynamic roll data
-
-      // WFRP 4e uses d100 system with characteristics and skills
-      switch (rollType) {
-        case 'characteristic':
-        case 'ability':
-          // WFRP characteristics (WS, BS, S, T, I, Ag, Dex, Int, WP, Fel)
-          const charCode = this.getWFRPCharacteristicCode(rollTarget);
-          const charValue = rollData.characteristics?.[charCode]?.value ??
-            (character as any).system?.characteristics?.[charCode]?.value ?? 50;
-          baseFormula = `1d100<=${charValue}`;
-          break;
-
-        case 'skill':
-          // BUG-271: wfrp4e skills are embedded Items, not system.skills entries.
-          // Read the computed total from the item's system.total.value.
-          const skillName = rollTarget.toLowerCase();
-          const skillItem = (character as any).items?.find(
-            (i: any) => i.type === 'skill' && i.name?.toLowerCase() === skillName
-          ) as any;
-          const skillValue = skillItem?.system?.total?.value ?? 50;
-          baseFormula = `1d100<=${skillValue}`;
-          break;
-
-        case 'custom':
-          baseFormula = rollTarget; // Use rollTarget as the formula directly
-          break;
-
-        default:
-          baseFormula = '1d100<=50'; // Default WFRP roll
-      }
-    } else {
-      console.warn(`[${MODULE_ID}] No character provided for roll formula, using base 1d100<=50`);
-      baseFormula = '1d100<=50';
-    }
-
-    // BUG-331: for roll-under formulas the modifier adjusts the TARGET, not the roll —
-    // Foundry's v13 parser drops the `<=NN` clause and would fold an appended modifier
-    // into the d100 arithmetic (displayed total = die + modifier). Fold flat modifiers
-    // into the target number; non-d100 custom formulas keep the arithmetic append.
-    if (rollModifier && rollModifier.trim()) {
-      const modifier = rollModifier.startsWith('+') || rollModifier.startsWith('-') ? rollModifier : `+${rollModifier}`;
-      const rollUnder = /^1d100<=(\d+)$/.exec(baseFormula);
-      const flat = parseInt(modifier, 10);
-      if (rollUnder && Number.isFinite(flat)) {
-        baseFormula = `1d100<=${Math.max(0, parseInt(rollUnder[1]!, 10) + flat)}`;
-      } else {
-        baseFormula += modifier;
-      }
-    }
-
-    return baseFormula;
-  }
-
-  /**
-   * Map WFRP characteristic names to codes
-   */
-  private getWFRPCharacteristicCode(charName: string): string {
-    const charMap: { [key: string]: string } = {
-      'weapon skill': 'ws',
-      'weaponskill': 'ws',
-      'ws': 'ws',
-      'ballistic skill': 'bs',
-      'ballisticskill': 'bs',
-      'bs': 'bs',
-      'strength': 's',
-      's': 's',
-      'toughness': 't',
-      't': 't',
-      'initiative': 'i',
-      'i': 'i',
-      'agility': 'ag',
-      'ag': 'ag',
-      'dexterity': 'dex',
-      'dex': 'dex',
-      'intelligence': 'int',
-      'int': 'int',
-      'willpower': 'wp',
-      'wp': 'wp',
-      'fellowship': 'fel',
-      'fel': 'fel'
-    };
-
-    const normalized = charName.toLowerCase().replace(/\s+/g, '');
-    // BUG-377: charMap is a plain object literal, so charMap[normalized] for a prototype-key
-    // ('constructor', '__proto__', 'tostring', 'valueof', 'hasownproperty') resolves to a truthy
-    // Object.prototype member and bypasses the `|| 'ws'` fallback, returning a non-string. Guard
-    // with hasOwnProperty so only real entries are returned and everything else falls back to 'ws'.
-    const code = Object.prototype.hasOwnProperty.call(charMap, normalized) ? charMap[normalized] : undefined;
-    return code ?? 'ws'; // Default to weapon skill
-  }
-
-  /**
-   * Build roll button label
-   */
-  private buildRollButtonLabel(rollType: string, rollTarget: string, isPublic: boolean): string {
-    const visibility = isPublic ? 'Public' : 'Private';
-
-    switch (rollType) {
-      case 'ability':
-        return `${rollTarget.toUpperCase()} Ability Check (${visibility})`;
-      case 'skill':
-        return `${rollTarget.charAt(0).toUpperCase() + rollTarget.slice(1)} Skill Check (${visibility})`;
-      case 'attack':
-        return `${rollTarget} Attack (${visibility})`;
-      case 'initiative':
-        return `Initiative Roll (${visibility})`;
-      case 'custom':
-        return `Custom Roll (${visibility})`;
-      default:
-        return `Roll (${visibility})`;
-    }
-  }
-
-  /**
-   * Restore roll button states from persistent storage
-   * Called when chat messages are rendered to maintain state across sessions
-   */
-
-  /**
-   * Attach click handlers to roll buttons and handle visibility
-   * Called by global renderChatMessageHTML hook in main.ts
-   */
-  public attachRollButtonHandlers(html: any): void {
-    const currentUserId = game.user?.id;
-    const isGM = game.user?.isGM;
-
-    // Note: Roll state restoration now handled by ChatMessage content, not DOM manipulation
-
-    // Handle button visibility and styling based on permissions and public/private status
-    // IMPORTANT: Skip styling for buttons that are already in rolled state
-    html.find('.mcp-roll-button').each((_index: number, element: any) => {
-      const button = $(element);
-      const targetUserId = button.data('target-user-id');
-      const isPublicRollRaw = button.data('is-public');
-      const isPublicRoll = isPublicRollRaw === true || isPublicRollRaw === 'true';
-
-      // Note: No need to check for rolled state - ChatMessage.update() replaces buttons with completion status
-
-      // Determine if user can interact with this button
-      const canClickButton = isGM || (targetUserId && targetUserId === currentUserId);
-
-
-      if (isPublicRoll) {
-        // Public roll: show to all players, but style differently for non-clickable users
-        if (canClickButton) {
-          // Can click: normal active button
-          button.css({
-            'background': '#4CAF50',
-            'cursor': 'pointer',
-            'opacity': '1'
-          });
-        } else {
-          // Cannot click: disabled/informational style
-          button.css({
-            'background': '#9E9E9E',
-            'cursor': 'not-allowed',
-            'opacity': '0.7'
-          });
-          button.prop('disabled', true);
-        }
-      } else {
-        // Private roll: only show to target user and GM
-        if (canClickButton) {
-          button.show();
-        } else {
-          button.hide();
-        }
-      }
-    });
-
-    // Attach click handlers to roll buttons
-    html.find('.mcp-roll-button').on('click', async (event: any) => {
-      const button = $(event.currentTarget);
-
-      // Ignore clicks on disabled buttons
-      if (button.prop('disabled')) {
-        return;
-      }
-
-      // Prevent double-clicks by immediately disabling the button
-      button.prop('disabled', true);
-      const originalText = button.text();
-      button.text('🎲 Rolling...');
-
-      const buttonId = button.data('button-id');
-
-      // BUG-263: a single try/finally spans everything after the disable above, so
-      // every exit path (in-flight guard, missing button-id, permission denied, roll
-      // error) restores the button — only a completed roll leaves it disabled.
-      let rollCompleted = false;
-      let markedProcessing = false;
-
-      try {
-        // Another click on this button is already mid-roll; that run owns the
-        // processing flag and will restore/replace the button itself.
-        if (buttonId && this.isRollButtonProcessing(buttonId)) {
-          return;
-        }
-
-        // Validate button has required data
-        if (!buttonId) {
-          console.warn(`[${MODULE_ID}] Button missing button-id data attribute`);
-          return;
-        }
-
-        // Mark this button as being processed
-        this.setRollButtonProcessing(buttonId, true);
-        markedProcessing = true;
-
-        const rollFormula = button.data('roll-formula');
-        const rollLabel = button.data('roll-label');
-        const isPublicRaw = button.data('is-public');
-        const isPublic = isPublicRaw === true || isPublicRaw === 'true'; // Convert to proper boolean
-        const characterId = button.data('character-id');
-        const targetUserId = button.data('target-user-id');
-        const isGmRoll = game.user?.isGM || false; // Determine if this is a GM executing the roll
-
-        // Check if user has permission to execute this roll
-        // Allow GM to roll for any character, or allow character owner to roll for their character
-        const canExecuteRoll = game.user?.isGM || (targetUserId && targetUserId === game.user?.id);
-
-        if (!canExecuteRoll) {
-          console.warn(`[${MODULE_ID}] Permission denied for roll execution`);
-          notify.warn('You do not have permission to execute this roll');
-          return;
-        }
-
-        // Create and evaluate the roll
-        const roll = new Roll(rollFormula);
-        await roll.evaluate();
-
-
-        // Get the character for speaker info
-        const character = characterId ? game.actors?.get(characterId) : null;
-
-        // Use the modern Foundry v13 approach with roll.toMessage()
-        const whisperTargets: string[] = [];
-
-        if (!isPublic) {
-          // For private rolls: whisper to target + GM
-          if (targetUserId) {
-            whisperTargets.push(targetUserId);
-          }
-          // Add all active GMs
-          const gmUsers = game.users?.filter((u: User) => u.isGM && u.active);
-          if (gmUsers) {
-            for (const gm of gmUsers) {
-              if (gm.id && !whisperTargets.includes(gm.id)) {
-                whisperTargets.push(gm.id);
-              }
-            }
-          }
-        }
-
-        const messageData: any = {
-          speaker: ChatMessage.getSpeaker({ actor: character }),
-          flavor: `${rollLabel} ${isGmRoll ? '(GM Override)' : ''}`,
-          ...(whisperTargets.length > 0 ? { whisper: whisperTargets } : {})
-        };
-
-
-        // Use roll.toMessage() with proper rollMode
-        await roll.toMessage(messageData);
-
-        // Emit roll-result event if an awaitResult requestId is set on this button.
-        const rollRequestId = button.data('request-id');
-        if (rollRequestId) {
-          const emitRollEvent = (window as any).foundryMCPBridge?.emitRollEvent;
-          if (typeof emitRollEvent === 'function') {
-            emitRollEvent(rollRequestId, this.buildRollResultPayload(String(rollFormula ?? ''), roll));
-          }
-        }
-
-        // Update the ChatMessage to reflect rolled state
-        if (game.user?.id) {
-          try {
-            await this.updateRollButtonMessage(buttonId, game.user.id, rollLabel);
-          } catch (updateError) {
-            console.error(`[${MODULE_ID}] Failed to update chat message:`, updateError);
-            console.error(`[${MODULE_ID}] Error details:`, updateError instanceof Error ? updateError.stack : updateError);
-            // Fall back to DOM manipulation if message update fails
-            button.prop('disabled', true).text('✓ Rolled');
-          }
-        } else {
-          console.warn(`[${MODULE_ID}] Cannot update ChatMessage - missing userId for button:`, buttonId);
-        }
-
-        rollCompleted = true;
-      } catch (error) {
-        console.error(`[${MODULE_ID}] Error executing roll:`, error);
-        notify.error('Failed to execute roll');
-      } finally {
-        // Clear processing state only if this handler set it (an in-flight run owns it otherwise)
-        if (markedProcessing && buttonId) {
-          this.setRollButtonProcessing(buttonId, false);
-        }
-        // BUG-263: restore the button on every non-completed exit so it never
-        // sticks disabled in "Rolling..."; a completed roll keeps its rolled state.
-        if (!rollCompleted) {
-          button.prop('disabled', false);
-          button.text(originalText);
-        }
-      }
-    });
-  }
-
-  /**
-   * Build the awaitResult roll payload with real WFRP4e values (BUG-272).
-   * wfrp4e is roll-under: SL = tens(target) - tens(roll), success = roll <= target,
-   * with automatic success on rolls <=5 (SL floored to +1) and automatic failure on
-   * rolls >=96 (SL clamped to -1) — mirrors TestWFRP.computeResult, default SLMethod.
-   * Foundry's parser DROPS the `<=NN` clause from the formula and folds any appended
-   * modifier into the roll arithmetic, so the d100 value must come from the first die
-   * (not roll.total) and the target (base + modifier) is parsed from the formula text.
-   * Formulas without a `<=target` clause (custom rolls) report the raw total only.
-   */
-  private buildRollResultPayload(
-    rollFormula: string,
-    roll: any
-  ): { outcome: string; total: number; SL: number | null; success: boolean | null } {
-    const targetMatch = /<=\s*([0-9+\- ]+)$/.exec(rollFormula);
-    if (!targetMatch) {
-      return { outcome: 'roll_completed', total: roll.total ?? 0, SL: null, success: null };
-    }
-    // Target expression may carry appended modifiers ("1d100<=50+10" → 60).
-    const target = targetMatch[1]!
-      .replace(/\s+/g, '')
-      .split(/(?=[+-])/)
-      .reduce((sum, term) => sum + (parseInt(term, 10) || 0), 0);
-    const d100 = roll.dice?.[0]?.total ?? roll.total ?? 0;
-    const baseSL = Math.floor(target / 10) - Math.floor(d100 / 10);
-    const success = d100 <= 5 || (d100 < 96 && d100 <= target);
-    const SL = success
-      ? (d100 <= 5 && baseSL < 1 ? 1 : baseSL)
-      : (d100 >= 96 && baseSL > -1 ? -1 : baseSL);
-    return { outcome: 'roll_completed', total: d100, SL, success };
-  }
-
-  /**
-   * Get enhanced creature index for campaign analysis
-   */
-  async getEnhancedCreatureIndex(): Promise<any[]> {
-    this.validateFoundryState();
-
-    // Get the enhanced creature index (builds if needed)
-    const enhancedCreatures = await this.persistentIndex.getEnhancedIndex();
-
-    return enhancedCreatures || [];
-  }
-
-  /**
-   * Save roll button state to persistent storage
+   * Save roll button state to persistent storage (legacy redirect).
+   * Phase 4 (R4.1): facade delegate to RollButtonService.
    */
   async saveRollState(buttonId: string, userId: string): Promise<void> {
-    // LEGACY METHOD - Redirecting to new ChatMessage.update() system
-
-    try {
-      // Use the new ChatMessage.update() approach instead
-      const rollLabel = 'Legacy Roll'; // We don't have the label here, use generic
-      await this.updateRollButtonMessage(buttonId, userId, rollLabel);
-    } catch (error) {
-      console.error(`[${MODULE_ID}] Legacy saveRollState redirect failed:`, error);
-      // Don't throw - we don't want to break the old system completely
-    }
+    return this.rollButton.saveRollState(buttonId, userId);
   }
 
   /**
-   * Get roll button state from persistent storage
+   * Get roll button state from persistent storage.
+   * Phase 4 (R4.1): facade delegate to RollButtonService.
    */
   getRollState(buttonId: string): { rolled: boolean; rolledBy?: string; rolledByName?: string; timestamp?: number } | null {
-    this.validateFoundryState();
-
-    try {
-      const rollStates = game.settings.get(MODULE_ID, 'rollStates') || {};
-      return rollStates[buttonId] || null;
-    } catch (error) {
-      console.error(`[${MODULE_ID}] Error getting roll state:`, error);
-      return null;
-    }
+    return this.rollButton.getRollState(buttonId);
   }
 
   /**
-   * Save button ID to message ID mapping for ChatMessage updates
-   */
-  saveRollButtonMessageId(buttonId: string, messageId: string): void {
-    try {
-      const buttonMessageMap = game.settings.get(MODULE_ID, 'buttonMessageMap') || {};
-      buttonMessageMap[buttonId] = messageId;
-      void game.settings.set(MODULE_ID, 'buttonMessageMap', buttonMessageMap);
-    } catch (error) {
-      console.error(`[${MODULE_ID}] Error saving button-message mapping:`, error);
-    }
-  }
-
-  /**
-   * Get message ID for a roll button
-   */
-  getRollButtonMessageId(buttonId: string): string | null {
-    try {
-      const buttonMessageMap = game.settings.get(MODULE_ID, 'buttonMessageMap') || {};
-      return buttonMessageMap[buttonId] || null;
-    } catch (error) {
-      console.error(`[${MODULE_ID}] Error getting button-message mapping:`, error);
-      return null;
-    }
-  }
-
-  /**
-   * Get roll button state from ChatMessage flags
-   */
-  getRollStateFromMessage(chatMessage: any, buttonId: string): any {
-    try {
-      const rollButtons = chatMessage.getFlag(MODULE_ID, 'rollButtons');
-      return rollButtons?.[buttonId] || null;
-    } catch (error) {
-      console.error(`[${MODULE_ID}] Error getting roll state from message:`, error);
-      return null;
-    }
-  }
-
-  /**
-   * Update the ChatMessage to replace button with rolled state
+   * Update the ChatMessage to replace the button with rolled state (incl. the non-GM→GM socket relay).
+   * Phase 4 (R4.1): facade delegate to RollButtonService.
    */
   async updateRollButtonMessage(buttonId: string, userId: string, rollLabel: string): Promise<void> {
-    try {
-
-      // Get the message ID for this button
-      const messageId = this.getRollButtonMessageId(buttonId);
-
-      if (!messageId) {
-        throw new Error(`No message ID found for button ${buttonId}`);
-      }
-
-      // Get the chat message
-      const chatMessage = game.messages?.get(messageId);
-
-      if (!chatMessage) {
-        throw new Error(`ChatMessage ${messageId} not found`);
-      }
-
-      const rolledByName = game.users?.get(userId)?.name || 'Unknown';
-      const timestamp = new Date().toLocaleString();
-
-      // Check permissions before attempting update
-      const canUpdate = chatMessage.canUserModify(game.user, 'update');
-
-      if (!canUpdate && !game.user?.isGM) {
-        // Non-GM user cannot update message - request GM to do it via socket
-
-        // Find online GM
-        const onlineGM = game.users?.find(u => u.isGM && u.active);
-        if (!onlineGM) {
-          throw new Error('No Game Master is online to update the chat message');
-        }
-
-        // Send socket request to GM
-        if (game.socket) {
-          // BUG-274: game.user may be null; use optional access.
-          game.socket.emit('module.warhammer-mcp', {
-            type: 'requestMessageUpdate',
-            buttonId: buttonId,
-            userId: userId,
-            rollLabel: rollLabel,
-            messageId: messageId,
-            fromUserId: game.user?.id,
-            targetGM: onlineGM.id
-          });
-          return; // Exit early - GM will handle the update
-        } else {
-          throw new Error('Socket not available for GM communication');
-        }
-      }
-
-      // Update the message flags to mark button as rolled
-      const currentFlags = chatMessage.flags || {};
-      const moduleFlags = currentFlags[MODULE_ID] || {};
-      const rollButtons = moduleFlags.rollButtons || {};
-
-      rollButtons[buttonId] = {
-        ...rollButtons[buttonId],
-        rolled: true,
-        rolledBy: userId,
-        rolledByName: rolledByName,
-        timestamp: Date.now()
-      };
-
-      // Create the rolled state HTML
-      const rolledHtml = `
-        <div class="mcp-roll-request" style="margin: 10px 0; padding: 10px; border: 1px solid #ccc; border-radius: 5px; background: #f9f9f9;">
-          <p><strong>Roll Request:</strong> ${rollLabel}</p>
-          <p><strong>Status:</strong> ✅ <strong>Completed by ${rolledByName}</strong> at ${timestamp}</p>
-        </div>
-      `;
-
-
-      // Update the message content and flags
-      await chatMessage.update({
-        content: rolledHtml,
-        flags: {
-          ...currentFlags,
-          [MODULE_ID]: {
-            ...moduleFlags,
-            rollButtons: rollButtons
-          }
-        }
-      });
-
-
-    } catch (error) {
-      console.error(`[${MODULE_ID}] Error updating roll button message:`, error);
-      console.error(`[${MODULE_ID}] Error stack:`, error instanceof Error ? error.stack : error);
-      throw error;
-    }
+    return this.rollButton.updateRollButtonMessage(buttonId, userId, rollLabel);
   }
 
   /**
-   * Request GM to save roll state (for non-GM users who can't write to world settings)
+   * Request GM to save roll state (legacy redirect).
+   * Phase 4 (R4.1): facade delegate to RollButtonService.
    */
   requestRollStateSave(buttonId: string, userId: string): void {
-    // LEGACY METHOD - Redirecting to new ChatMessage.update() system
-
-    try {
-      // Use the new ChatMessage.update() approach instead
-      const rollLabel = 'Legacy Roll'; // We don't have the label here, use generic
-      this.updateRollButtonMessage(buttonId, userId, rollLabel)
-        .then(() => {
-        })
-        .catch((error) => {
-          console.error(`[${MODULE_ID}] Legacy requestRollStateSave redirect failed:`, error);
-          // If the new system fails, just log it - don't use the old socket system
-        });
-    } catch (error) {
-      console.error(`[${MODULE_ID}] Error in legacy requestRollStateSave redirect:`, error);
-    }
+    return this.rollButton.requestRollStateSave(buttonId, userId);
   }
 
   /**
-   * Broadcast roll state change to all connected users for real-time sync
+   * Broadcast roll state change (legacy no-op).
+   * Phase 4 (R4.1): facade delegate to RollButtonService.
    */
-  broadcastRollState(_buttonId: string, _rollState: any): void {
-    // LEGACY METHOD - No longer needed with ChatMessage.update() system
-    // ChatMessage.update() automatically broadcasts to all clients, so this method is no longer needed
+  broadcastRollState(buttonId: string, rollState: any): void {
+    return this.rollButton.broadcastRollState(buttonId, rollState);
   }
 
   /**
-   * Clean up old roll states (optional maintenance)
-   * Removes roll states older than 30 days to prevent storage bloat
+   * Clean up old roll states (optional maintenance).
+   * Phase 4 (R4.1): facade delegate to RollButtonService.
    */
   async cleanOldRollStates(): Promise<number> {
-    this.validateFoundryState();
-
-    try {
-      const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
-      const rollStates = game.settings.get(MODULE_ID, 'rollStates') || {};
-      let cleanedCount = 0;
-
-      // Remove old roll states
-      for (const [buttonId, rollState] of Object.entries(rollStates)) {
-        if (rollState && typeof rollState === 'object' && 'timestamp' in rollState) {
-          const timestamp = (rollState as any).timestamp;
-          if (typeof timestamp === 'number' && timestamp < thirtyDaysAgo) {
-            delete rollStates[buttonId];
-            cleanedCount++;
-          }
-        }
-      }
-
-      if (cleanedCount > 0) {
-        await game.settings.set(MODULE_ID, 'rollStates', rollStates);
-      }
-
-      return cleanedCount;
-    } catch (error) {
-      console.error(`[${MODULE_ID}] Error cleaning old roll states:`, error);
-      return 0;
-    }
+    return this.rollButton.cleanOldRollStates();
   }
 
   // Phase 1 mcp_crud_expansion (2026-05-14): the actor-only `setActorOwnership`
@@ -2061,165 +1164,43 @@ export class FoundryDataAccess {
   // input and return a deprecation error pointing at the new surface.
 
   /**
-   * Find actor by name or ID
-   */
-  private findActorByIdentifier(identifier: string): any {
-    return game.actors?.get(identifier) ||
-      game.actors?.getName(identifier) ||
-      Array.from(game.actors?.values() || []).find((a: any) =>
-        a.name?.toLowerCase().includes(identifier.toLowerCase())
-      );
-  }
-
-  /**
-   * Get friendly NPCs from current scene
+   * Get friendly NPCs from current scene.
+   * Phase 4 (R4.1): facade delegate to PlayerLookupService.
    */
   async getFriendlyNPCs(): Promise<Array<{ id: string, name: string }>> {
-    this.validateFoundryState();
-
-    try {
-      const scene = game.scenes?.find(s => s.active);
-      if (!scene) {
-        return [];
-      }
-
-      const friendlyTokens = scene.tokens.filter((token: any) =>
-        token.disposition === 1 // FRIENDLY disposition
-      );
-
-      return friendlyTokens.map((token: any) => ({
-        id: token.actor?.id || token.id || '',
-        name: token.name || token.actor?.name || 'Unknown',
-      })).filter(t => t.id);
-    } catch (error) {
-      console.error(`[${MODULE_ID}] Error getting friendly NPCs:`, error);
-      return [];
-    }
+    return this.playerLookup.getFriendlyNPCs();
   }
 
   /**
-   * Get party characters (player-owned actors)
+   * Get party characters (player-owned actors).
+   * Phase 4 (R4.1): facade delegate to PlayerLookupService.
    */
   async getPartyCharacters(): Promise<Array<{ id: string, name: string }>> {
-    this.validateFoundryState();
-
-    try {
-      const partyCharacters = Array.from(game.actors?.values() || []).filter((actor: any) =>
-        actor.hasPlayerOwner && actor.type === 'character'
-      );
-
-      return partyCharacters.map((actor: any) => ({
-        id: actor.id || '',
-        name: actor.name || 'Unknown',
-      })).filter(c => c.id);
-    } catch (error) {
-      console.error(`[${MODULE_ID}] Error getting party characters:`, error);
-      return [];
-    }
+    return this.playerLookup.getPartyCharacters();
   }
 
   /**
-   * Get connected players (excluding GM)
+   * Get connected players (excluding GM).
+   * Phase 4 (R4.1): facade delegate to PlayerLookupService.
    */
   async getConnectedPlayers(): Promise<Array<{ id: string, name: string }>> {
-    this.validateFoundryState();
-
-    try {
-      const connectedPlayers = Array.from(game.users?.values() || []).filter((user: any) =>
-        user.active && !user.isGM
-      );
-
-      return connectedPlayers.map((user: any) => ({
-        id: user.id || '',
-        name: user.name || 'Unknown',
-      })).filter(u => u.id);
-    } catch (error) {
-      console.error(`[${MODULE_ID}] Error getting connected players:`, error);
-      return [];
-    }
+    return this.playerLookup.getConnectedPlayers();
   }
 
   /**
-   * Find players by identifier with partial matching
+   * Find players by identifier with partial matching.
+   * Phase 4 (R4.1): facade delegate to PlayerLookupService.
    */
   async findPlayers(data: { identifier: string; allowPartialMatch?: boolean; includeCharacterOwners?: boolean }): Promise<Array<{ id: string, name: string }>> {
-    this.validateFoundryState();
-
-    try {
-      const { identifier, allowPartialMatch = true, includeCharacterOwners = true } = data;
-      const searchTerm = identifier.toLowerCase();
-      const players = [];
-
-      // Direct user name matching
-      for (const user of Array.from(game.users?.values() || [])) {
-        if ((user as any).isGM) continue;
-
-        const userName = (user as any).name?.toLowerCase() || '';
-        if (userName === searchTerm || (allowPartialMatch && userName.includes(searchTerm))) {
-          players.push({ id: (user as any).id || '', name: (user as any).name || 'Unknown' });
-        }
-      }
-
-      // Character name matching (find owner of character)
-      if (includeCharacterOwners && players.length === 0) {
-        for (const actor of Array.from(game.actors?.values() || [])) {
-          if ((actor as any).type !== 'character') continue;
-
-          const actorName = (actor as any).name?.toLowerCase() || '';
-          if (actorName === searchTerm || (allowPartialMatch && actorName.includes(searchTerm))) {
-            // Find the player owner of this character
-            const owner = Array.from(game.users?.values() || []).find((user: any) =>
-              (actor as any).testUserPermission(user, 'OWNER') && !user.isGM
-            );
-
-            if (owner && !players.some(p => p.id === (owner as any).id)) {
-              players.push({ id: (owner as any).id || '', name: (owner as any).name || 'Unknown' });
-            }
-          }
-        }
-      }
-
-      return players.filter(p => p.id);
-    } catch (error) {
-      console.error(`[${MODULE_ID}] Error finding players:`, error);
-      return [];
-    }
+    return this.playerLookup.findPlayers(data);
   }
 
   /**
-   * Find single actor by identifier
+   * Find single actor by identifier.
+   * Phase 4 (R4.1): facade delegate to PlayerLookupService.
    */
   async findActor(data: { identifier: string }): Promise<{ id: string, name: string } | null> {
-    this.validateFoundryState();
-
-    try {
-      const actor = this.findActorByIdentifier(data.identifier);
-      return actor ? { id: actor.id, name: actor.name } : null;
-    } catch (error) {
-      console.error(`[${MODULE_ID}] Error finding actor:`, error);
-      return null;
-    }
-  }
-
-  // Private storage for tracking roll button processing states
-  private rollButtonProcessingStates: Map<string, boolean> = new Map();
-
-  /**
-   * Check if a roll button is currently being processed
-   */
-  private isRollButtonProcessing(buttonId: string): boolean {
-    return this.rollButtonProcessingStates.get(buttonId) || false;
-  }
-
-  /**
-   * Set roll button processing state
-   */
-  private setRollButtonProcessing(buttonId: string, processing: boolean): void {
-    if (processing) {
-      this.rollButtonProcessingStates.set(buttonId, true);
-    } else {
-      this.rollButtonProcessingStates.delete(buttonId);
-    }
+    return this.playerLookup.findActor(data);
   }
 
   /**

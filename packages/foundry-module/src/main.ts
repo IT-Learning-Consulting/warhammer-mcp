@@ -7,6 +7,8 @@ import { notify } from './notify.js';
 import { registerRollRelayHook } from './hooks/createChatMessage-roll-relay.js';
 import { registerMcpDialogChimeHook } from './hooks/mcp-dialog-chime.js';
 import { registerMcpDialogAutoResolve } from './mcp-dialog-autoresolve.js';
+// Phase 4.3 (R4.2): per-message AbortController registry for the roll-button listener-leak fix.
+import { bindMessageController, releaseMessageController } from './utils/message-lifecycle.js';
 // Connection control now handled through settings menu
 
 /**
@@ -114,6 +116,9 @@ class FoundryMCPBridge {
 
       // Expose data access globally for settings UI
       (window as any).foundryMCPBridge.dataAccess = this.queryHandlers.dataAccess;
+      // Phase 4 (R3.3): expose the creature index for the Settings-UI rebuild button + ready-hook build
+      // (the rebuild wrapper left FoundryDataAccess for PersistentCreatureIndex.rebuildEnhancedIndex()).
+      (window as any).foundryMCPBridge.creatureIndex = this.queryHandlers.creatureIndex;
       // Expose emitRollEvent for data-access roll-result relay.
       (window as any).foundryMCPBridge.emitRollEvent = (requestId: string, payload: any) =>
         this.socketBridge?.emitRollEvent(requestId, payload);
@@ -193,9 +198,9 @@ class FoundryMCPBridge {
           console.log(`[${MODULE_ID}] Enhanced creature index not found, building automatically for better UX...`);
           notify.info('Building enhanced creature index for faster searches...');
 
-          // Trigger index build through data access
-          if (this.queryHandlers?.dataAccess?.rebuildEnhancedCreatureIndex) {
-            await this.queryHandlers.dataAccess.rebuildEnhancedCreatureIndex();
+          // Trigger index build through the creature index (Phase 4 R3.3)
+          if (this.queryHandlers?.creatureIndex?.rebuildEnhancedIndex) {
+            await this.queryHandlers.creatureIndex.rebuildEnhancedIndex();
           }
         } else {
           console.log(`[${MODULE_ID}] Enhanced creature index exists, ready for instant searches`);
@@ -880,8 +885,10 @@ Hooks.on('renderChatMessageHTML', (message: any, html: HTMLElement) => {
         // If message has rolled buttons, the content should already be updated
         // Just attach any necessary handlers for active buttons
         if ($html.find('.mcp-roll-button').length > 0) {
-          // Only attach handlers to active (non-rolled) buttons
-          queryHandlers.dataAccess.attachRollButtonHandlers($html);
+          // Only attach handlers to active (non-rolled) buttons. Phase 4.3 (R4.2): bind a per-message
+          // AbortController so this render's listeners supersede (not stack on) the prior render's.
+          const signal = bindMessageController(message.id);
+          queryHandlers.dataAccess.attachRollButtonHandlers($html, signal);
         }
 
       }
@@ -890,7 +897,9 @@ Hooks.on('renderChatMessageHTML', (message: any, html: HTMLElement) => {
 
       const queryHandlers = foundryMCPBridge['queryHandlers'] as any;
       if (queryHandlers && queryHandlers.dataAccess) {
-        queryHandlers.dataAccess.attachRollButtonHandlers($html);
+        // Phase 4.3 (R4.2): per-message AbortController so re-renders don't stack click listeners.
+        const signal = bindMessageController(message.id);
+        queryHandlers.dataAccess.attachRollButtonHandlers($html, signal);
 
         // Check for legacy roll states
         setTimeout(() => {
@@ -904,6 +913,13 @@ Hooks.on('renderChatMessageHTML', (message: any, html: HTMLElement) => {
   } catch (error) {
     console.warn(`[${MODULE_ID}] Error processing roll buttons in chat message:`, error);
   }
+});
+
+// Phase 4.3 (R4.2): release the per-message AbortController when a chat message is deleted, so the
+// controller registry doesn't grow unbounded across a long session (and the message's live click
+// listener is torn down with it).
+Hooks.on('deleteChatMessage', (message: any) => {
+  releaseMessageController(message.id);
 });
 
 // When a disease's DURATION begins (symptoms manifest), whisper the patient a vague "you feel

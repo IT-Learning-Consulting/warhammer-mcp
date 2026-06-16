@@ -1,0 +1,63 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`RollButtonService.buildRollResultPayload — characterization > snapshot: auto-failure on roll >= 96 (SL clamped to -1) 1`] = `
+{
+  "SL": -1,
+  "outcome": "roll_completed",
+  "success": false,
+  "total": 98,
+}
+`;
+
+exports[`RollButtonService.buildRollResultPayload — characterization > snapshot: auto-success on roll <= 5 (SL floored to +1) 1`] = `
+{
+  "SL": 2,
+  "outcome": "roll_completed",
+  "success": true,
+  "total": 3,
+}
+`;
+
+exports[`RollButtonService.buildRollResultPayload — characterization > snapshot: custom formula without a <=target clause reports raw total only 1`] = `
+{
+  "SL": null,
+  "outcome": "roll_completed",
+  "success": null,
+  "total": 11,
+}
+`;
+
+exports[`RollButtonService.buildRollResultPayload — characterization > snapshot: normal-zone failure (roll > target) 1`] = `
+{
+  "SL": -2,
+  "outcome": "roll_completed",
+  "success": false,
+  "total": 70,
+}
+`;
+
+exports[`RollButtonService.buildRollResultPayload — characterization > snapshot: normal-zone success (roll <= target) 1`] = `
+{
+  "SL": 2,
+  "outcome": "roll_completed",
+  "success": true,
+  "total": 30,
+}
+`;
+
+exports[`RollButtonService.buildRollResultPayload — characterization > snapshot: target carries an appended modifier (1d100<=50+10 → 60) 1`] = `
+{
+  "SL": 1,
+  "outcome": "roll_completed",
+  "success": true,
+  "total": 55,
+}
+`;
+
+exports[`RollRequestService.requestPlayerRolls — characterization > snapshot: structured error when the target player/character is not found 1`] = `
+{
+  "error": "No player or character named "Nonexistent Player" found. Available players: none",
+  "message": "",
+  "success": false,
+}
+`;

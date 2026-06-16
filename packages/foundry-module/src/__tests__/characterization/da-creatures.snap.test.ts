@@ -1,16 +1,18 @@
-// Characterization snapshot tests for FoundryDataAccess creature methods:
-//   listCreaturesByCriteria (line 1166)
-//   getEnhancedCreatureIndex (line 2989)
-// Phase 0, sub-phase 0.7.3 — regression net for the upcoming data-access.ts refactor.
+// Characterization snapshot tests for the creature listing path:
+//   listCreaturesByCriteria (CompendiumSearchService)
+// Phase 0, sub-phase 0.7.3 — regression net for the data-access.ts refactor.
+// Phase 4 (R3.3): listCreaturesByCriteria + getEnhancedCreatureIndex left FoundryDataAccess. This file now
+// pierces CompendiumSearchService directly; the describe/it names are UNCHANGED so the listCreaturesByCriteria
+// snapshots stay byte-identical. The getEnhancedCreatureIndex describe was removed (its facade is gone) —
+// the single sanctioned --update-snapshots of this phase drops those two obsolete entries (HC3 ADR).
 // DO NOT edit data-access.ts, setup.ts, or any source from this file.
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { FoundryDataAccess } from '../../data-access.js';
+import { CompendiumSearchService } from '../../services/index.js';
+import { MODULE_ID } from '../../constants.js';
 
-function makeDA() {
-  const da = new FoundryDataAccess();
-  (da as any).validateFoundryState = () => {};
-  return da;
+function makeSearch(creatures: typeof CANNED_CREATURES) {
+  return new CompendiumSearchService(MODULE_ID, { getEnhancedIndex: async () => creatures });
 }
 
 let randomCounter = 0;
@@ -74,18 +76,6 @@ const CANNED_CREATURES = [
   },
 ];
 
-/**
- * Inject a stub persistentIndex so tests never hit fetch/FilePicker.
- * Called per test; pass the creatures array you want returned.
- */
-function stubPersistentIndex(da: FoundryDataAccess, creatures: typeof CANNED_CREATURES) {
-  (da as any).persistentIndex = {
-    getEnhancedIndex: async () => creatures,
-    rebuildIndex: async () => creatures,
-    registerFoundryHooks: () => {},
-  };
-}
-
 // ---------------------------------------------------------------------------
 // listCreaturesByCriteria — enhanced index path
 // ---------------------------------------------------------------------------
@@ -100,10 +90,9 @@ describe('FoundryDataAccess.listCreaturesByCriteria — characterization', () =>
       },
     };
 
-    const da = makeDA();
-    stubPersistentIndex(da, CANNED_CREATURES);
+    const svc = makeSearch(CANNED_CREATURES);
 
-    const result = await da.listCreaturesByCriteria({});
+    const result = await svc.listCreaturesByCriteria({});
     expect(result).toMatchSnapshot();
   });
 
@@ -116,10 +105,9 @@ describe('FoundryDataAccess.listCreaturesByCriteria — characterization', () =>
       },
     };
 
-    const da = makeDA();
-    stubPersistentIndex(da, CANNED_CREATURES);
+    const svc = makeSearch(CANNED_CREATURES);
 
-    const result = await da.listCreaturesByCriteria({ creatureType: 'greenskin' });
+    const result = await svc.listCreaturesByCriteria({ creatureType: 'greenskin' });
     expect(result).toMatchSnapshot();
   });
 
@@ -132,11 +120,10 @@ describe('FoundryDataAccess.listCreaturesByCriteria — characterization', () =>
       },
     };
 
-    const da = makeDA();
-    stubPersistentIndex(da, CANNED_CREATURES);
+    const svc = makeSearch(CANNED_CREATURES);
 
     // CR 1–3: Goblin (2) + Gor (3); Goblin Shaman (5) excluded
-    const result = await da.listCreaturesByCriteria({ threatLevel: { min: 1, max: 3 } });
+    const result = await svc.listCreaturesByCriteria({ threatLevel: { min: 1, max: 3 } });
     expect(result).toMatchSnapshot();
   });
 
@@ -149,10 +136,9 @@ describe('FoundryDataAccess.listCreaturesByCriteria — characterization', () =>
       },
     };
 
-    const da = makeDA();
-    stubPersistentIndex(da, CANNED_CREATURES);
+    const svc = makeSearch(CANNED_CREATURES);
 
-    const result = await da.listCreaturesByCriteria({ hasSpells: true });
+    const result = await svc.listCreaturesByCriteria({ hasSpells: true });
     expect(result).toMatchSnapshot();
   });
 
@@ -180,30 +166,8 @@ describe('FoundryDataAccess.listCreaturesByCriteria — characterization', () =>
       packs: new Map([['wfrp4e-core.bestiary', pack]]),
     };
 
-    const da = makeDA();
-    const result = await da.listCreaturesByCriteria({ creatureType: 'greenskin' });
-    expect(result).toMatchSnapshot();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// getEnhancedCreatureIndex
-// ---------------------------------------------------------------------------
-
-describe('FoundryDataAccess.getEnhancedCreatureIndex — characterization', () => {
-  it('snapshot: returns raw enhanced creature array from persistentIndex', async () => {
-    const da = makeDA();
-    stubPersistentIndex(da, CANNED_CREATURES);
-
-    const result = await da.getEnhancedCreatureIndex();
-    expect(result).toMatchSnapshot();
-  });
-
-  it('snapshot: empty index returns empty array', async () => {
-    const da = makeDA();
-    stubPersistentIndex(da, []);
-
-    const result = await da.getEnhancedCreatureIndex();
+    const svc = makeSearch([]);
+    const result = await svc.listCreaturesByCriteria({ creatureType: 'greenskin' });
     expect(result).toMatchSnapshot();
   });
 });

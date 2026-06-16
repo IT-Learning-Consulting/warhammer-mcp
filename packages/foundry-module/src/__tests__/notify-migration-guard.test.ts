@@ -39,12 +39,14 @@ function walk(dir: string): string[] {
 
 // PRD: mcp_notify_coverage_v1 §5 Phase 3 R3.4 — ChatMessage allowlist.
 // Direct `ChatMessage.create` calls bypass the notify dispatcher's chat-audit
-// channel. The two legitimate sites are notify.ts (emitChat dispatch) and
-// data-access.ts (requestPlayerRolls roll-button, paired with notify.created('mcp', ...)).
+// channel. The legitimate sites are notify.ts (emitChat dispatch) and
+// services/roll-request.ts (requestPlayerRolls roll-button, paired with notify.created('mcp', ...)).
 const CHAT_FORBIDDEN = /\bChatMessage\.create\s*\(/;
 const CHAT_ALLOWLIST = new Set<string>([
   'notify.ts',        // emitChat() — legitimate dispatch
-  'data-access.ts',   // requestPlayerRolls roll-button (paired with notify.created('mcp',...))
+  // Phase 4 (R4.1): requestPlayerRolls moved data-access.ts → services/roll-request.ts (still paired
+  // with notify.created('mcp',...)). The basename allowlist follows it.
+  'roll-request.ts',  // requestPlayerRolls roll-button (paired with notify.created('mcp',...))
   // main.ts: player-/GM-facing game broadcasts notify's GM-only audit channel cannot carry —
   // disease-contracted GM-note (custom alias + must always show, not setting-gated),
   // wfrp-test-button `chat` action (public OR owners+GMs), and disease-onset omen

@@ -9,3 +9,7 @@
 
 export { PersistentCreatureIndex } from './creature-index.js';
 export { CompendiumSearchService } from './compendium-search.js';
+// Phase 4 (R4.1): player-rolls + roll-button state machine extracted three-way (D1).
+export { RollRequestService } from './roll-request.js';
+export { RollButtonService } from './roll-button.js';
+export { PlayerLookupService } from './player-lookup.js';
