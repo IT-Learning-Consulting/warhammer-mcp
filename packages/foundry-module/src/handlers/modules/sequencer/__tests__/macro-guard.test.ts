@@ -129,9 +129,12 @@ describe('play-sequence-json macro-node guard — ALLOWLIST (SA2, Phase 5B)', ()
 
 describe('play-sequence-json macro-node guard — allowed types pass', () => {
   it('allows type:"effect" and feeds the wrapped {options,sections} shape to fromJSON', async () => {
+    // Sections carry repetitionsDelay:[min,max] — every real Sequence.toJSON() section does, and the
+    // play-sequence-json structural pre-check rejects sections that lack it (a hand-authored stub would
+    // otherwise escape the try/catch as a detached unhandled rejection). Mirror real toJSON output here.
     const result = await dispatchModuleSequencer({
       action: 'play-sequence-json',
-      sequence: [{ type: 'effect', file: 'jb2a.flames.orange' }],
+      sequence: [{ type: 'effect', file: 'jb2a.flames.orange', repetitionsDelay: [0, 0] }],
     });
     // fromJSON called means the guard passed; success means no UNSAFE_SECTION_EXCLUDED
     expect(fromJsonMock).toHaveBeenCalledTimes(1);
@@ -140,7 +143,7 @@ describe('play-sequence-json macro-node guard — allowed types pass', () => {
     expect(fromJsonMock).toHaveBeenCalledWith(
       expect.objectContaining({
         options: expect.objectContaining({ moduleName: 'warhammer-mcp' }),
-        sections: [{ type: 'effect', file: 'jb2a.flames.orange' }],
+        sections: [{ type: 'effect', file: 'jb2a.flames.orange', repetitionsDelay: [0, 0] }],
       }),
     );
     expect(playMock).toHaveBeenCalledTimes(1);
@@ -150,7 +153,7 @@ describe('play-sequence-json macro-node guard — allowed types pass', () => {
   it('allows type:"sound"', async () => {
     const result = await dispatchModuleSequencer({
       action: 'play-sequence-json',
-      sequence: [{ type: 'sound', file: 'sounds/thunder.ogg' }],
+      sequence: [{ type: 'sound', file: 'sounds/thunder.ogg', repetitionsDelay: [0, 0] }],
     });
     expect(fromJsonMock).toHaveBeenCalledTimes(1);
     expect(result.success).toBe(true);
@@ -159,7 +162,7 @@ describe('play-sequence-json macro-node guard — allowed types pass', () => {
   it('allows type:"canvasPan"', async () => {
     await dispatchModuleSequencer({
       action: 'play-sequence-json',
-      sequence: [{ type: 'canvasPan', duration: 1000 }],
+      sequence: [{ type: 'canvasPan', duration: 1000, repetitionsDelay: [0, 0] }],
     });
     expect(fromJsonMock).toHaveBeenCalledTimes(1);
   });
@@ -167,7 +170,7 @@ describe('play-sequence-json macro-node guard — allowed types pass', () => {
   it('allows type:"wait"', async () => {
     await dispatchModuleSequencer({
       action: 'play-sequence-json',
-      sequence: [{ type: 'wait', duration: 500 }],
+      sequence: [{ type: 'wait', duration: 500, repetitionsDelay: [0, 0] }],
     });
     expect(fromJsonMock).toHaveBeenCalledTimes(1);
   });
