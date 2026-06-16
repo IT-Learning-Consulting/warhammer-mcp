@@ -1,0 +1,249 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`template-apply engine — BUG-242 bare-specialisation skill > embeds a bare-spec skill ("Channelling") with skipSpecialisationChoice:true so no dialog blocks execution 1`] = `
+{
+  "fromTemplate": "tpl-mage",
+  "skipSpecialisationChoice": true,
+}
+`;
+
+exports[`template-apply engine — applyTemplate (world actor) write capture > captures WRITE #1 (actor.update + skipExperienceChecks) and WRITE #2 (createEmbeddedDocuments + fromTemplate) 1`] = `
+{
+  "result": {
+    "actorId": "act-1",
+    "actorName": "Skeleton",
+    "applied": {
+      "characteristics": {
+        "t": 10,
+        "ws": 15,
+      },
+      "itemIds": [
+        "new-0",
+        "new-1",
+      ],
+      "itemsByType": {
+        "skill": 1,
+        "spell": 0,
+        "talent": 1,
+        "trait": 0,
+        "trapping": 0,
+      },
+      "name": "Wight Skeleton",
+    },
+    "success": true,
+    "templateId": "tpl-wight",
+    "templateName": "Wight",
+  },
+  "write1_actorUpdate": [
+    {
+      "options": {
+        "skipExperienceChecks": true,
+      },
+      "updateData": {
+        "name": "Wight Skeleton",
+        "prototypeToken.name": "Wight Skeleton",
+        "system.characteristics.t.advances": 10,
+        "system.characteristics.ws.advances": 15,
+      },
+    },
+  ],
+  "write2_createEmbedded": [
+    {
+      "items": [
+        {
+          "name": "Intimidate",
+          "system": {
+            "advances": {
+              "value": 20,
+            },
+          },
+          "type": "skill",
+        },
+        {
+          "name": "Frightening",
+          "type": "talent",
+        },
+      ],
+      "options": {
+        "fromTemplate": "tpl-wight",
+        "skipSpecialisationChoice": true,
+      },
+    },
+  ],
+}
+`;
+
+exports[`template-apply engine — applyTemplateToToken (synthetic delta) write capture > captures WRITE #1 (no prototypeToken.name on a token delta), WRITE #2, and WRITE #3 token name-sync 1`] = `
+{
+  "result": {
+    "actorId": "goblin",
+    "actorName": "Goblin",
+    "applied": {
+      "characteristics": {
+        "ws": 5,
+      },
+      "itemIds": [
+        "new-0",
+      ],
+      "itemsByType": {
+        "skill": 1,
+        "spell": 0,
+        "talent": 0,
+        "trait": 0,
+        "trapping": 0,
+      },
+      "name": "Skirmisher Goblin",
+    },
+    "sceneId": "s1",
+    "success": true,
+    "templateId": "tpl-skirmisher",
+    "templateName": "Skirmisher",
+    "tokenId": "t1",
+  },
+  "worldActorUntouched": {
+    "creates": 0,
+    "updates": 0,
+  },
+  "write1_deltaUpdate": [
+    {
+      "options": {
+        "skipExperienceChecks": true,
+      },
+      "updateData": {
+        "name": "Skirmisher Goblin",
+        "system.characteristics.ws.advances": 5,
+      },
+    },
+  ],
+  "write2_createEmbedded": [
+    {
+      "items": [
+        {
+          "name": "Stealth (Rural)",
+          "system": {
+            "advances": {
+              "value": 10,
+            },
+          },
+          "type": "skill",
+        },
+      ],
+      "options": {
+        "fromTemplate": "tpl-skirmisher",
+        "skipSpecialisationChoice": true,
+      },
+    },
+  ],
+  "write3_tokenNameSync": [
+    {
+      "name": "Skirmisher Goblin (1)",
+    },
+  ],
+}
+`;
+
+exports[`template-apply engine — planTemplateApply / executeTemplatePlan split (R6.2 internal dry-run) > executeTemplatePlan applies the planned writes (WRITE #1 then WRITE #2) — identical to the monolith baseline 1`] = `
+{
+  "result": {
+    "actorId": "act-1",
+    "actorName": "Skeleton",
+    "applied": {
+      "characteristics": {
+        "t": 10,
+        "ws": 15,
+      },
+      "itemIds": [
+        "new-0",
+        "new-1",
+      ],
+      "itemsByType": {
+        "skill": 1,
+        "spell": 0,
+        "talent": 1,
+        "trait": 0,
+        "trapping": 0,
+      },
+      "name": "Wight Skeleton",
+    },
+    "success": true,
+    "templateId": "tpl-wight",
+    "templateName": "Wight",
+  },
+  "write1_actorUpdate": [
+    {
+      "options": {
+        "skipExperienceChecks": true,
+      },
+      "updateData": {
+        "name": "Wight Skeleton",
+        "prototypeToken.name": "Wight Skeleton",
+        "system.characteristics.t.advances": 10,
+        "system.characteristics.ws.advances": 15,
+      },
+    },
+  ],
+  "write2_createEmbedded": [
+    {
+      "items": [
+        {
+          "name": "Intimidate",
+          "system": {
+            "advances": {
+              "value": 20,
+            },
+          },
+          "type": "skill",
+        },
+        {
+          "name": "Frightening",
+          "type": "talent",
+        },
+      ],
+      "options": {
+        "fromTemplate": "tpl-wight",
+        "skipSpecialisationChoice": true,
+      },
+    },
+  ],
+}
+`;
+
+exports[`template-apply engine — planTemplateApply / executeTemplatePlan split (R6.2 internal dry-run) > planTemplateApply builds the serializable 2-write plan and performs NO Foundry writes (dry-run) 1`] = `
+[
+  {
+    "op": "actor.update",
+    "options": {
+      "skipExperienceChecks": true,
+    },
+    "updateData": {
+      "name": "Wight Skeleton",
+      "prototypeToken.name": "Wight Skeleton",
+      "system.characteristics.t.advances": 10,
+      "system.characteristics.ws.advances": 15,
+    },
+  },
+  {
+    "documentType": "Item",
+    "items": [
+      {
+        "name": "Intimidate",
+        "system": {
+          "advances": {
+            "value": 20,
+          },
+        },
+        "type": "skill",
+      },
+      {
+        "name": "Frightening",
+        "type": "talent",
+      },
+    ],
+    "op": "createEmbeddedDocuments",
+    "options": {
+      "fromTemplate": "tpl-wight",
+      "skipSpecialisationChoice": true,
+    },
+  },
+]
+`;

@@ -1,6 +1,6 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`FoundryDataAccess.getCombat — characterization > snapshot: active combat with scene and combatant 1`] = `
+exports[`CombatService.getCombat — characterization > snapshot: active combat with scene and combatant 1`] = `
 {
   "active": true,
   "combatantCount": 2,
@@ -13,7 +13,7 @@ exports[`FoundryDataAccess.getCombat — characterization > snapshot: active com
 }
 `;
 
-exports[`FoundryDataAccess.getCombat — characterization > snapshot: combat with no scene or combatant 1`] = `
+exports[`CombatService.getCombat — characterization > snapshot: combat with no scene or combatant 1`] = `
 {
   "active": true,
   "combatantCount": 0,
@@ -26,11 +26,11 @@ exports[`FoundryDataAccess.getCombat — characterization > snapshot: combat wit
 }
 `;
 
-exports[`FoundryDataAccess.getCombat — characterization > snapshot: no combat returns null 1`] = `null`;
+exports[`CombatService.getCombat — characterization > snapshot: no combat returns null 1`] = `null`;
 
-exports[`FoundryDataAccess.listCombatants — characterization > snapshot: no combat returns empty array 1`] = `[]`;
+exports[`CombatService.listCombatants — characterization > snapshot: no combat returns empty array 1`] = `[]`;
 
-exports[`FoundryDataAccess.listCombatants — characterization > snapshot: two combatants with full fields 1`] = `
+exports[`CombatService.listCombatants — characterization > snapshot: two combatants with full fields 1`] = `
 [
   {
     "actorId": "actor-001",

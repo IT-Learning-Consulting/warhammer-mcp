@@ -1,8 +1,8 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`FoundryDataAccess.listConditions — characterization > snapshot: actor with no conditions returns empty array 1`] = `[]`;
+exports[`ConditionsService.listConditions — characterization > snapshot: actor with no conditions returns empty array 1`] = `[]`;
 
-exports[`FoundryDataAccess.listConditions — characterization > snapshot: actor with two conditions 1`] = `
+exports[`ConditionsService.listConditions — characterization > snapshot: actor with two conditions 1`] = `
 [
   {
     "conditionKey": "stunned",

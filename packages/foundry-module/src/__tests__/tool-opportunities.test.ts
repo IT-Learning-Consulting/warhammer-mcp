@@ -4,6 +4,14 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { FoundryDataAccess } from '../data-access.js';
+// Phase 6 (R5.2): listScenes + getActiveScene were promoted off FoundryDataAccess to
+// ScenePlacementService; those blocks instantiate the service directly. The listActiveEffects /
+// getActiveEffectByName blocks below still pierce FoundryDataAccess.
+import { ScenePlacementService } from '../services/index.js';
+
+function makeService(): any {
+  return new ScenePlacementService(() => {}, () => {});
+}
 
 function makeScene(id: string, name: string, active = false) {
   return {
@@ -75,14 +83,13 @@ beforeEach(() => {
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 
-describe('FoundryDataAccess.listScenes — TOOL-IDEA-001 pagination + countOnly', () => {
+describe('ScenePlacementService.listScenes — TOOL-IDEA-001 pagination + countOnly', () => {
   it('returns a bare array (back-compat) when no pagination params are set', async () => {
     const scenes = [makeScene('s1', 'A'), makeScene('s2', 'B')];
     (globalThis as any).game = { scenes: { contents: scenes } };
-    const da: any = new FoundryDataAccess();
-    da.validateFoundryState = () => {};
+    const svc: any = makeService();
 
-    const result = await da.listScenes({});
+    const result = await svc.listScenes({});
 
     expect(Array.isArray(result)).toBe(true);
     expect(result).toHaveLength(2);
@@ -92,10 +99,9 @@ describe('FoundryDataAccess.listScenes — TOOL-IDEA-001 pagination + countOnly'
   it('returns {total, filterApplied} when countOnly=true', async () => {
     const scenes = Array.from({ length: 215 }, (_, i) => makeScene(`s${i}`, `Scene ${i}`));
     (globalThis as any).game = { scenes: { contents: scenes } };
-    const da: any = new FoundryDataAccess();
-    da.validateFoundryState = () => {};
+    const svc: any = makeService();
 
-    const result = await da.listScenes({ countOnly: true });
+    const result = await svc.listScenes({ countOnly: true });
 
     expect(result).toEqual({ total: 215, filterApplied: false });
   });
@@ -103,10 +109,9 @@ describe('FoundryDataAccess.listScenes — TOOL-IDEA-001 pagination + countOnly'
   it('reports filterApplied=true in countOnly when a filter is set', async () => {
     const scenes = [makeScene('s1', 'Town'), makeScene('s2', 'Forest'), makeScene('s3', 'Tower')];
     (globalThis as any).game = { scenes: { contents: scenes } };
-    const da: any = new FoundryDataAccess();
-    da.validateFoundryState = () => {};
+    const svc: any = makeService();
 
-    const result = await da.listScenes({ countOnly: true, filter: 'to' });
+    const result = await svc.listScenes({ countOnly: true, filter: 'to' });
 
     expect(result.total).toBe(2); // Town + Tower
     expect(result.filterApplied).toBe(true);
@@ -115,10 +120,9 @@ describe('FoundryDataAccess.listScenes — TOOL-IDEA-001 pagination + countOnly'
   it('returns paginated envelope when pageSize is set', async () => {
     const scenes = Array.from({ length: 125 }, (_, i) => makeScene(`s${i}`, `Scene ${i}`));
     (globalThis as any).game = { scenes: { contents: scenes } };
-    const da: any = new FoundryDataAccess();
-    da.validateFoundryState = () => {};
+    const svc: any = makeService();
 
-    const result = await da.listScenes({ page: 2, pageSize: 50 });
+    const result = await svc.listScenes({ page: 2, pageSize: 50 });
 
     expect(result).toMatchObject({
       total: 125,
@@ -134,27 +138,24 @@ describe('FoundryDataAccess.listScenes — TOOL-IDEA-001 pagination + countOnly'
   it('returns short final page', async () => {
     const scenes = Array.from({ length: 125 }, (_, i) => makeScene(`s${i}`, `Scene ${i}`));
     (globalThis as any).game = { scenes: { contents: scenes } };
-    const da: any = new FoundryDataAccess();
-    da.validateFoundryState = () => {};
+    const svc: any = makeService();
 
-    const result = await da.listScenes({ page: 3, pageSize: 50 });
+    const result = await svc.listScenes({ page: 3, pageSize: 50 });
 
     expect(result.scenes).toHaveLength(25); // 125 - 50 - 50
     expect(result.pageCount).toBe(3);
   });
 });
 
-describe('FoundryDataAccess.getActiveScene — TOOL-IDEA-007 sceneId param', () => {
+describe('ScenePlacementService.getActiveScene — TOOL-IDEA-007 sceneId param', () => {
   it('returns active scene when sceneId is omitted (back-compat)', async () => {
     const active = makeScene('active', 'Active Scene', true);
     (globalThis as any).game = {
       scenes: { current: active, get: () => null },
     };
-    const da: any = new FoundryDataAccess();
-    da.validateFoundryState = () => {};
-    da.getTokenDisposition = () => 'neutral';
+    const svc: any = makeService();
 
-    const result = await da.getActiveScene({});
+    const result = await svc.getActiveScene({});
 
     expect(result.id).toBe('active');
     expect(result.active).toBe(true);
@@ -169,11 +170,9 @@ describe('FoundryDataAccess.getActiveScene — TOOL-IDEA-007 sceneId param', () 
         get: (id: string) => (id === 'other' ? other : null),
       },
     };
-    const da: any = new FoundryDataAccess();
-    da.validateFoundryState = () => {};
-    da.getTokenDisposition = () => 'neutral';
+    const svc: any = makeService();
 
-    const result = await da.getActiveScene({ sceneId: 'other' });
+    const result = await svc.getActiveScene({ sceneId: 'other' });
 
     expect(result.id).toBe('other');
     expect(result.active).toBe(false);
@@ -183,10 +182,9 @@ describe('FoundryDataAccess.getActiveScene — TOOL-IDEA-007 sceneId param', () 
     (globalThis as any).game = {
       scenes: { current: makeScene('a', 'A', true), get: () => null },
     };
-    const da: any = new FoundryDataAccess();
-    da.validateFoundryState = () => {};
+    const svc: any = makeService();
 
-    await expect(da.getActiveScene({ sceneId: 'ghost' })).rejects.toThrow(/Scene not found.*ghost/);
+    await expect(svc.getActiveScene({ sceneId: 'ghost' })).rejects.toThrow(/Scene not found.*ghost/);
   });
 });
 

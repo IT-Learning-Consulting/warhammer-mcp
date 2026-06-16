@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { MODULE_ID } from './constants.js';
 import { FoundryDataAccess } from './data-access.js';
 // Phase 4 (R3.3): QueryHandlers owns the extracted creature-index + compendium-search services.
-import { PersistentCreatureIndex, CompendiumSearchService, RollRequestService, RollButtonService, PlayerLookupService } from './services/index.js';
+import { PersistentCreatureIndex, CompendiumSearchService, RollRequestService, RollButtonService, PlayerLookupService, CombatService, ConditionsService, ScenePlacementService } from './services/index.js';
 import { wrappedWrite } from './transaction-manager.js';
 import { notify } from './notify.js';
 // Phase 1 mcp_crud_expansion — polymorphic ownership handlers.
@@ -222,15 +222,34 @@ export class QueryHandlers {
   public rollRequest: RollRequestService;
   public rollButton: RollButtonService;
   public playerLookup: PlayerLookupService;
+  // Phase 6 (R5.2): Contract — the combat + conditions clusters promoted off FoundryDataAccess to
+  // QueryHandlers (mirrors the Phase-5 rollRequest/rollButton/playerLookup promotion). The live call
+  // sites (the combat/conditions handlers below) call these directly now; the facade delegates were
+  // deleted from FoundryDataAccess.
+  public combat: CombatService;
+  public conditions: ConditionsService;
+  // Phase 6 (R5.2): scene-placement promoted to QueryHandlers and ctor-injected into FoundryDataAccess so
+  // external handlers (handlers/scene.ts, handlers/token.ts) and the 2 internal self-callers
+  // (createActors/createActor) share one instance. Its auditLog seam binds to dataAccess.auditLog so
+  // scene-placement audit entries are unchanged (HC1).
+  public scenePlacement: ScenePlacementService;
 
   constructor() {
     this.creatureIndex = new PersistentCreatureIndex();
     this.compendiumSearch = new CompendiumSearchService(MODULE_ID, this.creatureIndex);
-    this.dataAccess = new FoundryDataAccess(this.compendiumSearch);
     const validateState = (): void => this.dataAccess.validateFoundryState();
+    // scenePlacement is built BEFORE dataAccess so it can be injected; its callbacks reference
+    // this.dataAccess lazily (only invoked at runtime, after construction completes).
+    this.scenePlacement = new ScenePlacementService(
+      validateState,
+      (operation, data, result, error) => this.dataAccess.auditLog(operation, data, result, error),
+    );
+    this.dataAccess = new FoundryDataAccess(this.compendiumSearch, this.scenePlacement);
     this.rollRequest = new RollRequestService(validateState);
     this.rollButton = new RollButtonService(validateState);
     this.playerLookup = new PlayerLookupService(validateState);
+    this.combat = new CombatService(validateState);
+    this.conditions = new ConditionsService(validateState);
   }
 
   /**
@@ -562,7 +581,8 @@ export class QueryHandlers {
   private async handleScene(data: unknown): Promise<any> {
     try {
       this.dataAccess.validateFoundryState();
-      return await dispatchSceneHandler(data, this.dataAccess);
+      // Phase 6 (R5.2): the `list` action's listScenes now lives on the promoted ScenePlacementService.
+      return await dispatchSceneHandler(data, this.scenePlacement);
     } catch (error) {
       rethrowAsInvalidInput(error);
       throw new Error(`Failed to dispatch scene action: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -934,7 +954,8 @@ export class QueryHandlers {
   async handleToken(data: unknown): Promise<any> {
     try {
       this.dataAccess.validateFoundryState();
-      return await dispatchTokenHandler(data, this.dataAccess);
+      // Phase 6 (R5.2): add-tokens / delete-token now live on the promoted ScenePlacementService.
+      return await dispatchTokenHandler(data, this.scenePlacement);
     } catch (error) {
       rethrowAsInvalidInput(error);
       throw new Error(`Failed to dispatch token action: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -1683,7 +1704,7 @@ export class QueryHandlers {
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
       const parsed = GetCombatInput.strict().parse(data ?? {});
-      return { success: true, data: await this.dataAccess.getCombat(parsed) };
+      return { success: true, data: await this.combat.getCombat(parsed) };
     } catch (error) {
       rethrowAsInvalidInput(error);
       throw new Error(`Failed to get combat: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -1696,7 +1717,7 @@ export class QueryHandlers {
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
       const parsed = ListCombatantsInput.strict().parse(data ?? {});
-      return { success: true, data: await this.dataAccess.listCombatants(parsed) };
+      return { success: true, data: await this.combat.listCombatants(parsed) };
     } catch (error) {
       rethrowAsInvalidInput(error);
       throw new Error(`Failed to list combatants: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -1711,7 +1732,7 @@ export class QueryHandlers {
       const parsed = AdvanceCombatInput.strict().parse(data ?? {});
       return await wrappedWrite('advanceCombat', async () => ({
         success: true,
-        data: await this.dataAccess.advanceCombat(parsed),
+        data: await this.combat.advanceCombat(parsed),
       }));
     } catch (error) {
       rethrowAsInvalidInput(error);
@@ -1727,7 +1748,7 @@ export class QueryHandlers {
       const parsed = AddCombatantsInput.strict().parse(data ?? {});
       return await wrappedWrite('addCombatants', async () => ({
         success: true,
-        data: await this.dataAccess.addCombatants(parsed),
+        data: await this.combat.addCombatants(parsed),
       }));
     } catch (error) {
       rethrowAsInvalidInput(error);
@@ -1743,7 +1764,7 @@ export class QueryHandlers {
       const parsed = RemoveCombatantsInput.strict().parse(data ?? {});
       return await wrappedWrite('removeCombatants', async () => ({
         success: true,
-        data: await this.dataAccess.removeCombatants(parsed),
+        data: await this.combat.removeCombatants(parsed),
       }));
     } catch (error) {
       rethrowAsInvalidInput(error);
@@ -1759,7 +1780,7 @@ export class QueryHandlers {
       const parsed = EndCombatInput.strict().parse(data ?? {});
       return await wrappedWrite('endCombat', async () => ({
         success: true,
-        data: await this.dataAccess.endCombat(parsed),
+        data: await this.combat.endCombat(parsed),
       }));
     } catch (error) {
       rethrowAsInvalidInput(error);
@@ -1791,7 +1812,7 @@ export class QueryHandlers {
       const parsed = ApplyConditionInput.strict().parse(data ?? {});
       return await wrappedWrite('applyCondition', async () => ({
         success: true,
-        data: await this.dataAccess.applyCondition(parsed),
+        data: await this.conditions.applyCondition(parsed),
       }));
     } catch (error) {
       rethrowAsInvalidInput(error);
@@ -1807,7 +1828,7 @@ export class QueryHandlers {
       const parsed = RemoveConditionInput.strict().parse(data ?? {});
       return await wrappedWrite('removeCondition', async () => ({
         success: true,
-        data: await this.dataAccess.removeCondition(parsed),
+        data: await this.conditions.removeCondition(parsed),
       }));
     } catch (error) {
       rethrowAsInvalidInput(error);
@@ -1821,7 +1842,7 @@ export class QueryHandlers {
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
       const parsed = ListConditionsInput.strict().parse(data ?? {});
-      return { success: true, data: await this.dataAccess.listConditions(parsed) };
+      return { success: true, data: await this.conditions.listConditions(parsed) };
     } catch (error) {
       rethrowAsInvalidInput(error);
       throw new Error(`Failed to list conditions: ${error instanceof Error ? error.message : 'Unknown error'}`);

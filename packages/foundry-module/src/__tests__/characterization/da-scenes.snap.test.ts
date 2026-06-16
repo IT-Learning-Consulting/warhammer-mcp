@@ -1,10 +1,12 @@
-import { beforeEach, describe, expect, it } from 'vitest';
-import { FoundryDataAccess } from '../../data-access.js';
+// Characterization snapshot tests — ScenePlacementService.getActiveScene / listScenes
+// Phase 6 (R5.2): Contract — the scene-placement cluster was promoted off FoundryDataAccess to
+// QueryHandlers; these tests now pierce ScenePlacementService directly (values unchanged).
 
-function makeDA() {
-  const da = new FoundryDataAccess();
-  (da as any).validateFoundryState = () => {};
-  return da;
+import { beforeEach, describe, expect, it } from 'vitest';
+import { ScenePlacementService } from '../../services/index.js';
+
+function makeService(): any {
+  return new ScenePlacementService(() => {}, () => {});
 }
 
 function makeToken(overrides: Record<string, any> = {}) {
@@ -43,7 +45,7 @@ function makeSceneObj(overrides: Record<string, any> = {}) {
   };
 }
 
-describe('FoundryDataAccess.getActiveScene — characterization', () => {
+describe('ScenePlacementService.getActiveScene — characterization', () => {
   beforeEach(() => {
     (globalThis as any).foundry.utils.randomID = () => 'fixed-id';
   });
@@ -58,8 +60,8 @@ describe('FoundryDataAccess.getActiveScene — characterization', () => {
       },
     };
 
-    const da = makeDA();
-    const result = await da.getActiveScene();
+    const svc = makeService();
+    const result = await svc.getActiveScene();
     expect(result).toMatchSnapshot();
   });
 
@@ -83,8 +85,8 @@ describe('FoundryDataAccess.getActiveScene — characterization', () => {
       },
     };
 
-    const da = makeDA();
-    const result = await da.getActiveScene({ sceneId: 'scene-2' });
+    const svc = makeService();
+    const result = await svc.getActiveScene({ sceneId: 'scene-2' });
     expect(result).toMatchSnapshot();
   });
 
@@ -97,14 +99,14 @@ describe('FoundryDataAccess.getActiveScene — characterization', () => {
       },
     };
 
-    const da = makeDA();
-    await expect(da.getActiveScene({ sceneId: 'no-such-scene' })).rejects.toThrow(
+    const svc = makeService();
+    await expect(svc.getActiveScene({ sceneId: 'no-such-scene' })).rejects.toThrow(
       /Scene not found/,
     );
   });
 });
 
-describe('FoundryDataAccess.listScenes — characterization', () => {
+describe('ScenePlacementService.listScenes — characterization', () => {
   beforeEach(() => {
     (globalThis as any).foundry.utils.randomID = () => 'fixed-id';
   });
@@ -149,36 +151,36 @@ describe('FoundryDataAccess.listScenes — characterization', () => {
 
   it('returns bare array of scenes with no options (back-compat)', async () => {
     wireScenes([sceneA, sceneB]);
-    const da = makeDA();
-    const result = await da.listScenes();
+    const svc = makeService();
+    const result = await svc.listScenes();
     expect(result).toMatchSnapshot();
   });
 
   it('returns empty array when no scenes exist', async () => {
     wireScenes([]);
-    const da = makeDA();
-    const result = await da.listScenes();
+    const svc = makeService();
+    const result = await svc.listScenes();
     expect(result).toMatchSnapshot();
   });
 
   it('returns paginated envelope when page is specified', async () => {
     wireScenes([sceneA, sceneB]);
-    const da = makeDA();
-    const result = await da.listScenes({ page: 1, pageSize: 1 });
+    const svc = makeService();
+    const result = await svc.listScenes({ page: 1, pageSize: 1 });
     expect(result).toMatchSnapshot();
   });
 
   it('returns countOnly envelope', async () => {
     wireScenes([sceneA, sceneB]);
-    const da = makeDA();
-    const result = await da.listScenes({ countOnly: true });
+    const svc = makeService();
+    const result = await svc.listScenes({ countOnly: true });
     expect(result).toMatchSnapshot();
   });
 
   it('filters by name substring', async () => {
     wireScenes([sceneA, sceneB]);
-    const da = makeDA();
-    const result = await da.listScenes({ filter: 'dungeon' });
+    const svc = makeService();
+    const result = await svc.listScenes({ filter: 'dungeon' });
     expect(result).toMatchSnapshot();
   });
 });

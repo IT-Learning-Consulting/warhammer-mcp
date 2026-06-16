@@ -1,17 +1,17 @@
-// Characterization snapshot tests — FoundryDataAccess.listConditions
+// Characterization snapshot tests — ConditionsService.listConditions
 // Phase 0 sub-phase 0.7.3: lock the return-shape so refactors have a regression net.
+// Phase 6 (R5.2): Contract — the conditions cluster was promoted off FoundryDataAccess to
+// QueryHandlers; these tests now pierce ConditionsService directly (values unchanged).
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { FoundryDataAccess } from '../../data-access.js';
+import { ConditionsService } from '../../services/index.js';
 
 vi.mock('../notify.js', () => ({
   notify: { created: vi.fn(), updated: vi.fn(), deleted: vi.fn(), warn: vi.fn() },
 }));
 
-function makeDA() {
-  const da = new FoundryDataAccess();
-  (da as any).validateFoundryState = () => {};
-  return da;
+function makeService() {
+  return new ConditionsService(() => {});
 }
 
 function makeConditionEffect(id: string, conditionKey: string, value: number) {
@@ -26,7 +26,7 @@ function makeConditionEffect(id: string, conditionKey: string, value: number) {
   };
 }
 
-describe('FoundryDataAccess.listConditions — characterization', () => {
+describe('ConditionsService.listConditions — characterization', () => {
   beforeEach(() => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -48,8 +48,8 @@ describe('FoundryDataAccess.listConditions — characterization', () => {
       actors: { get: (id: string) => (id === actor.id ? actor : null) },
     };
 
-    const da = makeDA();
-    const result = await da.listConditions({ actorId: 'actor-001' });
+    const svc = makeService();
+    const result = await svc.listConditions({ actorId: 'actor-001' });
     expect(result).toMatchSnapshot();
   });
 
@@ -64,8 +64,8 @@ describe('FoundryDataAccess.listConditions — characterization', () => {
       actors: { get: (id: string) => (id === actor.id ? actor : null) },
     };
 
-    const da = makeDA();
-    const result = await da.listConditions({ actorId: 'actor-002' });
+    const svc = makeService();
+    const result = await svc.listConditions({ actorId: 'actor-002' });
     expect(result).toMatchSnapshot();
   });
 });

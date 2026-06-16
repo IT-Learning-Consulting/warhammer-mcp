@@ -2,7 +2,13 @@
 // so one world actor with `prototypeToken.actorLink=false` can spawn N unlinked tokens.
 
 import { describe, it, beforeEach, vi, expect } from 'vitest';
-import { FoundryDataAccess } from '../data-access.js';
+// Phase 6 (R5.2): addActorsToScene was promoted off FoundryDataAccess to ScenePlacementService;
+// this pierce now instantiates the service directly (no-op validateState + auditLog seams).
+import { ScenePlacementService } from '../services/index.js';
+
+function makeService(): any {
+  return new ScenePlacementService(() => {}, () => {});
+}
 
 function makeActor(id: string, name: string, actorLink = false) {
   return {
@@ -40,7 +46,7 @@ beforeEach(() => {
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 
-describe('FoundryDataAccess.addActorsToScene — per-actor quantities (BUG-051 post-hotfix)', () => {
+describe('ScenePlacementService.addActorsToScene — per-actor quantities (BUG-051 post-hotfix)', () => {
   it('drops N tokens for one actor when quantities[0] = N; each at a distinct calculated position', async () => {
     const scene = makeScene();
     const actor = makeActor('act-1', 'Skeleton');
@@ -50,10 +56,9 @@ describe('FoundryDataAccess.addActorsToScene — per-actor quantities (BUG-051 p
       actors: { get: (id: string) => (id === 'act-1' ? actor : null) },
     };
 
-    const da: any = new FoundryDataAccess();
-    da.validateFoundryState = () => {};
+    const svc: any = makeService();
 
-    await da.addActorsToScene({
+    await svc.addActorsToScene({
       actorIds: ['act-1'],
       quantities: [3],
       placement: 'grid',
@@ -82,10 +87,9 @@ describe('FoundryDataAccess.addActorsToScene — per-actor quantities (BUG-051 p
       actors: { get: (id: string) => (id === 'act-1' ? a1 : id === 'act-2' ? a2 : null) },
     };
 
-    const da: any = new FoundryDataAccess();
-    da.validateFoundryState = () => {};
+    const svc: any = makeService();
 
-    await da.addActorsToScene({
+    await svc.addActorsToScene({
       actorIds: ['act-1', 'act-2'],
       placement: 'grid',
       hidden: false,
@@ -99,7 +103,7 @@ describe('FoundryDataAccess.addActorsToScene — per-actor quantities (BUG-051 p
 });
 
 // TOOL-IDEA-004 + TOOL-IDEA-005 (2026-05-14)
-describe('FoundryDataAccess.addActorsToScene — sceneId + tokens[] response', () => {
+describe('ScenePlacementService.addActorsToScene — sceneId + tokens[] response', () => {
   it('targets a non-active scene via sceneId (TOOL-IDEA-004)', async () => {
     const activeScene = makeScene();
     activeScene.id = 'active-scene';
@@ -117,10 +121,9 @@ describe('FoundryDataAccess.addActorsToScene — sceneId + tokens[] response', (
       actors: { get: (id: string) => (id === 'act-1' ? actor : null) },
     };
 
-    const da: any = new FoundryDataAccess();
-    da.validateFoundryState = () => {};
+    const svc: any = makeService();
 
-    const result = await da.addActorsToScene({
+    const result = await svc.addActorsToScene({
       actorIds: ['act-1'],
       placement: 'grid',
       hidden: false,
@@ -144,11 +147,10 @@ describe('FoundryDataAccess.addActorsToScene — sceneId + tokens[] response', (
       actors: { get: () => null },
     };
 
-    const da: any = new FoundryDataAccess();
-    da.validateFoundryState = () => {};
+    const svc: any = makeService();
 
     await expect(
-      da.addActorsToScene({
+      svc.addActorsToScene({
         actorIds: ['act-1'],
         placement: 'grid',
         hidden: false,
@@ -166,10 +168,9 @@ describe('FoundryDataAccess.addActorsToScene — sceneId + tokens[] response', (
       actors: { get: (id: string) => (id === 'act-1' ? actor : null) },
     };
 
-    const da: any = new FoundryDataAccess();
-    da.validateFoundryState = () => {};
+    const svc: any = makeService();
 
-    const result = await da.addActorsToScene({
+    const result = await svc.addActorsToScene({
       actorIds: ['act-1'],
       quantities: [3],
       placement: 'grid',

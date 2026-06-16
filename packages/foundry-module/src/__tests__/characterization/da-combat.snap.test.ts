@@ -1,18 +1,18 @@
-// Characterization snapshot tests — FoundryDataAccess.getCombat / listCombatants
+// Characterization snapshot tests — CombatService.getCombat / listCombatants
 // Phase 0 sub-phase 0.7.3: lock the return-shape so refactors have a regression net.
+// Phase 6 (R5.2): Contract — the combat cluster was promoted off FoundryDataAccess to
+// QueryHandlers; these tests now pierce CombatService directly (values unchanged).
 // These tests NEVER test behaviour; they only freeze the current output shape.
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { FoundryDataAccess } from '../../data-access.js';
+import { CombatService } from '../../services/index.js';
 
 vi.mock('../notify.js', () => ({
   notify: { created: vi.fn(), updated: vi.fn(), deleted: vi.fn(), warn: vi.fn() },
 }));
 
-function makeDA() {
-  const da = new FoundryDataAccess();
-  (da as any).validateFoundryState = () => {};
-  return da;
+function makeService() {
+  return new CombatService(() => {});
 }
 
 function makeCombat(overrides: Record<string, any> = {}) {
@@ -48,7 +48,7 @@ function makeCombat(overrides: Record<string, any> = {}) {
   };
 }
 
-describe('FoundryDataAccess.getCombat — characterization', () => {
+describe('CombatService.getCombat — characterization', () => {
   beforeEach(() => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -66,8 +66,8 @@ describe('FoundryDataAccess.getCombat — characterization', () => {
       scenes: { active: { id: 'scene-001' } },
     };
 
-    const da = makeDA();
-    const result = await da.getCombat({ combatId: 'combat-001' });
+    const svc = makeService();
+    const result = await svc.getCombat({ combatId: 'combat-001' });
     expect(result).toMatchSnapshot();
   });
 
@@ -83,8 +83,8 @@ describe('FoundryDataAccess.getCombat — characterization', () => {
       scenes: { active: { id: 'scene-001' } },
     };
 
-    const da = makeDA();
-    const result = await da.getCombat({ combatId: 'combat-001' });
+    const svc = makeService();
+    const result = await svc.getCombat({ combatId: 'combat-001' });
     expect(result).toMatchSnapshot();
   });
 
@@ -99,13 +99,13 @@ describe('FoundryDataAccess.getCombat — characterization', () => {
       scenes: { active: null },
     };
 
-    const da = makeDA();
-    const result = await da.getCombat({});
+    const svc = makeService();
+    const result = await svc.getCombat({});
     expect(result).toMatchSnapshot();
   });
 });
 
-describe('FoundryDataAccess.listCombatants — characterization', () => {
+describe('CombatService.listCombatants — characterization', () => {
   beforeEach(() => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -123,8 +123,8 @@ describe('FoundryDataAccess.listCombatants — characterization', () => {
       scenes: { active: { id: 'scene-001' } },
     };
 
-    const da = makeDA();
-    const result = await da.listCombatants({ combatId: 'combat-001' });
+    const svc = makeService();
+    const result = await svc.listCombatants({ combatId: 'combat-001' });
     expect(result).toMatchSnapshot();
   });
 
@@ -139,8 +139,8 @@ describe('FoundryDataAccess.listCombatants — characterization', () => {
       scenes: { active: null },
     };
 
-    const da = makeDA();
-    const result = await da.listCombatants({});
+    const svc = makeService();
+    const result = await svc.listCombatants({});
     expect(result).toMatchSnapshot();
   });
 });

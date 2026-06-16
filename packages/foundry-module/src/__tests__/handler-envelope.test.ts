@@ -45,7 +45,7 @@ describe('handler envelope — scene umbrella (handleScene action=list)', () => 
   // are covered by live smoke at validate stage.
   it('returns { success: true, data } on action=list', async () => {
     const qh = makeHandlers();
-    (qh.dataAccess as any).listScenes = async () => [
+    (qh.scenePlacement as any).listScenes = async () => [
       { id: 's1', name: 'Stage', active: true, navigation: true },
     ];
     const result = await (qh as any).handleScene({ action: 'list' });
@@ -94,7 +94,7 @@ describe('handler envelope — item-write (handleCreateItem)', () => {
 describe('handler envelope — combat-read (handleGetCombat)', () => {
   it('returns { success: true, data } on success', async () => {
     const qh = makeHandlers();
-    (qh.dataAccess as any).getCombat = async () => ({ id: 'c1', round: 1, turn: 0 });
+    (qh.combat as any).getCombat = async () => ({ id: 'c1', round: 1, turn: 0 });
     const result = await (qh as any).handleGetCombat({});
     expectEnvelope<{ id: string }>(result);
     expect(result.data.id).toBe('c1');
@@ -104,7 +104,7 @@ describe('handler envelope — combat-read (handleGetCombat)', () => {
 describe('handler envelope — combat-read (handleListCombatants)', () => {
   it('returns { success: true, data } on success', async () => {
     const qh = makeHandlers();
-    (qh.dataAccess as any).listCombatants = async () => [{ id: 'co1', name: 'Hero' }];
+    (qh.combat as any).listCombatants = async () => [{ id: 'co1', name: 'Hero' }];
     const result = await (qh as any).handleListCombatants({});
     expectEnvelope<Array<{ id: string; name: string }>>(result);
     expect(result.data[0].id).toBe('co1');
@@ -114,7 +114,7 @@ describe('handler envelope — combat-read (handleListCombatants)', () => {
 describe('handler envelope — combat-write (handleAdvanceCombat)', () => {
   it('returns { success: true, data } on success', async () => {
     const qh = makeHandlers();
-    (qh.dataAccess as any).advanceCombat = async () => ({ combatId: 'c1', round: 1, turn: 1, combatantId: 'co2' });
+    (qh.combat as any).advanceCombat = async () => ({ combatId: 'c1', round: 1, turn: 1, combatantId: 'co2' });
     const result = await (qh as any).handleAdvanceCombat({ action: 'next' });
     expectEnvelope<{ combatantId: string }>(result);
     expect(result.data.combatantId).toBe('co2');
@@ -124,7 +124,7 @@ describe('handler envelope — combat-write (handleAdvanceCombat)', () => {
 describe('handler envelope — combat-write (handleAddCombatants)', () => {
   it('returns { success: true, data } on success', async () => {
     const qh = makeHandlers();
-    (qh.dataAccess as any).addCombatants = async () => ({ added: ['co3'] });
+    (qh.combat as any).addCombatants = async () => ({ added: ['co3'] });
     const result = await (qh as any).handleAddCombatants({ actorIds: ['a1'] });
     expectEnvelope<{ added: string[] }>(result);
     expect(result.data.added).toEqual(['co3']);
@@ -134,7 +134,7 @@ describe('handler envelope — combat-write (handleAddCombatants)', () => {
 describe('handler envelope — combat-write (handleRemoveCombatants)', () => {
   it('returns { success: true, data } on success', async () => {
     const qh = makeHandlers();
-    (qh.dataAccess as any).removeCombatants = async () => ({ removed: ['co3'] });
+    (qh.combat as any).removeCombatants = async () => ({ removed: ['co3'] });
     const result = await (qh as any).handleRemoveCombatants({ combatantIds: ['co3'] });
     expectEnvelope<{ removed: string[] }>(result);
     expect(result.data.removed).toEqual(['co3']);
@@ -144,7 +144,7 @@ describe('handler envelope — combat-write (handleRemoveCombatants)', () => {
 describe('handler envelope — combat-write (handleEndCombat)', () => {
   it('returns { success: true, data } on success', async () => {
     const qh = makeHandlers();
-    (qh.dataAccess as any).endCombat = async () => ({ ended: 'c1' });
+    (qh.combat as any).endCombat = async () => ({ ended: 'c1' });
     const result = await (qh as any).handleEndCombat({});
     expectEnvelope<{ ended: string }>(result);
     expect(result.data.ended).toBe('c1');
@@ -177,7 +177,7 @@ describe('handler envelope — damage-write (handleApplyDamage)', () => {
 describe('handler envelope — condition-write (handleApplyCondition)', () => {
   it('returns { success: true, data } on success', async () => {
     const qh = makeHandlers();
-    (qh.dataAccess as any).applyCondition = async () => ({ actorId: 'a1', conditionKey: 'prone', stackCount: 1 });
+    (qh.conditions as any).applyCondition = async () => ({ actorId: 'a1', conditionKey: 'prone', stackCount: 1 });
     const result = await (qh as any).handleApplyCondition({ actorId: 'a1', conditionKey: 'prone' });
     expectEnvelope<{ stackCount: number }>(result);
     expect(result.data.stackCount).toBe(1);
@@ -187,7 +187,7 @@ describe('handler envelope — condition-write (handleApplyCondition)', () => {
 describe('handler envelope — condition-write (handleRemoveCondition)', () => {
   it('returns { success: true, data } on success', async () => {
     const qh = makeHandlers();
-    (qh.dataAccess as any).removeCondition = async () => ({ actorId: 'a1', conditionKey: 'prone', remainingCount: 0 });
+    (qh.conditions as any).removeCondition = async () => ({ actorId: 'a1', conditionKey: 'prone', remainingCount: 0 });
     const result = await (qh as any).handleRemoveCondition({ actorId: 'a1', conditionKey: 'prone' });
     expectEnvelope<{ remainingCount: number }>(result);
     expect(result.data.remainingCount).toBe(0);
@@ -197,7 +197,7 @@ describe('handler envelope — condition-write (handleRemoveCondition)', () => {
 describe('handler envelope — condition-read (handleListConditions)', () => {
   it('returns { success: true, data } on success', async () => {
     const qh = makeHandlers();
-    (qh.dataAccess as any).listConditions = async () => [{ conditionKey: 'prone', value: 1, effectId: 'e1' }];
+    (qh.conditions as any).listConditions = async () => [{ conditionKey: 'prone', value: 1, effectId: 'e1' }];
     const result = await (qh as any).handleListConditions({ actorId: 'a1' });
     expectEnvelope<Array<{ conditionKey: string }>>(result);
     expect(result.data[0].conditionKey).toBe('prone');

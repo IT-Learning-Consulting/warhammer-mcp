@@ -90,20 +90,22 @@ describe('Phase 4b — wrappedWrite engagement per handler', () => {
     return qh;
   }
 
-  const writeCases: Array<[string, string, any, string]> = [
-    ['handleAdvanceCombat', 'advanceCombat', { action: 'next' }, 'advanceCombat'],
-    ['handleAddCombatants', 'addCombatants', { actorIds: ['a1'] }, 'addCombatants'],
-    ['handleRemoveCombatants', 'removeCombatants', { combatantIds: ['c1'] }, 'removeCombatants'],
-    ['handleEndCombat', 'endCombat', {}, 'endCombat'],
-    ['handleApplyDamage', 'applyDamage', { actorId: 'a1', amount: 0 }, 'applyDamage'],
-    ['handleApplyCondition', 'applyCondition', { actorId: 'a1', conditionKey: 'prone' }, 'applyCondition'],
-    ['handleRemoveCondition', 'removeCondition', { actorId: 'a1', conditionKey: 'prone' }, 'removeCondition'],
+  // Phase 6 (R5.2): combat/conditions handlers were promoted off FoundryDataAccess to QueryHandlers;
+  // the 5th tuple element names the object that owns the stubbed method ('combat'/'conditions'/'dataAccess').
+  const writeCases: Array<[string, string, any, string, string]> = [
+    ['handleAdvanceCombat', 'advanceCombat', { action: 'next' }, 'advanceCombat', 'combat'],
+    ['handleAddCombatants', 'addCombatants', { actorIds: ['a1'] }, 'addCombatants', 'combat'],
+    ['handleRemoveCombatants', 'removeCombatants', { combatantIds: ['c1'] }, 'removeCombatants', 'combat'],
+    ['handleEndCombat', 'endCombat', {}, 'endCombat', 'combat'],
+    ['handleApplyDamage', 'applyDamage', { actorId: 'a1', amount: 0 }, 'applyDamage', 'dataAccess'],
+    ['handleApplyCondition', 'applyCondition', { actorId: 'a1', conditionKey: 'prone' }, 'applyCondition', 'conditions'],
+    ['handleRemoveCondition', 'removeCondition', { actorId: 'a1', conditionKey: 'prone' }, 'removeCondition', 'conditions'],
   ];
 
-  for (const [method, daMethod, input, expectedOp] of writeCases) {
+  for (const [method, daMethod, input, expectedOp, targetField] of writeCases) {
     it(`${method} engages wrappedWrite (startTransaction called with "${expectedOp}")`, async () => {
       const qh = makeHandlers();
-      (qh.dataAccess as any)[daMethod] = async () => ({ ok: true });
+      (qh as any)[targetField][daMethod] = async () => ({ ok: true });
       const startSpy = vi.spyOn(transactionManager, 'startTransaction').mockReturnValue('tx');
       await (qh as any)[method](input);
       // Phase 6.3 BUG-081: startTransaction signature is (description, opts?). Check description only.

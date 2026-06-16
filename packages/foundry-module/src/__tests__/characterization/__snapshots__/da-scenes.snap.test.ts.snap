@@ -1,6 +1,6 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`FoundryDataAccess.getActiveScene — characterization > returns a non-active scene when sceneId is provided 1`] = `
+exports[`ScenePlacementService.getActiveScene — characterization > returns a non-active scene when sceneId is provided 1`] = `
 {
   "active": false,
   "background": "scenes/market.webp",
@@ -19,7 +19,7 @@ exports[`FoundryDataAccess.getActiveScene — characterization > returns a non-a
 }
 `;
 
-exports[`FoundryDataAccess.getActiveScene — characterization > returns current scene data with tokens and notes 1`] = `
+exports[`ScenePlacementService.getActiveScene — characterization > returns current scene data with tokens and notes 1`] = `
 {
   "active": true,
   "background": "scenes/market.webp",
@@ -58,7 +58,7 @@ exports[`FoundryDataAccess.getActiveScene — characterization > returns current
 }
 `;
 
-exports[`FoundryDataAccess.listScenes — characterization > filters by name substring 1`] = `
+exports[`ScenePlacementService.listScenes — characterization > filters by name substring 1`] = `
 [
   {
     "active": false,
@@ -79,7 +79,7 @@ exports[`FoundryDataAccess.listScenes — characterization > filters by name sub
 ]
 `;
 
-exports[`FoundryDataAccess.listScenes — characterization > returns bare array of scenes with no options (back-compat) 1`] = `
+exports[`ScenePlacementService.listScenes — characterization > returns bare array of scenes with no options (back-compat) 1`] = `
 [
   {
     "active": true,
@@ -116,16 +116,16 @@ exports[`FoundryDataAccess.listScenes — characterization > returns bare array 
 ]
 `;
 
-exports[`FoundryDataAccess.listScenes — characterization > returns countOnly envelope 1`] = `
+exports[`ScenePlacementService.listScenes — characterization > returns countOnly envelope 1`] = `
 {
   "filterApplied": false,
   "total": 2,
 }
 `;
 
-exports[`FoundryDataAccess.listScenes — characterization > returns empty array when no scenes exist 1`] = `[]`;
+exports[`ScenePlacementService.listScenes — characterization > returns empty array when no scenes exist 1`] = `[]`;
 
-exports[`FoundryDataAccess.listScenes — characterization > returns paginated envelope when page is specified 1`] = `
+exports[`ScenePlacementService.listScenes — characterization > returns paginated envelope when page is specified 1`] = `
 {
   "page": 1,
   "pageCount": 2,

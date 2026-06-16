@@ -17,3 +17,5 @@ export { PlayerLookupService } from './player-lookup.js';
 export { ScenePlacementService } from './scene-placement.js';
 export { CombatService } from './combat.js';
 export { ConditionsService } from './conditions.js';
+// Phase 6 (R6.1): template-apply engine (applyTemplate + applyTemplateToToken + plan/apply split).
+export { TemplateApplyService } from './template-apply.js';

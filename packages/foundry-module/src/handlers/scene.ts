@@ -94,11 +94,10 @@ type SceneResponse =
   | ScenePreloadResponse
   | SceneImportFromCompendiumResponse;
 
-// Minimal data-access surface the dispatcher needs. queries.ts passes its own
-// FoundryDataAccess instance in; we type just the methods we touch so the
-// handler file doesn't import the heavy data-access.ts directly.
+// Minimal scene-placement surface the dispatcher needs (only the `list` action uses it).
+// Phase 6 (R5.2): scene-placement was promoted off FoundryDataAccess to QueryHandlers, which now
+// passes its own ScenePlacementService instance in; we type just the one method we touch.
 export interface SceneDataAccessFacade {
-  validateFoundryState(): void;
   listScenes(input: any): Promise<any>;
 }
 

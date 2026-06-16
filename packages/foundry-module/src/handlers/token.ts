@@ -111,11 +111,10 @@ export type TokenResponse =
   | TokenListResponse
   | TokenAddResponse;
 
-// Minimal facade the dispatcher needs for migrated actions; queries.ts passes
-// its FoundryDataAccess instance to delegate scene.add-tokens / scene.delete-token
-// runtime through their existing (already-validated) implementations.
+// Minimal scene-placement surface the dispatcher needs for the add-tokens / delete-token actions.
+// Phase 6 (R5.2): scene-placement was promoted off FoundryDataAccess to QueryHandlers, which now
+// passes its own ScenePlacementService instance in; we type just the two methods we touch.
 export interface TokenDataAccessFacade {
-  validateFoundryState(): void;
   addActorsToScene(input: {
     actorIds: string[];
     quantities?: number[];
