@@ -609,7 +609,7 @@ Hooks.once('ready', async () => {
               // Get the data access instance to update the message
               const queryHandlers = foundryMCPBridge['queryHandlers'] as any;
               if (queryHandlers && queryHandlers.dataAccess) {
-                await queryHandlers.dataAccess.updateRollButtonMessage(data.buttonId, data.userId, data.rollLabel);
+                await queryHandlers.rollButton.updateRollButtonMessage(data.buttonId, data.userId, data.rollLabel);
               }
             } catch (error) {
               console.error(`[${MODULE_ID}] GM failed to update message:`, error);
@@ -632,7 +632,7 @@ Hooks.once('ready', async () => {
               // Get the data access instance to save the roll state
               const queryHandlers = foundryMCPBridge['queryHandlers'] as any;
               if (queryHandlers && queryHandlers.dataAccess) {
-                await queryHandlers.dataAccess.saveRollState(data.buttonId, data.rollState.rolledBy);
+                await queryHandlers.rollButton.saveRollState(data.buttonId, data.rollState.rolledBy);
               }
             } catch (error) {
               console.error(`[${MODULE_ID}] GM failed to save LEGACY roll state:`, error);
@@ -888,7 +888,7 @@ Hooks.on('renderChatMessageHTML', (message: any, html: HTMLElement) => {
           // Only attach handlers to active (non-rolled) buttons. Phase 4.3 (R4.2): bind a per-message
           // AbortController so this render's listeners supersede (not stack on) the prior render's.
           const signal = bindMessageController(message.id);
-          queryHandlers.dataAccess.attachRollButtonHandlers($html, signal);
+          queryHandlers.rollButton.attachRollButtonHandlers($html, signal);
         }
 
       }
@@ -899,12 +899,7 @@ Hooks.on('renderChatMessageHTML', (message: any, html: HTMLElement) => {
       if (queryHandlers && queryHandlers.dataAccess) {
         // Phase 4.3 (R4.2): per-message AbortController so re-renders don't stack click listeners.
         const signal = bindMessageController(message.id);
-        queryHandlers.dataAccess.attachRollButtonHandlers($html, signal);
-
-        // Check for legacy roll states
-        setTimeout(() => {
-          queryHandlers.dataAccess.ensureButtonStatesForMessage($html);
-        }, 100);
+        queryHandlers.rollButton.attachRollButtonHandlers($html, signal);
       }
     }
 

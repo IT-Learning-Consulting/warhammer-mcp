@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { FoundryDataAccess } from '../data-access.js';
+// Phase 5 (R5.1): addCombatants / removeCombatants moved to CombatService (branch-by-abstraction Migrate).
+// These guards stub the service's private resolveCombat directly (was FoundryDataAccess.resolveCombat).
+import { CombatService } from '../services/index.js';
 
-function makeDA() {
-  const da = new FoundryDataAccess();
-  (da as any).validateFoundryState = () => {};
-  return da;
+function makeCombatSvc(): any {
+  // validateState injected as a no-op so the methods are reachable without a live Foundry state.
+  return new CombatService(() => {});
 }
 
 beforeEach(() => {
@@ -16,14 +17,14 @@ beforeEach(() => {
 
 describe('addCombatants guard (BUG-084)', () => {
   it('rejects tokenless actors instead of creating null-token combatants', async () => {
-    const da = makeDA();
+    const svc = makeCombatSvc();
     const createEmbeddedDocuments = vi.fn();
     const combat = {
       id: 'combat-1',
       scene: { id: 'scene-1', name: 'Bridge Ambush', tokens: [] },
       createEmbeddedDocuments,
     };
-    (da as any).resolveCombat = () => combat;
+    (svc as any).resolveCombat = () => combat;
     (globalThis as any).game = {
       ...(globalThis as any).game,
       actors: new Map([['actor-1', { id: 'actor-1', name: 'Tokenless Recruit' }]]),
@@ -31,13 +32,13 @@ describe('addCombatants guard (BUG-084)', () => {
     };
 
     await expect(
-      da.addCombatants({ actorIds: ['actor-1'] })
+      svc.addCombatants({ actorIds: ['actor-1'] })
     ).rejects.toThrow(/ADD_COMBATANTS_TOKEN_REQUIRED/);
     expect(createEmbeddedDocuments).not.toHaveBeenCalled();
   });
 
   it('uses the scene token id when present', async () => {
-    const da = makeDA();
+    const svc = makeCombatSvc();
     const createEmbeddedDocuments = vi.fn(async (_type: string, creates: any[]) =>
       creates.map((c, idx) => ({ id: `co-${idx + 1}`, ...c })),
     );
@@ -50,14 +51,14 @@ describe('addCombatants guard (BUG-084)', () => {
       },
       createEmbeddedDocuments,
     };
-    (da as any).resolveCombat = () => combat;
+    (svc as any).resolveCombat = () => combat;
     (globalThis as any).game = {
       ...(globalThis as any).game,
       actors: new Map([['actor-1', { id: 'actor-1', name: 'Placed Recruit' }]]),
       scenes: { active: combat.scene, get: () => combat.scene },
     };
 
-    const result = await da.addCombatants({ actorIds: ['actor-1'] });
+    const result = await svc.addCombatants({ actorIds: ['actor-1'] });
 
     expect(createEmbeddedDocuments).toHaveBeenCalledWith('Combatant', [
       {
@@ -95,11 +96,11 @@ describe('removeCombatants — BUG-215 return actual IDs', () => {
   }
 
   it('returns only actually-deleted IDs and pre-filters bogus ids before delete (mixed valid/bogus)', async () => {
-    const da = makeDA();
+    const svc = makeCombatSvc();
     const combat = makeCombat(['co-valid-1']);
-    (da as any).resolveCombat = () => combat;
+    (svc as any).resolveCombat = () => combat;
 
-    const result = await da.removeCombatants({
+    const result = await svc.removeCombatants({
       combatId: 'c1',
       combatantIds: ['co-valid-1', 'co-bogus-99'],
     });
@@ -112,11 +113,11 @@ describe('removeCombatants — BUG-215 return actual IDs', () => {
   });
 
   it('removes nothing and skips the delete call entirely when all ids are bogus', async () => {
-    const da = makeDA();
+    const svc = makeCombatSvc();
     const combat = makeCombat([]);
-    (da as any).resolveCombat = () => combat;
+    (svc as any).resolveCombat = () => combat;
 
-    const result = await da.removeCombatants({
+    const result = await svc.removeCombatants({
       combatId: 'c1',
       combatantIds: ['co-bogus-1', 'co-bogus-2'],
     });

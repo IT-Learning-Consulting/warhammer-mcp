@@ -1,10 +1,10 @@
 // fast-check property tests — getTokenDisposition + getWFRPCharacteristicCode invariants (Phase 0 R0.2)
 //
-// Sites: FoundryDataAccess.getTokenDisposition  (data-access.ts ~1715, private)
-//         FoundryDataAccess.getWFRPCharacteristicCode (data-access.ts ~1529, private)
+// Sites: ScenePlacementService.getTokenDisposition  (services/scene-placement.ts, private; moved Phase 5 R5.1)
+//         RollRequestService.getWFRPCharacteristicCode (services/roll-request.ts, private; moved Phase 4 R4.1)
 //
 // Both are pure mapping / clamp helpers that never touch Foundry globals.
-// We access them via (da as any).<method>() after stubbing validateFoundryState.
+// We access them via an `any` cast on the service instance (no validateState gate needed).
 //
 // Contract — getTokenDisposition:
 //   1. NUMERIC INPUT: numeric values are returned as-is (no clamping by this function).
@@ -19,23 +19,16 @@
 
 import { describe, it } from 'vitest';
 import fc from 'fast-check';
-import { FoundryDataAccess } from '../../data-access.js';
-// Phase 4 (R4.1): getWFRPCharacteristicCode moved to RollRequestService; pierce it there. getTokenDisposition
-// stays on FoundryDataAccess.
-import { RollRequestService } from '../../services/index.js';
+// Phase 4 (R4.1): getWFRPCharacteristicCode moved to RollRequestService; pierce it there.
+// Phase 5 (R5.1): getTokenDisposition moved to ScenePlacementService; pierce it there.
+import { RollRequestService, ScenePlacementService } from '../../services/index.js';
 
 // ---------------------------------------------------------------------------
 // Test rig
 // ---------------------------------------------------------------------------
 
-function makeDA(): any {
-  const da = new FoundryDataAccess();
-  // Bypass the Foundry-state gate so pure methods are reachable.
-  (da as any).validateFoundryState = () => {};
-  return da;
-}
-
-const da = makeDA();
+// getTokenDisposition is private on ScenePlacementService; reach it via an `any` cast on the instance.
+const dispoSvc: any = new ScenePlacementService(() => {}, () => {});
 // getWFRPCharacteristicCode is private on RollRequestService; reach it via an `any` cast on the instance.
 const charSvc: any = new RollRequestService(() => {});
 
@@ -81,7 +74,7 @@ describe('getTokenDisposition — numeric passthrough', () => {
   it('any finite number is returned unchanged', () => {
     fc.assert(
       fc.property(fc.integer(), (n) => {
-        const result: number = da.getTokenDisposition(n);
+        const result: number = dispoSvc.getTokenDisposition(n);
         return result === n;
       }),
       { numRuns: 2000 }
@@ -91,7 +84,7 @@ describe('getTokenDisposition — numeric passthrough', () => {
   it('any float is returned unchanged', () => {
     fc.assert(
       fc.property(fc.double({ noNaN: true }), (n) => {
-        const result: number = da.getTokenDisposition(n);
+        const result: number = dispoSvc.getTokenDisposition(n);
         return result === n;
       }),
       { numRuns: 1000 }
@@ -103,7 +96,7 @@ describe('getTokenDisposition — non-numeric defaults to NEUTRAL (0)', () => {
   it('string input returns 0 (NEUTRAL)', () => {
     fc.assert(
       fc.property(fc.string(), (s) => {
-        const result: number = da.getTokenDisposition(s);
+        const result: number = dispoSvc.getTokenDisposition(s);
         return result === TOKEN_DISPOSITIONS.NEUTRAL;
       }),
       { numRuns: 1000 }
@@ -122,7 +115,7 @@ describe('getTokenDisposition — non-numeric defaults to NEUTRAL (0)', () => {
           fc.constant(false),
         ),
         (v) => {
-          const result: number = da.getTokenDisposition(v);
+          const result: number = dispoSvc.getTokenDisposition(v);
           return result === TOKEN_DISPOSITIONS.NEUTRAL;
         }
       ),
@@ -135,7 +128,7 @@ describe('getTokenDisposition — output is always a number', () => {
   it('any input produces typeof number', () => {
     fc.assert(
       fc.property(fc.anything(), (v) => {
-        const result = da.getTokenDisposition(v);
+        const result = dispoSvc.getTokenDisposition(v);
         return typeof result === 'number';
       }),
       { numRuns: 2000 }

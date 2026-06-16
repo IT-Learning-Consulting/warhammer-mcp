@@ -243,7 +243,7 @@ export interface ValidateWfrpConfigResponse {
 export interface BrokenUuid {
   docId: string;
   docName: string;
-  field: 'description' | 'gmdescription';
+  field: 'description' | 'gmdescription' | 'biography';
   uuid: string;
   // Present when the broken UUID lives on actor.items[i] rather than the
   // top-level doc itself.

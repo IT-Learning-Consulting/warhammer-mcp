@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { MODULE_ID } from './constants.js';
 import { FoundryDataAccess } from './data-access.js';
 // Phase 4 (R3.3): QueryHandlers owns the extracted creature-index + compendium-search services.
-import { PersistentCreatureIndex, CompendiumSearchService } from './services/index.js';
+import { PersistentCreatureIndex, CompendiumSearchService, RollRequestService, RollButtonService, PlayerLookupService } from './services/index.js';
 import { wrappedWrite } from './transaction-manager.js';
 import { notify } from './notify.js';
 // Phase 1 mcp_crud_expansion — polymorphic ownership handlers.
@@ -215,11 +215,22 @@ export class QueryHandlers {
   // FoundryDataAccess gets the service injected for its one residual caller (createActorFromCompendium).
   public creatureIndex: PersistentCreatureIndex;
   public compendiumSearch: CompendiumSearchService;
+  // Phase 5 (R4.3): Contract — the player-rolls / roll-button / player-lookup services moved off
+  // FoundryDataAccess to QueryHandlers (mirrors the Phase-4 creatureIndex/compendiumSearch promotion).
+  // The live call sites (queries.ts:handleRequestPlayerRolls + main.ts roll-button hooks/socket) call
+  // these directly now; FoundryDataAccess no longer carries the facade delegates.
+  public rollRequest: RollRequestService;
+  public rollButton: RollButtonService;
+  public playerLookup: PlayerLookupService;
 
   constructor() {
     this.creatureIndex = new PersistentCreatureIndex();
     this.compendiumSearch = new CompendiumSearchService(MODULE_ID, this.creatureIndex);
     this.dataAccess = new FoundryDataAccess(this.compendiumSearch);
+    const validateState = (): void => this.dataAccess.validateFoundryState();
+    this.rollRequest = new RollRequestService(validateState);
+    this.rollButton = new RollButtonService(validateState);
+    this.playerLookup = new PlayerLookupService(validateState);
   }
 
   /**
@@ -1118,7 +1129,7 @@ export class QueryHandlers {
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
       const parsed = RequestPlayerRollsInput.strict().parse(data ?? {});
-      return await wrappedWrite('requestPlayerRolls', async () => ({ success: true, data: await this.dataAccess.requestPlayerRolls(parsed) }));
+      return await wrappedWrite('requestPlayerRolls', async () => ({ success: true, data: await this.rollRequest.requestPlayerRolls(parsed) }));
     } catch (error) {
       rethrowAsInvalidInput(error);
       throw new Error(`Failed to request player rolls: ${error instanceof Error ? error.message : 'Unknown error'}`);

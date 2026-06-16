@@ -1,13 +1,15 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { FoundryDataAccess } from '../../data-access.js';
+import { PlayerLookupService } from '../../services/index.js';
 
-function makeDA() {
-  const da = new FoundryDataAccess();
-  (da as any).validateFoundryState = () => {};
-  return da;
+// Phase 5 (R4.3): Contract — the player-lookup helpers left FoundryDataAccess for PlayerLookupService.
+// These characterizations now instantiate the service directly (validateState injected as a no-op),
+// matching the sibling da-roll-button characterization. Describe titles renamed accordingly; the one
+// sanctioned snapshot key change (--update-snapshots) is journal-ADR-backed per HC3.
+function makeLookup() {
+  return new PlayerLookupService(() => {});
 }
 
-describe('FoundryDataAccess.getFriendlyNPCs — characterization', () => {
+describe('PlayerLookupService.getFriendlyNPCs — characterization', () => {
   beforeEach(() => {
     (globalThis as any).foundry.utils.randomID = () => 'fixed-id';
   });
@@ -39,8 +41,8 @@ describe('FoundryDataAccess.getFriendlyNPCs — characterization', () => {
       },
     };
 
-    const da = makeDA();
-    const result = await da.getFriendlyNPCs();
+    const svc = makeLookup();
+    const result = await svc.getFriendlyNPCs();
     expect(result).toMatchSnapshot();
   });
 
@@ -52,13 +54,13 @@ describe('FoundryDataAccess.getFriendlyNPCs — characterization', () => {
       },
     };
 
-    const da = makeDA();
-    const result = await da.getFriendlyNPCs();
+    const svc = makeLookup();
+    const result = await svc.getFriendlyNPCs();
     expect(result).toMatchSnapshot();
   });
 });
 
-describe('FoundryDataAccess.getPartyCharacters — characterization', () => {
+describe('PlayerLookupService.getPartyCharacters — characterization', () => {
   beforeEach(() => {
     (globalThis as any).foundry.utils.randomID = () => 'fixed-id';
   });
@@ -74,8 +76,8 @@ describe('FoundryDataAccess.getPartyCharacters — characterization', () => {
       actors: { values: () => allActors.values() },
     };
 
-    const da = makeDA();
-    const result = await da.getPartyCharacters();
+    const svc = makeLookup();
+    const result = await svc.getPartyCharacters();
     expect(result).toMatchSnapshot();
   });
 
@@ -85,13 +87,13 @@ describe('FoundryDataAccess.getPartyCharacters — characterization', () => {
       actors: { values: () => [].values() },
     };
 
-    const da = makeDA();
-    const result = await da.getPartyCharacters();
+    const svc = makeLookup();
+    const result = await svc.getPartyCharacters();
     expect(result).toMatchSnapshot();
   });
 });
 
-describe('FoundryDataAccess.getConnectedPlayers — characterization', () => {
+describe('PlayerLookupService.getConnectedPlayers — characterization', () => {
   beforeEach(() => {
     (globalThis as any).foundry.utils.randomID = () => 'fixed-id';
   });
@@ -108,8 +110,8 @@ describe('FoundryDataAccess.getConnectedPlayers — characterization', () => {
       users: { values: () => users.values() },
     };
 
-    const da = makeDA();
-    const result = await da.getConnectedPlayers();
+    const svc = makeLookup();
+    const result = await svc.getConnectedPlayers();
     expect(result).toMatchSnapshot();
   });
 
@@ -120,13 +122,13 @@ describe('FoundryDataAccess.getConnectedPlayers — characterization', () => {
       users: { values: () => users.values() },
     };
 
-    const da = makeDA();
-    const result = await da.getConnectedPlayers();
+    const svc = makeLookup();
+    const result = await svc.getConnectedPlayers();
     expect(result).toMatchSnapshot();
   });
 });
 
-describe('FoundryDataAccess.findPlayers — characterization', () => {
+describe('PlayerLookupService.findPlayers — characterization', () => {
   beforeEach(() => {
     (globalThis as any).foundry.utils.randomID = () => 'fixed-id';
   });
@@ -143,8 +145,8 @@ describe('FoundryDataAccess.findPlayers — characterization', () => {
       actors: { values: () => [].values() },
     };
 
-    const da = makeDA();
-    const result = await da.findPlayers({ identifier: 'Alice' });
+    const svc = makeLookup();
+    const result = await svc.findPlayers({ identifier: 'Alice' });
     expect(result).toMatchSnapshot();
   });
 
@@ -163,8 +165,8 @@ describe('FoundryDataAccess.findPlayers — characterization', () => {
       actors: { values: () => [characterActor].values() },
     };
 
-    const da = makeDA();
-    const result = await da.findPlayers({ identifier: 'brunhilde', includeCharacterOwners: true });
+    const svc = makeLookup();
+    const result = await svc.findPlayers({ identifier: 'brunhilde', includeCharacterOwners: true });
     expect(result).toMatchSnapshot();
   });
 
@@ -176,13 +178,13 @@ describe('FoundryDataAccess.findPlayers — characterization', () => {
       actors: { values: () => [].values() },
     };
 
-    const da = makeDA();
-    const result = await da.findPlayers({ identifier: 'nobody' });
+    const svc = makeLookup();
+    const result = await svc.findPlayers({ identifier: 'nobody' });
     expect(result).toMatchSnapshot();
   });
 });
 
-describe('FoundryDataAccess.findActor — characterization', () => {
+describe('PlayerLookupService.findActor — characterization', () => {
   beforeEach(() => {
     (globalThis as any).foundry.utils.randomID = () => 'fixed-id';
   });
@@ -198,8 +200,8 @@ describe('FoundryDataAccess.findActor — characterization', () => {
       },
     };
 
-    const da = makeDA();
-    const result = await da.findActor({ identifier: 'actor-1' });
+    const svc = makeLookup();
+    const result = await svc.findActor({ identifier: 'actor-1' });
     expect(result).toMatchSnapshot();
   });
 
@@ -214,8 +216,8 @@ describe('FoundryDataAccess.findActor — characterization', () => {
       },
     };
 
-    const da = makeDA();
-    const result = await da.findActor({ identifier: 'brunhilde' });
+    const svc = makeLookup();
+    const result = await svc.findActor({ identifier: 'brunhilde' });
     expect(result).toMatchSnapshot();
   });
 
@@ -229,8 +231,8 @@ describe('FoundryDataAccess.findActor — characterization', () => {
       },
     };
 
-    const da = makeDA();
-    const result = await da.findActor({ identifier: 'nobody' });
+    const svc = makeLookup();
+    const result = await svc.findActor({ identifier: 'nobody' });
     expect(result).toMatchSnapshot();
   });
 });

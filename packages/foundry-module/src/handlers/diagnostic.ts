@@ -465,9 +465,13 @@ async function handleScanBrokenUuids(
     checked++;
     const desc = d?.system?.description?.value;
     const gmdesc = d?.system?.gmdescription?.value;
-    const checks: Array<{ field: 'description' | 'gmdescription'; text: string }> = [];
+    // BUG-388: character/npc biographies live at system.details.biography.value (NOT
+    // system.description.value); a broken @UUID there went undetected before this walk.
+    const bio = d?.system?.details?.biography?.value;
+    const checks: Array<{ field: 'description' | 'gmdescription' | 'biography'; text: string }> = [];
     if (typeof desc === 'string') checks.push({ field: 'description', text: desc });
     if (typeof gmdesc === 'string') checks.push({ field: 'gmdescription', text: gmdesc });
+    if (typeof bio === 'string') checks.push({ field: 'biography', text: bio });
 
     let docHadBroken = false;
     for (const { field, text } of checks) {

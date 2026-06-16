@@ -68,3 +68,65 @@ export interface CompendiumSearchResult {
   hasImage?: boolean;
   description?: string;
 }
+
+// Phase 5 (R5.1): scene-placement DTOs relocated here from data-access.ts so ScenePlacementService and
+// FoundryDataAccess (the delegating facade) share them without a cross-service import.
+
+export interface SceneInfo {
+  id: string;
+  name: string;
+  img?: string;
+  background?: string;
+  width: number;
+  height: number;
+  padding: number;
+  active: boolean;
+  navigation: boolean;
+  tokens: SceneToken[];
+  walls: number;
+  lights: number;
+  sounds: number;
+  notes: SceneNote[];
+}
+
+export interface SceneToken {
+  id: string;
+  name: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  actorId?: string;
+  img: string;
+  hidden: boolean;
+  disposition: number;
+}
+
+export interface SceneNote {
+  id: string;
+  text: string;
+  x: number;
+  y: number;
+}
+
+export interface SceneTokenPlacement {
+  actorIds: string[];
+  quantities?: number[];
+  placement: 'random' | 'grid' | 'center' | 'coordinates';
+  hidden: boolean;
+  coordinates?: { x: number; y: number }[];
+  // TOOL-IDEA-004 (2026-05-14): optional sceneId targets a non-active scene.
+  sceneId?: string;
+}
+
+export interface TokenPlacementResult {
+  success: boolean;
+  tokensCreated: number;
+  tokenIds: string[];
+  // TOOL-IDEA-005 (2026-05-14): structured per-token list incl. final disambiguated
+  // name (Foundry auto-counter rename) + actorId for chaining.
+  tokens?: { id: string; name: string; actorId: string }[];
+  sceneId?: string;
+  sceneName?: string;
+  errors?: string[] | undefined;
+}

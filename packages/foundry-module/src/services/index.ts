@@ -13,3 +13,7 @@ export { CompendiumSearchService } from './compendium-search.js';
 export { RollRequestService } from './roll-request.js';
 export { RollButtonService } from './roll-button.js';
 export { PlayerLookupService } from './player-lookup.js';
+// Phase 5 (R5.1): scene/token-placement + combat + conditions clusters.
+export { ScenePlacementService } from './scene-placement.js';
+export { CombatService } from './combat.js';
+export { ConditionsService } from './conditions.js';

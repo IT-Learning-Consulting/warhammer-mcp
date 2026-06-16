@@ -324,12 +324,14 @@ export async function handleAssignKey(input: AssignKeyInput): Promise<Envelope<u
     const game = getGame();
     const lock = resolveDoc(input.lockDocumentId, input.lockDocumentType, undefined);
     const applied: string[] = [];
+    let keyItemDoc: any = null;
 
     if (input.keyItemId) {
       let item = game?.items?.get?.(input.keyItemId);
       if (!item) { try { item = (globalThis as any).fromUuidSync?.(input.keyItemId); } catch { /* ignore */ } }
       if (!item) return { success: false, error: `ASSIGN_KEY_ERROR: key Item "${input.keyItemId}" not found.` };
       await flags.linkKeyLock?.(item, lock, input.keyId);
+      keyItemDoc = item;
       applied.push('linkKeyLock');
     }
 
@@ -347,7 +349,13 @@ export async function handleAssignKey(input: AssignKeyInput): Promise<Envelope<u
         lockDocumentId: input.lockDocumentId,
         lockDocumentType: input.lockDocumentType,
         applied,
+        // Lock-side read-back (best-effort): LnK's linkKeyLock write to the lock's KeyIDs is
+        // fire-and-forget, so this can lag/read empty immediately after the call (see create-key note).
         verifiedKeyIds: (() => { try { return flags.KeyIDs?.(lock); } catch { return null; } })(),
+        // BUG-389: item-side read-back — the key Item's shared key id (LocknKey IDKeysFlag).
+        // Reliably reflects the item-stored link even when the lock's KeyIDs lags, so a key-item
+        // assignment is verifiable rather than appearing empty.
+        verifiedItemKeyId: (() => { try { return keyItemDoc?.getFlag?.('LocknKey', 'IDKeysFlag') ?? null; } catch { return null; } })(),
       },
     };
   } catch (e) {

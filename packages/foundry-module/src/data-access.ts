@@ -1,8 +1,9 @@
-import { MODULE_ID, ERROR_MESSAGES, TOKEN_DISPOSITIONS } from './constants.js';
+import { MODULE_ID, ERROR_MESSAGES } from './constants.js';
 import { notify } from './notify.js';
 import { verifyDocWrite } from './utils/verifyWrite.js';
-import { RollRequestService, RollButtonService, PlayerLookupService, type CompendiumSearchService } from './services/index.js';
+import { ScenePlacementService, CombatService, ConditionsService, type CompendiumSearchService } from './services/index.js';
 import { findActorByIdentifier } from './utils/actor-lookup.js';
+import type { SceneInfo, SceneTokenPlacement, TokenPlacementResult } from './service-interfaces.js';
 // Local type definitions to avoid shared package import issues
 interface CharacterInfo {
   id: string;
@@ -35,44 +36,9 @@ interface CharacterEffect {
 }
 
 // Phase 3 (R3.1/R3.2): CompendiumSearchResult + the 4 creature-index interfaces moved to
-// ./service-interfaces.ts (shared by the extracted services/ files; imported below).
-
-interface SceneInfo {
-  id: string;
-  name: string;
-  img?: string;
-  background?: string;
-  width: number;
-  height: number;
-  padding: number;
-  active: boolean;
-  navigation: boolean;
-  tokens: SceneToken[];
-  walls: number;
-  lights: number;
-  sounds: number;
-  notes: SceneNote[];
-}
-
-interface SceneToken {
-  id: string;
-  name: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  actorId?: string;
-  img: string;
-  hidden: boolean;
-  disposition: number;
-}
-
-interface SceneNote {
-  id: string;
-  text: string;
-  x: number;
-  y: number;
-}
+// ./service-interfaces.ts (shared by the extracted services/ files).
+// Phase 5 (R5.1): SceneInfo / SceneToken / SceneNote / SceneTokenPlacement / TokenPlacementResult
+// likewise relocated to ./service-interfaces.ts (imported at the top); shared with ScenePlacementService.
 
 interface WorldInfo {
   id: string;
@@ -147,28 +113,6 @@ interface CompendiumEffect {
   duration?: Record<string, unknown>;
 }
 
-interface SceneTokenPlacement {
-  actorIds: string[];
-  quantities?: number[];
-  placement: 'random' | 'grid' | 'center' | 'coordinates';
-  hidden: boolean;
-  coordinates?: { x: number; y: number }[];
-  // TOOL-IDEA-004 (2026-05-14): optional sceneId targets a non-active scene.
-  sceneId?: string;
-}
-
-interface TokenPlacementResult {
-  success: boolean;
-  tokensCreated: number;
-  tokenIds: string[];
-  // TOOL-IDEA-005 (2026-05-14): structured per-token list incl. final disambiguated
-  // name (Foundry auto-counter rename) + actorId for chaining.
-  tokens?: { id: string; name: string; actorId: string }[];
-  sceneId?: string;
-  sceneName?: string;
-  errors?: string[] | undefined;
-}
-
 // Phase 4 (R3.3): Contract step. The persistent creature index + the compendium-search cluster have fully
 // left FoundryDataAccess — QueryHandlers (the composition layer) now owns the creature index + search
 // service, and the index rebuild wrapper lives on the index service's own rebuildEnhancedIndex() method.
@@ -179,19 +123,24 @@ export class FoundryDataAccess {
   // Injected by QueryHandlers (the owner of the creature index + search service). Optional so the many
   // `new FoundryDataAccess()` test constructions that never touch compendium matching keep compiling.
   private compendiumSearch: CompendiumSearchService | undefined;
-  // Phase 4 (R4.1): the player-rolls + roll-button + player-lookup cluster moved to dedicated services
-  // (three-file split, D1). FoundryDataAccess constructs them with a validateFoundryState callback and keeps
-  // thin facade delegates below so existing callers/tests keep resolving (Contract deferred to Phase 5, R4.3).
-  private readonly rollRequest: RollRequestService;
-  private readonly rollButton: RollButtonService;
-  private readonly playerLookup: PlayerLookupService;
+  // Phase 5 (R4.3): Contract — the player-rolls + roll-button + player-lookup cluster has fully left
+  // FoundryDataAccess. QueryHandlers (the composition layer) now owns those three services and the live
+  // call sites (queries.ts handleRequestPlayerRolls + main.ts roll-button hooks/socket) call them directly.
+  // Phase 5 (R5.1): scene/token-placement + combat + conditions clusters extracted to ScenePlacementService /
+  // CombatService / ConditionsService (branch-by-abstraction Migrate); FoundryDataAccess keeps thin facade
+  // delegates below + injects callbacks (Contract deferred to Phase 6).
+  private readonly scenePlacement: ScenePlacementService;
+  private readonly combat: CombatService;
+  private readonly conditions: ConditionsService;
 
   constructor(compendiumSearch?: CompendiumSearchService) {
     this.compendiumSearch = compendiumSearch;
-    const validateState = (): void => this.validateFoundryState();
-    this.rollRequest = new RollRequestService(validateState);
-    this.rollButton = new RollButtonService(validateState);
-    this.playerLookup = new PlayerLookupService(validateState);
+    this.scenePlacement = new ScenePlacementService(
+      () => this.validateFoundryState(),
+      (operation, data, result, error) => this.auditLog(operation, data, result, error),
+    );
+    this.combat = new CombatService(() => this.validateFoundryState());
+    this.conditions = new ConditionsService(() => this.validateFoundryState());
   }
 
   /**
@@ -280,53 +229,9 @@ export class FoundryDataAccess {
    * if the id misses. When `sceneId` is omitted, behavior is unchanged (returns
    * `game.scenes.current`).
    */
+  // Phase 5 (R5.1): facade delegate to ScenePlacementService (Contract deferred to Phase 6).
   async getActiveScene(options: { sceneId?: string } = {}): Promise<SceneInfo> {
-
-    const scene = options.sceneId
-      ? (game.scenes as any).get(options.sceneId)
-      : (game.scenes as any).current;
-    if (!scene) {
-      throw new Error(
-        options.sceneId
-          ? `Scene not found: ${options.sceneId}`
-          : ERROR_MESSAGES.SCENE_NOT_FOUND
-      );
-    }
-
-    const sceneData: SceneInfo = {
-      id: scene.id,
-      name: scene.name,
-      img: scene.img || undefined,
-      background: scene.background?.src || undefined,
-      width: scene.width,
-      height: scene.height,
-      padding: scene.padding,
-      active: scene.active,
-      navigation: scene.navigation,
-      tokens: scene.tokens.map((token: any) => ({
-        id: token.id,
-        name: token.name,
-        x: token.x,
-        y: token.y,
-        width: token.width,
-        height: token.height,
-        actorId: token.actorId || undefined,
-        img: token.texture?.src || '',
-        hidden: token.hidden,
-        disposition: this.getTokenDisposition(token.disposition),
-      })),
-      walls: scene.walls.size,
-      lights: scene.lights.size,
-      sounds: scene.sounds.size,
-      notes: scene.notes.map((note: any) => ({
-        id: note.id,
-        text: note.text || '',
-        x: note.x,
-        y: note.y,
-      })),
-    };
-
-    return sceneData;
+    return this.scenePlacement.getActiveScene(options);
   }
 
   /**
@@ -490,18 +395,6 @@ export class FoundryDataAccess {
       console.warn(`[${this.moduleId}] JSON stringify failed, using fallback:`, error);
       return '{}';
     }
-  }
-
-  /**
-   * Get token disposition as number
-   */
-  private getTokenDisposition(disposition: any): number {
-    if (typeof disposition === 'number') {
-      return disposition;
-    }
-
-    // Default to neutral if unknown
-    return TOKEN_DISPOSITIONS.NEUTRAL;
   }
 
   /**
@@ -886,106 +779,9 @@ export class FoundryDataAccess {
   /**
    * Add actors to the current scene as tokens
    */
+  // Phase 5 (R5.1): facade delegate to ScenePlacementService (Contract deferred to Phase 6).
   async addActorsToScene(placement: SceneTokenPlacement): Promise<TokenPlacementResult> {
-    this.validateFoundryState();
-
-    // TOOL-IDEA-004 (2026-05-14): optional `sceneId` targets a non-active scene.
-    // `scene.createEmbeddedDocuments('Token', ...)` is a DB write that works regardless
-    // of canvas/active state — tokens become visible when the GM later views the scene.
-    const scene = (placement as any).sceneId
-      ? (game.scenes as any).get((placement as any).sceneId)
-      : (game.scenes as any).current;
-    if (!scene) {
-      throw new Error(
-        (placement as any).sceneId
-          ? `Scene not found: ${(placement as any).sceneId}`
-          : 'No active scene found'
-      );
-    }
-
-    try {
-      const tokenData: any[] = [];
-      const errors: string[] = [];
-      // BUG-270: compute total token count up-front so grid cols is stable across the batch.
-      const totalTokenCount = placement.actorIds.reduce((sum, _, ai) =>
-        sum + Math.max(1, placement.quantities?.[ai] ?? 1), 0);
-
-      for (let ai = 0; ai < placement.actorIds.length; ai++) {
-        const actorId = placement.actorIds[ai]!;
-        const qty = Math.max(1, placement.quantities?.[ai] ?? 1);
-        try {
-          const actor = game.actors.get(actorId);
-          if (!actor) {
-            errors.push(`Actor ${actorId} not found`);
-            continue;
-          }
-
-          // BUG-051 hotfix: if actor uses linked tokens, note it in the audit log — user may
-          // have wanted unlinked (prototype) tokens for per-token independent HP. Proceed anyway.
-          if ((actor as any).prototypeToken?.actorLink === true && qty > 1) {
-            this.auditLog('addActorsToScene', { actorId, quantity: qty }, 'success', 'actor.prototypeToken.actorLink=true — N tokens share one ActorDelta');
-          }
-
-          for (let i = 0; i < qty; i++) {
-            const tokenDoc = (actor as any).prototypeToken.toObject();
-            const position = this.calculateTokenPosition(placement.placement, scene, tokenData.length, placement.coordinates, totalTokenCount);
-
-            if (tokenDoc.texture?.src?.startsWith('http')) {
-              notify.warn(`Token texture still remote: ${tokenDoc.texture.src} — placement may render poorly`);
-              tokenDoc.texture.src = null;
-            }
-
-            tokenData.push({
-              ...tokenDoc,
-              x: position.x,
-              y: position.y,
-              actorId: actorId,
-              hidden: placement.hidden,
-            });
-          }
-        } catch (error) {
-          errors.push(`Failed to prepare token for actor ${actorId}: ${error instanceof Error ? error.message : 'Unknown error'}`);
-        }
-      }
-
-      const createdTokens = await scene.createEmbeddedDocuments('Token', tokenData);
-
-      if (createdTokens.length > 0) {
-        notify.created('token', `${createdTokens.length} token(s)`, {
-          summary: `on ${scene.name}`,
-        });
-      }
-
-      // TOOL-IDEA-005 (2026-05-14): surface placed token names alongside IDs so callers
-      // chaining encounter-builder workflows can read auto-counter-renamed names (e.g.
-      // "Skeleton (3)") without a follow-up `get-current-scene` over-fetch. `tokenIds`
-      // is preserved for back-compat with existing skill prompts.
-      const result: TokenPlacementResult = {
-        success: createdTokens.length > 0,
-        tokensCreated: createdTokens.length,
-        tokenIds: createdTokens.map((token: any) => token.id),
-        tokens: createdTokens.map((token: any) => ({
-          id: token.id,
-          name: token.name,
-          actorId: token.actorId,
-        })),
-        sceneId: scene.id,
-        sceneName: scene.name,
-        ...(errors.length > 0 ? { errors } : {}),
-      };
-
-      // BUG-265: audit after the operation; report partial failure when per-token errors occurred.
-      if (errors.length > 0) {
-        this.auditLog('addActorsToScene', placement, 'failure', `partial: ${errors.join('; ')}`);
-      } else {
-        this.auditLog('addActorsToScene', placement, 'success');
-      }
-      return result;
-
-    } catch (error) {
-      this.auditLog('addActorsToScene', placement, 'failure', error instanceof Error ? error.message : 'Unknown error');
-      throw error;
-    }
+    return this.scenePlacement.addActorsToScene(placement);
   }
 
   /**
@@ -1039,169 +835,11 @@ export class FoundryDataAccess {
     }
   }
 
-  /**
-   * Calculate token position based on placement strategy
-   */
-  // BUG-270: accept total token count so grid cols is fixed for the whole batch.
-  private calculateTokenPosition(placement: 'random' | 'grid' | 'center' | 'coordinates', scene: any, index: number, coordinates?: { x: number; y: number }[], total?: number): { x: number; y: number } {
-    const gridSize = scene.grid?.size || 100;
-    // BUG-270: cols must be derived from the full batch size, not per-index.
-    const effectiveTotal = (total != null && total > 0) ? total : (index + 1);
-    const fixedCols = Math.ceil(Math.sqrt(effectiveTotal));
-
-    switch (placement) {
-      case 'coordinates':
-        if (coordinates && coordinates[index]) {
-          return coordinates[index];
-        }
-        // Fallback to grid if coordinates not provided or insufficient
-        const fallbackRow = Math.floor(index / fixedCols);
-        const fallbackCol = index % fixedCols;
-        return {
-          x: gridSize + (fallbackCol * gridSize * 2),
-          y: gridSize + (fallbackRow * gridSize * 2),
-        };
-
-      case 'center':
-        return {
-          x: (scene.width / 2) + (index * gridSize),
-          y: scene.height / 2,
-        };
-
-      case 'grid':
-        const row = Math.floor(index / fixedCols);
-        const col = index % fixedCols;
-        return {
-          x: gridSize + (col * gridSize * 2),
-          y: gridSize + (row * gridSize * 2),
-        };
-
-      case 'random':
-      default:
-        return {
-          x: Math.random() * (scene.width - gridSize),
-          y: Math.random() * (scene.height - gridSize),
-        };
-    }
-  }
-
-  /**
-   * Request player rolls — creates interactive roll buttons in chat.
-   * Phase 4 (R4.1): facade delegate to RollRequestService (Contract deferred to Phase 5, R4.3).
-   */
-  async requestPlayerRolls(data: {
-    rollType: string;
-    rollTarget: string;
-    targetPlayer: string;
-    isPublic: boolean;
-    rollModifier: string;
-    flavor: string;
-  }): Promise<{ success: boolean; requestId?: string; message: string; error?: string }> {
-    return this.rollRequest.requestPlayerRolls(data);
-  }
-
-  /**
-   * Attach click handlers to roll buttons and handle visibility.
-   * Called by the global renderChatMessageHTML hook in main.ts.
-   * Phase 4 (R4.1): facade delegate to RollButtonService (Contract deferred to Phase 5, R4.3).
-   */
-  public attachRollButtonHandlers(html: any, signal?: AbortSignal): void {
-    return this.rollButton.attachRollButtonHandlers(html, signal);
-  }
-
-  /**
-   * Save roll button state to persistent storage (legacy redirect).
-   * Phase 4 (R4.1): facade delegate to RollButtonService.
-   */
-  async saveRollState(buttonId: string, userId: string): Promise<void> {
-    return this.rollButton.saveRollState(buttonId, userId);
-  }
-
-  /**
-   * Get roll button state from persistent storage.
-   * Phase 4 (R4.1): facade delegate to RollButtonService.
-   */
-  getRollState(buttonId: string): { rolled: boolean; rolledBy?: string; rolledByName?: string; timestamp?: number } | null {
-    return this.rollButton.getRollState(buttonId);
-  }
-
-  /**
-   * Update the ChatMessage to replace the button with rolled state (incl. the non-GM→GM socket relay).
-   * Phase 4 (R4.1): facade delegate to RollButtonService.
-   */
-  async updateRollButtonMessage(buttonId: string, userId: string, rollLabel: string): Promise<void> {
-    return this.rollButton.updateRollButtonMessage(buttonId, userId, rollLabel);
-  }
-
-  /**
-   * Request GM to save roll state (legacy redirect).
-   * Phase 4 (R4.1): facade delegate to RollButtonService.
-   */
-  requestRollStateSave(buttonId: string, userId: string): void {
-    return this.rollButton.requestRollStateSave(buttonId, userId);
-  }
-
-  /**
-   * Broadcast roll state change (legacy no-op).
-   * Phase 4 (R4.1): facade delegate to RollButtonService.
-   */
-  broadcastRollState(buttonId: string, rollState: any): void {
-    return this.rollButton.broadcastRollState(buttonId, rollState);
-  }
-
-  /**
-   * Clean up old roll states (optional maintenance).
-   * Phase 4 (R4.1): facade delegate to RollButtonService.
-   */
-  async cleanOldRollStates(): Promise<number> {
-    return this.rollButton.cleanOldRollStates();
-  }
-
   // Phase 1 mcp_crud_expansion (2026-05-14): the actor-only `setActorOwnership`
   // and `getActorOwnership` methods that lived here are removed. The polymorphic
   // replacements live in `handlers/ownership.ts` and are dispatched from
   // queries.ts. The deprecation wrappers in queries.ts now strict-parse legacy
   // input and return a deprecation error pointing at the new surface.
-
-  /**
-   * Get friendly NPCs from current scene.
-   * Phase 4 (R4.1): facade delegate to PlayerLookupService.
-   */
-  async getFriendlyNPCs(): Promise<Array<{ id: string, name: string }>> {
-    return this.playerLookup.getFriendlyNPCs();
-  }
-
-  /**
-   * Get party characters (player-owned actors).
-   * Phase 4 (R4.1): facade delegate to PlayerLookupService.
-   */
-  async getPartyCharacters(): Promise<Array<{ id: string, name: string }>> {
-    return this.playerLookup.getPartyCharacters();
-  }
-
-  /**
-   * Get connected players (excluding GM).
-   * Phase 4 (R4.1): facade delegate to PlayerLookupService.
-   */
-  async getConnectedPlayers(): Promise<Array<{ id: string, name: string }>> {
-    return this.playerLookup.getConnectedPlayers();
-  }
-
-  /**
-   * Find players by identifier with partial matching.
-   * Phase 4 (R4.1): facade delegate to PlayerLookupService.
-   */
-  async findPlayers(data: { identifier: string; allowPartialMatch?: boolean; includeCharacterOwners?: boolean }): Promise<Array<{ id: string, name: string }>> {
-    return this.playerLookup.findPlayers(data);
-  }
-
-  /**
-   * Find single actor by identifier.
-   * Phase 4 (R4.1): facade delegate to PlayerLookupService.
-   */
-  async findActor(data: { identifier: string }): Promise<{ id: string, name: string } | null> {
-    return this.playerLookup.findActor(data);
-  }
 
   /**
    * Get or create a folder for organizing MCP-generated content
@@ -1263,6 +901,7 @@ export class FoundryDataAccess {
    * When any pagination param is set, returns `{total, page, pageSize, pageCount, scenes}`.
    * When countOnly is set, returns `{total, filterApplied}` only.
    */
+  // Phase 5 (R5.1): facade delegate to ScenePlacementService (Contract deferred to Phase 6).
   async listScenes(options: {
     filter?: string;
     include_active_only?: boolean;
@@ -1270,127 +909,15 @@ export class FoundryDataAccess {
     pageSize?: number;
     countOnly?: boolean;
   } = {}): Promise<any> {
-    this.validateFoundryState();
-
-    try {
-      let scenes = game.scenes?.contents || [];
-
-      // Filter by active only if requested
-      if (options.include_active_only) {
-        scenes = scenes.filter((scene: any) => scene.active);
-      }
-
-      // Filter by name if provided
-      if (options.filter) {
-        const filterLower = options.filter.toLowerCase();
-        scenes = scenes.filter((scene: any) =>
-          scene.name.toLowerCase().includes(filterLower)
-        );
-      }
-
-      const total = scenes.length;
-      const filterApplied = !!(options.filter || options.include_active_only);
-
-      // Count-only short-circuit: caller wants to probe inventory size before paging.
-      if (options.countOnly) {
-        return { total, filterApplied };
-      }
-
-      const projectScene = (scene: any) => ({
-        id: scene.id,
-        name: scene.name,
-        active: scene.active,
-        dimensions: {
-          width: scene.dimensions?.width || (scene as any).width || 0,
-          height: scene.dimensions?.height || (scene as any).height || 0
-        },
-        gridSize: scene.grid?.size || 100,
-        background: scene.background?.src || scene.img || '',
-        walls: scene.walls?.size || 0,
-        tokens: scene.tokens?.size || 0,
-        lighting: scene.lights?.size || 0,
-        sounds: scene.sounds?.size || 0,
-        navigation: scene.navigation || false
-      });
-
-      const paginate = options.page !== undefined || options.pageSize !== undefined;
-      if (paginate) {
-        const pageSize = options.pageSize ?? 50;
-        const page = options.page ?? 1;
-        const start = (page - 1) * pageSize;
-        const pageScenes = scenes.slice(start, start + pageSize).map(projectScene);
-        return {
-          total,
-          page,
-          pageSize,
-          pageCount: Math.max(1, Math.ceil(total / pageSize)),
-          scenes: pageScenes,
-        };
-      }
-
-      // Back-compat: bare array when no pagination/count params are set.
-      return scenes.map(projectScene);
-    } catch (error) {
-      throw new Error(`Failed to list scenes: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    return this.scenePlacement.listScenes(options);
   }
 
   /**
    * Switch to a different scene
    */
+  // Phase 5 (R5.1): facade delegate to ScenePlacementService (Contract deferred to Phase 6).
   async switchScene(options: { scene_identifier: string; optimize_view?: boolean | undefined }): Promise<any> {
-    this.validateFoundryState();
-
-    try {
-      // Find the target scene by ID or name
-      const scenes = game.scenes?.contents || [];
-      const targetScene = scenes.find((scene: any) =>
-        scene.id === options.scene_identifier ||
-        scene.name.toLowerCase() === options.scene_identifier.toLowerCase()
-      );
-
-      if (!targetScene) {
-        throw new Error(`Scene not found: "${options.scene_identifier}"`);
-      }
-
-      // Activate the scene
-      await targetScene.activate();
-
-      // Optimize view if requested (default true)
-      if (options.optimize_view !== false && typeof canvas !== 'undefined' && canvas?.scene) {
-        const dimensions = targetScene.dimensions || {
-          width: (targetScene as any).width || 0,
-          height: (targetScene as any).height || 0
-        };
-        const width = (dimensions as any).width || 0;
-        const height = (dimensions as any).height || 0;
-
-        if (width && height) {
-          // Center the view on the scene (canvas.pan is synchronous in v13 — no await)
-          canvas.pan({
-            x: width / 2,
-            y: height / 2,
-            scale: Math.min(
-              (canvas as any).screenDimensions?.[0] / width || 1,
-              (canvas as any).screenDimensions?.[1] / height || 1,
-              1
-            )
-          });
-        }
-      }
-
-      return {
-        success: true,
-        sceneId: targetScene.id,
-        sceneName: targetScene.name,
-        dimensions: {
-          width: (targetScene.dimensions as any)?.width || (targetScene as any).width || 0,
-          height: (targetScene.dimensions as any)?.height || (targetScene as any).height || 0
-        }
-      };
-    } catch (error) {
-      throw new Error(`Failed to switch scene: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    return this.scenePlacement.switchScene(options);
   }
 
   /**
@@ -3507,61 +3034,14 @@ export class FoundryDataAccess {
   }
 
   // BUG-051 hotfix companion — delete a single scene token. Pairs with addActorsToScene.
+  // Phase 5 (R5.1): facade delegate to ScenePlacementService (Contract deferred to Phase 6).
   async deleteToken(data: { sceneId: string; tokenId: string }): Promise<any> {
-    this.validateFoundryState();
-
-    try {
-      const scene: any = (game.scenes as any)?.get(data.sceneId);
-      if (!scene) {
-        throw new Error(`Scene not found with ID: ${data.sceneId}`);
-      }
-
-      const token: any = scene.tokens?.get(data.tokenId);
-      if (!token) {
-        throw new Error(`Token not found with ID: ${data.tokenId} on scene ${scene.name}`);
-      }
-
-      const tokenName = token.name;
-
-      await scene.deleteEmbeddedDocuments('Token', [data.tokenId]);
-
-      notify.deleted('token', tokenName, { summary: `from scene ${scene.name}` });
-
-      return {
-        success: true,
-        sceneId: scene.id,
-        tokenId: data.tokenId,
-        tokenName,
-      };
-    } catch (error) {
-      throw new Error(`Failed to delete token: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    return this.scenePlacement.deleteToken(data);
   }
 
   // ============================================================
   // Phase 4b — combat / damage / conditions / active-effects
   // ============================================================
-
-  private resolveCombat(combatId?: string): any {
-    const combats: any = (game as any).combats;
-    if (combatId) return combats?.get(combatId) ?? null;
-    // Primary: game.combats.active (the combat flagged active on the viewed/active scene).
-    if (combats?.active) return combats.active;
-    // BUG-354 fallback: game.combats.active can read null in the headless MCP path after
-    // remove-combatants vacates the turn-holder (the .active getter resolves via the viewed
-    // scene + combat.active flag, which can desync when the current-turn slot is emptied),
-    // even though the Combat document still lives in game.combats. Recover it so no-combatId
-    // callers (end-combat, advance-combat) keep working: prefer a combat on the active scene,
-    // else fall back to the sole combat if exactly one exists.
-    const all: any[] = Array.from(combats?.values?.() ?? combats?.contents ?? []);
-    if (all.length === 0) return null;
-    const sceneId: string | undefined = (game as any).scenes?.active?.id ?? (game as any).scenes?.current?.id;
-    if (sceneId) {
-      const onScene = all.find((c: any) => (c.scene?.id ?? c.scene) === sceneId);
-      if (onScene) return onScene;
-    }
-    return all.length === 1 ? all[0] : null;
-  }
 
   private snapshotStatus(actor: any): any {
     const status: any = actor.system?.status ?? {};
@@ -3585,79 +3065,20 @@ export class FoundryDataAccess {
     };
   }
 
+  // Phase 5 (R5.1): combat-cluster facade delegates to CombatService (Contract deferred to Phase 6).
   async getCombat(data: { combatId?: string | undefined } = {}): Promise<any> {
-    this.validateFoundryState();
-    const combat = this.resolveCombat(data.combatId);
-    if (!combat) return null;
-    return {
-      id: combat.id,
-      round: combat.round,
-      turn: combat.turn,
-      active: combat.active,
-      started: combat.started,
-      sceneId: combat.scene?.id ?? null,
-      currentCombatantId: combat.combatant?.id ?? null,
-      combatantCount: combat.turns?.length ?? 0,
-    };
+    return this.combat.getCombat(data);
   }
 
   async listCombatants(data: { combatId?: string | undefined } = {}): Promise<any[]> {
-    this.validateFoundryState();
-    const combat = this.resolveCombat(data.combatId);
-    if (!combat) return [];
-    return (combat.turns ?? []).map((c: any) => ({
-      id: c.id,
-      actorId: c.actorId ?? c.actor?.id ?? null,
-      tokenId: c.tokenId ?? c.token?.id ?? null,
-      name: c.name,
-      initiative: c.initiative,
-      defeated: c.defeated ?? false,
-      hidden: c.hidden ?? false,
-    }));
+    return this.combat.listCombatants(data);
   }
 
   async advanceCombat(data: {
     combatId?: string | undefined;
     action: 'start' | 'next' | 'prev' | 'nextRound' | 'prevRound' | 'rollAll' | 'rollNPC';
   }): Promise<any> {
-    this.validateFoundryState();
-    const combat: any = this.resolveCombat(data.combatId);
-    if (!combat) throw new Error('No combat found');
-
-    switch (data.action) {
-      case 'start':
-        await combat.startCombat();
-        break;
-      case 'next':
-        await combat.nextTurn();
-        break;
-      case 'prev':
-        await combat.previousTurn();
-        break;
-      case 'nextRound':
-        await combat.nextRound();
-        break;
-      case 'prevRound':
-        await combat.previousRound();
-        break;
-      case 'rollAll':
-        await combat.rollAll();
-        break;
-      case 'rollNPC':
-        await combat.rollNPC();
-        break;
-    }
-
-    notify.updated('combat', combat.id, {
-      summary: `action: ${data.action}, round ${combat.round}`,
-    });
-
-    return {
-      combatId: combat.id,
-      round: combat.round,
-      turn: combat.turn,
-      combatantId: combat.combatant?.id ?? null,
-    };
+    return this.combat.advanceCombat(data);
   }
 
   async addCombatants(data: {
@@ -3665,83 +3086,18 @@ export class FoundryDataAccess {
     actorIds: string[];
     sceneId?: string | undefined;
   }): Promise<{ added: string[] }> {
-    this.validateFoundryState();
-    let combat: any = this.resolveCombat(data.combatId);
-
-    if (!combat) {
-      const sceneId = data.sceneId ?? (game as any).scenes?.active?.id;
-      if (!sceneId) throw new Error('No active scene and no sceneId provided');
-      combat = await (Combat as any).create({ scene: sceneId, active: true });
-    }
-
-    const scene: any = combat.scene ?? (game as any).scenes?.get(data.sceneId) ?? (game as any).scenes?.active;
-    const creates: any[] = [];
-    const missingTokens: string[] = [];
-    for (const actorId of data.actorIds) {
-      const actor: any = (game as any).actors?.get(actorId);
-      if (!actor) continue;
-      const token: any = scene?.tokens?.find((t: any) => t.actorId === actorId);
-      if (!token?.id) {
-        missingTokens.push(`${actor.name ?? actorId} (${actorId})`);
-        continue;
-      }
-      creates.push({
-        actorId,
-        tokenId: token.id,
-        sceneId: scene?.id,
-        hidden: token?.hidden ?? false,
-      });
-    }
-
-    if (missingTokens.length > 0) {
-      const sceneLabel = scene?.name ?? scene?.id ?? data.sceneId ?? '(unknown scene)';
-      throw new Error(
-        `ADD_COMBATANTS_TOKEN_REQUIRED: add-combatants requires a scene-placed token on scene "${sceneLabel}". Missing token context for: ${missingTokens.join(', ')}. Pass sceneId for the target scene or place tokens before adding combatants.`,
-      );
-    }
-
-    const created: any[] = await combat.createEmbeddedDocuments('Combatant', creates);
-    if (created.length > 0) {
-      notify.created('combatant', `${created.length} combatant(s)`, {
-        summary: `to combat ${combat.id}`,
-      });
-    }
-    return { added: created.map((c: any) => c.id).filter(Boolean) };
+    return this.combat.addCombatants(data);
   }
 
   async removeCombatants(data: {
     combatId?: string | undefined;
     combatantIds: string[];
   }): Promise<{ removed: string[] }> {
-    this.validateFoundryState();
-    const combat: any = this.resolveCombat(data.combatId);
-    if (!combat) throw new Error('No combat found');
-    // BUG-215 + PARITY-025: pre-filter the requested IDs against the live combatant
-    // collection BEFORE deleting. Foundry's deleteEmbeddedDocuments THROWS on any id not
-    // present in the EmbeddedCollection (it does NOT silently skip), so a mixed valid/bogus
-    // batch would otherwise fail wholesale and remove nothing. We then map the delete return
-    // to surface only the IDs Foundry actually removed (mirrors addCombatants:5400).
-    // (BUG-215 re-fix 2026-05-24: original fix assumed silent-skip — a false premise surfaced
-    // by /agent-validate live eval; deleteEmbeddedDocuments throws, so the pre-filter is required.)
-    const validIds = data.combatantIds.filter((id) => combat.combatants?.get(id));
-    const deleted = validIds.length
-      ? await combat.deleteEmbeddedDocuments('Combatant', validIds)
-      : [];
-    const removedIds = deleted.map((c: any) => c.id).filter(Boolean);
-    notify.deleted('combatant', `${removedIds.length} combatant(s)`, {
-      summary: `from combat ${combat.id}`,
-    });
-    return { removed: removedIds };
+    return this.combat.removeCombatants(data);
   }
 
   async endCombat(data: { combatId?: string | undefined } = {}): Promise<{ ended: string }> {
-    this.validateFoundryState();
-    const combat: any = this.resolveCombat(data.combatId);
-    if (!combat) throw new Error('No combat found');
-    const id: string = combat.id;
-    await combat.delete();
-    notify.deleted('combat', id, { summary: 'combat ended' });
-    return { ended: id };
+    return this.combat.endCombat(data);
   }
 
   private async waitForActorUpdateCommit(actorId: string, timeoutMs: number = 250): Promise<void> {
@@ -3847,49 +3203,13 @@ export class FoundryDataAccess {
     };
   }
 
+  // Phase 5 (R5.1): conditions-cluster facade delegates to ConditionsService (Contract deferred to Phase 6).
   async applyCondition(data: {
     actorId: string;
     conditionKey: string;
     value?: number | undefined;
   }): Promise<any> {
-    this.validateFoundryState();
-    const actor: any = (game as any).actors?.get(data.actorId);
-    if (!actor) throw new Error(`Actor not found with ID: ${data.actorId}`);
-
-    // BUG-344 (same root cause): wfrp4e config is on game.wfrp4e.config, not CONFIG.WFRP4E.
-    // The old CONFIG.WFRP4E.conditions lookup returned undefined → validKeys=[] → the guard
-    // below was silently skipped, so unknown condition keys were never rejected.
-    const validKeys = Object.keys((globalThis as any).game?.wfrp4e?.config?.conditions ?? {});
-    if (validKeys.length && !validKeys.includes(data.conditionKey)) {
-      throw new Error(
-        `Unknown condition key '${data.conditionKey}'. Valid: ${validKeys.join(', ')}`,
-      );
-    }
-
-    const value = data.value ?? 1;
-    await actor.addCondition(data.conditionKey, value);
-    const stacked: any = actor.hasCondition?.(data.conditionKey);
-    const stackCount =
-      typeof stacked === 'object'
-        ? stacked?.conditionValue ?? stacked?.flags?.wfrp4e?.value ?? value
-        : value;
-
-    // Surface canvas-anchored feedback when actor has a token on the current scene.
-    const placedToken: any = (globalThis as any).canvas?.tokens?.placeables?.find(
-      (t: any) => t?.actor?.id === actor.id,
-    );
-    const tokenDoc = placedToken?.document;
-    notify.created('condition', data.conditionKey, {
-      summary: `on ${actor.name} (stack ${stackCount})`,
-      uuid: actor.uuid,
-      tooltip: tokenDoc ? { tokenDoc, message: `+${data.conditionKey}` } : undefined,
-    });
-
-    return {
-      actorId: actor.id,
-      conditionKey: data.conditionKey,
-      stackCount,
-    };
+    return this.conditions.applyCondition(data);
   }
 
   async removeCondition(data: {
@@ -3897,41 +3217,11 @@ export class FoundryDataAccess {
     conditionKey: string;
     count?: number | undefined;
   }): Promise<any> {
-    this.validateFoundryState();
-    const actor: any = (game as any).actors?.get(data.actorId);
-    if (!actor) throw new Error(`Actor not found with ID: ${data.actorId}`);
-    const count = data.count ?? 1;
-    await actor.removeCondition(data.conditionKey, count);
-    const stacked: any = actor.hasCondition?.(data.conditionKey);
-    const remainingCount =
-      stacked && typeof stacked === 'object'
-        ? stacked?.conditionValue ?? stacked?.flags?.wfrp4e?.value ?? 0
-        : stacked
-          ? 1
-          : 0;
-    notify.deleted('condition', data.conditionKey, {
-      summary: `from ${actor.name} (${count} stack(s) removed)`,
-      uuid: (actor as any).uuid,
-    });
-    return {
-      actorId: actor.id,
-      conditionKey: data.conditionKey,
-      remainingCount,
-    };
+    return this.conditions.removeCondition(data);
   }
 
   async listConditions(data: { actorId: string }): Promise<any[]> {
-    this.validateFoundryState();
-    const actor: any = (game as any).actors?.get(data.actorId);
-    if (!actor) throw new Error(`Actor not found with ID: ${data.actorId}`);
-    return (actor.effects ?? [])
-      .filter((e: any) => e.isCondition)
-      .map((e: any) => ({
-        conditionKey: e.conditionKey ?? e.statuses?.first?.() ?? e.name,
-        value:
-          e.conditionValue ?? e.flags?.wfrp4e?.value ?? 1,
-        effectId: e.id,
-      }));
+    return this.conditions.listConditions(data);
   }
 
   async listActiveEffects(data: {
