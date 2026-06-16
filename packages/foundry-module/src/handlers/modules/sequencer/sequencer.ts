@@ -132,6 +132,23 @@ async function handlePlaySequenceJson(input: PlaySeqInput): Promise<Envelope<unk
   const guardErr = checkMacroGuard(input.sequence as Array<{ type: string; [key: string]: unknown }>);
   if (guardErr) return { success: false, error: guardErr };
 
+  // Structural pre-check: play-sequence-json consumes the output of Sequence.toJSON(). Every
+  // serialized section carries `repetitionsDelay` as a [min,max] array; Section._deserialize reads
+  // `data.repetitionsDelay[0]` unconditionally. A hand-authored stub (e.g. {type:"effect",file:…})
+  // lacks it, and because fromJSON invokes the async _deserialize WITHOUT awaiting it, the resulting
+  // TypeError escapes this try/catch as a DETACHED unhandled promise rejection (console noise, no
+  // envelope). Reject incomplete sections up-front with a clean SEQUENCER_PLAY_ERROR. Real toJSON()
+  // blobs always carry repetitionsDelay, so legitimate session-transport is unaffected.
+  const badIdx = (input.sequence as Array<Record<string, unknown>>).findIndex(
+    (s) => !Array.isArray((s as any)?.repetitionsDelay),
+  );
+  if (badIdx !== -1) {
+    return {
+      success: false,
+      error: `SEQUENCER_PLAY_ERROR: section ${badIdx} is not a valid serialized section (missing repetitionsDelay[min,max]). play-sequence-json consumes the output of Sequence.toJSON(), not hand-authored section stubs.`,
+    };
+  }
+
   try {
     const Sequence = getSequenceClass();
     // SA2 / live Sequencer v4.0.1: fromJSON is an INSTANCE method that consumes the toJSON()

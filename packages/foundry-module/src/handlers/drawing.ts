@@ -52,6 +52,22 @@ const SHAPE_CODE_TO_WORD: Record<string, string> = {
   c: 'circle',
 };
 
+// Foundry v13 requires every Drawing to have at least ONE visible property — visible text,
+// a visible fill (fillType>0 & fillAlpha>0), OR a visible line (strokeWidth>0 & strokeAlpha>0) —
+// or DrawingDocument.validateJoint throws "Drawings must have visible text, a visible fill, or a
+// visible line." Foundry defaults strokeWidth=0 & fillType=0, so a bare-geometry create (e.g.
+// {x,y,shape} with no text/fill/stroke) fails. Default to a visible line (8px @ alpha 1 — the
+// serializer's canonical baseline) when the caller supplied no visible property. CREATE-only:
+// updates merge onto an already-valid stored doc.
+function ensureVisibleDrawing<T extends Record<string, any>>(payload: T): T {
+  const p: any = payload ?? {};
+  const hasText = typeof p.text === 'string' && p.text.length > 0;
+  const hasFill = (p.fillType ?? 0) > 0 && (p.fillAlpha ?? 0.5) > 0;
+  const hasLine = (p.strokeWidth ?? 0) > 0 && (p.strokeAlpha ?? 1) > 0;
+  if (hasText || hasFill || hasLine) return payload;
+  return { ...payload, strokeWidth: 8, strokeAlpha: 1 };
+}
+
 // Map a payload's shape.type word → Foundry code (no-op if absent / already a code).
 function encodeShapeType<T extends Record<string, any>>(payload: T): T {
   const t = payload?.shape?.type;
@@ -198,7 +214,7 @@ const handlers = createEmbeddedCRUDHandlers<any, any, DrawingViewModel, DrawingL
   defaultPageSize: 50,
   // Translate the friendly shape.type word → Foundry's single-char code at the write boundary,
   // then expand the optional advanced-drawing-tools delegate block (Phase 13B, fail-open).
-  preCreateTransform: (_scene, payload) => expandAdvancedDrawingFlags(encodeShapeType(payload)),
+  preCreateTransform: (_scene, payload) => ensureVisibleDrawing(expandAdvancedDrawingFlags(encodeShapeType(payload))),
   preUpdateTransform: (_scene, changes) => expandAdvancedDrawingFlags(encodeShapeType(changes)),
 });
 

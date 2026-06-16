@@ -219,15 +219,22 @@ export async function updateFolder(data: unknown): Promise<Envelope<any>> {
   // Depth pre-check when re-parenting
   if (input.changes.folder !== undefined && input.changes.folder !== null) {
     const parentFolder = (game as any).folders?.get(input.changes.folder);
-    if (parentFolder) {
-      const newDepth = ((parentFolder.depth as number) ?? 0) + 1;
-      const FOLDER_MAX_DEPTH = (globalThis as any).CONST?.FOLDER_MAX_DEPTH ?? 4;
-      if (newDepth > FOLDER_MAX_DEPTH) {
-        return {
-          success: false,
-          error: `FOLDER_MAX_DEPTH_EXCEEDED: re-parenting would put this folder at depth ${newDepth} which exceeds CONST.FOLDER_MAX_DEPTH (${FOLDER_MAX_DEPTH})`,
-        };
-      }
+    // BUG-367 (mirror of createFolder): a non-existent parent id otherwise falls through to
+    // Folder.update() and fails late as a raw Foundry DataModelValidationError ("folder: must
+    // be a valid 16-character alphanumeric ID"). Surface a precise FOLDER_NOT_FOUND instead.
+    if (!parentFolder) {
+      return {
+        success: false,
+        error: `FOLDER_NOT_FOUND: no folder with id "${input.changes.folder}" — cannot re-parent under a non-existent parent`,
+      };
+    }
+    const newDepth = ((parentFolder.depth as number) ?? 0) + 1;
+    const FOLDER_MAX_DEPTH = (globalThis as any).CONST?.FOLDER_MAX_DEPTH ?? 4;
+    if (newDepth > FOLDER_MAX_DEPTH) {
+      return {
+        success: false,
+        error: `FOLDER_MAX_DEPTH_EXCEEDED: re-parenting would put this folder at depth ${newDepth} which exceeds CONST.FOLDER_MAX_DEPTH (${FOLDER_MAX_DEPTH})`,
+      };
     }
   }
 
