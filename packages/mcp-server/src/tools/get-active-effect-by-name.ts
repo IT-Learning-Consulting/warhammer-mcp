@@ -3,7 +3,11 @@
 // Phase 4 mcp_coverage_expansion: target widened to ActiveEffectTarget — adds scope='actor-direct'
 // which searches actor.effects directly and returns parentType:'Actor'.
 
-import { GetActiveEffectByNameInput, ACTIVE_EFFECT_TARGET_JSON_SCHEMA } from '@foundry-mcp/shared';
+import {
+  GetActiveEffectByNameInput,
+  ACTIVE_EFFECT_TARGET_JSON_SCHEMA,
+  type GetActiveEffectByNameOutputType,
+} from '@foundry-mcp/shared';
 import { FoundryClient } from '../foundry-client.js';
 import { Logger } from '../logger.js';
 import { BaseTool, BaseToolOptions } from '../base-tool.js';
@@ -70,6 +74,6 @@ export class GetActiveEffectByNameTool extends BaseTool {
       effectId: parsed.effectId,
       effectName: parsed.effectName,
     });
-    return await this.query<any>('getActiveEffectByName', parsed);
+    return await this.query<GetActiveEffectByNameOutputType>('getActiveEffectByName', parsed);
   }
 }

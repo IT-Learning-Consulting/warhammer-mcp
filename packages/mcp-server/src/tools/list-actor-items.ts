@@ -1,4 +1,7 @@
-import { ListActorItemsInput } from '@foundry-mcp/shared';
+import {
+  ListActorItemsInput,
+  type ListActorItemsOutputType,
+} from '@foundry-mcp/shared';
 import { FoundryClient } from '../foundry-client.js';
 import { Logger } from '../logger.js';
 import { BaseTool, BaseToolOptions } from '../base-tool.js';
@@ -57,6 +60,6 @@ export class ListActorItemsTool extends BaseTool {
       actorId: parsed.actorId,
       typeFilter: parsed.typeFilter,
     });
-    return await this.query<any>('listActorItems', parsed);
+    return await this.query<ListActorItemsOutputType>('listActorItems', parsed);
   }
 }

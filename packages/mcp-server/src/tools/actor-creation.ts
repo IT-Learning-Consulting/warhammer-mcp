@@ -1,5 +1,13 @@
 import { z } from 'zod';
-import { FolderId, PackId, ItemId } from '@foundry-mcp/shared';
+import {
+  FolderId,
+  PackId,
+  ItemId,
+  type FoundryRawItem,
+  type FoundryRawEffect,
+  type GetCompendiumEntryFullOutputType,
+  type CreateActorFromCompendiumOutputType,
+} from '@foundry-mcp/shared';
 import { FoundryClient } from '../foundry-client.js';
 import { Logger } from '../logger.js';
 import { BaseTool, BaseToolOptions } from '../base-tool.js';
@@ -23,6 +31,15 @@ interface CreateActorResult {
   id: string;
   name: string;
   type: string;
+}
+
+// Raw foundry-module response shape for the createActorFromCompendium query.
+interface CreateActorFromCompendiumRaw {
+  totalCreated: number;
+  totalRequested: number;
+  tokensPlaced: number;
+  actors: Array<{ id: string; name: string; type: string }>;
+  errors: unknown[];
 }
 
 export class ActorCreationTools extends BaseTool {
@@ -239,7 +256,7 @@ export class ActorCreationTools extends BaseTool {
       }
 
       // Create the actors via Foundry module using exact pack/item IDs
-      const result = await this.query<any>('createActorFromCompendium', {
+      const result = await this.query<CreateActorFromCompendiumRaw>('createActorFromCompendium', {
         packId,
         itemId,
         customNames: customNames.slice(0, finalQuantity),
@@ -323,7 +340,7 @@ export class ActorCreationTools extends BaseTool {
     this.logger.info('Getting full compendium entry', { packId, entryId, summary_only });
 
     try {
-      const fullEntry = await this.query<any>('getCompendiumDocumentFull', {
+      const fullEntry = await this.query<FoundryRawItem>('getCompendiumDocumentFull', {
         packId,
         documentId: entryId,
       });
@@ -353,13 +370,13 @@ export class ActorCreationTools extends BaseTool {
    * (huge — prototypeToken, full system, embedded AE script payloads) and project
    * items[]/effects[] down to names-only summaries.
    */
-  private formatCompendiumEntryResponse(entry: any, summaryOnly: boolean = false): any {
+  private formatCompendiumEntryResponse(entry: FoundryRawItem, summaryOnly: boolean = false): GetCompendiumEntryFullOutputType {
     const itemsInfo = entry.items?.length > 0
-      ? `\n📦 Items: ${entry.items.map((item: any) => item.name).join(', ')}`
+      ? `\n📦 Items: ${entry.items.map((item: FoundryRawItem) => item.name).join(', ')}`
       : '';
 
     const effectsInfo = entry.effects?.length > 0
-      ? `\n✨ Effects: ${entry.effects.map((effect: any) => effect.name).join(', ')}`
+      ? `\n✨ Effects: ${entry.effects.map((effect: FoundryRawEffect) => effect.name).join(', ')}`
       : '';
 
     if (summaryOnly) {
@@ -367,12 +384,12 @@ export class ActorCreationTools extends BaseTool {
         name: entry.name,
         type: entry.type,
         pack: entry.packLabel,
-        items: (entry.items || []).map((item: any) => ({
+        items: (entry.items || []).map((item: FoundryRawItem) => ({
           id: item.id,
           name: item.name,
           type: item.type,
         })),
-        effects: (entry.effects || []).map((effect: any) => ({
+        effects: (entry.effects || []).map((effect: FoundryRawEffect) => ({
           id: effect.id,
           name: effect.name,
           disabled: !!effect.disabled,
@@ -397,10 +414,10 @@ export class ActorCreationTools extends BaseTool {
   /**
    * Format simplified actor creation response
    */
-  private formatSimpleActorCreationResponse(result: any, packId: PackId, itemId: ItemId, customNames: string[]): any {
+  private formatSimpleActorCreationResponse(result: CreateActorFromCompendiumRaw, packId: PackId, itemId: ItemId, customNames: string[]): CreateActorFromCompendiumOutputType {
     const summary = `✅ Created ${result.totalCreated} of ${result.totalRequested} requested actors`;
 
-    const details = result.actors.map((actor: any) =>
+    const details = result.actors.map((actor) =>
       `• **${actor.name}** (from ${packId})`
     ).join('\n');
 

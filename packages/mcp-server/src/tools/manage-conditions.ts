@@ -2,6 +2,9 @@ import {
   ApplyConditionInput,
   RemoveConditionInput,
   ListConditionsInput,
+  type ApplyConditionOutputType,
+  type RemoveConditionOutputType,
+  type ListConditionsOutputType,
 } from '@foundry-mcp/shared';
 import { FoundryClient } from '../foundry-client.js';
 import { Logger } from '../logger.js';
@@ -130,18 +133,18 @@ export class ManageConditionsTools extends BaseTool {
   async handleApplyCondition(args: any): Promise<any> {
     const parsed = ApplyConditionInput.parse(args);
     this.logger.info('apply-condition', parsed);
-    return await this.query<any>('applyCondition', parsed);
+    return await this.query<ApplyConditionOutputType>('applyCondition', parsed);
   }
 
   async handleRemoveCondition(args: any): Promise<any> {
     const parsed = RemoveConditionInput.parse(args);
     this.logger.info('remove-condition', parsed);
-    return await this.query<any>('removeCondition', parsed);
+    return await this.query<RemoveConditionOutputType>('removeCondition', parsed);
   }
 
   async handleListConditions(args: any): Promise<any> {
     const parsed = ListConditionsInput.parse(args);
     this.logger.info('list-conditions', parsed);
-    return await this.query<any>('listConditions', parsed);
+    return await this.query<ListConditionsOutputType>('listConditions', parsed);
   }
 }

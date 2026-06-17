@@ -1,4 +1,7 @@
-import { ApplyTemplateInput } from '@foundry-mcp/shared';
+import {
+  ApplyTemplateInput,
+  type ApplyTemplateOutputType,
+} from '@foundry-mcp/shared';
 import { FoundryClient } from '../foundry-client.js';
 import { Logger } from '../logger.js';
 import { BaseTool, BaseToolOptions } from '../base-tool.js';
@@ -113,8 +116,8 @@ export class ApplyTemplateTool extends BaseTool {
       templateUuid: parsed.templateUuid,
       hasPreResolved: !!parsed.preResolvedChoices,
     });
-    const data = await this.query<Record<string, unknown>>('applyTemplate', parsed);
-    const d = data as any;
+    const data = await this.query<ApplyTemplateOutputType>('applyTemplate', parsed);
+    const d = data;
     const applied = d?.applied?.itemsByType ?? {};
     const text = `Applied template ${d?.templateName ?? d?.templateId ?? ''} to ${d?.actorName ?? d?.actorId ?? ''}: ` +
       `${applied.skill ?? 0} skills, ${applied.talent ?? 0} talents, ` +

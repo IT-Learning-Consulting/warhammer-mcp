@@ -5,6 +5,12 @@ import {
   AddCombatantsInput,
   RemoveCombatantsInput,
   EndCombatInput,
+  type GetCombatOutputType,
+  type ListCombatantsOutputType,
+  type AdvanceCombatOutputType,
+  type AddCombatantsOutputType,
+  type RemoveCombatantsOutputType,
+  type EndCombatOutputType,
 } from '@foundry-mcp/shared';
 import { FoundryClient } from '../foundry-client.js';
 import { Logger } from '../logger.js';
@@ -184,15 +190,15 @@ export class ManageCombatTools extends BaseTool {
   async handleGetCombat(args: any): Promise<any> {
     const parsed = GetCombatInput.parse(args);
     this.logger.info('get-combat', parsed);
-    return await this.query<any>('getCombat', parsed);
+    return await this.query<GetCombatOutputType>('getCombat', parsed);
   }
 
   async handleListCombatants(args: any): Promise<any> {
     const parsed = ListCombatantsInput.parse(args);
     this.logger.info('list-combatants', parsed);
-    const result = await this.query<any>('listCombatants', parsed);
+    const result = await this.query<ListCombatantsOutputType | unknown[]>('listCombatants', parsed);
     if (Array.isArray(result)) {
-      const combat = await this.query<any>('getCombat', { combatId: parsed.combatId }).catch(() => null);
+      const combat = await this.query<GetCombatOutputType>('getCombat', { combatId: parsed.combatId }).catch(() => null);
       return { combatId: combat?.id ?? null, combatants: result };
     }
     return result;
@@ -201,24 +207,24 @@ export class ManageCombatTools extends BaseTool {
   async handleAdvanceCombat(args: any): Promise<any> {
     const parsed = AdvanceCombatInput.parse(args);
     this.logger.info('advance-combat', parsed);
-    return await this.query<any>('advanceCombat', parsed);
+    return await this.query<AdvanceCombatOutputType>('advanceCombat', parsed);
   }
 
   async handleAddCombatants(args: any): Promise<any> {
     const parsed = AddCombatantsInput.parse(args);
     this.logger.info('add-combatants', parsed);
-    return await this.query<any>('addCombatants', parsed);
+    return await this.query<AddCombatantsOutputType>('addCombatants', parsed);
   }
 
   async handleRemoveCombatants(args: any): Promise<any> {
     const parsed = RemoveCombatantsInput.parse(args);
     this.logger.info('remove-combatants', parsed);
-    return await this.query<any>('removeCombatants', parsed);
+    return await this.query<RemoveCombatantsOutputType>('removeCombatants', parsed);
   }
 
   async handleEndCombat(args: any): Promise<any> {
     const parsed = EndCombatInput.parse(args);
     this.logger.info('end-combat', parsed);
-    return await this.query<any>('endCombat', parsed);
+    return await this.query<EndCombatOutputType>('endCombat', parsed);
   }
 }

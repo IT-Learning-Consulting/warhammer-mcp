@@ -1,4 +1,8 @@
-import { ListActiveEffectsInput } from '@foundry-mcp/shared';
+import {
+  ListActiveEffectsInput,
+  type ListActiveEffectsOutputType,
+  type FoundryRawActor,
+} from '@foundry-mcp/shared';
 import { FoundryClient } from '../foundry-client.js';
 import { Logger } from '../logger.js';
 import { BaseTool, BaseToolOptions } from '../base-tool.js';
@@ -57,10 +61,10 @@ export class ListActiveEffectsTool extends BaseTool {
   async handle(args: any): Promise<any> {
     const parsed = ListActiveEffectsInput.parse(args);
     this.logger.info('list-active-effects', parsed);
-    const result = await this.query<any>('listActiveEffects', parsed);
+    const result = await this.query<ListActiveEffectsOutputType | unknown[]>('listActiveEffects', parsed);
     if (Array.isArray(result)) {
       // BUG-319: actorId is an ID, not a name — use characterId param
-      const character = await this.query<any>('getCharacterInfo', { characterId: parsed.actorId }).catch(() => null);
+      const character = await this.query<FoundryRawActor>('getCharacterInfo', { characterId: parsed.actorId }).catch(() => null);
       return {
         actorId: parsed.actorId,
         actorName: character?.name ?? null,

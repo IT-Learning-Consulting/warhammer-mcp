@@ -1,5 +1,18 @@
 import { z } from 'zod';
-import { GetCharacterOutput, GET_CHARACTER_OUTPUT_JSON_SCHEMA } from '@foundry-mcp/shared';
+import {
+  GetCharacterOutput,
+  GET_CHARACTER_OUTPUT_JSON_SCHEMA,
+  type FoundryRawActor,
+  type FoundryRawItem,
+  type FoundryRawEffect,
+  type CharacterBasicInfoView,
+  type CharacterStatsView,
+  type CharacterConditionsView,
+  type CharacterSectionsView,
+  type CharacterItemView,
+  type CharacterEffectView,
+  type CharacterResponseView,
+} from '@foundry-mcp/shared';
 import { FoundryClient } from '../foundry-client.js';
 import { Logger } from '../logger.js';
 import { BaseTool, BaseToolOptions } from '../base-tool.js';
@@ -95,7 +108,7 @@ export class CharacterTools extends BaseTool {
 
     try {
       const isId = /^[A-Za-z0-9]{16}$/.test(identifier);
-      const characterData = await this.query<any>('getCharacterInfo', isId
+      const characterData = await this.query<FoundryRawActor>('getCharacterInfo', isId
         ? { characterId: identifier }
         : { characterName: identifier }
       );
@@ -125,7 +138,7 @@ export class CharacterTools extends BaseTool {
   // Splits basicInfo into identity/vitals/biography virtual sections, plus
   // characteristics/skills/talents lifted from stats. id/name/type/hasImage
   // are always preserved.
-  private applySectionsFilter(full: any, sections: readonly string[]): any {
+  private applySectionsFilter(full: CharacterResponseView, sections: readonly string[]): CharacterSectionsView {
     const sectionSet = new Set(sections);
     const basicInfo = full.basicInfo ?? {};
     const stats = full.stats ?? {};
@@ -138,15 +151,15 @@ export class CharacterTools extends BaseTool {
     const vitalsKeys = ['wounds', 'fortune', 'fate', 'resilience', 'resolve', 'corruption', 'toughness', 'money', 'criticalWounds', 'hitLocationTable'];
     const biographyKeys = ['biography', 'gmNotes', 'experience', 'experienceLog'];
 
-    const pick = (src: any, keys: string[]): any => {
-      const out: any = {};
+    const pick = (src: CharacterBasicInfoView, keys: string[]): CharacterBasicInfoView => {
+      const out: CharacterBasicInfoView = {};
       for (const k of keys) {
         if (src[k] !== undefined) out[k] = src[k];
       }
       return out;
     };
 
-    const filtered: any = {
+    const filtered: CharacterSectionsView = {
       id: full.id,
       name: full.name,
       type: full.type,
@@ -169,7 +182,7 @@ export class CharacterTools extends BaseTool {
       filtered.skills = stats.skills;
     }
     if (sectionSet.has('talents')) {
-      const t: any = {};
+      const t: CharacterSectionsView = {};
       if (stats.talents) t.talents = stats.talents;
       if (stats.traits) t.traits = stats.traits;
       if (Object.keys(t).length > 0) filtered.talents = t;
@@ -197,13 +210,13 @@ export class CharacterTools extends BaseTool {
     this.logger.info('Listing characters', { type });
 
     try {
-      const actors = await this.query<any>('listActors', { type });
+      const actors = await this.query<FoundryRawActor[]>('listActors', { type });
 
       this.logger.debug('Successfully retrieved character list', { count: actors.length });
 
       // Format the response for Claude
       return {
-        characters: actors.map((actor: any) => ({
+        characters: actors.map((actor: FoundryRawActor) => ({
           id: actor.id,
           name: actor.name,
           type: actor.type,
@@ -219,7 +232,7 @@ export class CharacterTools extends BaseTool {
     }
   }
 
-  private formatCharacterResponse(characterData: any): any {
+  private formatCharacterResponse(characterData: FoundryRawActor): CharacterResponseView {
     const response = {
       id: characterData.id,
       name: characterData.name,
@@ -235,12 +248,12 @@ export class CharacterTools extends BaseTool {
     return response;
   }
 
-  private extractBasicInfo(characterData: any): any {
+  private extractBasicInfo(characterData: FoundryRawActor): CharacterBasicInfoView {
     const system = characterData.system || {};
     const items = characterData.items || [];
 
     // Extract common fields that exist across different game systems
-    const basicInfo: any = {};
+    const basicInfo: CharacterBasicInfoView = {};
 
     // WFRP 4e system (system-id guard upstream ensures WFRP)
     if (system.status?.wounds) {
@@ -277,10 +290,10 @@ export class CharacterTools extends BaseTool {
     }
 
     // Critical Wounds (count critical wound items)
-    const criticalWounds = items.filter((item: any) => item.type === 'critical');
+    const criticalWounds = items.filter((item: FoundryRawItem) => item.type === 'critical');
     basicInfo.criticalWounds = {
       count: criticalWounds.length,
-      wounds: criticalWounds.map((crit: any) => ({
+      wounds: criticalWounds.map((crit: FoundryRawItem) => ({
         name: crit.name,
         location: crit.system?.location?.value || 'unknown',
         severity: crit.system?.wounds?.value || 0,
@@ -289,7 +302,7 @@ export class CharacterTools extends BaseTool {
     };
 
     // Money (filter and sum money items correctly)
-    const moneyItems = items.filter((item: any) => item.type === 'money');
+    const moneyItems = items.filter((item: FoundryRawItem) => item.type === 'money');
     if (moneyItems.length > 0) {
       basicInfo.money = {};
       for (const moneyItem of moneyItems) {
@@ -330,8 +343,8 @@ export class CharacterTools extends BaseTool {
     // (the embedded career with system.current.value === true): name = career, system.class.value =
     // class (e.g. "Warrior"), system.level.value = career level (1-4). See
     // wfrp4e_system/data/Item/career.md. Prefer that item; fall back to the manual details fields.
-    const currentCareer = (items as any[]).find(
-      (i: any) => i.type === 'career' && i.system?.current?.value === true
+    const currentCareer = items.find(
+      (i: FoundryRawItem) => i.type === 'career' && i.system?.current?.value === true
     );
     const careerName = currentCareer?.name ?? (system.details?.career?.value || undefined);
     if (careerName) {
@@ -443,14 +456,14 @@ export class CharacterTools extends BaseTool {
     return basicInfo;
   }
 
-  private extractStats(characterData: any): any {
+  private extractStats(characterData: FoundryRawActor): CharacterStatsView {
     const system = characterData.system || {};
-    const stats: any = {};
+    const stats: CharacterStatsView = {};
 
     // WFRP 4e Characteristics (WS, BS, S, T, I, Ag, Dex, Int, WP, Fel)
     if (system.characteristics) {
       stats.characteristics = {};
-      const charMap: any = {
+      const charMap: Record<string, string> = {
         ws: 'Weapon Skill',
         bs: 'Ballistic Skill',
         s: 'Strength',
@@ -465,7 +478,7 @@ export class CharacterTools extends BaseTool {
 
       for (const [key, characteristic] of Object.entries(system.characteristics)) {
         if (typeof characteristic === 'object' && characteristic !== null) {
-          const char = characteristic as any;
+          const char = characteristic as any; // Object.entries values are genuinely-Foundry-untyped
           stats.characteristics[key.toUpperCase()] = {
             name: charMap[key] || key.toUpperCase(),
             initial: char.initial || 0,
@@ -479,7 +492,7 @@ export class CharacterTools extends BaseTool {
 
     // WFRP Skills - Extract from items array (skills are items in WFRP4e)
     const items = characterData.items || [];
-    const skillItems = items.filter((item: any) => item.type === 'skill');
+    const skillItems = items.filter((item: FoundryRawItem) => item.type === 'skill');
 
     if (skillItems.length > 0) {
       stats.skills = {};
@@ -495,10 +508,10 @@ export class CharacterTools extends BaseTool {
     }
 
     // WFRP Talents - Extract from items array (talents are also items)
-    const talentItems = items.filter((item: any) => item.type === 'talent');
+    const talentItems = items.filter((item: FoundryRawItem) => item.type === 'talent');
 
     if (talentItems.length > 0) {
-      stats.talents = talentItems.map((talent: any) => ({
+      stats.talents = talentItems.map((talent: FoundryRawItem) => ({
         name: talent.name,
         advances: talent.system?.advances?.value || 1,
         tests: talent.system?.tests?.value || '',
@@ -507,10 +520,10 @@ export class CharacterTools extends BaseTool {
     }
 
     // WFRP Traits - Extract creature traits
-    const traitItems = items.filter((item: any) => item.type === 'trait');
+    const traitItems = items.filter((item: FoundryRawItem) => item.type === 'trait');
 
     if (traitItems.length > 0) {
-      stats.traits = traitItems.map((trait: any) => ({
+      stats.traits = traitItems.map((trait: FoundryRawItem) => ({
         name: trait.name,
         specification: trait.system?.specification?.value || '',
         description: this.truncateText(trait.system?.description?.value || '', 200)
@@ -520,14 +533,14 @@ export class CharacterTools extends BaseTool {
     return stats;
   }
 
-  private formatItems(items: any[]): any[] {
+  private formatItems(items: FoundryRawItem[]): CharacterItemView[] {
     // Filter out non-inventory items:
     // - skills, talents, traits: handled in stats section
     // - career: shown in basicInfo.career
     // - money: aggregated in basicInfo.money
     // - critical: shown in basicInfo.criticalWounds
     // - injury, mutation, disease, psychology: status effects, not inventory
-    const inventoryItems = items.filter((item: any) =>
+    const inventoryItems = items.filter((item: FoundryRawItem) =>
       item.type !== 'skill' &&
       item.type !== 'talent' &&
       item.type !== 'trait' &&
@@ -551,31 +564,31 @@ export class CharacterTools extends BaseTool {
     }));
   }
 
-  private formatConditions(items: any[]): any {
+  private formatConditions(items: FoundryRawItem[]): CharacterConditionsView {
     // Extract status condition items (injuries, mutations, diseases, psychology)
-    const conditions: any = {};
+    const conditions: CharacterConditionsView = {};
 
-    const injuries = items.filter((item: any) => item.type === 'injury');
+    const injuries = items.filter((item: FoundryRawItem) => item.type === 'injury');
     if (injuries.length > 0) {
-      conditions.injuries = injuries.map((injury: any) => ({
+      conditions.injuries = injuries.map((injury: FoundryRawItem) => ({
         name: injury.name,
         location: injury.system?.location?.value || '',
         description: this.truncateText(injury.system?.description?.value || '', 200),
       }));
     }
 
-    const mutations = items.filter((item: any) => item.type === 'mutation');
+    const mutations = items.filter((item: FoundryRawItem) => item.type === 'mutation');
     if (mutations.length > 0) {
-      conditions.mutations = mutations.map((mutation: any) => ({
+      conditions.mutations = mutations.map((mutation: FoundryRawItem) => ({
         name: mutation.name,
         type: mutation.system?.mutationType?.value || '',
         description: this.truncateText(mutation.system?.description?.value || '', 200),
       }));
     }
 
-    const diseases = items.filter((item: any) => item.type === 'disease');
+    const diseases = items.filter((item: FoundryRawItem) => item.type === 'disease');
     if (diseases.length > 0) {
-      conditions.diseases = diseases.map((disease: any) => ({
+      conditions.diseases = diseases.map((disease: FoundryRawItem) => ({
         name: disease.name,
         contraction: disease.system?.contraction?.value || '',
         incubation: disease.system?.incubation?.value || '',
@@ -585,9 +598,9 @@ export class CharacterTools extends BaseTool {
       }));
     }
 
-    const psychology = items.filter((item: any) => item.type === 'psychology');
+    const psychology = items.filter((item: FoundryRawItem) => item.type === 'psychology');
     if (psychology.length > 0) {
-      conditions.psychology = psychology.map((psych: any) => ({
+      conditions.psychology = psychology.map((psych: FoundryRawItem) => ({
         name: psych.name,
         description: this.truncateText(psych.system?.description?.value || '', 200),
       }));
@@ -600,9 +613,9 @@ export class CharacterTools extends BaseTool {
     return conditions;
   }
 
-  private formatEffects(effects: any[]): any[] {
+  private formatEffects(effects: FoundryRawEffect[]): CharacterEffectView[] {
     return effects.map(effect => {
-      const formattedEffect: any = {
+      const formattedEffect: CharacterEffectView = {
         id: effect.id,
         name: effect.name,
         disabled: effect.disabled,

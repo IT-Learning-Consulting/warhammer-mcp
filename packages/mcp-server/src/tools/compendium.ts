@@ -1,5 +1,17 @@
 import { z } from 'zod';
-import { SearchCompendiumOutput, SEARCH_COMPENDIUM_OUTPUT_JSON_SCHEMA, ItemId, PackId } from '@foundry-mcp/shared';
+import {
+  SearchCompendiumOutput,
+  SEARCH_COMPENDIUM_OUTPUT_JSON_SCHEMA,
+  ItemId,
+  PackId,
+  type FoundryRawItem,
+  type FoundryRawPack,
+  type CompendiumItemView,
+  type CompendiumStatsView,
+  type CompendiumPropertiesView,
+  type CreatureListItemView,
+  type CompactCreatureStatsView,
+} from '@foundry-mcp/shared';
 import { FoundryClient } from '../foundry-client.js';
 import { Logger } from '../logger.js';
 import { BaseTool, BaseToolOptions } from '../base-tool.js';
@@ -269,7 +281,7 @@ export class CompendiumTools extends BaseTool {
     const { query, packType, filters, limit } = parsedArgs;
 
     try {
-      const results = await this.query<any>('searchCompendium', {
+      const results = await this.query<FoundryRawItem[]>('searchCompendium', {
         query,
         packType,
         filters,
@@ -286,7 +298,7 @@ export class CompendiumTools extends BaseTool {
 
       const output = {
         query,
-        results: limitedResults.map((item: any) => this.formatCompendiumItem(item)),
+        results: limitedResults.map((item: FoundryRawItem) => this.formatCompendiumItem(item)),
         totalFound: results.length,
         showing: limitedResults.length,
         hasMore: results.length > limit,
@@ -314,7 +326,7 @@ export class CompendiumTools extends BaseTool {
 
     try {
       // Use the proper document retrieval method that already exists in actor creation
-      const item = await this.query<any>('getCompendiumDocumentFull', {
+      const item = await this.query<FoundryRawItem>('getCompendiumDocumentFull', {
         packId: packId,
         documentId: itemId,
       });
@@ -344,7 +356,7 @@ export class CompendiumTools extends BaseTool {
         // item subtree (including system.description.value HTML and system.effects[].changes
         // script payloads) which defeated the point of "compact".
         const compactStats = this.extractCompactStats(item);
-        const compactItems = (item.items || []).slice(0, 5).map((it: any) => ({
+        const compactItems = (item.items || []).slice(0, 5).map((it: FoundryRawItem) => ({
           id: it.id,
           name: it.name,
           type: it.type,
@@ -453,7 +465,10 @@ export class CompendiumTools extends BaseTool {
       // BUG-365: compact is a response-shaping flag only — strip it before the query so it
       // never contaminates the foundry-module criteria object.
       const { compact, ...queryParams } = params;
-      const results = await this.query<any>('listCreaturesByCriteria', queryParams);
+      const results = await this.query<{
+        creatures?: FoundryRawItem[];
+        searchSummary?: { packsSearched?: number; topPacks?: string[]; totalCreaturesFound?: number };
+      }>('listCreaturesByCriteria', queryParams);
 
       this.logger.debug('Creature criteria search completed', {
         criteriaCount: Object.keys(queryParams).length,
@@ -473,7 +488,7 @@ export class CompendiumTools extends BaseTool {
 
       return {
         creatures: Array.isArray(results?.creatures)
-          ? results.creatures.map((creature: any) =>
+          ? results.creatures.map((creature: FoundryRawItem) =>
               compact
                 // BUG-365: compact entry — id/name/type/pack only (~40 bytes vs ~334). Survey
                 // names at high limits, then get-compendium-item for details on the final picks.
@@ -506,11 +521,11 @@ export class CompendiumTools extends BaseTool {
     this.logger.info('Listing compendium packs', { type });
 
     try {
-      const packs = await this.query<any>('getAvailablePacks');
+      const packs = await this.query<FoundryRawPack[]>('getAvailablePacks');
 
       // Filter by type if specified
       const filteredPacks = type
-        ? packs.filter((pack: any) => pack.type === type)
+        ? packs.filter((pack: FoundryRawPack) => pack.type === type)
         : packs;
 
       this.logger.debug('Successfully retrieved compendium packs', {
@@ -520,7 +535,7 @@ export class CompendiumTools extends BaseTool {
       });
 
       return {
-        packs: filteredPacks.map((pack: any) => ({
+        packs: filteredPacks.map((pack: FoundryRawPack) => ({
           id: pack.id,
           label: pack.label,
           type: pack.type,
@@ -528,7 +543,7 @@ export class CompendiumTools extends BaseTool {
           private: pack.private,
         })),
         total: filteredPacks.length,
-        availableTypes: [...new Set(packs.map((pack: any) => pack.type))],
+        availableTypes: [...new Set(packs.map((pack: FoundryRawPack) => pack.type))],
       };
 
     } catch (error) {
@@ -537,8 +552,8 @@ export class CompendiumTools extends BaseTool {
     }
   }
 
-  private formatCompendiumItem(item: any): any {
-    const formatted: any = {
+  private formatCompendiumItem(item: FoundryRawItem): CompendiumItemView {
+    const formatted: CompendiumItemView = {
       id: item.id,
       name: item.name,
       type: item.type,
@@ -555,7 +570,7 @@ export class CompendiumTools extends BaseTool {
     // WFRP 4e specific data structures
     if (item.type === 'npc' || item.type === 'character') {
       const system = item.system || {};
-      const stats: any = {};
+      const stats: CompendiumStatsView = {};
 
       // Threat Level (WFRP: Toughness + Wounds/10)
       const cr = system.details?.cr || system.cr;
@@ -602,7 +617,7 @@ export class CompendiumTools extends BaseTool {
     return formatted;
   }
 
-  private formatDetailedCompendiumItem(item: any): any {
+  private formatDetailedCompendiumItem(item: FoundryRawItem): CompendiumItemView {
     const formatted = this.formatCompendiumItem(item);
 
     // Add more detailed information
@@ -613,7 +628,7 @@ export class CompendiumTools extends BaseTool {
     return formatted;
   }
 
-  private extractDescription(item: any): string {
+  private extractDescription(item: FoundryRawItem): string {
     const system = item.system || {};
 
     // Try different common description fields
@@ -627,7 +642,7 @@ export class CompendiumTools extends BaseTool {
     return this.truncateText(this.stripHtml(description), 200);
   }
 
-  private extractFullDescription(item: any): string {
+  private extractFullDescription(item: FoundryRawItem): string {
     const system = item.system || {};
 
     const description =
@@ -640,7 +655,7 @@ export class CompendiumTools extends BaseTool {
     return this.stripHtml(description);
   }
 
-  private createItemSummary(item: any): string {
+  private createItemSummary(item: FoundryRawItem): string {
     const parts = [];
 
     parts.push(`${item.type} from ${item.packLabel}`);
@@ -672,7 +687,7 @@ export class CompendiumTools extends BaseTool {
     return parts.join(' • ');
   }
 
-  private formatCreatureListItem(creature: any): any {
+  private formatCreatureListItem(creature: FoundryRawItem): CreatureListItemView {
     const system = creature.system || {};
 
     // Handle both enhanced creature index data (direct properties) and raw Foundry data (system paths)
@@ -715,9 +730,9 @@ export class CompendiumTools extends BaseTool {
     };
   }
 
-  private extractCompactStats(item: any): any {
+  private extractCompactStats(item: FoundryRawItem): CompactCreatureStatsView {
     const system = item.system || {};
-    const stats: any = {};
+    const stats: CompactCreatureStatsView = {};
 
     // Core combat stats - WFRP 4e
 
@@ -750,9 +765,9 @@ export class CompendiumTools extends BaseTool {
 
     // Characteristics (WFRP)
     if (system.characteristics) {
-      const characteristics: any = {};
+      const characteristics: CompactCreatureStatsView = {};
       for (const [key, char] of Object.entries(system.characteristics)) {
-        const c = char as any;
+        const c = char as any; // Object.entries values are genuinely-Foundry-untyped
         if (c.value !== undefined) {
           characteristics[key.toUpperCase()] = c.value;
         }
@@ -768,9 +783,9 @@ export class CompendiumTools extends BaseTool {
     return stats;
   }
 
-  private extractItemProperties(item: any): any {
+  private extractItemProperties(item: FoundryRawItem): CompendiumPropertiesView {
     const system = item.system || {};
-    const properties: any = {};
+    const properties: CompendiumPropertiesView = {};
 
     // Common properties across different item types
     if (system.rarity) properties.rarity = system.rarity;
@@ -803,7 +818,7 @@ export class CompendiumTools extends BaseTool {
     return properties;
   }
 
-  private sanitizeSystemData(systemData: any): any {
+  private sanitizeSystemData(systemData: Record<string, unknown>): Record<string, unknown> {
     // Remove potentially large or unnecessary fields
     const sanitized = { ...systemData };
 
