@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { MODULE_ID } from './constants.js';
 import { FoundryDataAccess } from './data-access.js';
 // Phase 4 (R3.3): QueryHandlers owns the extracted creature-index + compendium-search services.
-import { PersistentCreatureIndex, CompendiumSearchService, RollRequestService, RollButtonService, PlayerLookupService, CombatService, ConditionsService, ScenePlacementService, TemplateApplyService } from './services/index.js';
+import { PersistentCreatureIndex, CompendiumSearchService, RollRequestService, RollButtonService, PlayerLookupService, CombatService, ConditionsService, ScenePlacementService, TemplateApplyService, ActorService, ItemService, EffectsService } from './services/index.js';
 import { wrappedWrite } from './transaction-manager.js';
 import { notify } from './notify.js';
 // Phase 1 mcp_crud_expansion — polymorphic ownership handlers.
@@ -208,6 +208,26 @@ function rethrowAsInvalidInput(error: unknown): void {
   }
 }
 
+/**
+ * Phase 8 (R8.3): centralizes the per-handler try/catch boilerplate that wrapped
+ * every query handler. `errorPrefix` is the operation message WITHOUT the trailing
+ * colon — e.g. 'Failed to list actors' or 'Failed to dispatch scene action'; the
+ * helper appends `: <message>` so BOTH wire-format prefix forms are preserved
+ * byte-for-byte. ZodErrors are re-thrown as 'Invalid input: …' via
+ * rethrowAsInvalidInput first (CCR-5), exactly as the inline catch blocks did.
+ * The error contract is locked by characterization/query-error-format.snap.test.ts.
+ * Excluded from this collapse (different catch shapes): handleQuery (outer
+ * envelope shell) and handleNotify (NOTIFY_INVALID_INPUT path).
+ */
+async function wrapQuery<T>(errorPrefix: string, fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (error) {
+    rethrowAsInvalidInput(error);
+    throw new Error(`${errorPrefix}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
 export class QueryHandlers {
   public dataAccess: FoundryDataAccess;
   // Phase 4 (R3.3): QueryHandlers owns the creature index + search service (they left FoundryDataAccess).
@@ -237,6 +257,14 @@ export class QueryHandlers {
   // Phase-6 combat/conditions promotion). The 2 template handlers below call this directly now; the facade
   // delegates were deleted from FoundryDataAccess. Single seam: validateState (no auditLog).
   public templateApply: TemplateApplyService;
+  // Phase 8 (R7.3): Contract — the actor/item/effect MUTATION clusters promoted off FoundryDataAccess to
+  // QueryHandlers (mirrors the Phase-7 templateApply promotion). The handlers below call these directly now;
+  // the 16 facade delegates were deleted from FoundryDataAccess. Seams: actorService takes scenePlacement +
+  // compendiumSearch + validateState + an auditLog callback + a getCompendiumDocumentFull callback (both
+  // stay on the DA facade); item/effects take validateState only.
+  public actorService: ActorService;
+  public itemService: ItemService;
+  public effectsService: EffectsService;
 
   constructor() {
     this.creatureIndex = new PersistentCreatureIndex();
@@ -248,13 +276,27 @@ export class QueryHandlers {
       validateState,
       (operation, data, result, error) => this.dataAccess.auditLog(operation, data, result, error),
     );
-    this.dataAccess = new FoundryDataAccess(this.compendiumSearch, this.scenePlacement);
+    // Phase 8 (R7.3): scenePlacement + compendiumSearch injections dropped — FoundryDataAccess no longer
+    // constructs the actor/item/effect services (promoted to QueryHandlers below), so it is dependency-free.
+    this.dataAccess = new FoundryDataAccess();
     this.rollRequest = new RollRequestService(validateState);
     this.rollButton = new RollButtonService(validateState);
     this.playerLookup = new PlayerLookupService(validateState);
     this.combat = new CombatService(validateState);
     this.conditions = new ConditionsService(validateState);
     this.templateApply = new TemplateApplyService(validateState);
+    // Phase 8 (R7.3): promoted actor/item/effect services. Callbacks reference this.dataAccess lazily
+    // (invoked only at runtime, after construction completes) and reuse the surviving DA facade methods
+    // (auditLog + getCompendiumDocumentFull stay public on FoundryDataAccess).
+    this.effectsService = new EffectsService(validateState);
+    this.itemService = new ItemService(validateState);
+    this.actorService = new ActorService(
+      this.scenePlacement,
+      this.compendiumSearch,
+      validateState,
+      (operation, data, result, error) => this.dataAccess.auditLog(operation, data, result, error),
+      (packId, documentId) => this.dataAccess.getCompendiumDocumentFull(packId, documentId),
+    );
   }
 
   /**
@@ -269,183 +311,126 @@ export class QueryHandlers {
 
   registerHandlers(): void {
     const modulePrefix = MODULE_ID;
-
-    CONFIG.queries[`${modulePrefix}.getCharacterInfo`] = this.handleGetCharacterInfo.bind(this);
-    CONFIG.queries[`${modulePrefix}.listActors`] = this.handleListActors.bind(this);
-    CONFIG.queries[`${modulePrefix}.searchCompendium`] = this.handleSearchCompendium.bind(this);
-    CONFIG.queries[`${modulePrefix}.addItemFromCompendium`] = this.handleAddItemFromCompendium.bind(this);
-    CONFIG.queries[`${modulePrefix}.listCreaturesByCriteria`] = this.handleListCreaturesByCriteria.bind(this);
-    CONFIG.queries[`${modulePrefix}.getAvailablePacks`] = this.handleGetAvailablePacks.bind(this);
-    CONFIG.queries[`${modulePrefix}.getWorldInfo`] = this.handleGetWorldInfo.bind(this);
-    CONFIG.queries[`${modulePrefix}.ping`] = this.handlePing.bind(this);
-    CONFIG.queries[`${modulePrefix}.createActorFromCompendium`] = this.handleCreateActorFromCompendium.bind(this);
-    CONFIG.queries[`${modulePrefix}.getCompendiumDocumentFull`] = this.handleGetCompendiumDocumentFull.bind(this);
-    // Phase 4 mcp_crud_expansion — single `scene` umbrella replaces 5 legacy keys
-    // (getActiveScene, list-scenes, switch-scene, addActorsToScene, deleteToken).
-    // 11 actions dispatched in handlers/scene.ts.
-    CONFIG.queries[`${modulePrefix}.scene`] = this.handleScene.bind(this);
-    // Phase 3 mcp_crud_expansion — single `journal` umbrella replaces 5 legacy keys
-    // (createJournalEntry / listJournals / getJournalContent / updateJournalContent /
-    // deleteJournalEntry). 13 actions dispatched in handlers/journal.ts.
-    CONFIG.queries[`${modulePrefix}.journal`] = this.handleJournal.bind(this);
-    // Phase 1 mcp_diagnostic_tool — read-only diagnostic surface. GM-gated +
-    // setting-gated (enableDiagnosticTools, default false) in the dispatcher.
-    CONFIG.queries[`${modulePrefix}.diagnostic`] = this.handleDiagnostic.bind(this);
-    // Phase 5 mcp_crud_expansion — 7 embedded-doc CRUD umbrellas.
-    CONFIG.queries[`${modulePrefix}.token`] = this.handleToken.bind(this);
-    CONFIG.queries[`${modulePrefix}.light`] = this.handleLight.bind(this);
-    CONFIG.queries[`${modulePrefix}.note`] = this.handleNote.bind(this);
-    CONFIG.queries[`${modulePrefix}.sound`] = this.handleSound.bind(this);
-    // Phase 7 — playlist umbrella (10 actions; world-level + embedded sounds).
-    CONFIG.queries[`${modulePrefix}.playlist`] = this.handlePlaylist.bind(this);
-    CONFIG.queries[`${modulePrefix}.macro`] = this.handleMacro.bind(this);
-    CONFIG.queries[`${modulePrefix}.user`] = this.handleUser.bind(this);
-    // Phase 9 mcp_crud_expansion — Compendium umbrella (6 actions; NO DELETE per HC3).
-    CONFIG.queries[`${modulePrefix}.compendium`] = this.handleCompendium.bind(this);
-    // Phase 10 mcp_crud_expansion — Cross-doc FK umbrella (3 actions; closes PRD).
-    CONFIG.queries[`${modulePrefix}.cross-doc-fk`] = this.handleCrossDocFk.bind(this);
-    CONFIG.queries[`${modulePrefix}.region`] = this.handleRegion.bind(this);
-    CONFIG.queries[`${modulePrefix}.tile`] = this.handleTile.bind(this);
-    CONFIG.queries[`${modulePrefix}.template`] = this.handleTemplate.bind(this);
-    // Phase 5 mcp_coverage_expansion — drawing umbrella.
-    CONFIG.queries[`${modulePrefix}.drawing`] = this.handleDrawing.bind(this);
-    // Phase 7 mcp_coverage_expansion — cards umbrella.
-    CONFIG.queries[`${modulePrefix}.cards`] = this.handleCards.bind(this);
-    // Phase 8 mcp_coverage_expansion — document-io umbrella (export/import-as-new/preview).
-    CONFIG.queries[`${modulePrefix}.document-io`] = this.handleDocumentIo.bind(this);
-    CONFIG.queries[`${modulePrefix}.deleteActor`] = this.handleDeleteActor.bind(this);
-    CONFIG.queries[`${modulePrefix}.request-player-rolls`] = this.handleRequestPlayerRolls.bind(this);
-    // Deprecation wrappers — old actor-only ownership keys (PRD R1.5).
-    CONFIG.queries[`${modulePrefix}.setActorOwnership`] = this.handleSetActorOwnership.bind(this);
-    CONFIG.queries[`${modulePrefix}.getActorOwnership`] = this.handleGetActorOwnership.bind(this);
-    // Phase 1 mcp_crud_expansion — polymorphic ownership surface (4 handlers).
-    CONFIG.queries[`${modulePrefix}.setDocumentOwnership`] = this.handleSetDocumentOwnership.bind(this);
-    CONFIG.queries[`${modulePrefix}.getDocumentOwnership`] = this.handleGetDocumentOwnership.bind(this);
-    CONFIG.queries[`${modulePrefix}.bulkSetDocumentOwnership`] = this.handleBulkSetDocumentOwnership.bind(this);
-    CONFIG.queries[`${modulePrefix}.resetDocumentOwnership`] = this.handleResetDocumentOwnership.bind(this);
-    CONFIG.queries[`${modulePrefix}.createActor`] = this.handleCreateActor.bind(this);
-    CONFIG.queries[`${modulePrefix}.updateActor`] = this.handleUpdateActor.bind(this);
-    CONFIG.queries[`${modulePrefix}.updateItem`] = this.handleUpdateItem.bind(this);
-    CONFIG.queries[`${modulePrefix}.createItem`] = this.handleCreateItem.bind(this);
-    CONFIG.queries[`${modulePrefix}.deleteItem`] = this.handleDeleteItem.bind(this);
-    CONFIG.queries[`${modulePrefix}.modifyItemQualities`] = this.handleModifyItemQualities.bind(this);
-    CONFIG.queries[`${modulePrefix}.tradeItem`] = this.handleTradeItem.bind(this);
-    // Phase 2 mcp_crud_expansion — RollTable surface (6 migrated + 7 new = 13 handlers).
-    CONFIG.queries[`${modulePrefix}.createRollTable`] = this.handleCreateRollTable.bind(this);
-    CONFIG.queries[`${modulePrefix}.addTableResults`] = this.handleAddTableResults.bind(this);
-    CONFIG.queries[`${modulePrefix}.listRollTables`] = this.handleListRollTables.bind(this);
-    CONFIG.queries[`${modulePrefix}.getRollTable`] = this.handleGetRollTable.bind(this);
-    CONFIG.queries[`${modulePrefix}.rollOnTable`] = this.handleRollOnTable.bind(this);
-    CONFIG.queries[`${modulePrefix}.deleteRollTable`] = this.handleDeleteRollTable.bind(this);
-    CONFIG.queries[`${modulePrefix}.updateRollTable`] = this.handleUpdateRollTable.bind(this);
-    CONFIG.queries[`${modulePrefix}.updateTableResults`] = this.handleUpdateTableResults.bind(this);
-    CONFIG.queries[`${modulePrefix}.deleteTableResults`] = this.handleDeleteTableResults.bind(this);
-    CONFIG.queries[`${modulePrefix}.normalizeRollTable`] = this.handleNormalizeRollTable.bind(this);
-    CONFIG.queries[`${modulePrefix}.resetRollTableResults`] = this.handleResetRollTableResults.bind(this);
-    CONFIG.queries[`${modulePrefix}.drawManyFromTable`] = this.handleDrawManyFromTable.bind(this);
-    CONFIG.queries[`${modulePrefix}.importRollTableFromCompendium`] = this.handleImportRollTableFromCompendium.bind(this);
-
-    // Phase 4b — combat + damage + conditions + active-effects
-    CONFIG.queries[`${modulePrefix}.getCombat`] = this.handleGetCombat.bind(this);
-    CONFIG.queries[`${modulePrefix}.listCombatants`] = this.handleListCombatants.bind(this);
-    CONFIG.queries[`${modulePrefix}.advanceCombat`] = this.handleAdvanceCombat.bind(this);
-    CONFIG.queries[`${modulePrefix}.addCombatants`] = this.handleAddCombatants.bind(this);
-    CONFIG.queries[`${modulePrefix}.removeCombatants`] = this.handleRemoveCombatants.bind(this);
-    CONFIG.queries[`${modulePrefix}.endCombat`] = this.handleEndCombat.bind(this);
-    CONFIG.queries[`${modulePrefix}.applyDamage`] = this.handleApplyDamage.bind(this);
-    CONFIG.queries[`${modulePrefix}.applyCondition`] = this.handleApplyCondition.bind(this);
-    CONFIG.queries[`${modulePrefix}.removeCondition`] = this.handleRemoveCondition.bind(this);
-    CONFIG.queries[`${modulePrefix}.listConditions`] = this.handleListConditions.bind(this);
-    CONFIG.queries[`${modulePrefix}.listActiveEffects`] = this.handleListActiveEffects.bind(this);
-
-    // Phase 4c.0 — config-read primitive for skill-side rule lookups
-    CONFIG.queries[`${modulePrefix}.getWfrp4eConfig`] = this.handleGetWfrp4eConfig.bind(this);
-
-    // Phase 4g — /wfrp-build-npc primitives
-    CONFIG.queries[`${modulePrefix}.duplicateActor`] = this.handleDuplicateActor.bind(this);
-    CONFIG.queries[`${modulePrefix}.applyNpcCareerAdvance`] = this.handleApplyNpcCareerAdvance.bind(this);
-    CONFIG.queries[`${modulePrefix}.listActorItems`] = this.handleListActorItems.bind(this);
-
-    // Phase 4h — /wfrp-encounter-builder template-composition primitive
-    CONFIG.queries[`${modulePrefix}.applyTemplate`] = this.handleApplyTemplate.bind(this);
-
-    // apply-template-to-token — token-delta variant for prototype-sheet routing
-    CONFIG.queries[`${modulePrefix}.applyTemplateToToken`] = this.handleApplyTemplateToToken.bind(this);
-
-    // Phase 5 follow-up B — active-effect CRUD
-    CONFIG.queries[`${modulePrefix}.addActiveEffect`] = this.handleAddActiveEffect.bind(this);
-    CONFIG.queries[`${modulePrefix}.updateActiveEffect`] = this.handleUpdateActiveEffect.bind(this);
-    CONFIG.queries[`${modulePrefix}.deleteActiveEffect`] = this.handleDeleteActiveEffect.bind(this);
-
-    // TOOL-IDEA-003 (2026-05-14): read-only AE-by-name resolver.
-    CONFIG.queries[`${modulePrefix}.getActiveEffectByName`] = this.handleGetActiveEffectByName.bind(this);
-
-    // Phase 6.1 mcp_crud_expansion — FilePicker surface (upload/list + notify.warn round-trip).
-    CONFIG.queries[`${modulePrefix}.uploadFile`] = (data: unknown) => uploadFileHandler(data);
-    CONFIG.queries[`${modulePrefix}.listFiles`] = (data: unknown) => listFilesHandler(data);
-    CONFIG.queries[`${modulePrefix}.filepickerNotifyWarn`] = (data: unknown) => notifyWarnHandler(data);
-    // Phase 9C R9C.6 — create-directory (named query key, Option A).
-    CONFIG.queries[`${modulePrefix}.filepickerCreateDirectory`] = (data: unknown) => createDirectoryHandler(data);
-    // Phase 4 mcp_notify_coverage — `notify` umbrella surfaces notify.* to MCP
-    // skills as workflow bookends + ad-hoc GM-visible events. GM-gated.
-    CONFIG.queries[`${modulePrefix}.notify`] = this.handleNotify.bind(this);
-    // Phase wfrp-disease — Disease umbrella (8 actions).
-    CONFIG.queries[`${modulePrefix}.disease`] = this.handleDisease.bind(this);
-    // Phase 4 mcp_completion_v1 — Folder umbrella (6 actions).
-    CONFIG.queries[`${modulePrefix}.folder`] = this.handleFolder.bind(this);
-    // Phase 4 mcp_completion_v1 — Setting umbrella (4 actions).
-    CONFIG.queries[`${modulePrefix}.setting`] = this.handleSetting.bind(this);
-    // Phase 5 mcp_completion_v1 — ChatMessage umbrella (5 actions).
-    CONFIG.queries[`${modulePrefix}.chat-message`] = this.handleChatMessage.bind(this);
-    // Phase 1 mcp_coverage_expansion — item-directory umbrella (5 actions: list/get/search/duplicate/import-from-compendium).
-    CONFIG.queries[`${modulePrefix}.item-directory`] = this.handleItemDirectory.bind(this);
-    // Phase 1 mcp_coverage_expansion — actor-config umbrella (4 actions: get/update-prototype-token + get/set-art).
-    CONFIG.queries[`${modulePrefix}.actor-config`] = this.handleActorConfig.bind(this);
-    // Phase 2 mcp_coverage_expansion — dice-roll tool (roll/validate/simulate over Foundry Roll).
-    CONFIG.queries[`${modulePrefix}.dice-roll`] = this.handleDiceRoll.bind(this);
-    // Phase 10 mcp_coverage_expansion — keybinding tool (GM-client scope over game.keybindings).
-    CONFIG.queries[`${modulePrefix}.keybinding`] = this.handleKeybinding.bind(this);
-    // Phase 3 mcp_coverage_expansion — combatant umbrella (7 per-combatant actions).
-    CONFIG.queries[`${modulePrefix}.combatant`] = this.handleCombatant.bind(this);
-    // Phase 1 module_integration_v1 — module-probe umbrella (always-on, read-only).
-    // Does NOT call validateFoundryState() — game.modules is available before full init
-    // (mirrors handleDiagnostic pattern, not handleSetting). No enableDiagnosticTools gate.
-    CONFIG.queries[`${modulePrefix}.module-probe`] = this.handleModuleProbe.bind(this);
-    // Phase 1 module_integration_v1 — module-matt stub (monks-active-tiles conditional).
-    // requireModuleActive guard in the dispatcher returns MODULE_NOT_ACTIVE when inactive.
-    CONFIG.queries[`${modulePrefix}.module-matt`] = this.handleModuleMatt.bind(this);
-    // Phase 5 module_integration_v1 — module-tagger + module-sequencer (conditional).
-    CONFIG.queries[`${modulePrefix}.module-tagger`] = this.handleModuleTagger.bind(this);
-    CONFIG.queries[`${modulePrefix}.module-sequencer`] = this.handleModuleSequencer.bind(this);
-    // Phase 4 module_integration_v1 — module-levels (conditional).
-    CONFIG.queries[`${modulePrefix}.module-levels`] = this.handleModuleLevels.bind(this);
-    // Phase 8 module_integration_v1 — module-autoanimations (conditional).
-    CONFIG.queries[`${modulePrefix}.module-autoanimations`] = this.handleModuleAutoAnimations.bind(this);
-    // Phase 6 module_integration_v1 — module-scene-atmosphere bundle (conditional, per-member guard).
-    CONFIG.queries[`${modulePrefix}.module-scene-atmosphere`] = this.handleModuleSceneAtmosphere.bind(this);
-    // Phase 7 module_integration_v1 — module-access-control bundle (conditional, per-member guard).
-    CONFIG.queries[`${modulePrefix}.module-access-control`] = this.handleModuleAccessControl.bind(this);
-    // Phase 13A module_integration_v1 — module-css (conditional).
-    CONFIG.queries[`${modulePrefix}.module-css`] = this.handleModuleCss.bind(this);
-    // Phase 15 module_integration_v1 — module-lighting (CommunityLighting, conditional).
-    CONFIG.queries[`${modulePrefix}.module-lighting`] = this.handleModuleLighting.bind(this);
-    // Phase 9 module_integration_v1 — WFRP mechanic delegates: module-robak + module-tokenbar (conditional).
-    CONFIG.queries[`${modulePrefix}.module-robak`] = this.handleModuleRobak.bind(this);
-    CONFIG.queries[`${modulePrefix}.module-tokenbar`] = this.handleModuleTokenbar.bind(this);
-    // Phase 10 module_integration_v1 — module-armoury (forien-armoury conditional).
-    CONFIG.queries[`${modulePrefix}.module-armoury`] = this.handleModuleArmoury.bind(this);
-    // Phase 11 module_integration_v1 — module-party-resources + module-gmtoolkit (conditional).
-    CONFIG.queries[`${modulePrefix}.module-party-resources`] = this.handleModulePartyResources.bind(this);
-    CONFIG.queries[`${modulePrefix}.module-gmtoolkit`] = this.handleModuleGmtoolkit.bind(this);
-    // Phase 12 module_integration_v1 — module-chat-commander (conditional).
-    CONFIG.queries[`${modulePrefix}.module-chat-commander`] = this.handleModuleChatCommander.bind(this);
-    // Phase 14 module_integration_v1 — thin-session modules (conditional).
-    CONFIG.queries[`${modulePrefix}.module-timekeeping`] = this.handleModuleTimekeeping.bind(this);
-    CONFIG.queries[`${modulePrefix}.module-patrol`] = this.handleModulePatrol.bind(this);
-    CONFIG.queries[`${modulePrefix}.module-gatherer`] = this.handleModuleGatherer.bind(this);
-    CONFIG.queries[`${modulePrefix}.module-mastercrafted`] = this.handleModuleMastercrafted.bind(this);
-    // Phase 3 module_integration_v1 — item-piles economy surface (conditional).
-    CONFIG.queries[`${modulePrefix}.module-itempiles`] = this.handleModuleItempiles.bind(this);
+    // Phase 8 (R8.1/R8.2): table-driven registration — replaces the ~112 manual per-key query
+    // registrations with one Record + loop. Query keys stay byte-stable (HC8: the registered key is
+    // still modulePrefix + '.' + the table key); adding a handler is one table entry.
+    const handlerTable: Record<string, (data: unknown) => Promise<any>> = {
+      'getCharacterInfo': this.handleGetCharacterInfo.bind(this),
+      'listActors': this.handleListActors.bind(this),
+      'searchCompendium': this.handleSearchCompendium.bind(this),
+      'addItemFromCompendium': this.handleAddItemFromCompendium.bind(this),
+      'listCreaturesByCriteria': this.handleListCreaturesByCriteria.bind(this),
+      'getAvailablePacks': this.handleGetAvailablePacks.bind(this),
+      'getWorldInfo': this.handleGetWorldInfo.bind(this),
+      'ping': this.handlePing.bind(this),
+      'createActorFromCompendium': this.handleCreateActorFromCompendium.bind(this),
+      'getCompendiumDocumentFull': this.handleGetCompendiumDocumentFull.bind(this),
+      'scene': this.handleScene.bind(this),
+      'journal': this.handleJournal.bind(this),
+      'diagnostic': this.handleDiagnostic.bind(this),
+      'token': this.handleToken.bind(this),
+      'light': this.handleLight.bind(this),
+      'note': this.handleNote.bind(this),
+      'sound': this.handleSound.bind(this),
+      'playlist': this.handlePlaylist.bind(this),
+      'macro': this.handleMacro.bind(this),
+      'user': this.handleUser.bind(this),
+      'compendium': this.handleCompendium.bind(this),
+      'cross-doc-fk': this.handleCrossDocFk.bind(this),
+      'region': this.handleRegion.bind(this),
+      'tile': this.handleTile.bind(this),
+      'template': this.handleTemplate.bind(this),
+      'drawing': this.handleDrawing.bind(this),
+      'cards': this.handleCards.bind(this),
+      'document-io': this.handleDocumentIo.bind(this),
+      'deleteActor': this.handleDeleteActor.bind(this),
+      'request-player-rolls': this.handleRequestPlayerRolls.bind(this),
+      'setActorOwnership': this.handleSetActorOwnership.bind(this),
+      'getActorOwnership': this.handleGetActorOwnership.bind(this),
+      'setDocumentOwnership': this.handleSetDocumentOwnership.bind(this),
+      'getDocumentOwnership': this.handleGetDocumentOwnership.bind(this),
+      'bulkSetDocumentOwnership': this.handleBulkSetDocumentOwnership.bind(this),
+      'resetDocumentOwnership': this.handleResetDocumentOwnership.bind(this),
+      'createActor': this.handleCreateActor.bind(this),
+      'updateActor': this.handleUpdateActor.bind(this),
+      'updateItem': this.handleUpdateItem.bind(this),
+      'createItem': this.handleCreateItem.bind(this),
+      'deleteItem': this.handleDeleteItem.bind(this),
+      'modifyItemQualities': this.handleModifyItemQualities.bind(this),
+      'tradeItem': this.handleTradeItem.bind(this),
+      'createRollTable': this.handleCreateRollTable.bind(this),
+      'addTableResults': this.handleAddTableResults.bind(this),
+      'listRollTables': this.handleListRollTables.bind(this),
+      'getRollTable': this.handleGetRollTable.bind(this),
+      'rollOnTable': this.handleRollOnTable.bind(this),
+      'deleteRollTable': this.handleDeleteRollTable.bind(this),
+      'updateRollTable': this.handleUpdateRollTable.bind(this),
+      'updateTableResults': this.handleUpdateTableResults.bind(this),
+      'deleteTableResults': this.handleDeleteTableResults.bind(this),
+      'normalizeRollTable': this.handleNormalizeRollTable.bind(this),
+      'resetRollTableResults': this.handleResetRollTableResults.bind(this),
+      'drawManyFromTable': this.handleDrawManyFromTable.bind(this),
+      'importRollTableFromCompendium': this.handleImportRollTableFromCompendium.bind(this),
+      'getCombat': this.handleGetCombat.bind(this),
+      'listCombatants': this.handleListCombatants.bind(this),
+      'advanceCombat': this.handleAdvanceCombat.bind(this),
+      'addCombatants': this.handleAddCombatants.bind(this),
+      'removeCombatants': this.handleRemoveCombatants.bind(this),
+      'endCombat': this.handleEndCombat.bind(this),
+      'applyDamage': this.handleApplyDamage.bind(this),
+      'applyCondition': this.handleApplyCondition.bind(this),
+      'removeCondition': this.handleRemoveCondition.bind(this),
+      'listConditions': this.handleListConditions.bind(this),
+      'listActiveEffects': this.handleListActiveEffects.bind(this),
+      'getWfrp4eConfig': this.handleGetWfrp4eConfig.bind(this),
+      'duplicateActor': this.handleDuplicateActor.bind(this),
+      'applyNpcCareerAdvance': this.handleApplyNpcCareerAdvance.bind(this),
+      'listActorItems': this.handleListActorItems.bind(this),
+      'applyTemplate': this.handleApplyTemplate.bind(this),
+      'applyTemplateToToken': this.handleApplyTemplateToToken.bind(this),
+      'addActiveEffect': this.handleAddActiveEffect.bind(this),
+      'updateActiveEffect': this.handleUpdateActiveEffect.bind(this),
+      'deleteActiveEffect': this.handleDeleteActiveEffect.bind(this),
+      'getActiveEffectByName': this.handleGetActiveEffectByName.bind(this),
+      'uploadFile': (data: unknown) => uploadFileHandler(data),
+      'listFiles': (data: unknown) => listFilesHandler(data),
+      'filepickerNotifyWarn': (data: unknown) => notifyWarnHandler(data),
+      'filepickerCreateDirectory': (data: unknown) => createDirectoryHandler(data),
+      'notify': this.handleNotify.bind(this),
+      'disease': this.handleDisease.bind(this),
+      'folder': this.handleFolder.bind(this),
+      'setting': this.handleSetting.bind(this),
+      'chat-message': this.handleChatMessage.bind(this),
+      'item-directory': this.handleItemDirectory.bind(this),
+      'actor-config': this.handleActorConfig.bind(this),
+      'dice-roll': this.handleDiceRoll.bind(this),
+      'keybinding': this.handleKeybinding.bind(this),
+      'combatant': this.handleCombatant.bind(this),
+      'module-probe': this.handleModuleProbe.bind(this),
+      'module-matt': this.handleModuleMatt.bind(this),
+      'module-tagger': this.handleModuleTagger.bind(this),
+      'module-sequencer': this.handleModuleSequencer.bind(this),
+      'module-levels': this.handleModuleLevels.bind(this),
+      'module-autoanimations': this.handleModuleAutoAnimations.bind(this),
+      'module-scene-atmosphere': this.handleModuleSceneAtmosphere.bind(this),
+      'module-access-control': this.handleModuleAccessControl.bind(this),
+      'module-css': this.handleModuleCss.bind(this),
+      'module-lighting': this.handleModuleLighting.bind(this),
+      'module-robak': this.handleModuleRobak.bind(this),
+      'module-tokenbar': this.handleModuleTokenbar.bind(this),
+      'module-armoury': this.handleModuleArmoury.bind(this),
+      'module-party-resources': this.handleModulePartyResources.bind(this),
+      'module-gmtoolkit': this.handleModuleGmtoolkit.bind(this),
+      'module-chat-commander': this.handleModuleChatCommander.bind(this),
+      'module-timekeeping': this.handleModuleTimekeeping.bind(this),
+      'module-patrol': this.handleModulePatrol.bind(this),
+      'module-gatherer': this.handleModuleGatherer.bind(this),
+      'module-mastercrafted': this.handleModuleMastercrafted.bind(this),
+      'module-itempiles': this.handleModuleItempiles.bind(this),
+    };
+    for (const [key, handler] of Object.entries(handlerTable)) {
+      CONFIG.queries[`${modulePrefix}.${key}`] = handler;
+    }
   }
 
   unregisterHandlers(): void {
@@ -473,7 +458,7 @@ export class QueryHandlers {
   }
 
   private async handleGetCharacterInfo(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to get character info', async () => {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
@@ -481,109 +466,85 @@ export class QueryHandlers {
       const identifier = parsed.characterName || parsed.characterId;
       if (!identifier) throw new Error('characterName or characterId is required');
       return { success: true, data: await this.dataAccess.getCharacterInfo(identifier) };
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to get character info: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   private async handleListActors(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to list actors', async () => {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
       const parsed = ListActorsInput.strict().parse(data ?? {});
       return { success: true, data: await this.dataAccess.listActors(parsed.type) };
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to list actors: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   private async handleSearchCompendium(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to search compendium', async () => {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
       const parsed = SearchCompendiumInput.strict().parse(data ?? {});
       return { success: true, data: await this.compendiumSearch.searchCompendium(parsed.query, parsed.packType, parsed.filters, parsed.itemType) };
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to search compendium: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   private async handleAddItemFromCompendium(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to add item from compendium', async () => {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
       const parsed = AddItemFromCompendiumInput.strict().parse(data ?? {});
       // Phase 7 (R7.1): logic absorbed into ItemService (via the data-access delegate). Handler keeps
       // gmCheck + parse + wrappedWrite + the { success, data } wrap; query key 'addItemFromCompendium' unchanged.
-      return await wrappedWrite('addItemFromCompendium', async () => ({ success: true, data: await this.dataAccess.addItemFromCompendium(parsed) }));
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to add item from compendium: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+      return await wrappedWrite('addItemFromCompendium', async () => ({ success: true, data: await this.itemService.addItemFromCompendium(parsed) }));
+    });
   }
 
   private async handleListCreaturesByCriteria(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to list creatures by criteria', async () => {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
       const parsed = ListCreaturesByCriteriaInput.strict().parse(data ?? {});
       const result = await this.compendiumSearch.listCreaturesByCriteria(parsed);
       return { success: true, data: result };
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to list creatures by criteria: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   private async handleGetAvailablePacks(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to get available packs', async () => {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
       GetAvailablePacksInput.strict().parse(data ?? {});
       return { success: true, data: await this.dataAccess.getAvailablePacks() };
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to get available packs: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   // Phase 4 mcp_crud_expansion — single umbrella entry point for all 11 scene
   // actions. Validates Foundry-side state then delegates to dispatchScene
   // (handlers/scene.ts) which routes by `args.action`.
   private async handleScene(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to dispatch scene action', async () => {
       this.dataAccess.validateFoundryState();
       // Phase 6 (R5.2): the `list` action's listScenes now lives on the promoted ScenePlacementService.
       return await dispatchSceneHandler(data, this.scenePlacement);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to dispatch scene action: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   private async handleGetWorldInfo(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to get world info', async () => {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
       GetWorldInfoInput.strict().parse(data ?? {});
       return { success: true, data: await this.dataAccess.getWorldInfo() };
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to get world info: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   private async handlePing(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to ping', async () => {
       PingInput.strict().parse(data ?? {});
       const payload = {
         status: 'ok',
@@ -594,10 +555,7 @@ export class QueryHandlers {
         userId: game.user?.id,
       };
       return { success: true, data: payload };
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to ping: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   getRegisteredMethods(): string[] {
@@ -615,7 +573,7 @@ export class QueryHandlers {
   // ===== Write operation handlers =====
 
   private async handleCreateActorFromCompendium(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to create actor from compendium', async () => {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
@@ -630,24 +588,18 @@ export class QueryHandlers {
       };
       if (parsed.placement) requestData.placement = parsed.placement;
 
-      return await wrappedWrite('createActorFromCompendium', async () => ({ success: true, data: await this.dataAccess.createActorFromCompendiumEntry(requestData) }));
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to create actor from compendium: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+      return await wrappedWrite('createActorFromCompendium', async () => ({ success: true, data: await this.actorService.createActorFromCompendiumEntry(requestData) }));
+    });
   }
 
   private async handleGetCompendiumDocumentFull(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to get compendium document', async () => {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
       const parsed = GetCompendiumDocumentFullInput.strict().parse(data ?? {});
       return { success: true, data: await this.dataAccess.getCompendiumDocumentFull(parsed.packId, parsed.documentId) };
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to get compendium document: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   // Phase 4 mcp_crud_expansion — handleAddActorsToScene + handleDeleteToken
@@ -666,13 +618,10 @@ export class QueryHandlers {
   // GM access gate, transaction wrapping, BUG-070 post-verify, and the typed
   // response envelope per action.
   async handleJournal(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to dispatch journal action', async () => {
       this.dataAccess.validateFoundryState();
       return await dispatchJournalHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to dispatch journal action: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   // Phase 1 module_integration_v1 — module-probe umbrella dispatcher.
@@ -680,80 +629,59 @@ export class QueryHandlers {
   // before Foundry reaches full ready state (mirrors handleDiagnostic).
   // No enableDiagnosticTools gate — module-probe is a standalone read-only probe.
   private async handleModuleProbe(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to dispatch module-probe action', async () => {
       return await dispatchModuleProbeHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to dispatch module-probe action: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   // Phase 1 module_integration_v1 — module-matt stub dispatcher.
   // requireModuleActive('monks-active-tiles') guard runs inside dispatchModuleMatt.
   // Returns MODULE_NOT_ACTIVE when the module is absent/inactive.
   private async handleModuleMatt(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to dispatch module-matt action', async () => {
       return await dispatchModuleMattHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to dispatch module-matt action: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   // Phase 5 module_integration_v1 — module-tagger dispatcher.
   // requireModuleActive('tagger') guard runs inside dispatchModuleTagger.
   private async handleModuleTagger(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to dispatch module-tagger action', async () => {
       return await dispatchModuleTaggerHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to dispatch module-tagger action: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   // Phase 4 module_integration_v1 — module-levels dispatcher.
   // requireModuleActive('levels', ['wall-height']) guard runs inside dispatchModuleLevels.
   private async handleModuleLevels(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to dispatch module-levels action', async () => {
       return await dispatchModuleLevelsHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to dispatch module-levels action: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   // Phase 5 module_integration_v1 — module-sequencer dispatcher.
   // requireModuleActive('sequencer') guard runs inside dispatchModuleSequencer.
   private async handleModuleSequencer(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to dispatch module-sequencer action', async () => {
       return await dispatchModuleSequencerHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to dispatch module-sequencer action: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   // Phase 8 module_integration_v1 — module-autoanimations dispatcher.
   // requireModuleActive('autoanimations', ['sequencer','socketlib']) guard runs inside.
   private async handleModuleAutoAnimations(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to dispatch module-autoanimations action', async () => {
       return await dispatchModuleAutoAnimationsHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to dispatch module-autoanimations action: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   // Phase 6 module_integration_v1 — module-scene-atmosphere dispatcher.
   // Per-action guard via ACTION_MEMBER_MAP + requireModuleActive runs inside
   // dispatchModuleSceneAtmosphere. get-bundle-status is always unguarded.
   private async handleModuleSceneAtmosphere(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to dispatch module-scene-atmosphere action', async () => {
       return await dispatchModuleSceneAtmosphereHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to dispatch module-scene-atmosphere action: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   // Phase 7 module_integration_v1 — module-access-control dispatcher (LocknKey + LockView).
@@ -761,149 +689,107 @@ export class QueryHandlers {
   // dispatchModuleAccessControl. get-bundle-status is always unguarded; get-lock-state
   // routes to the LnK or LockView member by input shape.
   private async handleModuleAccessControl(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to dispatch module-access-control action', async () => {
       return await dispatchModuleAccessControlHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to dispatch module-access-control action: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   // Phase 9 module_integration_v1 — module-robak dispatcher.
   // requireModuleActive('wfrp4e-macros-and-more') guard runs inside dispatchModuleRobak.
   private async handleModuleRobak(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to dispatch module-robak action', async () => {
       return await dispatchModuleRobakHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to dispatch module-robak action: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   // Phase 9 module_integration_v1 — module-tokenbar dispatcher.
   // requireModuleActive('monks-tokenbar') guard runs inside dispatchModuleTokenbar.
   private async handleModuleTokenbar(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to dispatch module-tokenbar action', async () => {
       return await dispatchModuleTokenbarHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to dispatch module-tokenbar action: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   // Phase 10 module_integration_v1 — module-armoury dispatcher.
   // requireModuleActive('forien-armoury') guard runs inside dispatchModuleArmoury.
   private async handleModuleArmoury(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to dispatch module-armoury action', async () => {
       return await dispatchModuleArmouryHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to dispatch module-armoury action: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   // Phase 11 module_integration_v1 — module-party-resources dispatcher.
   // requireModuleActive('fvtt-party-resources') guard runs inside dispatchModulePartyResources.
   private async handleModulePartyResources(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to dispatch module-party-resources action', async () => {
       return await dispatchModulePartyResourcesHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to dispatch module-party-resources action: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   // Phase 11 module_integration_v1 — module-gmtoolkit dispatcher.
   // requireModuleActive('wfrp4e-gm-toolkit') guard runs inside dispatchModuleGmtoolkit.
   private async handleModuleGmtoolkit(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to dispatch module-gmtoolkit action', async () => {
       return await dispatchModuleGmtoolkitHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to dispatch module-gmtoolkit action: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   // Phase 12 module_integration_v1 — module-chat-commander dispatcher.
   // requireModuleActive('_chatcommands') guard runs inside dispatchModuleChatCommander.
   private async handleModuleChatCommander(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to dispatch module-chat-commander action', async () => {
       return await dispatchModuleChatCommanderHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to dispatch module-chat-commander action: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   // Phase 14 module_integration_v1 — thin-session dispatchers.
   // requireModuleActive(<id>) guards run inside each dispatcher.
   private async handleModuleTimekeeping(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to dispatch module-timekeeping action', async () => {
       return await dispatchModuleTimekeepingHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to dispatch module-timekeeping action: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   private async handleModulePatrol(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to dispatch module-patrol action', async () => {
       return await dispatchModulePatrolHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to dispatch module-patrol action: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   private async handleModuleGatherer(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to dispatch module-gatherer action', async () => {
       return await dispatchModuleGathererHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to dispatch module-gatherer action: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   private async handleModuleMastercrafted(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to dispatch module-mastercrafted action', async () => {
       return await dispatchModuleMastercraftedHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to dispatch module-mastercrafted action: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   // Phase 3 module_integration_v1 — module-itempiles dispatcher.
   // requireModuleActive('item-piles') guard runs inside dispatchModuleItempiles.
   private async handleModuleItempiles(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to dispatch module-itempiles action', async () => {
       return await dispatchModuleItempilesHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to dispatch module-itempiles action: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   // Phase 13A module_integration_v1 — module-css dispatcher.
   // requireModuleActive('custom-css') guard runs inside dispatchModuleCss.
   private async handleModuleCss(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to dispatch module-css action', async () => {
       return await dispatchModuleCssHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to dispatch module-css action: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   // Phase 15 module_integration_v1 — module-lighting dispatcher.
   // requireModuleActive('CommunityLighting') guard runs inside dispatchModuleLighting.
   private async handleModuleLighting(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to dispatch module-lighting action', async () => {
       return await dispatchModuleLightingHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to dispatch module-lighting action: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   // Phase 1 mcp_diagnostic_tool — Tier 1 read-only diagnostic dispatcher.
@@ -914,12 +800,9 @@ export class QueryHandlers {
   // Foundry state is half-broken. Dispatcher owns the dual gate
   // (validateGMAccess + enableDiagnosticTools setting).
   private async handleDiagnostic(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to dispatch diagnostic action', async () => {
       return await dispatchDiagnosticHandler(data, this.dataAccess);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to dispatch diagnostic action: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   // Phase 5 mcp_crud_expansion — 7 per-doc-type embedded-CRUD umbrella entry points.
@@ -932,209 +815,149 @@ export class QueryHandlers {
   // and do not need the data-access facade.
 
   async handleToken(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to dispatch token action', async () => {
       this.dataAccess.validateFoundryState();
       // Phase 6 (R5.2): add-tokens / delete-token now live on the promoted ScenePlacementService.
       return await dispatchTokenHandler(data, this.scenePlacement);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to dispatch token action: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   async handleLight(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to dispatch light action', async () => {
       this.dataAccess.validateFoundryState();
       return await dispatchLightHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to dispatch light action: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   async handleNote(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to dispatch note action', async () => {
       this.dataAccess.validateFoundryState();
       return await dispatchNoteHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to dispatch note action: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   async handleSound(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to dispatch sound action', async () => {
       this.dataAccess.validateFoundryState();
       return await dispatchSoundHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to dispatch sound action: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   async handlePlaylist(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to dispatch playlist action', async () => {
       this.dataAccess.validateFoundryState();
       return await dispatchPlaylistHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to dispatch playlist action: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   async handleMacro(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to dispatch macro action', async () => {
       this.dataAccess.validateFoundryState();
       return await dispatchMacroHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to dispatch macro action: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   async handleUser(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to dispatch user action', async () => {
       this.dataAccess.validateFoundryState();
       return await dispatchUserHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to dispatch user action: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   async handleCompendium(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to dispatch compendium action', async () => {
       this.dataAccess.validateFoundryState();
       return await dispatchCompendiumHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to dispatch compendium action: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   async handleCrossDocFk(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to dispatch cross-doc-fk action', async () => {
       this.dataAccess.validateFoundryState();
       return await dispatchCrossDocFkHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to dispatch cross-doc-fk action: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   async handleRegion(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to dispatch region action', async () => {
       this.dataAccess.validateFoundryState();
       return await dispatchRegionHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to dispatch region action: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   async handleTile(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to dispatch tile action', async () => {
       this.dataAccess.validateFoundryState();
       return await dispatchTileHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to dispatch tile action: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   async handleDrawing(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to dispatch drawing action', async () => {
       this.dataAccess.validateFoundryState();
       return await dispatchDrawingHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to dispatch drawing action: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   async handleCards(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to dispatch cards action', async () => {
       this.dataAccess.validateFoundryState();
       return await dispatchCardsHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to dispatch cards action: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   async handleDocumentIo(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to dispatch document-io action', async () => {
       this.dataAccess.validateFoundryState();
       return await dispatchDocumentIoHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to dispatch document-io action: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   async handleTemplate(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to dispatch template action', async () => {
       this.dataAccess.validateFoundryState();
       return await dispatchTemplateHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to dispatch template action: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   async handleDisease(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to dispatch disease action', async () => {
       this.dataAccess.validateFoundryState();
       return await dispatchDiseaseHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to dispatch disease action: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   async handleFolder(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to dispatch folder action', async () => {
       this.dataAccess.validateFoundryState();
       return await dispatchFolderHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to dispatch folder action: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   async handleSetting(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to dispatch setting action', async () => {
       // fail-closed: setting reads succeed pre-ready (game.settings is available before Foundry hits 'ready'),
       // but treat as fully-init flow for predictability. Diagnostic intentionally skips this; setting does not, per canonical-pass review 2026-05-21.
       this.dataAccess.validateFoundryState();
       return await dispatchSettingHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to dispatch setting action: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   async handleChatMessage(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to dispatch chat-message action', async () => {
       this.dataAccess.validateFoundryState();
       return await dispatchChatMessageHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to dispatch chat-message action: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   async handleRequestPlayerRolls(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to request player rolls', async () => {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
       const parsed = RequestPlayerRollsInput.strict().parse(data ?? {});
       return await wrappedWrite('requestPlayerRolls', async () => ({ success: true, data: await this.rollRequest.requestPlayerRolls(parsed) }));
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to request player rolls: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   // BUG-009 (2026-05-16) — handleGetEnhancedCreatureIndex removed; no MCP-tool
@@ -1144,7 +967,7 @@ export class QueryHandlers {
   // exported so cached legacy callers fail loudly with a pointer at the new
   // polymorphic surface. Input is still strict-parsed (BUG-034 / CCR-5).
   async handleSetActorOwnership(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to set actor ownership', async () => {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
@@ -1154,14 +977,11 @@ export class QueryHandlers {
         error: 'setActorOwnership is deprecated; use setDocumentOwnership with documentType: "actor" (PRD mcp_crud_expansion Phase 1 R1.5)',
         deprecated: true,
       };
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to set actor ownership: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   async handleGetActorOwnership(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to get actor ownership', async () => {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
@@ -1171,57 +991,42 @@ export class QueryHandlers {
         error: 'getActorOwnership is deprecated; use getDocumentOwnership with documentType: "actor" (PRD mcp_crud_expansion Phase 1 R1.5)',
         deprecated: true,
       };
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to get actor ownership: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   // Phase 1 mcp_crud_expansion — polymorphic ownership handlers. Each strict-parses
   // its input (CCR-5) and delegates to handlers/ownership.ts where the GM gate +
   // wrappedWrite + Foundry doc updates live.
   async handleSetDocumentOwnership(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to set document ownership', async () => {
       this.dataAccess.validateFoundryState();
       const parsed = SetDocumentOwnershipInput.parse(data ?? {});
       return await setDocumentOwnershipHandler(parsed);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to set document ownership: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   async handleGetDocumentOwnership(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to get document ownership', async () => {
       this.dataAccess.validateFoundryState();
       const parsed = GetDocumentOwnershipInput.parse(data ?? {});
       return await getDocumentOwnershipHandler(parsed);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to get document ownership: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   async handleBulkSetDocumentOwnership(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to bulk-set document ownership', async () => {
       this.dataAccess.validateFoundryState();
       const parsed = BulkSetDocumentOwnershipInput.parse(data ?? {});
       return await bulkSetDocumentOwnershipHandler(parsed);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to bulk-set document ownership: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   async handleResetDocumentOwnership(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to reset document ownership', async () => {
       this.dataAccess.validateFoundryState();
       const parsed = ResetDocumentOwnershipInput.parse(data ?? {});
       return await resetDocumentOwnershipHandler(parsed);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to reset document ownership: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   // BUG-009 (2026-05-16) — 5 orphan handlers removed (handleGetFriendlyNPCs,
@@ -1236,7 +1041,7 @@ export class QueryHandlers {
   // (per-user canvas view).
 
   private async handleCreateActor(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to create actor', async () => {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       const parsed = CreateActorInput.strict().parse(data ?? {});
@@ -1248,137 +1053,104 @@ export class QueryHandlers {
       // basic-skills DialogV2.confirm on npc/creature autonomous creation.
       return await wrappedWrite('createActor', async () => ({
         success: true,
-        data: await this.dataAccess.createActor({
+        data: await this.actorService.createActor({
           actorData,
           ...(parsed.options && parsed.options.skipItems !== undefined
             ? { options: { skipItems: parsed.options.skipItems } }
             : {}),
         }),
       }));
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to create actor: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   private async handleDuplicateActor(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to duplicate actor', async () => {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       const parsed = DuplicateActorInput.strict().parse(data ?? {});
-      return await wrappedWrite('duplicateActor', async () => ({ success: true, data: await this.dataAccess.duplicateActor(parsed) }));
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to duplicate actor: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+      return await wrappedWrite('duplicateActor', async () => ({ success: true, data: await this.actorService.duplicateActor(parsed) }));
+    });
   }
 
   private async handleApplyNpcCareerAdvance(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to apply NPC career advance', async () => {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       const parsed = ApplyNpcCareerAdvanceInput.strict().parse(data ?? {});
-      return await wrappedWrite('applyNpcCareerAdvance', async () => ({ success: true, data: await this.dataAccess.applyNpcCareerAdvance(parsed) }));
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to apply NPC career advance: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+      return await wrappedWrite('applyNpcCareerAdvance', async () => ({ success: true, data: await this.actorService.applyNpcCareerAdvance(parsed) }));
+    });
   }
 
   private async handleApplyTemplate(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to apply template', async () => {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       const parsed = ApplyTemplateInput.strict().parse(data ?? {});
       return await wrappedWrite('applyTemplate', async () => ({ success: true, data: await this.templateApply.applyTemplate(parsed) }));
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to apply template: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   private async handleApplyTemplateToToken(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to apply template to token', async () => {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       const parsed = ApplyTemplateToTokenInput.strict().parse(data ?? {});
       return await wrappedWrite('applyTemplateToToken', async () => ({ success: true, data: await this.templateApply.applyTemplateToToken(parsed) }));
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to apply template to token: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   private async handleListActorItems(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to list actor items', async () => {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       const parsed = ListActorItemsInput.strict().parse(data ?? {});
       return { success: true, data: await this.dataAccess.listActorItems(parsed) };
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to list actor items: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   private async handleUpdateActor(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to update actor', async () => {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       const parsed = UpdateActorInput.strict().parse(data ?? {});
-      return await wrappedWrite('updateActor', async () => ({ success: true, data: await this.dataAccess.updateActor(parsed) }));
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to update actor: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+      return await wrappedWrite('updateActor', async () => ({ success: true, data: await this.actorService.updateActor(parsed) }));
+    });
   }
 
   private async handleUpdateItem(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to update item', async () => {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       const parsed = UpdateItemInput.strict().parse(data ?? {});
-      return await wrappedWrite('updateItem', async () => ({ success: true, data: await this.dataAccess.updateItem(parsed) }));
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to update item: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+      return await wrappedWrite('updateItem', async () => ({ success: true, data: await this.itemService.updateItem(parsed) }));
+    });
   }
 
   private async handleCreateItem(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to create item', async () => {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       const parsed = CreateItemInput.strict().parse(data ?? {});
-      return await wrappedWrite('createItem', async () => ({ success: true, data: await this.dataAccess.createItem(parsed) }));
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to create item: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+      return await wrappedWrite('createItem', async () => ({ success: true, data: await this.itemService.createItem(parsed) }));
+    });
   }
 
   private async handleDeleteItem(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to delete item', async () => {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       const parsed = DeleteItemInput.strict().parse(data ?? {});
-      return await wrappedWrite('deleteItem', async () => ({ success: true, data: await this.dataAccess.deleteItem(parsed) }));
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to delete item: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+      return await wrappedWrite('deleteItem', async () => ({ success: true, data: await this.itemService.deleteItem(parsed) }));
+    });
   }
 
   private async handleDeleteActor(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to delete actor', async () => {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       const parsed = DeleteActorInput.strict().parse(data ?? {});
-      return await wrappedWrite('deleteActor', async () => ({ success: true, data: await this.dataAccess.deleteActor(parsed) }));
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to delete actor: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+      return await wrappedWrite('deleteActor', async () => ({ success: true, data: await this.actorService.deleteActor(parsed) }));
+    });
   }
 
   // Phase 3 mcp_crud_expansion — handleDeleteJournalEntry retired. The
@@ -1386,156 +1158,109 @@ export class QueryHandlers {
   // (free-function deleteEntry in handlers/journal.ts).
 
   private async handleModifyItemQualities(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to modify item qualities', async () => {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       const parsed = ModifyItemQualitiesV2Input.parse(data ?? {});
       // Phase 7 (R7.1): logic absorbed into ItemService (via the data-access delegate). Handler keeps
       // gmCheck + parse + wrappedWrite + the { success, data } wrap; query key 'modifyItemQualities' unchanged.
-      return await wrappedWrite('modifyItemQualities', async () => ({ success: true, data: await this.dataAccess.modifyItemQualities(parsed) }));
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to modify item qualities: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+      return await wrappedWrite('modifyItemQualities', async () => ({ success: true, data: await this.itemService.modifyItemQualities(parsed) }));
+    });
   }
 
   // Phase 5 — atomic item trade between actors
   // tradeItem: GM-gated via validateGMAccess(); transaction-wrapped via wrappedWrite.
   private async handleTradeItem(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to trade item', async () => {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       const parsed = TradeItemInput.strict().parse(data ?? {});
       return await wrappedWrite('tradeItem', async () => ({
         success: true,
-        data: await this.dataAccess.tradeItem(parsed),
+        data: await this.itemService.tradeItem(parsed),
       }));
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(
-        `Failed to trade item: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
-    }
+    });
   }
 
   // Phase 2 mcp_crud_expansion — RollTable thin shims. All logic now lives in
   // handlers/rolltable.ts (strict-parse + GM gate + wrappedWrite + BUG-070 pre/post-verify).
   // Shims just strict-validate Foundry state and delegate.
   private async handleCreateRollTable(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to create RollTable', async () => {
       return await createRollTableHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to create RollTable: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   private async handleAddTableResults(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to add table results', async () => {
       return await addTableResultsHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to add table results: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   private async handleListRollTables(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to list RollTables', async () => {
       return await listRollTablesHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to list RollTables: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   private async handleGetRollTable(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to get RollTable', async () => {
       return await getRollTableHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to get RollTable: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   private async handleRollOnTable(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to roll on table', async () => {
       return await rollOnTableHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to roll on table: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   private async handleDeleteRollTable(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to delete RollTable', async () => {
       return await deleteRollTableHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to delete RollTable: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   private async handleUpdateRollTable(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to update RollTable', async () => {
       return await updateRollTableHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to update RollTable: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   private async handleUpdateTableResults(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to update table results', async () => {
       return await updateTableResultsHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to update table results: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   private async handleDeleteTableResults(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to delete table results', async () => {
       return await deleteTableResultsHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to delete table results: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   private async handleNormalizeRollTable(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to normalize RollTable', async () => {
       return await normalizeRollTableHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to normalize RollTable: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   private async handleResetRollTableResults(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to reset RollTable results', async () => {
       return await resetRollTableResultsHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to reset RollTable results: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   private async handleDrawManyFromTable(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to draw from table', async () => {
       return await drawManyFromTableHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to draw from table: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   private async handleImportRollTableFromCompendium(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to import RollTable from compendium', async () => {
       return await importRollTableFromCompendiumHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to import RollTable from compendium: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   // ============================================================
@@ -1543,33 +1268,27 @@ export class QueryHandlers {
   // ============================================================
 
   private async handleGetCombat(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to get combat', async () => {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
       const parsed = GetCombatInput.strict().parse(data ?? {});
       return { success: true, data: await this.combat.getCombat(parsed) };
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to get combat: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   private async handleListCombatants(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to list combatants', async () => {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
       const parsed = ListCombatantsInput.strict().parse(data ?? {});
       return { success: true, data: await this.combat.listCombatants(parsed) };
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to list combatants: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   private async handleAdvanceCombat(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to advance combat', async () => {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
@@ -1578,14 +1297,11 @@ export class QueryHandlers {
         success: true,
         data: await this.combat.advanceCombat(parsed),
       }));
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to advance combat: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   private async handleAddCombatants(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to add combatants', async () => {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
@@ -1594,14 +1310,11 @@ export class QueryHandlers {
         success: true,
         data: await this.combat.addCombatants(parsed),
       }));
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to add combatants: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   private async handleRemoveCombatants(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to remove combatants', async () => {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
@@ -1610,14 +1323,11 @@ export class QueryHandlers {
         success: true,
         data: await this.combat.removeCombatants(parsed),
       }));
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to remove combatants: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   private async handleEndCombat(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to end combat', async () => {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
@@ -1626,14 +1336,11 @@ export class QueryHandlers {
         success: true,
         data: await this.combat.endCombat(parsed),
       }));
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to end combat: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   private async handleApplyDamage(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to apply damage', async () => {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
@@ -1642,14 +1349,11 @@ export class QueryHandlers {
         success: true,
         data: await this.dataAccess.applyDamage(parsed),
       }));
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to apply damage: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   private async handleApplyCondition(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to apply condition', async () => {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
@@ -1658,14 +1362,11 @@ export class QueryHandlers {
         success: true,
         data: await this.conditions.applyCondition(parsed),
       }));
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to apply condition: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   private async handleRemoveCondition(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to remove condition', async () => {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
@@ -1674,48 +1375,36 @@ export class QueryHandlers {
         success: true,
         data: await this.conditions.removeCondition(parsed),
       }));
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to remove condition: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   private async handleListConditions(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to list conditions', async () => {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
       const parsed = ListConditionsInput.strict().parse(data ?? {});
       return { success: true, data: await this.conditions.listConditions(parsed) };
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to list conditions: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   private async handleListActiveEffects(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to list active effects', async () => {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
       const parsed = ListActiveEffectsInput.strict().parse(data ?? {});
       return { success: true, data: await this.dataAccess.listActiveEffects(parsed) };
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to list active effects: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   private async handleGetWfrp4eConfig(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to read wfrp4e config', async () => {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       const parsed = GetWfrp4eConfigInput.strict().parse(data ?? {});
       return { success: true, data: await this.dataAccess.getWfrp4eConfig(parsed) };
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to read wfrp4e config: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   // ============================================================
@@ -1723,23 +1412,20 @@ export class QueryHandlers {
   // ============================================================
 
   private async handleAddActiveEffect(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to add active effect', async () => {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
       const parsed = AddActiveEffectInput.strict().parse(data ?? {});
       return await wrappedWrite('addActiveEffect', async () => ({
         success: true,
-        data: await this.dataAccess.addActiveEffect(parsed),
+        data: await this.effectsService.addActiveEffect(parsed),
       }));
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to add active effect: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   private async handleUpdateActiveEffect(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to update active effect', async () => {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
@@ -1749,16 +1435,13 @@ export class QueryHandlers {
       }
       return await wrappedWrite('updateActiveEffect', async () => ({
         success: true,
-        data: await this.dataAccess.updateActiveEffect(parsed),
+        data: await this.effectsService.updateActiveEffect(parsed),
       }));
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to update active effect: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   private async handleDeleteActiveEffect(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to delete active effect', async () => {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
@@ -1768,18 +1451,15 @@ export class QueryHandlers {
       }
       return await wrappedWrite('deleteActiveEffect', async () => ({
         success: true,
-        data: await this.dataAccess.deleteActiveEffect(parsed),
+        data: await this.effectsService.deleteActiveEffect(parsed),
       }));
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to delete active effect: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   // TOOL-IDEA-003 (2026-05-14): read-only AE-by-name resolver. Not wrapped in
   // wrappedWrite — pure read.
   private async handleGetActiveEffectByName(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to get active effect', async () => {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
@@ -1791,10 +1471,7 @@ export class QueryHandlers {
         success: true,
         data: await this.dataAccess.getActiveEffectByName(parsed),
       };
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to get active effect: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   // Phase 4 mcp_notify_coverage — `notify` umbrella handler.
@@ -1851,56 +1528,41 @@ export class QueryHandlers {
 
   // Phase 1 mcp_coverage_expansion — item-directory umbrella (5 actions).
   async handleItemDirectory(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to dispatch item-directory action', async () => {
       this.dataAccess.validateFoundryState();
       return await dispatchItemDirectoryHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to dispatch item-directory action: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   // Phase 2 mcp_coverage_expansion — dice-roll tool (roll/validate/simulate).
   async handleDiceRoll(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to dispatch dice-roll action', async () => {
       this.dataAccess.validateFoundryState();
       return await dispatchDiceRollHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to dispatch dice-roll action: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   // Phase 10 mcp_coverage_expansion — keybinding tool (list/get/set/reset-action/reset-all/find-conflicts).
   async handleKeybinding(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to dispatch keybinding action', async () => {
       this.dataAccess.validateFoundryState();
       return await dispatchKeybindingHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to dispatch keybinding action: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   // Phase 1 mcp_coverage_expansion — actor-config umbrella (4 actions).
   async handleActorConfig(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to dispatch actor-config action', async () => {
       this.dataAccess.validateFoundryState();
       return await dispatchActorConfigHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to dispatch actor-config action: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   // Phase 3 mcp_coverage_expansion — combatant umbrella (7 per-combatant actions).
   async handleCombatant(data: unknown): Promise<any> {
-    try {
+    return wrapQuery('Failed to dispatch combatant action', async () => {
       this.dataAccess.validateFoundryState();
       return await dispatchCombatantHandler(data);
-    } catch (error) {
-      rethrowAsInvalidInput(error);
-      throw new Error(`Failed to dispatch combatant action: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 }

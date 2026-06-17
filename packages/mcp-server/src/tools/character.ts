@@ -14,6 +14,14 @@ export class CharacterTools extends BaseTool {
     super(options);
   }
 
+  // Phase 8 (R8.2): declarative registration (R8.1 — name lives with the tool).
+  getRegistration(): Array<{ name: string; handler: (args: any) => Promise<any> }> {
+    return [
+      { name: 'get-character', handler: (args: any) => this.handleGetCharacter(args) },
+      { name: 'list-characters', handler: (args: any) => this.handleListCharacters(args) },
+    ];
+  }
+
   /**
    * Tool: get-character
    * Retrieve detailed information about a specific character

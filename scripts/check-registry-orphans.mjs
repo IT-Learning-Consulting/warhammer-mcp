@@ -23,7 +23,7 @@
 // Run from repo root: node scripts/check-registry-orphans.mjs
 // Exit: 0 = clean (no hard failures), 1 = hard violations found, 2 = bad invocation.
 
-import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -150,21 +150,64 @@ function readFile(path) {
   }
 }
 
-/** Extract all registry.register('<name>') tool names from backend.ts (Set B). */
-function extractSetB(src) {
+/** Recursively list .ts files under a directory. */
+function listToolFiles(dir) {
+  const out = [];
+  for (const entry of readdirSync(dir)) {
+    const p = join(dir, entry);
+    if (statSync(p).isDirectory()) out.push(...listToolFiles(p));
+    else if (entry.endsWith('.ts')) out.push(p);
+  }
+  return out;
+}
+
+/**
+ * Extract all registered tool names from the per-tool getRegistration() overrides (Set B).
+ *
+ * Phase 8 (R8.2): backend.ts no longer holds 94 `registry.register('<name>', ...)` literals —
+ * registration is a single forEach loop over buildTools() instances, each contributing its
+ * (name, handler) pairs via getRegistration(). The old regex (which required a quoted literal as
+ * the first register arg) would match ZERO and silently neuter this gate. So Set B is now harvested
+ * from the getRegistration() entries across every tool file. The `handler: (args: any) => this.`
+ * shape is distinctive to those entries, so this never picks up unrelated object literals.
+ */
+function extractSetB() {
+  const toolsDir = join(REPO_ROOT, 'packages/mcp-server/src/tools');
   const names = [];
-  const re = /registry\.register\(\s*['"]([^'"]+)['"]/g;
-  let m;
-  while ((m = re.exec(src)) !== null) names.push(m[1]);
+  const re = /\{\s*name:\s*['"]([^'"]+)['"],\s*handler:\s*\(args: any\) => this\./g;
+  for (const file of listToolFiles(toolsDir)) {
+    const src = readFileSync(file, 'utf8');
+    let m;
+    while ((m = re.exec(src)) !== null) names.push(m[1]);
+  }
   return names;
 }
 
-/** Extract all CONFIG.queries[`...modulePrefix.<key>`] keys from queries.ts (Set A). */
+/**
+ * Extract the registered query keys from queries.ts (Set A).
+ *
+ * Phase 8 (R8.2): registerHandlers() no longer holds ~112 individual
+ * `CONFIG.queries[`${modulePrefix}.X`] = ...` assignments — the keys now live in a single
+ * `handlerTable` Record literal, registered via one `Object.entries(handlerTable)` loop. The old
+ * regex would capture only the literal `${key}` from the loop line and miss every real key. So Set A
+ * is harvested from the handlerTable entries. (The legacy `CONFIG.queries['warhammer-mcp.X']` form is
+ * still supported as a fallback for any direct assignment outside the table.)
+ */
 function extractSetA(src) {
   const keys = [];
-  const re = /CONFIG\.queries\[\s*(?:`\$\{modulePrefix\}\.([^`]+)`|['"]warhammer-mcp\.([^'"]+)['"])\s*\]/g;
-  let m;
-  while ((m = re.exec(src)) !== null) keys.push(m[1] || m[2]);
+  const tableMatch = src.match(/const handlerTable[\s\S]*?=\s*\{\r?\n([\s\S]*?)\r?\n {4}\};/);
+  if (tableMatch) {
+    const re = /^\s+'([^']+)':\s/gm;
+    let m;
+    while ((m = re.exec(tableMatch[1])) !== null) keys.push(m[1]);
+  }
+  // Fallback: any remaining direct CONFIG.queries['warhammer-mcp.X'] / template assignments.
+  const direct = /CONFIG\.queries\[\s*(?:`\$\{modulePrefix\}\.((?!\$\{)[^`]+)`|['"]warhammer-mcp\.([^'"]+)['"])\s*\]\s*=/g;
+  let d;
+  while ((d = direct.exec(src)) !== null) {
+    const k = d[1] || d[2];
+    if (k && !keys.includes(k)) keys.push(k);
+  }
   return keys;
 }
 
@@ -202,7 +245,6 @@ function hasEvalCoverage(toolName, evalCoverage) {
 
 function main() {
   const args = process.argv.slice(2);
-  const backendSrc = readFile(BACKEND_TS);
   const queriesSrc = readFile(QUERIES_TS);
   const evalsDir = resolveEvalsDir(args);
   const evalCoverage = evalsDir ? extractEvalCoverage(evalsDir) : null;
@@ -214,7 +256,7 @@ function main() {
     );
   }
 
-  const setB = extractSetB(backendSrc);
+  const setB = extractSetB();
   const setA = extractSetA(queriesSrc);
   const setBSet = new Set(setA); // Set A for lookup
 

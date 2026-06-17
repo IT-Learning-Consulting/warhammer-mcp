@@ -6,6 +6,15 @@ export interface BaseToolOptions {
   logger: Logger;
 }
 
+/**
+ * Phase 8 (R8.2): one (name, handler) pair a tool contributes to the registry.
+ * Single-purpose tools return one; the 6 multi-method umbrella classes return N.
+ */
+export interface ToolRegistration {
+  name: string;
+  handler: (args: any) => Promise<any>;
+}
+
 export abstract class BaseTool {
   protected foundryClient: FoundryClient;
   protected logger: Logger;
@@ -75,6 +84,18 @@ export abstract class BaseTool {
       content: [{ type: 'text', text: `❌ **${action} failed**\n\n${message}` }],
       isError: true,
     };
+  }
+
+  /**
+   * Phase 8 (R8.2): declarative registration. Each registered tool returns the
+   * (name, handler) pairs it owns; backend.ts registers them with one loop instead
+   * of 94 hardcoded `registry.register(...)` literals (R8.1: adding a tool now touches
+   * the tool file + the instances array, ≤2 files). The default THROWS so a registered
+   * tool that forgets to override is caught loudly (registry-parity.test.ts + backend
+   * boot), never silently dropped from the registry.
+   */
+  getRegistration(): ToolRegistration[] {
+    throw new Error(`getRegistration() not implemented for ${this.constructor.name}`);
   }
 
   abstract getToolDefinitions(): any[];

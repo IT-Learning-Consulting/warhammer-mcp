@@ -197,6 +197,32 @@ export default tseslint.config(
     },
   },
 
+  // 9b - Phase 8 (R8.4): scene-atmosphere split grandfather (mirrors block 9). The 67-action bundle was
+  // split into per-sub-family formatter files + a definitions.ts schema literal as a VERBATIM move; each
+  // file keeps a hard 600-line cap. Per-function/complexity caps are relaxed here so the moved formatResult
+  // switch + the 509-line definitions literal don't ERROR on the new-file caps.
+  {
+    files: ['**/tools/modules/scene-atmosphere/**/*.ts'],
+    rules: {
+      'max-lines': ['error', { max: 600, skipComments: true }],
+      'max-lines-per-function': 'off',
+      complexity: 'off',
+      'max-depth': 'off',
+      'max-params': 'off',
+    },
+  },
+
+  // 9c - Phase 8 (R8.1/R8.2): tool-instantiation factory (build-tools.ts) — a flat declarative manifest
+  // (one `new XTool(deps)` per tool). Per-function caps don't apply; keeps the 600-line file cap.
+  {
+    files: ['**/tools/factory/**/*.ts'],
+    rules: {
+      'max-lines': ['error', { max: 600, skipComments: true }],
+      'max-lines-per-function': 'off',
+      complexity: 'off',
+    },
+  },
+
   // 10 - Prettier: disable conflicting formatting rules, then run prettier as a WARN-level rule (preserved).
   eslintConfigPrettier,
   {

@@ -2,7 +2,7 @@
 // 5 cases: happy path, drift throw, disappearance throw, opt-out, deletion-marker skip.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { FoundryDataAccess } from '../data-access.js';
+import { QueryHandlers } from '../queries.js';
 
 // Provide flattenObject and getProperty to the foundry.utils stub for these tests.
 // Real Foundry implementations: flattenObject converts nested objects to dot-paths;
@@ -75,9 +75,14 @@ function setupGame(opts: { actors?: any[]; worldItems?: any[] } = {}) {
   };
 }
 
-function makeDA(): FoundryDataAccess {
-  const da = new FoundryDataAccess();
-  (da as any).validateFoundryState = () => {};
+function makeDA(): any {
+  // Phase 8 (R7.3): the actor/item/effect mutation methods were promoted off FoundryDataAccess to the
+  // QueryHandlers services; re-expose the ones this test pierces on the DA handle so the captured
+  // write-paths are unchanged (the re-bind delegates to the same promoted service the handlers call).
+  const qh = new QueryHandlers();
+  const da: any = qh.dataAccess;
+  da.validateFoundryState = () => {};
+  da.updateItem = (d: any) => qh.itemService.updateItem(d);
   return da;
 }
 

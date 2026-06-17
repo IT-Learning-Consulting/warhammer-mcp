@@ -8,7 +8,6 @@
 // stays byte-identical. addItemFromCompendium has no other foundry-module-level net before Phase 7.
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { FoundryDataAccess } from '../../data-access.js';
 import { QueryHandlers } from '../../queries.js';
 
 vi.mock('../../notify.js', () => ({
@@ -58,8 +57,10 @@ describe('FoundryDataAccess.createItem — write-arg characterization', () => {
       ...(globalThis as any).game,
       actors: { get: (id: string) => (id === actor.id ? actor : null), find: () => null },
     };
-    const da = new FoundryDataAccess();
-    (da as any).validateFoundryState = () => {};
+    // Phase 8 (R7.3): createItem moved off FoundryDataAccess to the promoted ItemService; pierce it there.
+    const qh = new QueryHandlers();
+    (qh.dataAccess as any).validateFoundryState = () => {};
+    const da: any = qh.itemService;
     await da.createItem({
       itemData: { name: 'Hand Weapon', type: 'weapon', system: { damage: { value: 'SB+4' } } },
       destination: { type: 'actor', actorId: 'a1' },
@@ -92,8 +93,10 @@ describe('FoundryDataAccess.createItem — write-arg characterization', () => {
     }));
     (globalThis as any).Item = class { static create = ItemCreate; };
 
-    const da = new FoundryDataAccess();
-    (da as any).validateFoundryState = () => {};
+    // Phase 8 (R7.3): createItem moved off FoundryDataAccess to the promoted ItemService; pierce it there.
+    const qh = new QueryHandlers();
+    (qh.dataAccess as any).validateFoundryState = () => {};
+    const da: any = qh.itemService;
     await da.createItem({
       itemData: { name: 'Torch', type: 'trapping', system: {} },
       destination: { type: 'world', folder: ['Homebrew', 'Gear'] },
@@ -115,8 +118,10 @@ describe('FoundryDataAccess.createItem — write-arg characterization', () => {
         system: { damage: { value: 'SB+4' } },
       }),
     }));
-    const da = new FoundryDataAccess();
-    (da as any).validateFoundryState = () => {};
+    // Phase 8 (R7.3): createItem moved off FoundryDataAccess to the promoted ItemService; pierce it there.
+    const qh = new QueryHandlers();
+    (qh.dataAccess as any).validateFoundryState = () => {};
+    const da: any = qh.itemService;
     await da.createItem({
       itemData: { name: 'Fire Sword', system: { damage: { value: 'SB+6' } } },
       destination: { type: 'actor', actorId: 'a1' },

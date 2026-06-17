@@ -1,6 +1,5 @@
 import { MODULE_ID, ERROR_MESSAGES } from './constants.js';
 import { notify } from './notify.js';
-import { ScenePlacementService, EffectsService, ItemService, ActorService, type CompendiumSearchService } from './services/index.js';
 import { findActorByIdentifier } from './utils/actor-lookup.js';
 // Phase 7 (R7.1): shared document/folder/observer helpers extracted VERBATIM to services/shared/.
 // Used by the surviving effect READS here (getActiveEffectByName / listActiveEffects) + the actor/item/
@@ -10,8 +9,6 @@ import { _resolveActor, _resolveItem, _findEffect, _targetToResolverInput } from
 // Phase 7 (R7.1): actor-creation + compendium-entry DTOs relocated to ./service-interfaces.ts so
 // ActorService + the surviving getCompendiumDocumentFull read share them (no cross-service import).
 import type {
-  ActorCreationRequest,
-  ActorCreationResult,
   CompendiumEntryFull,
 } from './service-interfaces.js';
 // Local type definitions to avoid shared package import issues
@@ -69,53 +66,24 @@ interface WorldUser {
 // Phase 4 (R3.3): Contract step. The persistent creature index + the compendium-search cluster have fully
 // left FoundryDataAccess — QueryHandlers (the composition layer) now owns the creature index + search
 // service, and the index rebuild wrapper lives on the index service's own rebuildEnhancedIndex() method.
-// The only residual coupling is an injected CompendiumSearchService used by createActorFromCompendium.
+// Phase 8 (R7.3): the last residual coupling — an injected CompendiumSearchService that only fed the
+// (now-promoted) ActorService — is gone. FoundryDataAccess has no constructor dependencies.
 
 export class FoundryDataAccess {
   private moduleId: string = MODULE_ID;
-  // Injected by QueryHandlers (the owner of the creature index + search service). Optional so the many
-  // `new FoundryDataAccess()` test constructions that never touch compendium matching keep compiling.
-  private compendiumSearch: CompendiumSearchService | undefined;
   // Phase 5 (R4.3): Contract — the player-rolls + roll-button + player-lookup cluster has fully left
   // FoundryDataAccess. QueryHandlers (the composition layer) now owns those three services and the live
   // call sites (queries.ts handleRequestPlayerRolls + main.ts roll-button hooks/socket) call them directly.
   // Phase 5 (R5.1): scene/token-placement + combat + conditions clusters extracted to ScenePlacementService /
   // CombatService / ConditionsService (branch-by-abstraction Migrate).
-  // Phase 6 (R5.2): Contract — combat + conditions promoted to QueryHandlers (their facade delegates were
-  // deleted). scene-placement stays here as facade delegates below (2 internal self-callers in createActors/
-  // createActor still resolve via this injected field; its Contract lands in Phase 7 with services/actor.ts).
-  private readonly scenePlacement: ScenePlacementService;
-  // Phase 7 (R7.1): active-effect MUTATION cluster extracted to services/effects.ts (Migrate). This file
-  // keeps thin facade delegates above (Contract → Phase 8); effect READS stay here. Single seam:
-  // validateState (the cluster uses no auditLog).
-  private readonly effectsService: EffectsService;
-  // Phase 7 (R7.1): item MUTATION cluster (+ 2 absorbed handler bodies) extracted to services/item.ts.
-  private readonly itemService: ItemService;
-  // Phase 7 (R7.1/R7.2): actor MUTATION + CREATION cluster (+ updateActor orchestrator) extracted to
-  // services/actor.ts. The 2 scene-placement self-callers + getCompendiumDocumentFull are ctor-injected.
-  // scenePlacement injection STAYS this phase (drops at Phase 8 Contract, per Design Decisions).
-  private readonly actorService: ActorService;
-
-  // Phase 6 (R5.2): scenePlacement is ctor-injected by QueryHandlers (the promotion owner) so external
-  // handlers + the 2 internal self-callers (createActors/createActor) share one instance. The `??`
-  // fallback self-constructs for the many bare `new FoundryDataAccess()` test constructions (they never
-  // inject); both paths wire the same validateState + auditLog seams (HC1 audit behavior preserved).
-  constructor(compendiumSearch?: CompendiumSearchService, scenePlacement?: ScenePlacementService) {
-    this.compendiumSearch = compendiumSearch;
-    this.scenePlacement = scenePlacement ?? new ScenePlacementService(
-      () => this.validateFoundryState(),
-      (operation, data, result, error) => this.auditLog(operation, data, result, error),
-    );
-    this.effectsService = new EffectsService(() => this.validateFoundryState());
-    this.itemService = new ItemService(() => this.validateFoundryState());
-    this.actorService = new ActorService(
-      this.scenePlacement,
-      this.compendiumSearch,
-      () => this.validateFoundryState(),
-      (operation, data, result, error) => this.auditLog(operation, data, result, error),
-      (packId, documentId) => this.getCompendiumDocumentFull(packId, documentId),
-    );
-  }
+  // Phase 6 (R5.2): Contract — combat + conditions promoted to QueryHandlers (their facade delegates deleted).
+  // Phase 7 (R7.1/R7.2): actor / item / effect MUTATION + CREATION clusters extracted to services/{actor,item,
+  // effects}.ts (Migrate). Phase 8 (R7.3): Contract — those 3 services + the scenePlacement injection were
+  // promoted to QueryHandlers and their 16 facade delegates deleted. The compendiumSearch ctor dependency
+  // (which only fed the promoted ActorService) was also dropped, leaving FoundryDataAccess dependency-free.
+  // The READ surfaces stay here (listActorItems, getCompendiumDocumentFull, getActiveEffectByName,
+  // listActiveEffects, getCharacterInfo, listActors, getWfrp4eConfig, applyDamage, validateFoundryState,
+  // auditLog).
 
   /**
    * Get character/actor information by name or ID
@@ -418,39 +386,10 @@ export class FoundryDataAccess {
   // `journal` umbrella in `handlers/journal.ts`. Logic inlined there per Q&A R3
   // suggestion A1 (retire the dual-layer abstraction).
 
-  async deleteActor(data: { id: string }): Promise<{ success: boolean }> {
-    // Phase 7 (R7.1): facade delegate → ActorService (Migrate; Contract deferred to Phase 8).
-    return this.actorService.deleteActor(data);
-  }
 
   // Phase 3 mcp_crud_expansion — deleteJournalEntry retired here.
   // Superseded by handlers/journal.ts deleteEntry (BUG-070 post-verify included).
 
-  /**
-   * Create actors from compendium entries with custom names
-   */
-  async createActorFromCompendium(request: ActorCreationRequest): Promise<ActorCreationResult> {
-    // Phase 7 (R7.1): facade delegate → ActorService (createActorFromSource moved with it).
-    return this.actorService.createActorFromCompendium(request);
-  }
-
-  /**
-   * Create actor from specific compendium entry using pack/item IDs
-   */
-  async createActorFromCompendiumEntry(request: {
-    packId: string;
-    itemId: string;
-    customNames: string[];
-    quantity?: number;
-    addToScene?: boolean;
-    placement?: {
-      type: 'random' | 'grid' | 'center' | 'coordinates';
-      coordinates?: { x: number; y: number }[];
-    };
-  }): Promise<ActorCreationResult> {
-    // Phase 7 (R7.1): facade delegate → ActorService.
-    return this.actorService.createActorFromCompendiumEntry(request);
-  }
 
   /**
    * Get full compendium document with all embedded data
@@ -518,36 +457,6 @@ export class FoundryDataAccess {
 
 
   /**
-   * Create a new actor
-   * Creates an actor with the provided data structure.
-   * HC9: optional `options` bag plumbed to Actor.create(data, options) — supports
-   * `skipItems` to suppress wfrp4e _preCreate basic-skills dialog (mirror of BUG-089).
-   */
-  async createActor(data: { actorData: Record<string, any>; options?: { skipItems?: boolean } | undefined }): Promise<any> {
-    // Phase 7 (R7.1): facade delegate → ActorService.
-    return this.actorService.createActor(data);
-  }
-
-  /**
-   * Duplicate an existing world actor.
-   * Phase 4g primitive — clones source via toObject() with _id/folder/sort stripped,
-   * then persists via Actor.create. Preferred for /wfrp-build-npc Branch 2/3 (NPC-type
-   * templates) to avoid compendium re-cloning.
-   */
-  async duplicateActor(data: { sourceActorId: string; newName?: string | undefined }): Promise<any> {
-    // Phase 7 (R7.1): facade delegate → ActorService.
-    return this.actorService.duplicateActor(data);
-  }
-
-  /**
-   * Apply a career's auto-advancement to an NPC-type actor without opening the
-   * wfrp4e confirmation dialog. Invokes StandardActorModel.advance(career)
-   * (wfrp4e.js:6623), which constructs a new Advancement and calls its dialog-free
-   * advance() method (wfrp4e.js:2619 — characteristic + skill + talent stamping,
-   * no DialogV2). The Advancement class is module-local and not exposed on
-   * game.wfrp4e.apps, so the actor.system.advance() entry point is the only path.
-   */
-  /**
    * List all embedded items on an actor with raw IDs. Read-only surface for
    * skill/talent ID lookups (/wfrp-build-npc Branch 3 uses this to find
    * auto-populated basic skill items before calling update-item on their
@@ -586,150 +495,6 @@ export class FoundryDataAccess {
     }
   }
 
-  async applyNpcCareerAdvance(data: { actorId: string; careerItemId: string }): Promise<any> {
-    // Phase 7 (R7.1): facade delegate → ActorService.
-    return this.actorService.applyNpcCareerAdvance(data);
-  }
-
-  /**
-   * Update actor data
-   * Allows updating any actor properties using dot notation for nested fields
-   */
-  async updateActor(data: { actorId: string; updateData: Record<string, any>; warnings?: string[]; verifyPersistence?: boolean | undefined }): Promise<any> {
-    // Phase 7 (R7.1/R7.2): facade delegate → ActorService (the orchestrator + formatActorUpdateSummary
-    // split lives there now; Contract deferred to Phase 8).
-    return this.actorService.updateActor(data);
-  }
-
-
-  /**
-   * Update item data on an actor OR a world-scope item.
-   * Legacy `{actorId, itemId, updateData}` callers unaffected.
-   */
-  async updateItem(data: {
-    actorId?: string | undefined;
-    itemId?: string | undefined;
-    itemName?: string | undefined;
-    destination?:
-    | { type: 'actor'; actorId?: string | undefined; actorName?: string | undefined }
-    | { type: 'world'; folder?: string[] | undefined }
-    | undefined;
-    updateData: Record<string, any>;
-    options?: { skipExperienceChecks?: boolean | undefined } | undefined;
-    verifyPersistence?: boolean | undefined;
-  }): Promise<any> {
-    // Phase 7 (R7.1): facade delegate → ItemService (Migrate; Contract deferred to Phase 8).
-    return this.itemService.updateItem(data);
-  }
-
-  /**
-   * Phase 5: Create an item on an actor OR as a world-level document with optional
-   * folder placement. Optional compendium-clone seeding and rich-response opt-in.
-   */
-  async createItem(data: {
-    itemData: Record<string, any>;
-    destination:
-    | { type: 'actor'; actorId?: string | undefined; actorName?: string | undefined }
-    | { type: 'world'; folder?: string[] | undefined };
-    fromCompendium?: string | undefined;
-    returnFullPayload?: boolean | undefined;
-  }): Promise<any> {
-    // Phase 7 (R7.1): facade delegate → ItemService (the _ensureFolderChain helper moved with it).
-    return this.itemService.createItem(data);
-  }
-
-  async tradeItem(data: {
-    fromActorId: string;
-    toActorId: string;
-    itemId: string;
-    quantity?: number | undefined;
-  }): Promise<any> {
-    // Phase 7 (R7.1): facade delegate → ItemService.
-    return this.itemService.tradeItem(data);
-  }
-
-  /**
-   * Delete an item from an actor OR a world-scope item.
-   * Legacy `{actorId, itemId}` callers unaffected.
-   */
-  async deleteItem(data: {
-    actorId?: string | undefined;
-    itemId?: string | undefined;
-    itemName?: string | undefined;
-    destination?:
-    | { type: 'actor'; actorId?: string | undefined; actorName?: string | undefined }
-    | { type: 'world'; folder?: string[] | undefined }
-    | undefined;
-  }): Promise<any> {
-    // Phase 7 (R7.1): facade delegate → ItemService.
-    return this.itemService.deleteItem(data);
-  }
-
-  // Phase 7 (R7.1): NEW thin delegates for the 2 item handler bodies absorbed into ItemService (user Q2).
-  // The queries.ts handlers (addItemFromCompendium / modifyItemQualities) keep gmCheck + parse + wrappedWrite
-  // + the { success, data } wrap and now call these; query keys + registration are unchanged (tools/list stable).
-  async addItemFromCompendium(parsed: any): Promise<any> {
-    return this.itemService.addItemFromCompendium(parsed);
-  }
-
-  async modifyItemQualities(parsed: any): Promise<any> {
-    return this.itemService.modifyItemQualities(parsed);
-  }
-
-
-  /**
-   * Phase 5 follow-up B — add ActiveEffect to an existing item.
-   * Phase 4 mcp_coverage_expansion — also handles scope:'actor-direct' (effect on the actor itself).
-   * Target is an ActiveEffectTarget (actor-embedded, world item, or actor-direct).
-   * effect is the flat ergonomic shape shared with create-custom-item's effects[] field.
-   */
-  async addActiveEffect(data: {
-    target:
-    | { scope: 'actor'; actorId?: string | undefined; actorName?: string | undefined; itemId?: string | undefined; itemName?: string | undefined }
-    | { scope: 'world'; itemId?: string | undefined; itemName?: string | undefined }
-    | { scope: 'actor-direct'; actorId?: string | undefined; actorName?: string | undefined };
-    effect: any;
-    returnFullPayload?: boolean | undefined;
-  }): Promise<any> {
-    // Phase 7 (R7.1): facade delegate → EffectsService (Migrate; Contract deferred to Phase 8).
-    return this.effectsService.addActiveEffect(data);
-  }
-
-  /**
-   * Phase 5 follow-up B — partial update an existing ActiveEffect.
-   * Phase 4 mcp_coverage_expansion — also handles scope:'actor-direct' (effect on the actor itself).
-   * Flat input is inflated via buildEffectPayload; merge semantics preserve
-   * unlisted fields on the effect.
-   */
-  async updateActiveEffect(data: {
-    target:
-    | { scope: 'actor'; actorId?: string | undefined; actorName?: string | undefined; itemId?: string | undefined; itemName?: string | undefined }
-    | { scope: 'world'; itemId?: string | undefined; itemName?: string | undefined }
-    | { scope: 'actor-direct'; actorId?: string | undefined; actorName?: string | undefined };
-    effectId?: string | undefined;
-    effectName?: string | undefined;
-    updates: any;
-    returnFullPayload?: boolean | undefined;
-  }): Promise<any> {
-    // Phase 7 (R7.1): facade delegate → EffectsService (Migrate; Contract deferred to Phase 8).
-    return this.effectsService.updateActiveEffect(data);
-  }
-
-  /**
-   * Phase 5 follow-up B — remove an ActiveEffect from an item.
-   * Phase 4 mcp_coverage_expansion — also handles scope:'actor-direct' (effect on the actor itself).
-   */
-  async deleteActiveEffect(data: {
-    target:
-    | { scope: 'actor'; actorId?: string | undefined; actorName?: string | undefined; itemId?: string | undefined; itemName?: string | undefined }
-    | { scope: 'world'; itemId?: string | undefined; itemName?: string | undefined }
-    | { scope: 'actor-direct'; actorId?: string | undefined; actorName?: string | undefined };
-    effectId?: string | undefined;
-    effectName?: string | undefined;
-  }): Promise<any> {
-    // Phase 7 (R7.1): facade delegate → EffectsService (Migrate; Contract deferred to Phase 8).
-    return this.effectsService.deleteActiveEffect(data);
-  }
 
 
   // ============================================================

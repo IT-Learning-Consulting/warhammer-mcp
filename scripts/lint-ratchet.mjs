@@ -87,6 +87,32 @@ function makeEslint() {
           'max-lines': ['error', { max: 600, skipComments: true }],
         },
       },
+      // Phase 8 (R8.4): grandfather the scene-atmosphere split (mirror services/ block above). The 67-action
+      // bundle was split into per-sub-family files + a definitions.ts inputSchema literal as a VERBATIM move
+      // (zero behavioral change), so the per-function/complexity caps cannot apply; each file keeps a real
+      // 600-line file cap instead. definitions.ts (the 509-line schema literal) + the main formatResult
+      // 67-case switch live here.
+      {
+        files: ['**/tools/modules/scene-atmosphere/**/*.ts'],
+        rules: {
+          'max-lines-per-function': 'off',
+          complexity: 'off',
+          'max-depth': 'off',
+          'max-params': 'off',
+          'max-lines': ['error', { max: 600, skipComments: true }],
+        },
+      },
+      // Phase 8 (R8.1/R8.2): the tool-instantiation factory (build-tools.ts) is a flat declarative manifest
+      // (one `new XTool(deps)` per registered tool) extracted from backend.ts startBackend. Per-function
+      // caps don't apply to a one-array manifest — same rationale as services/. Keeps the 600-line file cap.
+      {
+        files: ['**/tools/factory/**/*.ts'],
+        rules: {
+          'max-lines-per-function': 'off',
+          complexity: 'off',
+          'max-lines': ['error', { max: 600, skipComments: true }],
+        },
+      },
       { files: TEST_GLOBS, rules: Object.fromEntries(CAP_RULES.map((r) => [r, 'off'])) },
     ],
   });

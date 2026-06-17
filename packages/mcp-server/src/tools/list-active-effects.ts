@@ -13,6 +13,13 @@ export class ListActiveEffectsTool extends BaseTool {
     super(options);
   }
 
+  // Phase 8 (R8.2): declarative registration (R8.1 — name lives with the tool).
+  getRegistration(): Array<{ name: string; handler: (args: any) => Promise<any> }> {
+    return [
+        { name: 'list-active-effects', handler: (args: any) => this.handle(args) },
+    ];
+  }
+
   getToolDefinitions() {
     return [
       {

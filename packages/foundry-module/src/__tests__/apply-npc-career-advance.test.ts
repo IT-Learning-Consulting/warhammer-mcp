@@ -51,7 +51,7 @@ afterEach(() => {
 describe('handleApplyNpcCareerAdvance — happy path envelope', () => {
   it('returns { success: true, data } with actor + career summary', async () => {
     const qh = makeHandlers();
-    (qh.dataAccess as any).applyNpcCareerAdvance = async () => ({
+    (qh.actorService as any).applyNpcCareerAdvance = async () => ({
       success: true,
       actorId: 'npc-1',
       actorName: 'Marius',
@@ -104,7 +104,7 @@ describe('dataAccess.applyNpcCareerAdvance — type + item guards', () => {
     });
     (globalThis as any).game.actors = new Map([['npc-1', actor]]);
 
-    const result = await (qh.dataAccess as any).applyNpcCareerAdvance({
+    const result = await (qh.actorService as any).applyNpcCareerAdvance({
       actorId: 'npc-1',
       careerItemId: 'c1',
     });
@@ -123,7 +123,7 @@ describe('dataAccess.applyNpcCareerAdvance — type + item guards', () => {
     (globalThis as any).game.actors = new Map([['cr-1', actor]]);
 
     await expect(
-      (qh.dataAccess as any).applyNpcCareerAdvance({ actorId: 'cr-1', careerItemId: 'c1' }),
+      (qh.actorService as any).applyNpcCareerAdvance({ actorId: 'cr-1', careerItemId: 'c1' }),
     ).rejects.toThrow(/requires an npc-type actor/);
   });
 
@@ -133,7 +133,7 @@ describe('dataAccess.applyNpcCareerAdvance — type + item guards', () => {
     (globalThis as any).game.actors = new Map([['pc-1', actor]]);
 
     await expect(
-      (qh.dataAccess as any).applyNpcCareerAdvance({ actorId: 'pc-1', careerItemId: 'c1' }),
+      (qh.actorService as any).applyNpcCareerAdvance({ actorId: 'pc-1', careerItemId: 'c1' }),
     ).rejects.toThrow(/requires an npc-type actor/);
   });
 
@@ -142,7 +142,7 @@ describe('dataAccess.applyNpcCareerAdvance — type + item guards', () => {
     (globalThis as any).game.actors = new Map();
 
     await expect(
-      (qh.dataAccess as any).applyNpcCareerAdvance({ actorId: 'ghost', careerItemId: 'c1' }),
+      (qh.actorService as any).applyNpcCareerAdvance({ actorId: 'ghost', careerItemId: 'c1' }),
     ).rejects.toThrow(/Actor not found/);
   });
 
@@ -152,7 +152,7 @@ describe('dataAccess.applyNpcCareerAdvance — type + item guards', () => {
     (globalThis as any).game.actors = new Map([['npc-2', actor]]);
 
     await expect(
-      (qh.dataAccess as any).applyNpcCareerAdvance({ actorId: 'npc-2', careerItemId: 'missing' }),
+      (qh.actorService as any).applyNpcCareerAdvance({ actorId: 'npc-2', careerItemId: 'missing' }),
     ).rejects.toThrow(/Career item ".+" not found/);
   });
 
@@ -167,7 +167,7 @@ describe('dataAccess.applyNpcCareerAdvance — type + item guards', () => {
     (globalThis as any).game.actors = new Map([['npc-3', actor]]);
 
     await expect(
-      (qh.dataAccess as any).applyNpcCareerAdvance({ actorId: 'npc-3', careerItemId: 'w1' }),
+      (qh.actorService as any).applyNpcCareerAdvance({ actorId: 'npc-3', careerItemId: 'w1' }),
     ).rejects.toThrow(/expected "career"/);
   });
 
@@ -179,7 +179,7 @@ describe('dataAccess.applyNpcCareerAdvance — type + item guards', () => {
     (globalThis as any).game.actors = new Map([['npc-4', actor]]);
 
     await expect(
-      (qh.dataAccess as any).applyNpcCareerAdvance({ actorId: 'npc-4', careerItemId: 'c1' }),
+      (qh.actorService as any).applyNpcCareerAdvance({ actorId: 'npc-4', careerItemId: 'c1' }),
     ).rejects.toThrow(/no system\.advance method/);
   });
 });
@@ -225,7 +225,7 @@ describe('applyNpcCareerAdvance — BUG-217/218 observer + post-verify', () => {
     (globalThis as any).game.actors = new Map([['npc-5', actor]]);
 
     const qh = makeHandlers();
-    const res = await (qh.dataAccess as any).applyNpcCareerAdvance({
+    const res = await (qh.actorService as any).applyNpcCareerAdvance({
       actorId: 'npc-5',
       careerItemId: 'c1',
     });
@@ -262,7 +262,7 @@ describe('applyNpcCareerAdvance — BUG-217/218 observer + post-verify', () => {
     };
 
     await expect(
-      (qh.dataAccess as any).applyNpcCareerAdvance({ actorId: 'npc-6', careerItemId: 'c1' }),
+      (qh.actorService as any).applyNpcCareerAdvance({ actorId: 'npc-6', careerItemId: 'c1' }),
     ).rejects.toThrow(/APPLY_NPC_CAREER_ADVANCE_NOT_PERSISTED/);
   });
 });

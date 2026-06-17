@@ -37,6 +37,15 @@ export class ManageConditionsTools extends BaseTool {
     super(options);
   }
 
+  // Phase 8 (R8.2): declarative registration (R8.1 — name lives with the tool).
+  getRegistration(): Array<{ name: string; handler: (args: any) => Promise<any> }> {
+    return [
+        { name: 'apply-condition', handler: (args: any) => this.handleApplyCondition(args) },
+        { name: 'remove-condition', handler: (args: any) => this.handleRemoveCondition(args) },
+        { name: 'list-conditions', handler: (args: any) => this.handleListConditions(args) },
+    ];
+  }
+
   getToolDefinitions() {
     return [
       {

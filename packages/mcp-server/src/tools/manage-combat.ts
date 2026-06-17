@@ -20,6 +20,18 @@ export class ManageCombatTools extends BaseTool {
     super(options);
   }
 
+  // Phase 8 (R8.2): declarative registration (R8.1 — name lives with the tool).
+  getRegistration(): Array<{ name: string; handler: (args: any) => Promise<any> }> {
+    return [
+        { name: 'get-combat', handler: (args: any) => this.handleGetCombat(args) },
+        { name: 'list-combatants', handler: (args: any) => this.handleListCombatants(args) },
+        { name: 'advance-combat', handler: (args: any) => this.handleAdvanceCombat(args) },
+        { name: 'add-combatants', handler: (args: any) => this.handleAddCombatants(args) },
+        { name: 'remove-combatants', handler: (args: any) => this.handleRemoveCombatants(args) },
+        { name: 'end-combat', handler: (args: any) => this.handleEndCombat(args) },
+    ];
+  }
+
   getToolDefinitions() {
     return [
       {

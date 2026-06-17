@@ -14,6 +14,16 @@ export class CompendiumTools extends BaseTool {
     super(options);
   }
 
+  // Phase 8 (R8.2): declarative registration (R8.1 — name lives with the tool).
+  getRegistration(): Array<{ name: string; handler: (args: any) => Promise<any> }> {
+    return [
+        { name: 'search-compendium', handler: (args: any) => this.handleSearchCompendium(args) },
+        { name: 'get-compendium-item', handler: (args: any) => this.handleGetCompendiumItem(args) },
+        { name: 'list-creatures-by-criteria', handler: (args: any) => this.handleListCreaturesByCriteria(args) },
+        { name: 'list-compendium-packs', handler: (args: any) => this.handleListCompendiumPacks(args) },
+    ];
+  }
+
   /**
    * Tool definitions for compendium operations
    */

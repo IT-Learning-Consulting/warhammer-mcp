@@ -30,6 +30,15 @@ export class ActorCreationTools extends BaseTool {
     super(options);
   }
 
+  // Phase 8 (R8.2): declarative registration (R8.1 — name lives with the tool).
+  getRegistration(): Array<{ name: string; handler: (args: any) => Promise<any> }> {
+    return [
+      { name: 'create-actor', handler: (args: any) => this.handleCreateActor(args) },
+      { name: 'create-actor-from-compendium', handler: (args: any) => this.handleCreateActorFromCompendium(args) },
+      { name: 'get-compendium-entry-full', handler: (args: any) => this.handleGetCompendiumEntryFull(args) },
+    ];
+  }
+
   /**
    * Tool definitions for actor creation operations
    */

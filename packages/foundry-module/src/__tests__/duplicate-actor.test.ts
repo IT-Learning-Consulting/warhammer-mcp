@@ -26,7 +26,7 @@ beforeEach(() => {
 describe('handleDuplicateActor — happy path envelope', () => {
   it('returns { success: true, data } with new actor id/name/type', async () => {
     const qh = makeHandlers();
-    (qh.dataAccess as any).duplicateActor = async (args: any) => ({
+    (qh.actorService as any).duplicateActor = async (args: any) => ({
       success: true,
       id: 'new-actor-123',
       name: args.newName ?? 'Source Actor',
@@ -46,7 +46,7 @@ describe('handleDuplicateActor — happy path envelope', () => {
 describe('handleDuplicateActor — missing source', () => {
   it('rejects when data-access throws for unknown source', async () => {
     const qh = makeHandlers();
-    (qh.dataAccess as any).duplicateActor = async () => {
+    (qh.actorService as any).duplicateActor = async () => {
       throw new Error('Failed to duplicate actor: Source actor not found with ID: bogus');
     };
     await expect(
@@ -97,7 +97,7 @@ describe('dataAccess.duplicateActor — Actor.create wiring', () => {
       },
     };
 
-    const result = await (qh.dataAccess as any).duplicateActor({
+    const result = await (qh.actorService as any).duplicateActor({
       sourceActorId: 'source-1',
       newName: 'Cloned',
     });
@@ -127,7 +127,7 @@ describe('dataAccess.duplicateActor — Actor.create wiring', () => {
       create: async (data: any) => ({ id: 'clone-2', name: data.name, type: data.type }),
     };
 
-    const result = await (qh.dataAccess as any).duplicateActor({
+    const result = await (qh.actorService as any).duplicateActor({
       sourceActorId: 'source-2',
     });
 
@@ -139,7 +139,7 @@ describe('dataAccess.duplicateActor — Actor.create wiring', () => {
     (globalThis as any).game.actors = new Map();
 
     await expect(
-      (qh.dataAccess as any).duplicateActor({ sourceActorId: 'ghost' }),
+      (qh.actorService as any).duplicateActor({ sourceActorId: 'ghost' }),
     ).rejects.toThrow(/Source actor not found/);
   });
 
@@ -154,7 +154,7 @@ describe('dataAccess.duplicateActor — Actor.create wiring', () => {
     (globalThis as any).Actor = { create: async () => null };
 
     await expect(
-      (qh.dataAccess as any).duplicateActor({ sourceActorId: 'source-3' }),
+      (qh.actorService as any).duplicateActor({ sourceActorId: 'source-3' }),
     ).rejects.toThrow(/Actor\.create returned no actor/);
   });
 });

@@ -1,0 +1,30 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`query error wire-format — ZodError path (Invalid input) > listActors invalid input 1`] = `
+"Invalid input: [
+  {
+    "code": "unrecognized_keys",
+    "keys": [
+      "bogusKey"
+    ],
+    "path": [],
+    "message": "Unrecognized key(s) in object: 'bogusKey'"
+  }
+]"
+`;
+
+exports[`query error wire-format — operation prefix (non-Zod inner error) > addActiveEffect 1`] = `"Failed to add active effect: FROZEN_INNER_ERROR"`;
+
+exports[`query error wire-format — operation prefix (non-Zod inner error) > addItemFromCompendium 1`] = `"Failed to add item from compendium: FROZEN_INNER_ERROR"`;
+
+exports[`query error wire-format — operation prefix (non-Zod inner error) > applyDamage 1`] = `"Failed to apply damage: FROZEN_INNER_ERROR"`;
+
+exports[`query error wire-format — operation prefix (non-Zod inner error) > createActor 1`] = `"Failed to create actor: FROZEN_INNER_ERROR"`;
+
+exports[`query error wire-format — operation prefix (non-Zod inner error) > getCharacterInfo 1`] = `"Failed to get character info: FROZEN_INNER_ERROR"`;
+
+exports[`query error wire-format — operation prefix (non-Zod inner error) > journal 1`] = `"Failed to dispatch journal action: FROZEN_INNER_ERROR"`;
+
+exports[`query error wire-format — operation prefix (non-Zod inner error) > listActors 1`] = `"Failed to list actors: FROZEN_INNER_ERROR"`;
+
+exports[`query error wire-format — operation prefix (non-Zod inner error) > scene 1`] = `"Failed to dispatch scene action: FROZEN_INNER_ERROR"`;

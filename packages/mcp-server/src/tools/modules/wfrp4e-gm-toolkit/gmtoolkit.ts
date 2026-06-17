@@ -86,6 +86,13 @@ export class ModuleGmtoolkitTool extends BaseTool {
     super(options);
   }
 
+  // Phase 8 (R8.2): declarative registration (R8.1 — name lives with the tool).
+  getRegistration(): Array<{ name: string; handler: (args: any) => Promise<any> }> {
+    return [
+        { name: 'module-gmtoolkit', handler: (args: any) => this.execute(args) },
+    ];
+  }
+
   getToolDefinitions() {
     return [
       {

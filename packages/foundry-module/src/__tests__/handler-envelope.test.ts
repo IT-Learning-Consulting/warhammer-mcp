@@ -58,7 +58,7 @@ describe('handler envelope — scene umbrella (handleScene action=list)', () => 
 describe('handler envelope — actor-write (handleUpdateActor)', () => {
   it('returns { success: true, data } on success', async () => {
     const qh = makeHandlers();
-    (qh.dataAccess as any).updateActor = async () => ({
+    (qh.actorService as any).updateActor = async () => ({
       actorId: 'a1',
       updated: true,
     });
@@ -74,7 +74,7 @@ describe('handler envelope — actor-write (handleUpdateActor)', () => {
 describe('handler envelope — item-write (handleCreateItem)', () => {
   it('returns { success: true, data } on success', async () => {
     const qh = makeHandlers();
-    (qh.dataAccess as any).createItem = async () => ({
+    (qh.itemService as any).createItem = async () => ({
       itemId: 'i1',
       itemName: 'Sword',
     });

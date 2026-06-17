@@ -7,7 +7,7 @@
 // These are NOT behavioural tests — they only pin the current output shape.
 
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
-import { FoundryDataAccess } from '../../data-access.js';
+import { QueryHandlers } from '../../queries.js';
 
 vi.mock('../notify.js', () => ({
   notify: { created: vi.fn(), updated: vi.fn(), deleted: vi.fn(), warn: vi.fn() },
@@ -72,9 +72,15 @@ function installFoundryUtils() {
   };
 }
 
-function makeDA() {
-  const da = new FoundryDataAccess();
-  (da as any).validateFoundryState = () => {};
+function makeDA(): any {
+  // Phase 8 (R7.3): the actor/item/effect mutation methods were promoted off FoundryDataAccess to the
+  // QueryHandlers services; re-expose the ones this test pierces on the DA handle so the captured
+  // write-paths are unchanged (the re-bind delegates to the same promoted service the handlers call).
+  const qh = new QueryHandlers();
+  const da: any = qh.dataAccess;
+  da.validateFoundryState = () => {};
+  da.updateActor = (d: any) => qh.actorService.updateActor(d);
+  da.createItem = (d: any) => qh.itemService.createItem(d);
   return da;
 }
 
