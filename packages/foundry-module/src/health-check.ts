@@ -11,6 +11,9 @@
 
 import { MODULE_ID } from './constants.js';
 import { MODULE_BADGE_STYLE, badgeStyle, type NotifySeverity } from './notify.js';
+// Phase 10 (R10.1): route the error hook + the 2 window listeners through the lifecycle registry
+// so teardownAll() deregisters them on world unload (previously they leaked).
+import * as lifecycle from './utils/lifecycle.js';
 
 const MODULE_PREFIX = `[${MODULE_ID}]`;
 
@@ -167,7 +170,7 @@ export function installRuntimeCapture(): void {
 
   // ── window.error — uncaught script errors ──────────────────────────────
   try {
-    window.addEventListener('error', (ev: ErrorEvent) => {
+    lifecycle.registerDomListener('health-check', window, 'error', (ev: ErrorEvent) => {
       try {
         const err = ev?.error instanceof Error ? ev.error : undefined;
         const message = err?.message ?? ev?.message ?? 'Unknown error';
@@ -193,7 +196,7 @@ export function installRuntimeCapture(): void {
 
   // ── unhandledrejection — rejected Promise without .catch ───────────────
   try {
-    window.addEventListener('unhandledrejection', (ev: PromiseRejectionEvent) => {
+    lifecycle.registerDomListener('health-check', window, 'unhandledrejection', (ev: PromiseRejectionEvent) => {
       try {
         const reason = ev?.reason;
         const err = reason instanceof Error ? reason : undefined;
@@ -221,7 +224,7 @@ export function installRuntimeCapture(): void {
   // Listener MUST NOT throw and MUST NOT return false (Risk 1.B — would
   // short-circuit Foundry's own error pipeline).
   try {
-    Hooks.on('error', (location: string, error: Error, data?: any) => {
+    lifecycle.registerHook('health-check', 'error', (location: string, error: Error, data?: any) => {
       try {
         const err = error instanceof Error ? error : new Error(String(error));
         const rec: RuntimeEventRecord = {

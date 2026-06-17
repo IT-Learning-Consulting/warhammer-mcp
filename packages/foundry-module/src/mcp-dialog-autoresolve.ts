@@ -22,6 +22,9 @@
 import { MODULE_ID } from './constants.js';
 import { isMcpActive, onMcpActivityDrained, getMcpRequestContext } from './mcp-activity.js';
 import { notify } from './notify.js';
+// Phase 10 (R10.1): route the persistent createItem correlation hook through the lifecycle
+// registry (the outer Hooks.once('ready') is exempt — fire-once, self-removing).
+import * as lifecycle from './utils/lifecycle.js';
 
 // Module-level override map: consulted before the deterministic default.
 // Keys are dialog titles; values are item ids or names to prefer.
@@ -315,7 +318,7 @@ export function registerMcpDialogAutoResolve(): void {
 
       // Correlate the renamed spec item ("Strider (Coastal)") back to its pick so
       // the GM notice can name what was modified + the actor it landed on.
-      Hooks.on('createItem', (item: any) => {
+      lifecycle.registerHook('dialog-autoresolve', 'createItem', (item: any) => {
         if (!isMcpActive()) return;
         try {
           correlateCreatedItem(item);

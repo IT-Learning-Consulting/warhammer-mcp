@@ -1,5 +1,8 @@
 import { MODULE_ID } from '../constants.js';
 import { isMcpActive } from '../mcp-activity.js';
+// Phase 10 (R10.1): route this persistent chime hook through the lifecycle registry so
+// teardownAll() deregisters it on world unload.
+import * as lifecycle from '../utils/lifecycle.js';
 
 /**
  * Register a Hooks.on('renderApplicationV2') listener that plays a chime
@@ -15,7 +18,7 @@ import { isMcpActive } from '../mcp-activity.js';
  * rendering.
  */
 export function registerMcpDialogChimeHook(): void {
-  Hooks.on('renderApplicationV2', (app: any) => {
+  lifecycle.registerHook('dialog-chime', 'renderApplicationV2', (app: any) => {
     try {
       if (!game.user?.isGM) return;
       if (!game.settings.get(MODULE_ID, 'dialogChimeEnabled')) return;

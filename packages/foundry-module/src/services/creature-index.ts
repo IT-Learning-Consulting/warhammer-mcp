@@ -5,6 +5,7 @@
 
 import { MODULE_ID } from '../constants.js';
 import { notify } from '../notify.js';
+import * as lifecycle from '../utils/lifecycle.js';
 import type { CreatureIndexReader, EnhancedCreatureIndex, PersistentEnhancedIndex, PackFingerprint } from '../service-interfaces.js';
 
 /**
@@ -185,43 +186,53 @@ export class PersistentCreatureIndex implements CreatureIndexReader {
     return true;
   }
 
-  /** Register Foundry hooks for real-time pack change detection */
+  /** Register Foundry hooks for real-time pack change detection.
+   * Phase 10 (R10.1): routed through utils/lifecycle.ts so destroy() → lifecycle.abort('creature-index')
+   * deregisters all five (previously they leaked — the service never tore its hooks down). */
   private registerFoundryHooks(): void {
     if (this.hooksRegistered) return;
 
     // Listen for compendium document changes
-    Hooks.on('createDocument', (document: any) => {
+    lifecycle.registerHook('creature-index', 'createDocument', (document: any) => {
       if (document.pack && (document.type === 'npc' || document.type === 'character')) {
         void this.invalidateIndex();
       }
     });
 
-    Hooks.on('updateDocument', (document: any) => {
+    lifecycle.registerHook('creature-index', 'updateDocument', (document: any) => {
       if (document.pack && (document.type === 'npc' || document.type === 'character')) {
         void this.invalidateIndex();
       }
     });
 
-    Hooks.on('deleteDocument', (document: any) => {
+    lifecycle.registerHook('creature-index', 'deleteDocument', (document: any) => {
       if (document.pack && (document.type === 'npc' || document.type === 'character')) {
         void this.invalidateIndex();
       }
     });
 
     // Listen for pack creation/deletion
-    Hooks.on('createCompendium', (pack: any) => {
+    lifecycle.registerHook('creature-index', 'createCompendium', (pack: any) => {
       if (pack.metadata.type === 'Actor') {
         void this.invalidateIndex();
       }
     });
 
-    Hooks.on('deleteCompendium', (pack: any) => {
+    lifecycle.registerHook('creature-index', 'deleteCompendium', (pack: any) => {
       if (pack.metadata.type === 'Actor') {
         void this.invalidateIndex();
       }
     });
 
     this.hooksRegistered = true;
+  }
+
+  /** Deregister all five cache-invalidation hooks (Phase 10 R10.1). Aborts the
+   * 'creature-index' owner controller so each Hooks.on is paired with a Hooks.off, and resets
+   * the idempotency guard so a later registerFoundryHooks() re-attaches cleanly. */
+  destroy(): void {
+    lifecycle.abort('creature-index');
+    this.hooksRegistered = false;
   }
 
   /** Invalidate the current index (mark for rebuild on next access) */

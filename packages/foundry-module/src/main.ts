@@ -9,7 +9,14 @@ import { registerMcpDialogChimeHook } from './hooks/mcp-dialog-chime.js';
 import { registerMcpDialogAutoResolve } from './mcp-dialog-autoresolve.js';
 // Phase 4.3 (R4.2): per-message AbortController registry for the roll-button listener-leak fix.
 import { bindMessageController, releaseMessageController } from './utils/message-lifecycle.js';
+// Phase 10 (R10.1): generic per-owner lifecycle registry — owns the Hooks.on/off + socket on/off
+// pairing for every persistent listener below, with teardownAll() wired into cleanup().
+import * as lifecycle from './utils/lifecycle.js';
 // Connection control now handled through settings menu
+
+// Phase 10 (R10.1): the 2-minute post-ready health-check banner timer (T-03). Stored at module scope
+// so cleanup() can cancel it — previously unstored, it could fire after the world was torn down.
+let healthCheckTimer: ReturnType<typeof setTimeout> | undefined;
 
 /**
  * Main Foundry MCP Bridge Module Class
@@ -508,6 +515,17 @@ class FoundryMCPBridge {
     await this.stop();
     this.queryHandlers.unregisterHandlers();
 
+    // Phase 10 (R10.1): cancel the post-ready health-check banner timer (T-03) and abort every
+    // owner controller so all persistent hooks / socket / window listeners deregister. Done here
+    // (not in stop()) because stop() early-returns when the bridge isn't running, and because
+    // restart() routes through stop() — clearing T-03 there would cancel the banner on every
+    // reconnect rather than only on teardown.
+    if (healthCheckTimer !== undefined) {
+      clearTimeout(healthCheckTimer);
+      healthCheckTimer = undefined;
+    }
+    lifecycle.teardownAll();
+
     console.log(`[${MODULE_ID}] Cleanup complete`);
   }
 
@@ -577,7 +595,7 @@ Hooks.once('ready', async () => {
       const expectedRaw = game.settings.get(MODULE_ID, 'expectedQueryCount') as number;
       const expected = expectedRaw && expectedRaw > 0 ? expectedRaw : undefined;
       if (delayMs > 0) {
-        setTimeout(() => {
+        healthCheckTimer = setTimeout(() => {
           try {
             const result = runHealthCheck(expected);
             // R1.9 — surface HC10 outcome to the GM via notify channel.
@@ -595,9 +613,11 @@ Hooks.once('ready', async () => {
       captureInitError('ready-hook-health-check-schedule', e);
     }
 
-    // Register socket listener for roll state management (after game.user is available)
+    // Register socket listener for roll state management (after game.user is available).
+    // Phase 10 (R10.1): routed through lifecycle.registerSocket so cleanup()/teardownAll() calls
+    // socket.off — previously this listener was never removed and survived reconnects.
 
-    game.socket?.on('module.warhammer-mcp', async (data) => {
+    lifecycle.registerSocket('main', 'module.warhammer-mcp', async (data: any) => {
 
       try {
         // Handle ChatMessage update requests (GM only)
@@ -684,7 +704,7 @@ Hooks.once('ready', async () => {
 });
 
 // Handle settings menu close to check for changes
-Hooks.on('closeSettingsConfig', () => {
+lifecycle.registerHook('main', 'closeSettingsConfig', () => {
   try {
     const enabled = foundryMCPBridge.getStatus().enabled;
     const connected = foundryMCPBridge.getStatus().connected;
@@ -861,7 +881,7 @@ async function runWfrpTestAction(a: any, actor: any, scope: any, g: any): Promis
 
 // Global hook to handle MCP roll button rendering and state management
 // Using renderChatMessageHTML for Foundry v13 compatibility (renderChatMessage is deprecated)
-Hooks.on('renderChatMessageHTML', (message: any, html: HTMLElement) => {
+lifecycle.registerHook('main', 'renderChatMessageHTML', (message: any, html: HTMLElement) => {
   try {
     // Convert HTMLElement to jQuery for compatibility with existing handler code
     const $html = $(html);
@@ -913,7 +933,7 @@ Hooks.on('renderChatMessageHTML', (message: any, html: HTMLElement) => {
 // Phase 4.3 (R4.2): release the per-message AbortController when a chat message is deleted, so the
 // controller registry doesn't grow unbounded across a long session (and the message's live click
 // listener is torn down with it).
-Hooks.on('deleteChatMessage', (message: any) => {
+lifecycle.registerHook('main', 'deleteChatMessage', (message: any) => {
   releaseMessageController(message.id);
 });
 
@@ -922,7 +942,7 @@ Hooks.on('deleteChatMessage', (message: any) => {
 // learns they have caught SOMETHING — never what. Fires once, GM-side, when system.duration.active
 // flips true (wfrp4e DiseaseModel.start("duration")). Player-facing flavor, drawn from a 1d20 table.
 const DISEASE_ONSET_TABLE_ID = '6u30TrMQ0L9ZknvT';
-Hooks.on('updateItem', async (item: any, change: any, _options: any, _userId: string) => {
+lifecycle.registerHook('main', 'updateItem', async (item: any, change: any, _options: any, _userId: string) => {
   try {
     if (item?.type !== 'disease') return;
     const g = globalThis as any;
@@ -948,7 +968,7 @@ Hooks.on('updateItem', async (item: any, change: any, _options: any, _userId: st
 // Re-enable disease symptoms that were temporarily suppressed by the Treat Disease service.
 // The service disables symptom AEs and stamps flags["warhammer-mcp"].symptomsSuppressedUntil
 // (= worldTime + ~1 day) on the disease item. When that time passes, restore the symptoms.
-Hooks.on('updateWorldTime', async (worldTime: number) => {
+lifecycle.registerHook('main', 'updateWorldTime', async (worldTime: number) => {
   try {
     if (!(game.user?.isGM && (game as any).users?.activeGM?.isSelf)) return;
     const now = Number((game as any).time?.worldTime ?? worldTime ?? 0);
@@ -969,7 +989,7 @@ Hooks.on('updateWorldTime', async (worldTime: number) => {
 // Socket listener will be registered in the 'ready' hook when game.user is available
 
 // Handle world close/reload
-Hooks.on('canvasReady', () => {
+lifecycle.registerHook('main', 'canvasReady', () => {
   // Canvas ready indicates the world is fully loaded
   // Good time to ensure bridge is in correct state
   try {

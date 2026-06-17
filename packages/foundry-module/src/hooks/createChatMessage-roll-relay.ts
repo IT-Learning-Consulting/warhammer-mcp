@@ -1,4 +1,7 @@
 import { MODULE_ID } from '../constants.js';
+// Phase 10 (R10.1): route this persistent relay hook through the lifecycle registry so
+// teardownAll() deregisters it on world unload.
+import * as lifecycle from '../utils/lifecycle.js';
 
 /**
  * Register a Hooks.on('createChatMessage') listener that relays WFRP4e test
@@ -12,7 +15,7 @@ import { MODULE_ID } from '../constants.js';
  * directly in the click handler (attachRollButtonHandlers in data-access.ts).
  */
 export function registerRollRelayHook(): void {
-  Hooks.on('createChatMessage', (message: any) => {
+  lifecycle.registerHook('roll-relay', 'createChatMessage', (message: any) => {
     try {
       if (message.type !== 'test') return;
 
