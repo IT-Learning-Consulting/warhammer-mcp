@@ -130,3 +130,63 @@ export interface TokenPlacementResult {
   sceneName?: string;
   errors?: string[] | undefined;
 }
+
+// Phase 7 (R7.1): actor-creation + compendium-entry DTOs relocated here from data-access.ts so
+// ActorService and FoundryDataAccess (the delegating facade + the surviving getCompendiumDocumentFull
+// read) share them without a cross-service import.
+
+export interface ActorCreationRequest {
+  creatureType: string;
+  customNames?: string[] | undefined;
+  packPreference?: string | undefined;
+  quantity?: number | undefined;
+  addToScene?: boolean | undefined;
+}
+
+export interface ActorCreationResult {
+  success: boolean;
+  actors: CreatedActorInfo[];
+  errors?: string[] | undefined;
+  tokensPlaced?: number;
+  totalRequested: number;
+  totalCreated: number;
+}
+
+export interface CreatedActorInfo {
+  id: string;
+  name: string;
+  originalName: string;
+  type: string;
+  sourcePackId: string;
+  sourcePackLabel: string;
+  img?: string;
+}
+
+export interface CompendiumEntryFull {
+  id: string;
+  name: string;
+  type: string;
+  img?: string;
+  pack: string;
+  packLabel: string;
+  system: Record<string, unknown>;
+  items?: CompendiumItem[];
+  effects?: CompendiumEffect[];
+  fullData: Record<string, unknown>;
+}
+
+export interface CompendiumItem {
+  id: string;
+  name: string;
+  type: string;
+  img?: string;
+  system: Record<string, unknown>;
+}
+
+export interface CompendiumEffect {
+  id: string;
+  name: string;
+  icon?: string;
+  disabled: boolean;
+  duration?: Record<string, unknown>;
+}

@@ -1,0 +1,51 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`FoundryDataAccess.updateActor — formatter byte-identity oracle (Phase 7 R7.2) > snapshot: >4 fields collapse to "and N more field(s)" > summary 1`] = `"Weapon Skill: 1 → 10, Ballistic Skill: 1 → 10, Strength: 1 → 10, Toughness: 1 → 10, and 2 more fields"`;
+
+exports[`FoundryDataAccess.updateActor — formatter byte-identity oracle (Phase 7 R7.2) > snapshot: {value:N} leaf extraction via nested-object updateData > summary 1`] = `"Weapon Skill: 30 → 45"`;
+
+exports[`FoundryDataAccess.updateActor — formatter byte-identity oracle (Phase 7 R7.2) > snapshot: all-internal (whole-segment) keys → "various fields" > summary 1`] = `"various fields"`;
+
+exports[`FoundryDataAccess.updateActor — formatter byte-identity oracle (Phase 7 R7.2) > snapshot: characteristic + status + details + experience (dot-notation, before→after) > result 1`] = `
+{
+  "actorId": "actor-upd-001",
+  "actorName": "Sigmar Recruit",
+  "success": true,
+  "updated": [
+    "system.characteristics.ws.value",
+    "system.status.wounds.value",
+    "system.details.age.value",
+    "system.details.experience.spent",
+  ],
+}
+`;
+
+exports[`FoundryDataAccess.updateActor — formatter byte-identity oracle (Phase 7 R7.2) > snapshot: characteristic + status + details + experience (dot-notation, before→after) > summary 1`] = `"Weapon Skill: 35 → 40, Wounds: 12 → 10, Age: 24 → 25, Experience: 100 → 150"`;
+
+exports[`FoundryDataAccess.updateActor — formatter byte-identity oracle (Phase 7 R7.2) > snapshot: characteristic + status + details + experience (dot-notation, before→after) > update-args 1`] = `
+[
+  [
+    {
+      "system.characteristics.ws.value": 40,
+      "system.details.age.value": 25,
+      "system.details.experience.spent": 150,
+      "system.status.wounds.value": 10,
+    },
+    {
+      "skipExperienceChecks": true,
+    },
+  ],
+]
+`;
+
+exports[`FoundryDataAccess.updateActor — formatter byte-identity oracle (Phase 7 R7.2) > snapshot: deletion-marker (.-=) key formatting + warnings array dispatch > summary 1`] = `"Fortune: 1 → 2, -=oldskill: null"`;
+
+exports[`FoundryDataAccess.updateActor — formatter byte-identity oracle (Phase 7 R7.2) > snapshot: deletion-marker (.-=) key formatting + warnings array dispatch > warn-calls 1`] = `
+[
+  [
+    "Out-of-career advance costs double XP",
+  ],
+]
+`;
+
+exports[`FoundryDataAccess.updateActor — formatter byte-identity oracle (Phase 7 R7.2) > snapshot: internal fields (_id / flags / sort) are filtered from the summary > summary 1`] = `"note: hidden, Fate: 2 → 3"`;

@@ -177,7 +177,7 @@ describe('template-apply engine — applyTemplate (world actor) write capture', 
     });
     (globalThis as any).warhammer.utility.findItemId = async () => template;
 
-    const result = await (qh.dataAccess as any).applyTemplate({
+    const result = await qh.templateApply.applyTemplate({
       actorId: 'act-1',
       templateUuid: 'Compendium.wfrp4e-owb2.items.Item.tpl-wight',
     });
@@ -215,7 +215,7 @@ describe('template-apply engine — applyTemplateToToken (synthetic delta) write
     });
     (globalThis as any).warhammer.utility.findItemId = async () => template;
 
-    const result = await (qh.dataAccess as any).applyTemplateToToken({
+    const result = await qh.templateApply.applyTemplateToToken({
       sceneId: 's1',
       tokenId: 't1',
       templateUuid: 'Compendium.wfrp4e-owb1.items.Item.tpl-skirmisher',
@@ -250,7 +250,7 @@ describe('template-apply engine — BUG-242 bare-specialisation skill', () => {
     });
     (globalThis as any).warhammer.utility.findItemId = async () => template;
 
-    await (qh.dataAccess as any).applyTemplate({ actorId: 'act-1', templateUuid: 'x' });
+    await qh.templateApply.applyTemplate({ actorId: 'act-1', templateUuid: 'x' });
 
     expect(actor.__creates[0]!.options).toMatchSnapshot();
     // The BUG-242 fix (2026-05-25): skipSpecialisationChoice short-circuits

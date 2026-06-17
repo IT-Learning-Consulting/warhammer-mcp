@@ -1,8 +1,19 @@
 import { MODULE_ID, ERROR_MESSAGES } from './constants.js';
 import { notify } from './notify.js';
-import { verifyDocWrite } from './utils/verifyWrite.js';
-import { ScenePlacementService, TemplateApplyService, type CompendiumSearchService } from './services/index.js';
+import { ScenePlacementService, EffectsService, ItemService, ActorService, type CompendiumSearchService } from './services/index.js';
 import { findActorByIdentifier } from './utils/actor-lookup.js';
+// Phase 7 (R7.1): shared document/folder/observer helpers extracted VERBATIM to services/shared/.
+// Used by the surviving effect READS here (getActiveEffectByName / listActiveEffects) + the actor/item/
+// effect mutation methods until they migrate to their services in 7.4-7.6 (which import the same helpers).
+// Effect READS that stay here (getActiveEffectByName / listActiveEffects) still use the shared resolvers.
+import { _resolveActor, _resolveItem, _findEffect, _targetToResolverInput } from './services/shared/document-resolver.js';
+// Phase 7 (R7.1): actor-creation + compendium-entry DTOs relocated to ./service-interfaces.ts so
+// ActorService + the surviving getCompendiumDocumentFull read share them (no cross-service import).
+import type {
+  ActorCreationRequest,
+  ActorCreationResult,
+  CompendiumEntryFull,
+} from './service-interfaces.js';
 // Local type definitions to avoid shared package import issues
 interface CharacterInfo {
   id: string;
@@ -55,63 +66,6 @@ interface WorldUser {
   isGM: boolean;
 }
 
-// Phase 2: Write Operation Interfaces
-interface ActorCreationRequest {
-  creatureType: string;
-  customNames?: string[] | undefined;
-  packPreference?: string | undefined;
-  quantity?: number | undefined;
-  addToScene?: boolean | undefined;
-}
-
-interface ActorCreationResult {
-  success: boolean;
-  actors: CreatedActorInfo[];
-  errors?: string[] | undefined;
-  tokensPlaced?: number;
-  totalRequested: number;
-  totalCreated: number;
-}
-
-interface CreatedActorInfo {
-  id: string;
-  name: string;
-  originalName: string;
-  type: string;
-  sourcePackId: string;
-  sourcePackLabel: string;
-  img?: string;
-}
-
-interface CompendiumEntryFull {
-  id: string;
-  name: string;
-  type: string;
-  img?: string;
-  pack: string;
-  packLabel: string;
-  system: Record<string, unknown>;
-  items?: CompendiumItem[];
-  effects?: CompendiumEffect[];
-  fullData: Record<string, unknown>;
-}
-
-interface CompendiumItem {
-  id: string;
-  name: string;
-  type: string;
-  img?: string;
-  system: Record<string, unknown>;
-}
-
-interface CompendiumEffect {
-  id: string;
-  name: string;
-  icon?: string;
-  disabled: boolean;
-  duration?: Record<string, unknown>;
-}
-
 // Phase 4 (R3.3): Contract step. The persistent creature index + the compendium-search cluster have fully
 // left FoundryDataAccess — QueryHandlers (the composition layer) now owns the creature index + search
 // service, and the index rebuild wrapper lives on the index service's own rebuildEnhancedIndex() method.
@@ -131,9 +85,16 @@ export class FoundryDataAccess {
   // deleted). scene-placement stays here as facade delegates below (2 internal self-callers in createActors/
   // createActor still resolve via this injected field; its Contract lands in Phase 7 with services/actor.ts).
   private readonly scenePlacement: ScenePlacementService;
-  // Phase 6 (R6.1): template-apply engine extracted to TemplateApplyService (Migrate). FoundryDataAccess
-  // keeps thin facade delegates below (Contract → Phase 7); the engine takes only the validateState seam.
-  private readonly templateApply: TemplateApplyService;
+  // Phase 7 (R7.1): active-effect MUTATION cluster extracted to services/effects.ts (Migrate). This file
+  // keeps thin facade delegates above (Contract → Phase 8); effect READS stay here. Single seam:
+  // validateState (the cluster uses no auditLog).
+  private readonly effectsService: EffectsService;
+  // Phase 7 (R7.1): item MUTATION cluster (+ 2 absorbed handler bodies) extracted to services/item.ts.
+  private readonly itemService: ItemService;
+  // Phase 7 (R7.1/R7.2): actor MUTATION + CREATION cluster (+ updateActor orchestrator) extracted to
+  // services/actor.ts. The 2 scene-placement self-callers + getCompendiumDocumentFull are ctor-injected.
+  // scenePlacement injection STAYS this phase (drops at Phase 8 Contract, per Design Decisions).
+  private readonly actorService: ActorService;
 
   // Phase 6 (R5.2): scenePlacement is ctor-injected by QueryHandlers (the promotion owner) so external
   // handlers + the 2 internal self-callers (createActors/createActor) share one instance. The `??`
@@ -145,7 +106,15 @@ export class FoundryDataAccess {
       () => this.validateFoundryState(),
       (operation, data, result, error) => this.auditLog(operation, data, result, error),
     );
-    this.templateApply = new TemplateApplyService(() => this.validateFoundryState());
+    this.effectsService = new EffectsService(() => this.validateFoundryState());
+    this.itemService = new ItemService(() => this.validateFoundryState());
+    this.actorService = new ActorService(
+      this.scenePlacement,
+      this.compendiumSearch,
+      () => this.validateFoundryState(),
+      (operation, data, result, error) => this.auditLog(operation, data, result, error),
+      (packId, documentId) => this.getCompendiumDocumentFull(packId, documentId),
+    );
   }
 
   /**
@@ -450,24 +419,8 @@ export class FoundryDataAccess {
   // suggestion A1 (retire the dual-layer abstraction).
 
   async deleteActor(data: { id: string }): Promise<{ success: boolean }> {
-    this.validateFoundryState();
-    const actor = game.actors?.get(data.id);
-    if (!actor) {
-      this.auditLog('deleteActor', data, 'failure', 'not found');
-      // BUG-212: throw instead of {success:false} — matches updateActor/duplicateActor not-found convention.
-      // CCR-2: no consumer reads {success:false} from deleteActor; throw propagates via query().
-      throw new Error(`Actor with ID "${data.id}" not found`);
-    }
-    const actorName = actor.name;
-    const actorUuid = (actor as any).uuid;
-    await actor.delete();
-    // BUG-212 + PARITY-020: post-verify the deletion persisted.
-    if (game.actors?.get(data.id)) {
-      throw new Error(`DELETE_ACTOR_NOT_PERSISTED: actor ${data.id} still present after delete (preDelete hook may have cancelled)`);
-    }
-    notify.deleted('actor', actorName, { uuid: actorUuid });
-    this.auditLog('deleteActor', data, 'success');
-    return { success: true };
+    // Phase 7 (R7.1): facade delegate → ActorService (Migrate; Contract deferred to Phase 8).
+    return this.actorService.deleteActor(data);
   }
 
   // Phase 3 mcp_crud_expansion — deleteJournalEntry retired here.
@@ -477,97 +430,8 @@ export class FoundryDataAccess {
    * Create actors from compendium entries with custom names
    */
   async createActorFromCompendium(request: ActorCreationRequest): Promise<ActorCreationResult> {
-    this.validateFoundryState();
-
-    const maxActors = game.settings.get(this.moduleId, 'maxActorsPerRequest') as number;
-    const quantity = Math.min(request.quantity || 1, maxActors);
-
-    try {
-      // Find matching compendium entry (delegated to the injected CompendiumSearchService — Phase 4 R3.3)
-      if (!this.compendiumSearch) {
-        throw new Error('CompendiumSearchService not provided to FoundryDataAccess');
-      }
-      const compendiumEntry = await this.compendiumSearch.findBestCompendiumMatch(request.creatureType, request.packPreference);
-      if (!compendiumEntry) {
-        throw new Error(`No compendium entry found for "${request.creatureType}"`);
-      }
-
-
-      // Get full compendium document
-      const sourceDoc = await this.getCompendiumDocumentFull(
-        compendiumEntry.pack,
-        compendiumEntry.id
-      );
-
-      const createdActors: CreatedActorInfo[] = [];
-      const errors: string[] = [];
-
-      // Create actors with custom names
-      for (let i = 0; i < quantity; i++) {
-        try {
-          const customName = request.customNames?.[i] ||
-            (quantity > 1 ? `${sourceDoc.name} ${i + 1}` : sourceDoc.name);
-
-          const newActor = await this.createActorFromSource(sourceDoc, customName);
-
-          createdActors.push({
-            id: newActor.id,
-            name: newActor.name,
-            originalName: sourceDoc.name,
-            type: newActor.type,
-            sourcePackId: compendiumEntry.pack,
-            sourcePackLabel: compendiumEntry.packLabel,
-            img: newActor.img,
-          });
-        } catch (error) {
-          errors.push(`Failed to create actor ${i + 1}: ${error instanceof Error ? error.message : 'Unknown error'}`);
-        }
-      }
-
-      let tokensPlaced = 0;
-
-      // Add to scene if requested
-      if (request.addToScene && createdActors.length > 0) {
-        try {
-          const tokenResult = await this.scenePlacement.addActorsToScene({
-            actorIds: createdActors.map(a => a.id),
-            placement: 'random',
-            hidden: false,
-          });
-          tokensPlaced = tokenResult.tokensCreated;
-        } catch (error) {
-          errors.push(`Failed to add actors to scene: ${error instanceof Error ? error.message : 'Unknown error'}`);
-        }
-      }
-
-      // Partial-failure signal is carried back via `errors`; rollback is now
-      // performed by the handler-level wrappedWrite on throw.
-      if (errors.length > 0 && createdActors.length < quantity && createdActors.length < quantity / 2) {
-        throw new Error(`Actor creation failed: ${errors.join(', ')}`);
-      }
-
-      const result: ActorCreationResult = {
-        success: createdActors.length > 0,
-        actors: createdActors,
-        ...(errors.length > 0 ? { errors } : {}),
-        tokensPlaced,
-        totalRequested: quantity,
-        totalCreated: createdActors.length,
-      };
-
-      if (createdActors.length > 0) {
-        notify.created('actor', `${createdActors.length} actor(s)`, {
-          summary: `from compendium (${request.creatureType})`,
-        });
-      }
-
-      this.auditLog('createActorFromCompendium', request, 'success');
-      return result;
-
-    } catch (error) {
-      this.auditLog('createActorFromCompendium', request, 'failure', error instanceof Error ? error.message : 'Unknown error');
-      throw error;
-    }
+    // Phase 7 (R7.1): facade delegate → ActorService (createActorFromSource moved with it).
+    return this.actorService.createActorFromCompendium(request);
   }
 
   /**
@@ -584,139 +448,8 @@ export class FoundryDataAccess {
       coordinates?: { x: number; y: number }[];
     };
   }): Promise<ActorCreationResult> {
-    this.validateFoundryState();
-
-    try {
-      const { packId, itemId, customNames, quantity = 1, addToScene = false, placement } = request;
-
-      // Validate inputs
-      if (!packId || !itemId) {
-        throw new Error('Both packId and itemId are required');
-      }
-
-      // Get the pack
-      const pack = game.packs.get(packId);
-      if (!pack) {
-        throw new Error(`Compendium pack "${packId}" not found`);
-      }
-
-      // Get the specific document
-      const sourceDocument = await pack.getDocument(itemId);
-      if (!sourceDocument) {
-        throw new Error(`Document "${itemId}" not found in pack "${packId}"`);
-      }
-
-      if (sourceDocument.documentName !== 'Actor') {
-        throw new Error(`Document "${itemId}" is not an Actor (documentName: ${sourceDocument.documentName}); pack "${packId}" must be an Actor compendium.`);
-      }
-
-      const sourceActor = sourceDocument as Actor;
-
-      // BUG-273: pad names up to quantity so all requested actors are created.
-      // When customNames covers quantity, use them as-is; otherwise auto-number the remainder.
-      const baseName = customNames.length > 0 ? customNames[0]! : `${sourceActor.name} Copy`;
-      const names: string[] = customNames.length >= quantity
-        ? customNames.slice(0, quantity)
-        : Array.from({ length: quantity }, (_, i) =>
-            i < customNames.length
-              ? customNames[i]!
-              : i === 0 ? baseName : `${baseName} (${i + 1})`
-          );
-      const finalQuantity = quantity;
-
-      const createdActors: any[] = [];
-      const errors: string[] = [];
-
-      // Create actors
-      for (let i = 0; i < finalQuantity; i++) {
-        try {
-          const customName = names[i] || `${sourceActor.name} ${i + 1}`;
-
-          // Create actor data with full system, items, and effects
-          const sourceData = sourceActor.toObject() as any;
-          const actorData = {
-            name: customName,
-            type: sourceData.type,
-            img: sourceData.img,
-            system: sourceData.system || sourceData.data || {},
-            items: sourceData.items || [],
-            effects: sourceData.effects || [],
-            folder: null, // Don't inherit folder
-            prototypeToken: sourceData.prototypeToken, // Include prototype token
-          };
-
-
-          // Fix remote image URLs - normalize to local paths
-          if (actorData.prototypeToken?.texture?.src?.startsWith('http')) {
-            actorData.prototypeToken.texture.src = null; // Clear remote URL
-          }
-
-          // Organize created actors in a folder - use "Foundry MCP Creatures" for generic monsters
-          const folderId = await this.getOrCreateFolder('Foundry MCP Creatures', 'Actor');
-          if (folderId) {
-            (actorData as any).folder = folderId;
-          }
-
-          // Create the actor
-          const newActor = await (Actor as any).create(actorData);
-          if (!newActor) {
-            throw new Error(`Failed to create actor "${customName}"`);
-          }
-
-          createdActors.push({
-            id: newActor.id,
-            name: newActor.name,
-            originalName: sourceActor.name,
-            sourcePackLabel: pack.metadata.label,
-          });
-
-
-        } catch (error) {
-          const errorMsg = `Failed to create actor ${i + 1}: ${error instanceof Error ? error.message : 'Unknown error'}`;
-          errors.push(errorMsg);
-          notify.warn(`Failed to create actor ${i + 1}/${finalQuantity}: ${error instanceof Error ? error.message : 'Unknown error'}`);
-        }
-      }
-
-      // Add to scene if requested
-      let tokensPlaced = 0;
-      if (addToScene && createdActors.length > 0) {
-        try {
-          const sceneResult = await this.scenePlacement.addActorsToScene({
-            actorIds: createdActors.map(a => a.id),
-            placement: placement?.type || 'grid',
-            hidden: false,
-            ...(placement?.coordinates && { coordinates: placement.coordinates })
-          });
-          tokensPlaced = sceneResult.success ? sceneResult.tokensCreated : 0;
-        } catch (error) {
-          errors.push(`Failed to add actors to scene: ${error instanceof Error ? error.message : 'Unknown error'}`);
-        }
-      }
-
-      const result: ActorCreationResult = {
-        success: createdActors.length > 0,
-        totalCreated: createdActors.length,
-        totalRequested: finalQuantity,
-        actors: createdActors,
-        tokensPlaced,
-        errors: errors.length > 0 ? errors : undefined,
-      };
-
-      if (createdActors.length > 0) {
-        notify.created('actor', `${createdActors.length} actor(s)`, {
-          summary: `from ${packId}/${itemId}`,
-        });
-      }
-
-      this.auditLog('createActorFromCompendiumEntry', request, 'success');
-      return result;
-
-    } catch (error) {
-      notify.error('Failed to create actor from compendium entry', error instanceof Error ? error : new Error(String(error)));
-      this.auditLog('createActorFromCompendiumEntry', request, 'failure', error instanceof Error ? error.message : 'Unknown error');
-      throw error;
-    }
+    // Phase 7 (R7.1): facade delegate → ActorService.
+    return this.actorService.createActorFromCompendiumEntry(request);
   }
 
   /**
@@ -774,53 +507,8 @@ export class FoundryDataAccess {
   /**
    * Create actor from source document with custom name
    */
-  private async createActorFromSource(sourceDoc: CompendiumEntryFull, customName: string): Promise<any> {
-
-    try {
-      // Clone the source data
-      const actorData = (foundry.utils as any).duplicate(sourceDoc.fullData) as any;
-
-      // Apply customizations
-      actorData.name = customName;
-      // Sync the prototype-token name. The clone keeps the compendium source's
-      // prototypeToken.name otherwise, so tokens dragged from this actor are
-      // mislabelled with the original creature/template name instead of customName.
-      if (actorData.prototypeToken) actorData.prototypeToken.name = customName;
-
-      // Fix only token texture - leave portrait (actor.img) alone
-      if (actorData.prototypeToken?.texture?.src?.startsWith('http')) {
-        console.error(`[${this.moduleId}] Removing remote token texture URL: ${actorData.prototypeToken.texture.src}`);
-        actorData.prototypeToken.texture.src = null; // Let Foundry use fallback
-      }
-
-
-      // Remove source-specific identifiers
-      delete actorData._id;
-      delete actorData.folder;
-      delete actorData.sort;
-
-      // Ensure required fields are present
-      if (!actorData.name) actorData.name = customName;
-      if (!actorData.type) actorData.type = sourceDoc.type || 'npc';
-
-      // Organize created actors in a folder - use "Foundry MCP Creatures" for generic monsters  
-      const folderId = await this.getOrCreateFolder('Foundry MCP Creatures', 'Actor');
-      if (folderId) {
-        (actorData as any).folder = folderId;
-      }
-
-      // Create the new actor
-      const createdDocs = await (Actor as any).createDocuments([actorData]);
-      if (!createdDocs || createdDocs.length === 0) {
-        throw new Error('Failed to create actor document');
-      }
-
-      return createdDocs[0];
-    } catch (error) {
-      notify.error('Actor creation failed', error instanceof Error ? error : new Error(String(error)));
-      throw error;
-    }
-  }
+  // Phase 7 (R7.1): createActorFromSource (private; only caller was createActorFromCompendium) moved to
+  // services/actor.ts with the cluster.
 
   // Phase 1 mcp_crud_expansion (2026-05-14): the actor-only `setActorOwnership`
   // and `getActorOwnership` methods that lived here are removed. The polymorphic
@@ -828,58 +516,6 @@ export class FoundryDataAccess {
   // queries.ts. The deprecation wrappers in queries.ts now strict-parse legacy
   // input and return a deprecation error pointing at the new surface.
 
-  /**
-   * Get or create a folder for organizing MCP-generated content
-   */
-  private async getOrCreateFolder(folderName: string, type: 'Actor' | 'JournalEntry'): Promise<string | null> {
-    try {
-      // Look for existing folder
-      const existingFolder = game.folders?.find((f: any) =>
-        f.name === folderName && f.type === type
-      );
-
-      if (existingFolder) {
-        return existingFolder.id;
-      }
-
-      // Create appropriate descriptions
-      let description = '';
-      if (type === 'Actor') {
-        if (folderName === 'Foundry MCP Creatures') {
-          description = 'Creatures and monsters created via Foundry MCP Bridge';
-        } else {
-          description = `NPCs and creatures related to: ${folderName}`;
-        }
-      } else {
-        description = `Quest and content for: ${folderName}`;
-      }
-
-      // Create new folder
-      const folderData = {
-        name: folderName,
-        type: type,
-        description: description,
-        color: type === 'Actor' ? '#4a90e2' : '#f39c12', // Blue for actors, orange for journals
-        sort: 0,
-        parent: null,
-        flags: {
-          'foundry-mcp-bridge': {
-            mcpGenerated: true,
-            createdAt: new Date().toISOString(),
-            questContext: type === 'JournalEntry' ? folderName : undefined
-          }
-        }
-      };
-
-      const folder = await Folder.create(folderData);
-      if (folder) notify.created('folder', folderName);
-      return folder?.id || null;
-    } catch (error) {
-      console.warn(`[${this.moduleId}] Failed to create folder "${folderName}":`, error);
-      // Return null so items are created without folders rather than failing
-      return null;
-    }
-  }
 
   /**
    * Create a new actor
@@ -888,27 +524,8 @@ export class FoundryDataAccess {
    * `skipItems` to suppress wfrp4e _preCreate basic-skills dialog (mirror of BUG-089).
    */
   async createActor(data: { actorData: Record<string, any>; options?: { skipItems?: boolean } | undefined }): Promise<any> {
-    this.validateFoundryState();
-
-    try {
-      const actor = await (Actor as any).create(data.actorData as any, (data.options ?? {}) as any);
-
-      if (!actor) {
-        throw new Error('Failed to create actor');
-      }
-
-      // Show notification to GM
-      notify.created('actor', actor.name, { uuid: (actor as any).uuid });
-
-      return {
-        success: true,
-        id: actor.id,
-        name: actor.name,
-        type: actor.type
-      };
-    } catch (error) {
-      throw new Error(`Failed to create actor: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    // Phase 7 (R7.1): facade delegate → ActorService.
+    return this.actorService.createActor(data);
   }
 
   /**
@@ -918,43 +535,8 @@ export class FoundryDataAccess {
    * templates) to avoid compendium re-cloning.
    */
   async duplicateActor(data: { sourceActorId: string; newName?: string | undefined }): Promise<any> {
-    this.validateFoundryState();
-
-    try {
-      const source = game.actors?.get(data.sourceActorId);
-      if (!source) {
-        throw new Error(`Source actor not found with ID: ${data.sourceActorId}`);
-      }
-
-      const actorData: any = (source as any).toObject();
-      delete actorData._id;
-      delete actorData.folder;
-      delete actorData.sort;
-      if (data.newName) {
-        actorData.name = data.newName;
-        // Sync the prototype-token name too. toObject() copies the source's
-        // prototypeToken (including its name), and Foundry's Actor._preCreate
-        // will NOT override a non-default token name — so without this, tokens
-        // dragged to the canvas show the source actor's name (e.g. "Human").
-        if (actorData.prototypeToken) actorData.prototypeToken.name = data.newName;
-      }
-
-      const actor = await (Actor as any).create(actorData);
-      if (!actor) {
-        throw new Error('Actor.create returned no actor');
-      }
-
-      notify.created('actor', actor.name, { summary: `duplicated from ${source.name}`, uuid: (actor as any).uuid });
-
-      return {
-        success: true,
-        id: actor.id,
-        name: actor.name,
-        type: actor.type
-      };
-    } catch (error) {
-      throw new Error(`Failed to duplicate actor: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    // Phase 7 (R7.1): facade delegate → ActorService.
+    return this.actorService.duplicateActor(data);
   }
 
   /**
@@ -1005,93 +587,8 @@ export class FoundryDataAccess {
   }
 
   async applyNpcCareerAdvance(data: { actorId: string; careerItemId: string }): Promise<any> {
-    this.validateFoundryState();
-
-    try {
-      const actor = game.actors?.get(data.actorId);
-      if (!actor) {
-        throw new Error(`Actor not found with ID: ${data.actorId}`);
-      }
-
-      if ((actor as any).type !== 'npc') {
-        throw new Error(`applyNpcCareerAdvance requires an npc-type actor; got "${(actor as any).type}" for actor ${actor.name}`);
-      }
-
-      const career = (actor as any).items?.get(data.careerItemId);
-      if (!career) {
-        throw new Error(`Career item "${data.careerItemId}" not found on actor ${actor.name}`);
-      }
-      if ((career as any).type !== 'career') {
-        throw new Error(`Item "${data.careerItemId}" on actor ${actor.name} is type "${(career as any).type}", expected "career"`);
-      }
-
-      const model: any = (actor as any).system;
-      if (typeof model?.advance !== 'function') {
-        throw new Error(`Actor ${actor.name} (type ${(actor as any).type}) has no system.advance method; wfrp4e system may have changed`);
-      }
-
-      // BUG-217: StandardActorModel.advance() is synchronous but fire-and-forgets async actor.update().
-      // HC1: bare `await model.advance()` is a NON-FIX (returns undefined). Observer pattern mirrors
-      // updateActor:4231-4234 exactly — register BEFORE the sync call, await AFTER.
-      const commitObserved = this.waitForActorUpdateCommit(String(actor.id), 250);
-      model.advance(career);
-      await commitObserved;
-
-      // BUG-218: re-read actor + career after commit to confirm persistence.
-      const fresh = game.actors?.get(data.actorId);
-      const freshCareer = fresh?.items?.get(data.careerItemId);
-      if (!fresh || !freshCareer) {
-        throw new Error(`APPLY_NPC_CAREER_ADVANCE_NOT_PERSISTED: actor ${data.actorId} or career ${data.careerItemId} missing after advance`);
-      }
-
-      notify.updated('actor', fresh.name ?? 'unknown', { summary: `advancing via ${freshCareer.name}`, uuid: (fresh as any).uuid });
-
-      return {
-        success: true,
-        actorId: fresh.id,
-        actorName: fresh.name,
-        careerItemId: freshCareer.id,
-        careerName: freshCareer.name,
-        careerLevel: (freshCareer as any).system?.level?.value ?? null
-      };
-    } catch (error) {
-      throw new Error(`Failed to apply NPC career advance: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
-
-  // Phase 6 (R6.1): template-apply engine extracted to services/template-apply.ts. These two public methods
-  // are thin facade delegates to TemplateApplyService (Contract → Phase 7). The engine's helpers
-  // (_runTemplateApply / planTemplateApply / executeTemplatePlan / resolveTemplateDoc / resolveSkillWildcard /
-  // walkTrappingsTree) now live on the service.
-  async applyTemplate(data: {
-    actorId: string;
-    templateUuid: string;
-    preResolvedChoices?: {
-      skillGroups?: Record<string, string> | undefined;
-      talentGroups?: Record<string, string> | undefined;
-      specialisations?: Record<string, string[]> | undefined;
-      lores?: string[] | undefined;
-      spells?: Record<string, string[]> | undefined;
-      trappings?: Record<string, string> | undefined;
-    } | undefined;
-  }): Promise<any> {
-    return this.templateApply.applyTemplate(data);
-  }
-
-  async applyTemplateToToken(data: {
-    sceneId: string;
-    tokenId: string;
-    templateUuid: string;
-    preResolvedChoices?: {
-      skillGroups?: Record<string, string> | undefined;
-      talentGroups?: Record<string, string> | undefined;
-      specialisations?: Record<string, string[]> | undefined;
-      lores?: string[] | undefined;
-      spells?: Record<string, string[]> | undefined;
-      trappings?: Record<string, string> | undefined;
-    } | undefined;
-  }): Promise<any> {
-    return this.templateApply.applyTemplateToToken(data);
+    // Phase 7 (R7.1): facade delegate → ActorService.
+    return this.actorService.applyNpcCareerAdvance(data);
   }
 
   /**
@@ -1099,452 +596,11 @@ export class FoundryDataAccess {
    * Allows updating any actor properties using dot notation for nested fields
    */
   async updateActor(data: { actorId: string; updateData: Record<string, any>; warnings?: string[]; verifyPersistence?: boolean | undefined }): Promise<any> {
-    this.validateFoundryState();
-
-    try {
-      const actor = game.actors?.get(data.actorId);
-      if (!actor) {
-        throw new Error(`Actor not found with ID: ${data.actorId}`);
-      }
-
-      // Capture previous values before update for better notifications
-      const previousValues: Record<string, any> = {};
-      for (const key of Object.keys(data.updateData || {})) {
-        try {
-          previousValues[key] = foundry.utils.getProperty(actor, key);
-        } catch (error) {
-          // If we can't get previous value, just skip it
-          previousValues[key] = undefined;
-        }
-      }
-
-      // Bypass wfrp4e's programmatic-hostile _preUpdate hooks:
-      //   - _checkCharacteristicChange (wfrp4e.js:28735) pops an Advancement Cost dialog
-      //     whenever system.characteristics.*.advances changes, doubling cost for
-      //     out-of-career advances. It calls actor.update() itself inside the dialog
-      //     callback, racing with our update and charging the XP twice.
-      //   - _handleExperienceChange (wfrp4e.js:28895) pops an ExpChange dialog whenever
-      //     system.details.experience changes without experience.log, then auto-appends
-      //     a log entry.
-      // Both hooks gate on !options.skipExperienceChecks (wfrp4e.js:28727). Setting it
-      // to true is the documented way for programmatic callers to bypass the wizardry.
-      // Caller contract: skills that bump experience.spent MUST also include the
-      // experience.log entry in updateData (since auto-append is now skipped).
-      // The old `skipDialog: true` flag was a no-op — no code in wfrp4e or warhammer-lib
-      // references it.
-      const commitObserved =
-        data.verifyPersistence !== false ? this.waitForActorUpdateCommit(String(actor.id), 250) : null;
-      await actor.update(data.updateData, { skipExperienceChecks: true } as any);
-      if (commitObserved) await commitObserved;
-
-      // BUG-086 fix (2026-05-17): actor.update() does NOT throw on DataModelValidationError;
-      // Foundry logs to console.warn but resolves the promise silently. Without post-write
-      // verification, our success envelope lies — caller gets {success:true} for a write
-      // that didn't persist any field. Mirrors manage-character.update-stats DP-16 pattern
-      // (CCR-Envelope-Consumer extension). Pass verifyPersistence:false to opt out when
-      // writing system-derived fields that auto-compute back via prepareDerivedData
-      // (e.g. CharacterModel.computeCareer overwriting system.details.status.* per BUG-085).
-      if (data.verifyPersistence !== false) {
-        const fresh = (game.actors as any)?.get(actor.id);
-        if (!fresh) {
-          throw new Error(`UPDATE_ACTOR_NOT_PERSISTED: actor ${actor.id} disappeared after update`);
-        }
-        const flat = (foundry as any).utils.flattenObject(data.updateData) as Record<string, unknown>;
-        const drift: string[] = [];
-        for (const [path, expected] of Object.entries(flat)) {
-          // Skip Foundry's deletion-marker syntax (e.g. "system.foo.-=key": null) — re-read
-          // can't validate "key absent" via getProperty/expected comparison.
-          if (path.includes('.-=')) continue;
-          const actual = (foundry as any).utils.getProperty(fresh, path);
-          if (JSON.stringify(actual) !== JSON.stringify(expected)) {
-            drift.push(`${path}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
-          }
-        }
-        if (drift.length > 0) {
-          throw new Error(
-            `UPDATE_ACTOR_NOT_PERSISTED: ${drift.length} field(s) did not persist (DataModelValidationError? auto-derive overwrite?). Drift: ${drift.slice(0, 3).join('; ')}${drift.length > 3 ? `; +${drift.length - 3} more` : ''}`
-          );
-        }
-      }
-
-      // Debug: Log the updateData structure to help diagnose issues
-      console.log(`[Warhammer MCP] Update data structure:`, {
-        actorName: actor.name,
-        updateDataKeys: Object.keys(data.updateData || {}),
-        hasWarnings: !!(data.warnings && data.warnings.length),
-        warningCount: data.warnings?.length || 0,
-        firstWarning: data.warnings?.[0]
-      });
-
-      // Format field names in a human-readable way
-      const formatFieldName = (key: string): string => {
-        // Ensure key is a string
-        if (typeof key !== 'string') {
-          console.warn(`[Warhammer MCP] Non-string field key:`, key);
-          return String(key);
-        }
-
-        try {
-          const parts = key.split('.');
-
-          if (parts.includes('characteristics')) {
-            const charIndex = parts.indexOf('characteristics');
-
-            // Validate array bounds
-            if (charIndex + 1 >= parts.length) {
-              return 'Unknown Characteristic';
-            }
-
-            const char = parts[charIndex + 1];
-
-            // Validate char exists and is string
-            if (!char || typeof char !== 'string') {
-              return 'Unknown Characteristic';
-            }
-
-            const charName: Record<string, string> = {
-              'ws': 'Weapon Skill',
-              'bs': 'Ballistic Skill',
-              's': 'Strength',
-              't': 'Toughness',
-              'i': 'Initiative',
-              'ag': 'Agility',
-              'dex': 'Dexterity',
-              'int': 'Intelligence',
-              'wp': 'Willpower',
-              'fel': 'Fellowship'
-            };
-
-            const result = charName[char];
-            return result || `${char.toUpperCase()} characteristic`;
-          } else if (parts.includes('status')) {
-            const statIndex = parts.indexOf('status');
-
-            // Validate array bounds
-            if (statIndex + 1 >= parts.length) {
-              return 'Unknown Status';
-            }
-
-            const stat = parts[statIndex + 1];
-
-            if (!stat || typeof stat !== 'string') {
-              return 'Unknown Status';
-            }
-
-            const statName: Record<string, string> = {
-              'wounds': 'Wounds',
-              'fortune': 'Fortune',
-              'fate': 'Fate',
-              'resilience': 'Resilience',
-              'resolve': 'Resolve',
-              'corruption': 'Corruption',
-              'armour': 'Armor Points'
-            };
-
-            const result = statName[stat];
-            return result || stat;
-          } else if (parts.includes('details')) {
-            const detailIndex = parts.indexOf('details');
-
-            // Validate array bounds
-            if (detailIndex + 1 >= parts.length) {
-              return 'Unknown Detail';
-            }
-
-            const detail = parts[detailIndex + 1];
-
-            if (!detail || typeof detail !== 'string') {
-              return 'Unknown Detail';
-            }
-
-            const detailName: Record<string, string> = {
-              'age': 'Age',
-              'height': 'Height',
-              'weight': 'Weight',
-              'gender': 'Gender',
-              'haircolour': 'Hair Colour',
-              'eyecolour': 'Eye Colour',
-              'distinguishingmark': 'Distinguishing Mark',
-              'starsign': 'Star Sign',
-              'move': 'Movement',
-              'motivation': 'Motivation',
-              'gmnotes': 'GM Notes',
-              'personal-ambitions': 'Ambitions',
-              'biography': 'Biography',
-              'experience': 'Experience'
-            };
-
-            const result = detailName[detail];
-            return result || detail;
-          } else if (parts.includes('experience') || key.includes('experience')) {
-            // Handle experience-related fields
-            if (parts.includes('log')) {
-              return 'Experience Log';
-            }
-            if (parts.includes('total')) {
-              return 'Total XP';
-            }
-            if (parts.includes('spent')) {
-              return 'Spent XP';
-            }
-            if (parts.includes('current')) {
-              return 'Available XP';
-            }
-            return 'Experience';
-          }
-
-          // Default: return last part of path
-          const lastPart = parts[parts.length - 1];
-          return lastPart || 'Unknown Field';
-        } catch (error) {
-          console.warn(`[Warhammer MCP] Error formatting field name "${key}":`, error);
-          return 'Unknown Field';
-        }
-      };
-
-      // Helper function to format a value for display
-      const formatValue = (value: any): string => {
-        if (value === null || value === undefined) return 'null';
-        if (typeof value === 'boolean') return value ? 'true' : 'false';
-        if (typeof value === 'number') return String(value);
-        if (typeof value === 'string') {
-          // Truncate long strings
-          return value.length > 30 ? value.substring(0, 27) + '...' : value;
-        }
-        if (Array.isArray(value)) {
-          return `[${value.length} items]`;
-        }
-        if (typeof value === 'object') {
-          // For objects, just show "updated" rather than JSON dump
-          return '[object]';
-        }
-        return String(value);
-      };
-
-      // Filter out internal fields that shouldn't be shown in notifications
-      const isInternalField = (key: string): boolean => {
-        const internalPatterns = ['_id', 'type', 'flags', 'ownership', 'folder', 'sort', 'permission'];
-        const lowerKey = key.toLowerCase();
-        return internalPatterns.some(pattern => lowerKey === pattern || lowerKey.endsWith('.' + pattern));
-      };
-
-      // Helper function to flatten nested objects into dot-notation paths
-      const flattenObject = (obj: Record<string, any>, prefix = ''): Record<string, any> => {
-        const result: Record<string, any> = {};
-
-        for (const key of Object.keys(obj)) {
-          const fullKey = prefix ? `${prefix}.${key}` : key;
-          const value = obj[key];
-
-          // Skip internal fields
-          if (isInternalField(key) || isInternalField(fullKey)) {
-            continue;
-          }
-
-          // If value is a plain object (not array, not null), recurse
-          if (value && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date)) {
-            // Check if it's a "leaf" value object (has 'value' property that's primitive)
-            if ('value' in value && (typeof value.value !== 'object' || value.value === null)) {
-              // This is likely a WFRP field like {value: 15}, extract the value
-              result[fullKey + '.value'] = value.value;
-            } else {
-              // Recurse into nested object
-              Object.assign(result, flattenObject(value, fullKey));
-            }
-          } else {
-            // Primitive value or array - keep as is
-            result[fullKey] = value;
-          }
-        }
-
-        return result;
-      };
-
-      // Flatten the updateData to get actual field paths
-      const flattenedUpdates = flattenObject(data.updateData || {});
-      const flattenedPrevious = flattenObject(previousValues || {});
-
-      // Create a clear, readable summary of what was updated with before/after values
-      const allKeys = Object.keys(flattenedUpdates);
-      const userFacingKeys = allKeys.filter(key => !isInternalField(key));
-
-      const fieldDescriptions = userFacingKeys.map((key, index) => {
-        try {
-          const formatted = formatFieldName(key);
-          const oldValue = flattenedPrevious[key];
-          const newValue = flattenedUpdates[key];
-
-          // Show before → after format
-          let description: string;
-          if (oldValue !== undefined && oldValue !== newValue) {
-            description = `${formatted}: ${formatValue(oldValue)} → ${formatValue(newValue)}`;
-          } else {
-            // If we don't have previous value or it's the same, just show new value
-            description = `${formatted}: ${formatValue(newValue)}`;
-          }
-
-          return description;
-        } catch (error) {
-          console.warn(`[Warhammer MCP] Error formatting field at index ${index} (key: "${key}"):`, error);
-          return `${String(key)}: ${formatValue(flattenedUpdates[key])}`;
-        }
-      });
-
-      // Filter out any non-strings just in case
-      const cleanDescriptions = fieldDescriptions.filter(d => typeof d === 'string');
-
-      // Limit to first 4 items if there are many updates
-      const maxItemsToShow = 4;
-      let updateSummary: string;
-      if (cleanDescriptions.length === 0) {
-        updateSummary = 'various fields';
-      } else if (cleanDescriptions.length <= maxItemsToShow) {
-        updateSummary = cleanDescriptions.join(', ');
-      } else {
-        const shown = cleanDescriptions.slice(0, maxItemsToShow).join(', ');
-        const remaining = cleanDescriptions.length - maxItemsToShow;
-        updateSummary = `${shown}, and ${remaining} more field${remaining > 1 ? 's' : ''}`;
-      }
-
-      // Show notifications to GM
-      if (data.warnings && Array.isArray(data.warnings) && data.warnings.length > 0) {
-        // Show each warning as a separate, clear notification
-        data.warnings.forEach((warning: any, index: number) => {
-          // Ensure warning is converted to readable string
-          let warningText: string;
-
-          if (typeof warning === 'string') {
-            warningText = warning;
-          } else if (warning === null || warning === undefined) {
-            warningText = 'Unknown warning';
-          } else if (typeof warning === 'object') {
-            // Try to extract message from object
-            warningText = warning.message || warning.text || JSON.stringify(warning);
-          } else {
-            warningText = String(warning);
-          }
-
-          // Clean up the warning text - remove "WARNING:" prefix if present
-          warningText = warningText.replace(/^WARNING:\s*/i, '').trim();
-
-          // Ensure we have a non-empty string
-          if (!warningText) {
-            warningText = `Warning ${index + 1}`;
-          }
-
-          notify.warn(warningText);
-        });
-
-        // Show summary notification
-        notify.updated('actor', actor.name ?? 'unknown', { summary: updateSummary, uuid: (actor as any).uuid });
-
-        // Log to console for GM review
-        console.warn(`[Warhammer MCP] Warnings for ${actor.name}:`, data.warnings);
-      } else {
-        // Simple success notification
-        notify.updated('actor', actor.name ?? 'unknown', { summary: updateSummary, uuid: (actor as any).uuid });
-      }
-
-      return {
-        success: true,
-        actorId: actor.id,
-        actorName: actor.name,
-        updated: Object.keys(data.updateData)
-      };
-    } catch (error) {
-      throw new Error(`Failed to update actor: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    // Phase 7 (R7.1/R7.2): facade delegate → ActorService (the orchestrator + formatActorUpdateSummary
+    // split lives there now; Contract deferred to Phase 8).
+    return this.actorService.updateActor(data);
   }
 
-  /**
-   * Phase 4 mcp_coverage_expansion: resolve an actor by id or name.
-   * Used by actor-direct AE branches (add/update/delete/getByName).
-   */
-  private _resolveActor(actorId?: string, actorName?: string): any {
-    let actor: any = null;
-    if (actorId) actor = (game.actors as any)?.get(actorId) ?? null;
-    if (!actor && actorName) {
-      const wanted = actorName.toLowerCase();
-      actor = (game.actors as any)?.find((a: any) => a.name?.toLowerCase() === wanted) ?? null;
-    }
-    if (!actor) {
-      throw new Error(`Actor not found: ${actorId ?? actorName ?? '(no identifier)'}`);
-    }
-    return actor;
-  }
-
-  /**
-   * Phase 5 follow-up: resolve an item to its doc + (optional) owning actor.
-   * Unifies actor-embedded and world-scope lookup across updateItem / deleteItem
-   * / addActiveEffect / updateActiveEffect / deleteActiveEffect.
-   *
-   * Accepts two target shapes:
-   *  - legacy `{actorId, itemId}` — actor-embedded lookup by id.
-   *  - new `{destination, itemId?, itemName?}` — route on destination.type.
-   * World-scope branch does NOT take an owner.
-   */
-  private _resolveItem(target: {
-    actorId?: string | undefined;
-    itemId?: string | undefined;
-    itemName?: string | undefined;
-    destination?:
-    | { type: 'actor'; actorId?: string | undefined; actorName?: string | undefined }
-    | { type: 'world'; folder?: string[] | undefined }
-    | undefined;
-  }): { item: any; owner: any | null; scope: 'actor' | 'world' } {
-    const dest = target.destination;
-    const hasActorLegacy = !!target.actorId;
-    if (!dest && !hasActorLegacy) {
-      throw new Error('Either `actorId` or `destination` must be supplied to resolve an item');
-    }
-
-    // World scope
-    if (dest?.type === 'world') {
-      const items: any = game.items as any;
-      let item: any = null;
-      if (target.itemId) item = items?.get?.(target.itemId) ?? null;
-      if (!item && target.itemName) {
-        const wanted = target.itemName.toLowerCase();
-        item = items?.find?.((i: any) => i.name?.toLowerCase() === wanted) ?? null;
-      }
-      if (!item) {
-        throw new Error(
-          `World item "${target.itemName ?? target.itemId ?? '(no identifier)'}" not found in Items sidebar`
-        );
-      }
-      return { item, owner: null, scope: 'world' };
-    }
-
-    // Actor scope (explicit destination or legacy actorId)
-    let actor: any = null;
-    if (dest?.type === 'actor') {
-      if (dest.actorId) actor = (game.actors as any)?.get(dest.actorId) ?? null;
-      if (!actor && dest.actorName) {
-        const wanted = dest.actorName.toLowerCase();
-        actor = (game.actors as any)?.find((a: any) => a.name?.toLowerCase() === wanted) ?? null;
-      }
-    } else if (hasActorLegacy) {
-      actor = (game.actors as any)?.get(target.actorId!) ?? null;
-    }
-    if (!actor) {
-      const ident =
-        dest?.type === 'actor' ? dest.actorId ?? dest.actorName : target.actorId;
-      throw new Error(`Actor not found: ${ident ?? '(no identifier)'}`);
-    }
-
-    let item: any = null;
-    if (target.itemId) item = actor.items?.get?.(target.itemId) ?? null;
-    if (!item && target.itemName) {
-      const wanted = target.itemName.toLowerCase();
-      item = actor.items?.find?.((i: any) => i.name?.toLowerCase() === wanted) ?? null;
-    }
-    if (!item) {
-      throw new Error(
-        `Item "${target.itemName ?? target.itemId ?? '(no identifier)'}" not found on ${actor.name}`
-      );
-    }
-    return { item, owner: actor, scope: 'actor' };
-  }
 
   /**
    * Update item data on an actor OR a world-scope item.
@@ -1562,127 +618,13 @@ export class FoundryDataAccess {
     options?: { skipExperienceChecks?: boolean | undefined } | undefined;
     verifyPersistence?: boolean | undefined;
   }): Promise<any> {
-    this.validateFoundryState();
-
-    try {
-      const { item, owner, scope } = this._resolveItem(data);
-      const flat =
-        data.verifyPersistence !== false
-          ? ((foundry as any).utils.flattenObject(data.updateData) as Record<string, unknown>)
-          : null;
-      const beforeValues =
-        flat && data.verifyPersistence !== false
-          ? Object.fromEntries(
-            Object.entries(flat)
-              .filter(([path]) => !path.includes('.-='))
-              .map(([path]) => [path, (foundry as any).utils.getProperty(item, path)]),
-          )
-          : null;
-      // BUG-385: a skill item whose `system.advances.value` changes on a character-type actor
-      // triggers SkillModel._preUpdate → Advancement.advancementDialog (a DialogV2), which
-      // deadlocks the MCP await until a human clicks. The wfrp4e gate is !options.skipExperienceChecks;
-      // updateActor already injects this unconditionally — mirror it here (GM-only programmatic path,
-      // the XP dialog is never appropriate).
-      const updateResult = await item.update(
-        data.updateData,
-        { ...(data.options ?? {}), skipExperienceChecks: true } as any,
-      );
-
-      // MCP Completion v1 Phase 1 (R1.2): item.update() does NOT throw on
-      // DataModelValidationError; Foundry logs to console.warn but resolves
-      // silently. Without post-write verification our success envelope lies.
-      // Mirrors updateActor's BUG-086 verify-block (data-access.ts:4190-4211).
-      // Pass verifyPersistence:false to opt out when writing auto-derived fields.
-      if (data.verifyPersistence !== false) {
-        const flatUpdate = flat ?? {};
-        // BUG-134: Foundry returns `undefined` when a preUpdate hook cancels the write.
-        // Treat that as a failed persistence attempt whenever the requested payload
-        // would have changed at least one field.
-        if (updateResult === undefined && beforeValues) {
-          const cancelled = Object.entries(flatUpdate)
-            .filter(([path]) => !path.includes('.-='))
-            .filter(([path, expected]) => JSON.stringify(beforeValues[path]) !== JSON.stringify(expected));
-          if (cancelled.length > 0) {
-            const preview = cancelled
-              .slice(0, 3)
-              .map(([path, expected]) => `${path}: expected ${JSON.stringify(expected)}, before ${JSON.stringify(beforeValues[path])}`)
-              .join('; ');
-            throw new Error(
-              `UPDATE_ITEM_NOT_PERSISTED: Item.update() returned undefined (preUpdate cancelled write?). Requested changes were not applied. ${preview}${cancelled.length > 3 ? `; +${cancelled.length - 3} more` : ''}`,
-            );
-          }
-        }
-        const freshItem =
-          scope === 'actor'
-            ? (game.actors as any)?.get(owner?.id)?.items?.get(item.id)
-            : (game.items as any)?.get(item.id);
-        if (!freshItem) {
-          throw new Error(`UPDATE_ITEM_NOT_PERSISTED: item ${item.id} disappeared after update`);
-        }
-        const drift: string[] = [];
-        for (const [path, expected] of Object.entries(flatUpdate)) {
-          if (path.includes('.-=')) continue;
-          const actual = (foundry as any).utils.getProperty(freshItem, path);
-          if (JSON.stringify(actual) !== JSON.stringify(expected)) {
-            drift.push(`${path}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
-          }
-        }
-        if (drift.length > 0) {
-          throw new Error(
-            `UPDATE_ITEM_NOT_PERSISTED: ${drift.length} field(s) did not persist (DataModelValidationError? auto-derive overwrite?). Drift: ${drift.slice(0, 3).join('; ')}${drift.length > 3 ? `; +${drift.length - 3} more` : ''}`
-          );
-        }
-      }
-
-      const ownerLabel = scope === 'world' ? '(world)' : owner?.name ?? '(unknown)';
-      notify.updated('item', item.name, { summary: `on ${ownerLabel}`, uuid: (item as any).uuid });
-
-      return {
-        success: true,
-        scope,
-        actorId: owner?.id ?? null,
-        itemId: item.id,
-        itemName: item.name,
-        updated: Object.keys(data.updateData),
-      };
-    } catch (error) {
-      throw new Error(`Failed to update item: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
-
-  /**
-   * Walk the Items-sidebar folder tree; create missing segments.
-   * Returns the leaf folder's ID. Empty/missing segments → null (root).
-   */
-  private async _ensureFolderChain(segments: string[]): Promise<string | null> {
-    if (!segments || segments.length === 0) return null;
-
-    let parentId: string | null = null;
-    for (const name of segments) {
-      const existing = (game.folders as any).find((f: any) => {
-        const fParent = f.folder?.id ?? f.folder ?? null;
-        return f.type === 'Item' && f.name === name && fParent === parentId;
-      });
-      if (existing) {
-        parentId = existing.id;
-        continue;
-      }
-      const payload: any = { name, type: 'Item', folder: parentId };
-      const created: any = await (Folder as any).create(payload);
-      if (!created?.id) {
-        throw new Error(`Folder.create returned no id for segment "${name}"`);
-      }
-      notify.created('folder', name);
-      parentId = created.id;
-    }
-    return parentId;
+    // Phase 7 (R7.1): facade delegate → ItemService (Migrate; Contract deferred to Phase 8).
+    return this.itemService.updateItem(data);
   }
 
   /**
    * Phase 5: Create an item on an actor OR as a world-level document with optional
    * folder placement. Optional compendium-clone seeding and rich-response opt-in.
-   *
-   * Input: { itemData, destination: {type:"actor"|"world", ...}, fromCompendium?, returnFullPayload? }
    */
   async createItem(data: {
     itemData: Record<string, any>;
@@ -1692,197 +634,18 @@ export class FoundryDataAccess {
     fromCompendium?: string | undefined;
     returnFullPayload?: boolean | undefined;
   }): Promise<any> {
-    this.validateFoundryState();
-
-    try {
-      // 1. Resolve compendium clone seed if requested
-      let effectiveItemData: Record<string, any> = data.itemData;
-      if (data.fromCompendium) {
-        const source: any = await (fromUuid as any)(data.fromCompendium);
-        if (!source) {
-          throw new Error(`Compendium source not found: ${data.fromCompendium}`);
-        }
-        const cloned: any = source.toObject();
-        delete cloned._id;
-        if (Array.isArray(cloned.effects)) {
-          for (const eff of cloned.effects) delete eff._id;
-        }
-        effectiveItemData = (foundry as any).utils.mergeObject(cloned, data.itemData, {
-          recursive: true,
-          overwrite: true,
-          inplace: false,
-        });
-      }
-
-      // 2. Route on destination type
-      if (data.destination.type === 'actor') {
-        const dest = data.destination;
-        let actor: any = null;
-        if (dest.actorId) {
-          actor = (game.actors as any)?.get(dest.actorId);
-        } else if (dest.actorName) {
-          actor = (game.actors as any)?.find(
-            (a: any) => a.name?.toLowerCase() === dest.actorName!.toLowerCase()
-          );
-        }
-        if (!actor) {
-          throw new Error(
-            `Actor not found: ${dest.actorId ?? dest.actorName ?? '(no id/name provided)'}`
-          );
-        }
-
-        const createdItems = await actor.createEmbeddedDocuments('Item', [effectiveItemData]);
-        const item: any = createdItems[0];
-        notify.created('item', item.name, { summary: `on ${actor.name}`, uuid: (item as any).uuid });
-
-        const base: any = {
-          success: true,
-          scope: 'actor',
-          actorId: actor.id,
-          actorName: actor.name,
-          itemId: item.id,
-          itemName: item.name,
-          itemType: item.type,
-        };
-        if (data.returnFullPayload === true) {
-          base.itemData = item.toObject();
-          base.effectIds = (item.effects as any)?.map((e: any) => e.id) ?? [];
-        }
-        return base;
-      }
-
-      // World scope
-      const worldDest = data.destination;
-      const folderId =
-        worldDest.folder && worldDest.folder.length > 0
-          ? await this._ensureFolderChain(worldDest.folder)
-          : null;
-
-      const createPayload: any = { ...effectiveItemData };
-      if (folderId) createPayload.folder = folderId;
-
-      const created: any = await (Item as any).create(createPayload);
-      if (!created) throw new Error('Item.create returned null');
-
-      notify.created('item', created.name, { summary: 'in world directory', uuid: (created as any).uuid });
-
-      const base: any = {
-        success: true,
-        scope: 'world',
-        itemId: created.id,
-        itemName: created.name,
-        itemType: created.type,
-        folderId: folderId ?? null,
-        folderPath: worldDest.folder ?? [],
-      };
-      if (data.returnFullPayload === true) {
-        base.itemData = created.toObject();
-        base.effectIds = (created.effects as any)?.map((e: any) => e.id) ?? [];
-      }
-      return base;
-    } catch (error) {
-      throw new Error(
-        `Failed to create item: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
-    }
+    // Phase 7 (R7.1): facade delegate → ItemService (the _ensureFolderChain helper moved with it).
+    return this.itemService.createItem(data);
   }
 
-  /**
-   * Phase 5: Atomic trade — move an Item from one actor to another. Partial-quantity
-   * transfers are supported via the `quantity` parameter. Encumbrance recomputes
-   * automatically via the system's prepareData pipeline (HC3).
-   *
-   * Transaction semantics are provided by wrappedWrite at the handler layer; this
-   * method throws on any failure so the outer wrapper rolls back.
-   */
   async tradeItem(data: {
     fromActorId: string;
     toActorId: string;
     itemId: string;
     quantity?: number | undefined;
   }): Promise<any> {
-    this.validateFoundryState();
-
-    const fromActor: any = (game.actors as any)?.get(data.fromActorId);
-    if (!fromActor) {
-      throw new Error(`Source actor not found: ${data.fromActorId}`);
-    }
-    const toActor: any = (game.actors as any)?.get(data.toActorId);
-    if (!toActor) {
-      throw new Error(`Destination actor not found: ${data.toActorId}`);
-    }
-
-    const item: any = fromActor.items?.get(data.itemId);
-    if (!item) {
-      throw new Error(`Item ${data.itemId} not found on ${fromActor.name}`);
-    }
-
-    const itemName: string = item.name;
-    const itemType: string = item.type;
-    const sourceQty: number = item.system?.quantity?.value ?? 1;
-
-    // Partial transfer: source retains (sourceQty - quantity); dest gets `quantity`.
-    if (
-      typeof data.quantity === 'number' &&
-      data.quantity > 0 &&
-      data.quantity < sourceQty
-    ) {
-      const cloned: any = item.toObject();
-      delete cloned._id;
-      if (cloned.system?.quantity) cloned.system.quantity.value = data.quantity;
-
-      // Decrement source — capture result for DP-16 verify BEFORE creating destination.
-      // BUG-213: if source decrement fails silently, dest create would duplicate the item.
-      // The throw MUST precede toActor.createEmbeddedDocuments — that ordering IS the fix.
-      const updateResult = await item.update({ 'system.quantity.value': sourceQty - data.quantity });
-      const freshItem = fromActor.items?.get(data.itemId);
-      const freshQty = (freshItem as any)?.system?.quantity?.value ?? sourceQty;
-      if (updateResult === undefined || freshQty !== sourceQty - data.quantity) {
-        throw new Error(
-          `TRADE_ITEM_SOURCE_DECREMENT_NOT_PERSISTED: source quantity expected ${sourceQty - data.quantity} but found ${freshQty} (updateResult=${updateResult === undefined ? 'undefined' : 'ok'})`,
-        );
-      }
-
-      // Create on destination
-      const destCreated = await toActor.createEmbeddedDocuments('Item', [cloned]);
-      const destItem: any = destCreated[0];
-
-      notify.updated('item', itemName, { summary: `traded ${data.quantity} × from ${fromActor.name} → ${toActor.name}` });
-
-      return {
-        success: true,
-        fromActorId: fromActor.id,
-        fromActorName: fromActor.name,
-        toActorId: toActor.id,
-        toActorName: toActor.name,
-        itemId: destItem?.id ?? null,
-        itemName,
-        itemType,
-        quantities: { from: sourceQty - data.quantity, to: data.quantity },
-      };
-    }
-
-    // Full transfer: delete from source, create on destination
-    const cloned: any = item.toObject();
-    delete cloned._id;
-
-    await fromActor.deleteEmbeddedDocuments('Item', [data.itemId]);
-    const destCreated = await toActor.createEmbeddedDocuments('Item', [cloned]);
-    const destItem: any = destCreated[0];
-
-    notify.updated('item', itemName, { summary: `traded from ${fromActor.name} → ${toActor.name}` });
-
-    return {
-      success: true,
-      fromActorId: fromActor.id,
-      fromActorName: fromActor.name,
-      toActorId: toActor.id,
-      toActorName: toActor.name,
-      itemId: destItem?.id ?? null,
-      itemName,
-      itemType,
-      quantities: { from: 0, to: sourceQty },
-    };
+    // Phase 7 (R7.1): facade delegate → ItemService.
+    return this.itemService.tradeItem(data);
   }
 
   /**
@@ -1898,54 +661,21 @@ export class FoundryDataAccess {
     | { type: 'world'; folder?: string[] | undefined }
     | undefined;
   }): Promise<any> {
-    this.validateFoundryState();
-
-    try {
-      const { item, owner, scope } = this._resolveItem(data);
-      const itemName = item.name;
-      const itemType = item.type;
-      const itemId = item.id;
-
-      if (scope === 'world') {
-        await item.delete();
-        notify.deleted('item', itemName, { summary: 'world directory' });
-      } else {
-        await owner.deleteEmbeddedDocuments('Item', [itemId]);
-        notify.deleted('item', itemName, { summary: `from ${owner.name}` });
-      }
-
-      return {
-        success: true,
-        scope,
-        actorId: owner?.id ?? null,
-        itemId,
-        itemName,
-        itemType,
-      };
-    } catch (error) {
-      throw new Error(`Failed to delete item: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    // Phase 7 (R7.1): facade delegate → ItemService.
+    return this.itemService.deleteItem(data);
   }
 
-  /**
-   * Phase 5 follow-up B: resolve an ActiveEffect on a document (item or actor) by id or name.
-   * doc-agnostic — iterates doc.effects, works for both item-parented and actor-direct AEs.
-   */
-  private _findEffect(doc: any, effectId?: string, effectName?: string): any {
-    const effects: any[] = (doc.effects as any)?.contents ?? Array.from(doc.effects ?? []);
-    let found: any = null;
-    if (effectId) found = effects.find((e: any) => e.id === effectId) ?? null;
-    if (!found && effectName) {
-      const wanted = effectName.toLowerCase();
-      found = effects.find((e: any) => e.name?.toLowerCase() === wanted) ?? null;
-    }
-    if (!found) {
-      throw new Error(
-        `Effect "${effectName ?? effectId ?? '(no identifier)'}" not found on "${doc.name}"`
-      );
-    }
-    return found;
+  // Phase 7 (R7.1): NEW thin delegates for the 2 item handler bodies absorbed into ItemService (user Q2).
+  // The queries.ts handlers (addItemFromCompendium / modifyItemQualities) keep gmCheck + parse + wrappedWrite
+  // + the { success, data } wrap and now call these; query keys + registration are unchanged (tools/list stable).
+  async addItemFromCompendium(parsed: any): Promise<any> {
+    return this.itemService.addItemFromCompendium(parsed);
   }
+
+  async modifyItemQualities(parsed: any): Promise<any> {
+    return this.itemService.modifyItemQualities(parsed);
+  }
+
 
   /**
    * Phase 5 follow-up B — add ActiveEffect to an existing item.
@@ -1961,152 +691,8 @@ export class FoundryDataAccess {
     effect: any;
     returnFullPayload?: boolean | undefined;
   }): Promise<any> {
-    this.validateFoundryState();
-    try {
-      // buildEffectPayload is imported lazily to avoid a top-of-file shuffle.
-      const { buildEffectPayload } = await import('@foundry-mcp/shared');
-
-      // BUG-340: an `immediate`-trigger script that returns false self-deletes its own
-      // effect during creation (documented wfrp4e recipe — effects/triggers/immediate.md).
-      // createEmbeddedDocuments then returns [] (the doc was removed inside the create op),
-      // or the read-back is absent — but the script DID run. Detect this so the one-shot
-      // self-deleting recipe is reported as success (fired + autoDeleted), not failure.
-      const isSelfDeletingImmediate = (eff: any): boolean =>
-        eff?.trigger === 'immediate' &&
-        /\breturn\s+false\b/.test(typeof eff?.script === 'string' ? eff.script : '');
-
-      // --- actor-direct branch: effect lives directly on the actor ---
-      if (data.target.scope === 'actor-direct') {
-        const actorDirect = data.target as { scope: 'actor-direct'; actorId?: string; actorName?: string };
-        const actor = this._resolveActor(actorDirect.actorId, actorDirect.actorName);
-        const effectPayload = buildEffectPayload(data.effect);
-        const created: any[] = await actor.createEmbeddedDocuments('ActiveEffect', [effectPayload]);
-        if (!created || created.length === 0) {
-          if (isSelfDeletingImmediate(data.effect)) {
-            notify.created('active-effect', data.effect.name, {
-              summary: `on ${actor.name} (immediate one-shot — fired + self-deleted)`,
-            });
-            return {
-              success: true,
-              scope: 'actor-direct',
-              actorId: actor.id,
-              actorName: actor.name,
-              itemId: null,
-              itemName: null,
-              effectId: null,
-              effectName: data.effect.name,
-              parentType: 'Actor' as const,
-              fired: true,
-              autoDeleted: true,
-            };
-          }
-          throw new Error('Failed to create ActiveEffect on actor');
-        }
-
-        const createdEffect: any = created[0];
-        // CCR-2a re-read: verify the AE was persisted
-        const fresh: any = actor.effects.get(createdEffect.id);
-        if (!fresh) {
-          if (isSelfDeletingImmediate(data.effect)) {
-            notify.created('active-effect', createdEffect.name, {
-              summary: `on ${actor.name} (immediate one-shot — fired + self-deleted)`,
-            });
-            return {
-              success: true,
-              scope: 'actor-direct',
-              actorId: actor.id,
-              actorName: actor.name,
-              itemId: null,
-              itemName: null,
-              effectId: createdEffect.id,
-              effectName: createdEffect.name,
-              parentType: 'Actor' as const,
-              fired: true,
-              autoDeleted: true,
-            };
-          }
-          throw new Error(`ADD_ACTIVE_EFFECT_NOT_PERSISTED: effect ${createdEffect.id} absent after create`);
-        }
-
-        notify.created('active-effect', createdEffect.name, {
-          summary: `on ${actor.name}`,
-          uuid: (createdEffect as any).uuid,
-        });
-
-        const base: any = {
-          success: true,
-          scope: 'actor-direct',
-          actorId: actor.id,
-          actorName: actor.name,
-          itemId: null,
-          itemName: null,
-          effectId: createdEffect.id,
-          effectName: createdEffect.name,
-          parentType: 'Actor' as const,
-        };
-        if (data.returnFullPayload === true) {
-          base.effectData = createdEffect.toObject?.() ?? null;
-        }
-        return base;
-      }
-
-      // --- item path (scope:'actor' or scope:'world') — unchanged ---
-      const { item, owner, scope } = this._resolveItem(this._targetToResolverInput(data.target as any));
-      const effectPayload = buildEffectPayload(data.effect);
-      const created: any[] = await item.createEmbeddedDocuments('ActiveEffect', [effectPayload]);
-      if (!created || created.length === 0) {
-        if (isSelfDeletingImmediate(data.effect)) {
-          notify.created('active-effect', data.effect.name, {
-            summary: `on ${item.name} (immediate one-shot — fired + self-deleted)`,
-          });
-          return {
-            success: true,
-            scope,
-            actorId: owner?.id ?? null,
-            itemId: item.id,
-            itemName: item.name,
-            effectId: null,
-            effectName: data.effect.name,
-            fired: true,
-            autoDeleted: true,
-          };
-        }
-        throw new Error('Failed to create ActiveEffect');
-      }
-
-      const createdEffect: any = created[0];
-
-      // Canvas-anchored tooltip when effect's owning item belongs to an actor
-      // that has a token placed on the current scene.
-      const ownerActorId: string | null = owner?.id ?? null;
-      const placedToken: any = ownerActorId
-        ? (globalThis as any).canvas?.tokens?.placeables?.find((t: any) => t?.actor?.id === ownerActorId)
-        : null;
-      const tokenDoc = placedToken?.document;
-      notify.created('active-effect', createdEffect.name, {
-        summary: `on ${item.name}`,
-        uuid: (createdEffect as any).uuid,
-        tooltip: tokenDoc ? { tokenDoc, message: `+${createdEffect.name}` } : undefined,
-      });
-
-      const base: any = {
-        success: true,
-        scope,
-        actorId: owner?.id ?? null,
-        itemId: item.id,
-        itemName: item.name,
-        effectId: createdEffect.id,
-        effectName: createdEffect.name,
-      };
-      if (data.returnFullPayload === true) {
-        base.effectData = createdEffect.toObject?.() ?? null;
-      }
-      return base;
-    } catch (error) {
-      throw new Error(
-        `Failed to add active effect: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
-    }
+    // Phase 7 (R7.1): facade delegate → EffectsService (Migrate; Contract deferred to Phase 8).
+    return this.effectsService.addActiveEffect(data);
   }
 
   /**
@@ -2125,226 +711,8 @@ export class FoundryDataAccess {
     updates: any;
     returnFullPayload?: boolean | undefined;
   }): Promise<any> {
-    this.validateFoundryState();
-    if (!data.effectId && !data.effectName) {
-      throw new Error('updateActiveEffect requires one of effectId or effectName');
-    }
-    try {
-      const { buildEffectPayload } = await import('@foundry-mcp/shared');
-
-      // --- actor-direct branch ---
-      if (data.target.scope === 'actor-direct') {
-        const actorDirect = data.target as { scope: 'actor-direct'; actorId?: string; actorName?: string };
-        const actor = this._resolveActor(actorDirect.actorId, actorDirect.actorName);
-        const effect: any = this._findEffect(actor, data.effectId, data.effectName);
-
-        const mergedFlat: any = {
-          name: data.updates.name ?? effect.name,
-          trigger: data.updates.trigger ?? effect.system?.scriptData?.[0]?.trigger ?? 'manual',
-          script: data.updates.script ?? effect.system?.scriptData?.[0]?.script ?? '',
-          ...data.updates,
-        };
-        const fullInflated = buildEffectPayload(mergedFlat);
-
-        const updatePayload: Record<string, unknown> = {};
-        const touchedScript = 'trigger' in data.updates || 'script' in data.updates || 'label' in data.updates;
-        const touchedTransfer = 'transfer' in data.updates;
-        for (const key of Object.keys(data.updates)) {
-          if (key === 'trigger' || key === 'script' || key === 'label') continue;
-          if (key === 'transfer') continue;
-          updatePayload[key] = (fullInflated as any)[key] ?? data.updates[key];
-        }
-        if (touchedScript) updatePayload['system.scriptData'] = (fullInflated as any).system.scriptData;
-        if (touchedTransfer) updatePayload['system.transferData'] = (fullInflated as any).system.transferData;
-
-        const flatUpdate = (foundry as any).utils.flattenObject(updatePayload) as Record<string, unknown>;
-        const beforeValues: Record<string, unknown> = {};
-        for (const path of Object.keys(flatUpdate)) {
-          if (path.includes('.-=')) continue;
-          beforeValues[path] = (foundry as any).utils.getProperty(effect, path);
-        }
-
-        const updateResult = await effect.update(updatePayload);
-
-        if (updateResult === undefined) {
-          const cancelled = Object.entries(flatUpdate)
-            .filter(([path]) => !path.includes('.-='))
-            .filter(([path, expected]) => JSON.stringify(beforeValues[path]) !== JSON.stringify(expected));
-          if (cancelled.length > 0) {
-            const preview = cancelled.slice(0, 3).map(([path, expected]) =>
-              `${path}: expected ${JSON.stringify(expected)}, before ${JSON.stringify(beforeValues[path])}`
-            ).join('; ');
-            throw new Error(
-              `UPDATE_ACTIVE_EFFECT_NOT_PERSISTED: effect.update() returned undefined. ${preview}`,
-            );
-          }
-        }
-
-        // CCR-2a re-read
-        let freshEffect: any;
-        try {
-          freshEffect = this._findEffect(actor, effect.id);
-        } catch {
-          throw new Error(`UPDATE_ACTIVE_EFFECT_NOT_PERSISTED: effect ${effect.id} disappeared after update`);
-        }
-        // BUG-342: foundry.utils.flattenObject treats arrays as LEAF values, so the whole
-        // `system.scriptData` array is a single flat key. Its wfrp4e-managed `options`
-        // sub-object is normalized on write (live keys: targeter/defending/runIfDisabled/
-        // deleteEffect/showDuplicates) and never matches the MCP payload template, so a
-        // whole-array compare false-fails. Skip the array from the generic drift verify and
-        // instead verify the caller-meaningful scriptData[0] fields (script/trigger/label) landed.
-        const scriptDataSkip = touchedScript ? ['system.scriptData'] : [];
-        verifyDocWrite(freshEffect, flatUpdate, 'UPDATE_ACTIVE_EFFECT_NOT_PERSISTED', { skipPaths: scriptDataSkip });
-        if (touchedScript) {
-          const sd0: any = (freshEffect as any).system?.scriptData?.[0] ?? {};
-          for (const f of ['script', 'trigger', 'label'] as const) {
-            if (typeof data.updates[f] === 'string' && sd0[f] !== data.updates[f]) {
-              throw new Error(
-                `UPDATE_ACTIVE_EFFECT_NOT_PERSISTED: scriptData.${f} did not persist (expected ${JSON.stringify(data.updates[f])}, got ${JSON.stringify(sd0[f])})`,
-              );
-            }
-          }
-        }
-
-        notify.updated('active-effect', effect.name, {
-          summary: `on ${actor.name}`,
-          uuid: (effect as any).uuid,
-        });
-
-        const base: any = {
-          success: true,
-          scope: 'actor-direct',
-          actorId: actor.id,
-          actorName: actor.name,
-          itemId: null,
-          itemName: null,
-          effectId: effect.id,
-          effectName: effect.name,
-          updated: Object.keys(updatePayload),
-          parentType: 'Actor' as const,
-        };
-        if (data.returnFullPayload === true) {
-          base.effectData = freshEffect.toObject?.() ?? null;
-        }
-        return base;
-      }
-
-      // --- item path (scope:'actor' or scope:'world') — unchanged ---
-      const { item, owner, scope } = this._resolveItem(this._targetToResolverInput(data.target as any));
-      const effect: any = this._findEffect(item, data.effectId, data.effectName);
-
-      // If updates contains flat keys that map through buildEffectPayload
-      // (name, trigger, script, label, transfer, disabled, changes, statuses,
-      // duration, flags, equipTransfer, enableScript, preApplyScript,
-      // testIndependent), inflate the subset. buildEffectPayload REQUIRES
-      // `name` and `trigger`; for a partial update we synthesize those from
-      // the existing effect if absent.
-      const mergedFlat: any = {
-        name: data.updates.name ?? effect.name,
-        trigger:
-          data.updates.trigger ??
-          effect.system?.scriptData?.[0]?.trigger ??
-          'manual',
-        script:
-          data.updates.script ??
-          effect.system?.scriptData?.[0]?.script ??
-          '',
-        ...data.updates,
-      };
-      const fullInflated = buildEffectPayload(mergedFlat);
-
-      // Build a minimal update payload: only the top-level keys the caller
-      // actually supplied get written (merge semantics), except when those
-      // keys' values live in nested system.* paths that buildEffectPayload
-      // rebuilds — for those, we pass the rebuilt subtree.
-      const updatePayload: Record<string, unknown> = {};
-      const touchedScript =
-        'trigger' in data.updates || 'script' in data.updates || 'label' in data.updates;
-      const touchedTransfer = 'transfer' in data.updates;
-      for (const key of Object.keys(data.updates)) {
-        if (key === 'trigger' || key === 'script' || key === 'label') continue;
-        if (key === 'transfer') continue;
-        updatePayload[key] = (fullInflated as any)[key] ?? data.updates[key];
-      }
-      if (touchedScript) {
-        updatePayload['system.scriptData'] = (fullInflated as any).system.scriptData;
-      }
-      if (touchedTransfer) {
-        updatePayload['system.transferData'] = (fullInflated as any).system.transferData;
-      }
-
-      // Snapshot before-values for the undefined-cancel guard (mirrors updateItem:4665).
-      const flatUpdate = (foundry as any).utils.flattenObject(updatePayload) as Record<string, unknown>;
-      const beforeValues: Record<string, unknown> = {};
-      for (const path of Object.keys(flatUpdate)) {
-        if (path.includes('.-=')) continue;
-        beforeValues[path] = (foundry as any).utils.getProperty(effect, path);
-      }
-
-      const updateResult = await effect.update(updatePayload);
-
-      // BUG-216: full DP-16 post-verify (token: UPDATE_ACTIVE_EFFECT_NOT_PERSISTED).
-      if (updateResult === undefined) {
-        const cancelled = Object.entries(flatUpdate)
-          .filter(([path]) => !path.includes('.-='))
-          .filter(([path, expected]) => JSON.stringify(beforeValues[path]) !== JSON.stringify(expected));
-        if (cancelled.length > 0) {
-          const preview = cancelled.slice(0, 3).map(([path, expected]) =>
-            `${path}: expected ${JSON.stringify(expected)}, before ${JSON.stringify(beforeValues[path])}`
-          ).join('; ');
-          throw new Error(
-            `UPDATE_ACTIVE_EFFECT_NOT_PERSISTED: effect.update() returned undefined (preUpdate cancelled write?). ${preview}`,
-          );
-        }
-      }
-      // BUG-279: _findEffect throws when not found, so wrap in try/catch to make the
-      // UPDATE_ACTIVE_EFFECT_NOT_PERSISTED sentinel reachable.
-      let freshEffect: any;
-      try {
-        freshEffect = this._findEffect(item, effect.id);
-      } catch {
-        throw new Error(`UPDATE_ACTIVE_EFFECT_NOT_PERSISTED: effect ${effect.id} disappeared after update`);
-      }
-      // BUG-342: foundry.utils.flattenObject treats arrays as LEAF values, so the whole
-      // `system.scriptData` array is a single flat key whose wfrp4e-normalized `options`
-      // sub-object never matches the MCP payload template (whole-array compare false-fails).
-      // Skip it from the generic drift verify; verify the meaningful scriptData[0] fields instead.
-      const scriptDataSkip = touchedScript ? ['system.scriptData'] : [];
-      verifyDocWrite(freshEffect, flatUpdate, 'UPDATE_ACTIVE_EFFECT_NOT_PERSISTED', { skipPaths: scriptDataSkip });
-      if (touchedScript) {
-        const sd0: any = (freshEffect as any).system?.scriptData?.[0] ?? {};
-        for (const f of ['script', 'trigger', 'label'] as const) {
-          if (typeof data.updates[f] === 'string' && sd0[f] !== data.updates[f]) {
-            throw new Error(
-              `UPDATE_ACTIVE_EFFECT_NOT_PERSISTED: scriptData.${f} did not persist (expected ${JSON.stringify(data.updates[f])}, got ${JSON.stringify(sd0[f])})`,
-            );
-          }
-        }
-      }
-
-      notify.updated('active-effect', effect.name, {
-        summary: `on ${item.name}`,
-        uuid: (effect as any).uuid,
-      });
-
-      const base: any = {
-        success: true,
-        scope,
-        actorId: owner?.id ?? null,
-        itemId: item.id,
-        effectId: effect.id,
-        effectName: effect.name,
-        updated: Object.keys(updatePayload),
-      };
-      if (data.returnFullPayload === true) {
-        base.effectData = freshEffect.toObject?.() ?? null;
-      }
-      return base;
-    } catch (error) {
-      throw new Error(
-        `Failed to update active effect: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
-    }
+    // Phase 7 (R7.1): facade delegate → EffectsService (Migrate; Contract deferred to Phase 8).
+    return this.effectsService.updateActiveEffect(data);
   }
 
   /**
@@ -2359,87 +727,10 @@ export class FoundryDataAccess {
     effectId?: string | undefined;
     effectName?: string | undefined;
   }): Promise<any> {
-    this.validateFoundryState();
-    if (!data.effectId && !data.effectName) {
-      throw new Error('deleteActiveEffect requires one of effectId or effectName');
-    }
-    try {
-      // --- actor-direct branch ---
-      if (data.target.scope === 'actor-direct') {
-        const actorDirect = data.target as { scope: 'actor-direct'; actorId?: string; actorName?: string };
-        const actor = this._resolveActor(actorDirect.actorId, actorDirect.actorName);
-        const effect: any = this._findEffect(actor, data.effectId, data.effectName);
-        const effectId: string = effect.id;
-        const effectName: string = effect.name;
-        await actor.deleteEmbeddedDocuments('ActiveEffect', [effectId]);
-        // CCR-2a verify gone
-        if (actor.effects.get(effectId)) {
-          throw new Error(`DELETE_ACTIVE_EFFECT_NOT_PERSISTED: effect ${effectId} still present after delete`);
-        }
-        notify.deleted('active-effect', effectName, { summary: `from ${actor.name}` });
-        return {
-          success: true,
-          scope: 'actor-direct',
-          actorId: actor.id,
-          actorName: actor.name,
-          itemId: null,
-          effectId,
-          effectName,
-          parentType: 'Actor' as const,
-        };
-      }
-
-      // --- item path (scope:'actor' or scope:'world') — unchanged ---
-      const { item, owner, scope } = this._resolveItem(this._targetToResolverInput(data.target as any));
-      const effect: any = this._findEffect(item, data.effectId, data.effectName);
-      const effectId: string = effect.id;
-      const effectName: string = effect.name;
-      await item.deleteEmbeddedDocuments('ActiveEffect', [effectId]);
-      notify.deleted('active-effect', effectName, { summary: `from ${item.name}` });
-      return {
-        success: true,
-        scope,
-        actorId: owner?.id ?? null,
-        itemId: item.id,
-        effectId,
-        effectName,
-      };
-    } catch (error) {
-      throw new Error(
-        `Failed to delete active effect: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
-    }
+    // Phase 7 (R7.1): facade delegate → EffectsService (Migrate; Contract deferred to Phase 8).
+    return this.effectsService.deleteActiveEffect(data);
   }
 
-  /**
-   * Translate an ItemTarget (scope discriminator) into the _resolveItem
-   * argument shape (destination discriminator). Keeps _resolveItem's single
-   * input shape shared with updateItem / deleteItem.
-   */
-  private _targetToResolverInput(target: any): {
-    itemId?: string | undefined;
-    itemName?: string | undefined;
-    destination:
-    | { type: 'actor'; actorId?: string | undefined; actorName?: string | undefined }
-    | { type: 'world' };
-  } {
-    if (target?.scope === 'world') {
-      return {
-        itemId: target.itemId,
-        itemName: target.itemName,
-        destination: { type: 'world' },
-      };
-    }
-    return {
-      itemId: target.itemId,
-      itemName: target.itemName,
-      destination: {
-        type: 'actor',
-        actorId: target.actorId,
-        actorName: target.actorName,
-      },
-    };
-  }
 
   // ============================================================
   // Phase 4b — combat / damage / conditions / active-effects
@@ -2467,29 +758,6 @@ export class FoundryDataAccess {
     };
   }
 
-  private async waitForActorUpdateCommit(actorId: string, timeoutMs: number = 250): Promise<void> {
-    const hooksApi: any = (globalThis as any).Hooks;
-    if (!hooksApi?.on || !hooksApi?.off) {
-      await Promise.resolve();
-      return;
-    }
-
-    let hookId: number | undefined;
-    let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
-    try {
-      await new Promise<void>((resolve) => {
-        hookId = hooksApi.on('updateActor', (updatedActor: any) => {
-          if (updatedActor?.id === actorId) {
-            resolve();
-          }
-        });
-        timeoutHandle = setTimeout(resolve, timeoutMs);
-      });
-    } finally {
-      if (hookId !== undefined) hooksApi.off('updateActor', hookId);
-      if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
-    }
-  }
 
   async applyDamage(data: {
     actorId: string;
@@ -2702,8 +970,8 @@ export class FoundryDataAccess {
       // --- actor-direct branch: search actor.effects directly (R4.4) ---
       if (data.target.scope === 'actor-direct') {
         const actorDirect = data.target as { scope: 'actor-direct'; actorId?: string; actorName?: string };
-        const actor = this._resolveActor(actorDirect.actorId, actorDirect.actorName);
-        const effect: any = this._findEffect(actor, data.effectId, data.effectName);
+        const actor = _resolveActor(actorDirect.actorId, actorDirect.actorName);
+        const effect: any = _findEffect(actor, data.effectId, data.effectName);
         return {
           success: true,
           scope: 'actor-direct',
@@ -2720,8 +988,8 @@ export class FoundryDataAccess {
       }
 
       // --- item path (scope:'actor' or scope:'world') — parentType:'Item' ---
-      const { item, owner, scope } = this._resolveItem(this._targetToResolverInput(data.target as any));
-      const effect: any = this._findEffect(item, data.effectId, data.effectName);
+      const { item, owner, scope } = _resolveItem(_targetToResolverInput(data.target as any));
+      const effect: any = _findEffect(item, data.effectId, data.effectName);
       return {
         success: true,
         scope,

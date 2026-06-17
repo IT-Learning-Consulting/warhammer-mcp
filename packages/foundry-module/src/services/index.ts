@@ -19,3 +19,7 @@ export { CombatService } from './combat.js';
 export { ConditionsService } from './conditions.js';
 // Phase 6 (R6.1): template-apply engine (applyTemplate + applyTemplateToToken + plan/apply split).
 export { TemplateApplyService } from './template-apply.js';
+// Phase 7 (R7.1): actor/item/effect MUTATION clusters (Migrate; Contract → Phase 8).
+export { EffectsService } from './effects.js';
+export { ItemService } from './item.js';
+export { ActorService } from './actor.js';

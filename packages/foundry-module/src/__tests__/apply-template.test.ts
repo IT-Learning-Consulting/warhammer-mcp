@@ -138,7 +138,7 @@ beforeEach(() => {
 describe('handleApplyTemplate — happy path envelope', () => {
   it('returns { success: true, data } with template summary', async () => {
     const qh = makeHandlers();
-    (qh.dataAccess as any).applyTemplate = async () => ({
+    qh.templateApply.applyTemplate = async () => ({
       success: true,
       actorId: 'act-1',
       actorName: 'Wight Skeleton',
@@ -192,7 +192,7 @@ describe('dataAccess.applyTemplate — actor + template guards', () => {
     const qh = makeHandlers();
     (globalThis as any).game.actors = new Map();
     await expect(
-      (qh.dataAccess as any).applyTemplate({ actorId: 'ghost', templateUuid: 'x' }),
+      qh.templateApply.applyTemplate({ actorId: 'ghost', templateUuid: 'x' }),
     ).rejects.toThrow(/Actor not found/);
   });
 
@@ -202,7 +202,7 @@ describe('dataAccess.applyTemplate — actor + template guards', () => {
     (globalThis as any).game.actors = new Map([['act-1', actor]]);
     (globalThis as any).warhammer.utility.findItemId = async () => null;
     await expect(
-      (qh.dataAccess as any).applyTemplate({ actorId: 'act-1', templateUuid: 'missing' }),
+      qh.templateApply.applyTemplate({ actorId: 'act-1', templateUuid: 'missing' }),
     ).rejects.toThrow(/Template not found/);
   });
 
@@ -212,7 +212,7 @@ describe('dataAccess.applyTemplate — actor + template guards', () => {
     (globalThis as any).game.actors = new Map([['act-1', actor]]);
     (globalThis as any).warhammer.utility.findItemId = async () => ({ id: 'not-tpl', name: 'Sword', type: 'weapon', system: {} });
     await expect(
-      (qh.dataAccess as any).applyTemplate({ actorId: 'act-1', templateUuid: 'Compendium.x.items.Item.sword' }),
+      qh.templateApply.applyTemplate({ actorId: 'act-1', templateUuid: 'Compendium.x.items.Item.sword' }),
     ).rejects.toThrow(/expected "template"/);
   });
 });
@@ -231,7 +231,7 @@ describe('dataAccess.applyTemplate — skills + characteristics + name', () => {
     });
     (globalThis as any).warhammer.utility.findItemId = async () => template;
 
-    const result = await (qh.dataAccess as any).applyTemplate({
+    const result = await qh.templateApply.applyTemplate({
       actorId: 'act-1',
       templateUuid: 'Compendium.wfrp4e-owb2.items.Item.tpl-wight',
     });
@@ -262,7 +262,7 @@ describe('dataAccess.applyTemplate — skills + characteristics + name', () => {
       { name: 'Other', baseName: 'Other' },
     ]);
 
-    await (qh.dataAccess as any).applyTemplate({
+    await qh.templateApply.applyTemplate({
       actorId: 'act-1',
       templateUuid: 'x',
       preResolvedChoices: { specialisations: { Melee: ['Melee (Polearm)', 'Melee (Basic)'] } },
@@ -300,7 +300,7 @@ describe('dataAccess.applyTemplate — trappings tree walker', () => {
       return { name: `Doc-${id}`, type: 'weapon', toObject: () => ({ name: `Doc-${id}`, type: 'weapon' }) };
     };
 
-    await (qh.dataAccess as any).applyTemplate({
+    await qh.templateApply.applyTemplate({
       actorId: 'act-1',
       templateUuid: 'x',
       preResolvedChoices: { trappings: { root: 'opt-sword' } },
@@ -328,7 +328,7 @@ describe('dataAccess.applyTemplate — trappings tree walker', () => {
       return { name: 'Mail Coif', type: 'armour', toObject: () => ({ name: 'Mail Coif', type: 'armour' }) };
     };
 
-    await (qh.dataAccess as any).applyTemplate({
+    await qh.templateApply.applyTemplate({
       actorId: 'act-1',
       templateUuid: 'x',
     });
@@ -377,7 +377,7 @@ describe('dataAccess.applyTemplate — trappings tree walker', () => {
     // The template skill `Melee (spec=1)` is resolved as a single `Melee` skill (not expanded),
     // so the correlation heuristic wouldn't match the "(Polearm)" suffix. Override trappings
     // branch explicitly to verify AND takes all children and the selected OR branch resolves.
-    await (qh.dataAccess as any).applyTemplate({
+    await qh.templateApply.applyTemplate({
       actorId: 'act-1',
       templateUuid: 'x',
       preResolvedChoices: { trappings: { 'or-weapon': 'opt-polearm' } },
@@ -412,7 +412,7 @@ describe('dataAccess.applyTemplate — trait diff merge', () => {
       return null;
     };
 
-    await (qh.dataAccess as any).applyTemplate({
+    await qh.templateApply.applyTemplate({
       actorId: 'act-1',
       templateUuid: 'x',
     });
@@ -434,7 +434,7 @@ describe('dataAccess.applyTemplate — wildcard (Any) resolution (BUG-051)', () 
     });
     (globalThis as any).warhammer.utility.findItemId = async () => template;
 
-    await (qh.dataAccess as any).applyTemplate({ actorId: 'act-1', templateUuid: 'x' });
+    await qh.templateApply.applyTemplate({ actorId: 'act-1', templateUuid: 'x' });
 
     const skills = actor.__creates[0]!.items.filter((i: any) => i.type === 'skill');
     expect(skills).toHaveLength(1);
@@ -454,7 +454,7 @@ describe('dataAccess.applyTemplate — wildcard (Any) resolution (BUG-051)', () 
     });
     (globalThis as any).warhammer.utility.findItemId = async () => template;
 
-    await (qh.dataAccess as any).applyTemplate({ actorId: 'act-1', templateUuid: 'x' });
+    await qh.templateApply.applyTemplate({ actorId: 'act-1', templateUuid: 'x' });
 
     const skills = actor.__creates[0]!.items.filter((i: any) => i.type === 'skill');
     expect(skills).toHaveLength(1);
@@ -491,7 +491,7 @@ describe('dataAccess.applyTemplate — wildcard (Any) resolution (BUG-051)', () 
       return [];
     };
 
-    await (qh.dataAccess as any).applyTemplate({ actorId: 'act-1', templateUuid: 'x' });
+    await qh.templateApply.applyTemplate({ actorId: 'act-1', templateUuid: 'x' });
 
     const skills = actor.__creates[0]!.items.filter((i: any) => i.type === 'skill');
     expect(skills).toHaveLength(1);
@@ -517,11 +517,11 @@ describe('dataAccess.applyTemplate — stacking', () => {
     let nextTpl = scout;
     (globalThis as any).warhammer.utility.findItemId = async () => nextTpl;
 
-    await (qh.dataAccess as any).applyTemplate({ actorId: 'act-1', templateUuid: 'x1' });
+    await qh.templateApply.applyTemplate({ actorId: 'act-1', templateUuid: 'x1' });
     // After first call, actor name would normally update; mock actor.name is static,
     // but both calls go through the same handler independently.
     nextTpl = veteran;
-    await (qh.dataAccess as any).applyTemplate({ actorId: 'act-1', templateUuid: 'x2' });
+    await qh.templateApply.applyTemplate({ actorId: 'act-1', templateUuid: 'x2' });
 
     expect(actor.__creates).toHaveLength(2);
     expect(actor.__creates[0]!.options.fromTemplate).toBe('tpl-scout');

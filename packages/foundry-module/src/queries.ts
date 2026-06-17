@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { MODULE_ID } from './constants.js';
 import { FoundryDataAccess } from './data-access.js';
 // Phase 4 (R3.3): QueryHandlers owns the extracted creature-index + compendium-search services.
-import { PersistentCreatureIndex, CompendiumSearchService, RollRequestService, RollButtonService, PlayerLookupService, CombatService, ConditionsService, ScenePlacementService } from './services/index.js';
+import { PersistentCreatureIndex, CompendiumSearchService, RollRequestService, RollButtonService, PlayerLookupService, CombatService, ConditionsService, ScenePlacementService, TemplateApplyService } from './services/index.js';
 import { wrappedWrite } from './transaction-manager.js';
 import { notify } from './notify.js';
 // Phase 1 mcp_crud_expansion — polymorphic ownership handlers.
@@ -233,6 +233,10 @@ export class QueryHandlers {
   // (createActors/createActor) share one instance. Its auditLog seam binds to dataAccess.auditLog so
   // scene-placement audit entries are unchanged (HC1).
   public scenePlacement: ScenePlacementService;
+  // Phase 7 (R6.3): Contract — template-apply promoted off FoundryDataAccess to QueryHandlers (mirrors the
+  // Phase-6 combat/conditions promotion). The 2 template handlers below call this directly now; the facade
+  // delegates were deleted from FoundryDataAccess. Single seam: validateState (no auditLog).
+  public templateApply: TemplateApplyService;
 
   constructor() {
     this.creatureIndex = new PersistentCreatureIndex();
@@ -250,6 +254,7 @@ export class QueryHandlers {
     this.playerLookup = new PlayerLookupService(validateState);
     this.combat = new CombatService(validateState);
     this.conditions = new ConditionsService(validateState);
+    this.templateApply = new TemplateApplyService(validateState);
   }
 
   /**
@@ -514,34 +519,9 @@ export class QueryHandlers {
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
       const parsed = AddItemFromCompendiumInput.strict().parse(data ?? {});
-      const uuid = parsed.itemUuid ?? parsed.compendiumId;
-      if (!uuid) throw new Error('add-item-from-compendium: one of {itemUuid, compendiumId} is required.');
-      return await wrappedWrite('addItemFromCompendium', async () => {
-        const actor = game.actors?.get(parsed.actorId);
-        if (!actor) throw new Error(`Actor with ID "${parsed.actorId}" not found`);
-
-        const itemDoc = await fromUuid(uuid);
-        if (!itemDoc) throw new Error(`Item with UUID "${uuid}" not found in compendium`);
-
-        const itemData = itemDoc.toObject();
-        const embedOptions: Record<string, unknown> = {};
-        if (parsed.skipSpecialisationChoice) embedOptions.skipSpecialisationChoice = true;
-        const createdItems = await actor.createEmbeddedDocuments('Item', [itemData], embedOptions);
-        if (!createdItems || createdItems.length === 0) throw new Error('Failed to create item on actor');
-
-        const createdItem = createdItems[0]!;
-        notify.created('item', createdItem.name ?? 'unknown', { summary: `on ${actor.name} from compendium`, uuid: (createdItem as any).uuid });
-
-        const payload = {
-          itemId: createdItem.id,
-          itemName: createdItem.name,
-          itemType: (createdItem as any).type,
-          actorId: actor.id,
-          actorName: actor.name,
-          message: `Successfully added "${createdItem.name}" to ${actor.name} from compendium`,
-        };
-        return { success: true, data: payload };
-      });
+      // Phase 7 (R7.1): logic absorbed into ItemService (via the data-access delegate). Handler keeps
+      // gmCheck + parse + wrappedWrite + the { success, data } wrap; query key 'addItemFromCompendium' unchanged.
+      return await wrappedWrite('addItemFromCompendium', async () => ({ success: true, data: await this.dataAccess.addItemFromCompendium(parsed) }));
     } catch (error) {
       rethrowAsInvalidInput(error);
       throw new Error(`Failed to add item from compendium: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -1310,7 +1290,7 @@ export class QueryHandlers {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       const parsed = ApplyTemplateInput.strict().parse(data ?? {});
-      return await wrappedWrite('applyTemplate', async () => ({ success: true, data: await this.dataAccess.applyTemplate(parsed) }));
+      return await wrappedWrite('applyTemplate', async () => ({ success: true, data: await this.templateApply.applyTemplate(parsed) }));
     } catch (error) {
       rethrowAsInvalidInput(error);
       throw new Error(`Failed to apply template: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -1322,7 +1302,7 @@ export class QueryHandlers {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       const parsed = ApplyTemplateToTokenInput.strict().parse(data ?? {});
-      return await wrappedWrite('applyTemplateToToken', async () => ({ success: true, data: await this.dataAccess.applyTemplateToToken(parsed) }));
+      return await wrappedWrite('applyTemplateToToken', async () => ({ success: true, data: await this.templateApply.applyTemplateToToken(parsed) }));
     } catch (error) {
       rethrowAsInvalidInput(error);
       throw new Error(`Failed to apply template to token: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -1410,145 +1390,9 @@ export class QueryHandlers {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       const parsed = ModifyItemQualitiesV2Input.parse(data ?? {});
-      return await wrappedWrite('modifyItemQualities', async () => {
-        // Phase 5: route on destination discriminator OR fall back to legacy characterName.
-        let item: any = null;
-        let ownerLabel = '';
-
-        if (parsed.destination?.type === 'world') {
-          // World-scope item lookup
-          const items = (game.items as any) ?? [];
-          if (parsed.itemId) {
-            item = items.get?.(parsed.itemId) ?? null;
-          }
-          if (!item && parsed.itemName) {
-            item = items.find?.(
-              (i: any) => i.name?.toLowerCase() === parsed.itemName!.toLowerCase()
-            ) ?? null;
-          }
-          if (!item) {
-            throw new Error(
-              `World item "${parsed.itemName ?? parsed.itemId}" not found in Items sidebar`
-            );
-          }
-          ownerLabel = '(world)';
-        } else {
-          // Actor-scope lookup — destination.actor OR legacy characterName
-          let actor: any = null;
-          if (parsed.destination?.type === 'actor') {
-            const dest = parsed.destination;
-            if (dest.actorId) {
-              actor = (game.actors as any)?.get(dest.actorId);
-            } else if (dest.actorName) {
-              actor = (game.actors as any)?.find(
-                (a: any) => a.name?.toLowerCase() === dest.actorName!.toLowerCase()
-              );
-            }
-          }
-          if (!actor) {
-            throw new Error(
-              `Actor not found: ${parsed.destination?.type === 'actor'
-                ? parsed.destination.actorId ?? parsed.destination.actorName
-                : '(no identifier)'
-              }`
-            );
-          }
-
-          if (parsed.itemId) {
-            item = actor.items?.get(parsed.itemId);
-          } else if (parsed.itemName) {
-            item = actor.items?.find(
-              (i: any) => i.name?.toLowerCase() === parsed.itemName!.toLowerCase()
-            );
-          }
-          if (!item) {
-            throw new Error(
-              `Item "${parsed.itemName ?? parsed.itemId}" not found on ${actor.name}`
-            );
-          }
-          ownerLabel = actor.name;
-        }
-
-        const normaliseEntry = (entry: any) => {
-          const normalised: Record<string, unknown> = { name: String(entry.name).toLowerCase() };
-          if (entry.value !== undefined) normalised.value = entry.value;
-          return normalised;
-        };
-        const readEntries = (key: 'qualities' | 'flaws') => {
-          const raw = item.system?.[key]?.value;
-          return Array.isArray(raw) ? raw.map((entry: any) => ({ ...entry })) : [];
-        };
-        const mergeEntries = (
-          current: any[],
-          additions: any[],
-          removals: string[]
-        ) => {
-          const removeSet = new Set(removals.map((name) => name.toLowerCase()));
-          const addNames = new Set(additions.map((entry) => String(entry.name).toLowerCase()));
-          const next = current.filter((entry) => {
-            const name = String(entry?.name ?? '').toLowerCase();
-            return !removeSet.has(name) && !addNames.has(name);
-          });
-          next.push(...additions.map(normaliseEntry));
-          return next;
-        };
-
-        const nextQualities = mergeEntries(
-          readEntries('qualities'),
-          parsed.addQualities,
-          parsed.removeQualities
-        );
-        const nextFlaws = mergeEntries(
-          readEntries('flaws'),
-          parsed.addFlaws,
-          parsed.removeFlaws
-        );
-
-        const updateData: Record<string, unknown> = {
-          'system.qualities.value': nextQualities,
-          'system.flaws.value': nextFlaws,
-        };
-
-        await item.update(updateData);
-
-        // BUG-288: re-fetch from parent collection so verify reads persisted
-        // _source, not the stale in-memory reference (DP-16 post-write pattern).
-        const persistedItem = item.parent
-          ? (item.parent.items?.get(item.id) ?? item)
-          : ((game.items as any)?.get(item.id) ?? item);
-        const persistedQualityNames = new Set(
-          ((persistedItem._source as any)?.system?.qualities?.value ?? []).map((entry: any) => String(entry?.name ?? '').toLowerCase())
-        );
-        const persistedFlawNames = new Set(
-          ((persistedItem._source as any)?.system?.flaws?.value ?? []).map((entry: any) => String(entry?.name ?? '').toLowerCase())
-        );
-        for (const quality of parsed.addQualities) {
-          if (!persistedQualityNames.has(String(quality.name).toLowerCase())) {
-            throw new Error(`MODIFY_ITEM_QUALITIES_NOT_PERSISTED: missing added quality "${quality.name}"`);
-          }
-        }
-        for (const quality of parsed.removeQualities) {
-          if (persistedQualityNames.has(quality.toLowerCase())) {
-            throw new Error(`MODIFY_ITEM_QUALITIES_NOT_PERSISTED: quality "${quality}" was not removed`);
-          }
-        }
-        for (const flaw of parsed.addFlaws) {
-          if (!persistedFlawNames.has(String(flaw.name).toLowerCase())) {
-            throw new Error(`MODIFY_ITEM_QUALITIES_NOT_PERSISTED: missing added flaw "${flaw.name}"`);
-          }
-        }
-        for (const flaw of parsed.removeFlaws) {
-          if (persistedFlawNames.has(flaw.toLowerCase())) {
-            throw new Error(`MODIFY_ITEM_QUALITIES_NOT_PERSISTED: flaw "${flaw}" was not removed`);
-          }
-        }
-
-        notify.updated('item', item.name, {
-          summary: `qualities modified on ${ownerLabel}`,
-          uuid: (item as any).uuid,
-        });
-        return { success: true, data: { itemName: item.name, owner: ownerLabel } };
-      });
+      // Phase 7 (R7.1): logic absorbed into ItemService (via the data-access delegate). Handler keeps
+      // gmCheck + parse + wrappedWrite + the { success, data } wrap; query key 'modifyItemQualities' unchanged.
+      return await wrappedWrite('modifyItemQualities', async () => ({ success: true, data: await this.dataAccess.modifyItemQualities(parsed) }));
     } catch (error) {
       rethrowAsInvalidInput(error);
       throw new Error(`Failed to modify item qualities: ${error instanceof Error ? error.message : 'Unknown error'}`);

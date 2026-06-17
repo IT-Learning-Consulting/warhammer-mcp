@@ -99,11 +99,12 @@ export default tseslint.config(
       'no-case-declarations': 'warn',
       'no-useless-escape': 'warn',
       // --- R0.4 complexity caps (WARN globally; ratcheted to ERROR on changed files) ---
-      'max-lines-per-function': ['warn', 60],
+      // skipComments (user policy 2026-06-16): comments do NOT count toward the line caps.
+      'max-lines-per-function': ['warn', { max: 60, skipComments: true }],
       complexity: ['warn', 10],
       'max-depth': ['warn', 3],
       'max-params': ['warn', 4],
-      'max-lines': ['warn', 400],
+      'max-lines': ['warn', { max: 400, skipComments: true }],
     },
   },
 
@@ -192,7 +193,7 @@ export default tseslint.config(
   {
     files: ['**/services/**/*.ts'],
     rules: {
-      'max-lines': ['error', 600],
+      'max-lines': ['error', { max: 600, skipComments: true }],
     },
   },
 

@@ -193,7 +193,7 @@ describe('dataAccess.applyTemplateToToken — scene + token + actor guards', () 
     const qh = makeHandlers();
     (globalThis as any).game.scenes = new Map();
     await expect(
-      (qh.dataAccess as any).applyTemplateToToken({ sceneId: 'ghost-scene', tokenId: 't1', templateUuid: 'x' }),
+      qh.templateApply.applyTemplateToToken({ sceneId: 'ghost-scene', tokenId: 't1', templateUuid: 'x' }),
     ).rejects.toThrow(/Scene not found/);
   });
 
@@ -202,7 +202,7 @@ describe('dataAccess.applyTemplateToToken — scene + token + actor guards', () 
     const scene = makeScene({ id: 's1', tokens: [] });
     (globalThis as any).game.scenes = new Map([['s1', scene]]);
     await expect(
-      (qh.dataAccess as any).applyTemplateToToken({ sceneId: 's1', tokenId: 'ghost-token', templateUuid: 'x' }),
+      qh.templateApply.applyTemplateToToken({ sceneId: 's1', tokenId: 'ghost-token', templateUuid: 'x' }),
     ).rejects.toThrow(/Token not found/);
   });
 
@@ -215,7 +215,7 @@ describe('dataAccess.applyTemplateToToken — scene + token + actor guards', () 
     });
     (globalThis as any).game.scenes = new Map([['s1', scene]]);
     await expect(
-      (qh.dataAccess as any).applyTemplateToToken({ sceneId: 's1', tokenId: 't1', templateUuid: 'x' }),
+      qh.templateApply.applyTemplateToToken({ sceneId: 's1', tokenId: 't1', templateUuid: 'x' }),
     ).rejects.toThrow(/actorLink=true/);
   });
 });
@@ -240,7 +240,7 @@ describe('dataAccess.applyTemplateToToken — happy path (delta write)', () => {
     });
     (globalThis as any).warhammer.utility.findItemId = async () => template;
 
-    const result = await (qh.dataAccess as any).applyTemplateToToken({
+    const result = await qh.templateApply.applyTemplateToToken({
       sceneId: 's1',
       tokenId: 't1',
       templateUuid: 'Compendium.wfrp4e-owb1.items.Item.tpl-skirmisher',
@@ -286,7 +286,7 @@ describe('dataAccess.applyTemplateToToken — happy path (delta write)', () => {
     (globalThis as any).warhammer.utility.findItemId = async () => template;
 
     // Apply to t3 — two existing "Skirmisher Goblin (N)" siblings, so t3 should become "(3)".
-    await (qh.dataAccess as any).applyTemplateToToken({
+    await qh.templateApply.applyTemplateToToken({
       sceneId: 's1',
       tokenId: 't3',
       templateUuid: 'x',
@@ -310,7 +310,7 @@ describe('dataAccess.applyTemplateToToken — happy path (delta write)', () => {
     });
     (globalThis as any).warhammer.utility.findItemId = async () => template;
 
-    await (qh.dataAccess as any).applyTemplateToToken({
+    await qh.templateApply.applyTemplateToToken({
       sceneId: 's1',
       tokenId: 't1',
       templateUuid: 'x',
@@ -342,7 +342,7 @@ describe('dataAccess.applyTemplateToToken — preResolvedChoices parity with app
       { name: 'Other', baseName: 'Other' },
     ]);
 
-    await (qh.dataAccess as any).applyTemplateToToken({
+    await qh.templateApply.applyTemplateToToken({
       sceneId: 's1',
       tokenId: 't1',
       templateUuid: 'x',

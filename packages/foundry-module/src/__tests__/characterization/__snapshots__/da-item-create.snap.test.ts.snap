@@ -1,0 +1,90 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`FoundryDataAccess.createItem — write-arg characterization > snapshot: actor-scope createEmbeddedDocuments args > actor-create-args 1`] = `
+[
+  [
+    "Item",
+    [
+      {
+        "name": "Hand Weapon",
+        "system": {
+          "damage": {
+            "value": "SB+4",
+          },
+        },
+        "type": "weapon",
+      },
+    ],
+  ],
+]
+`;
+
+exports[`FoundryDataAccess.createItem — write-arg characterization > snapshot: fromCompendium clone seed — _id stripped, user overrides merged > clone-create-args 1`] = `
+[
+  [
+    "Item",
+    [
+      {
+        "effects": [
+          {
+            "name": "Keen",
+          },
+        ],
+        "name": "Fire Sword",
+        "system": {
+          "damage": {
+            "value": "SB+6",
+          },
+        },
+        "type": "weapon",
+      },
+    ],
+  ],
+]
+`;
+
+exports[`FoundryDataAccess.createItem — write-arg characterization > snapshot: world-scope Item.create args with a folder chain > world-create-args 1`] = `
+[
+  [
+    {
+      "folder": "folder-2",
+      "name": "Torch",
+      "system": {},
+      "type": "trapping",
+    },
+  ],
+]
+`;
+
+exports[`QueryHandlers.handleAddItemFromCompendium — write-arg characterization > snapshot: createEmbeddedDocuments args + result payload (skipSpecialisationChoice) > addfromcompendium-create-args 1`] = `
+[
+  [
+    "Item",
+    [
+      {
+        "_id": "compendium-src",
+        "name": "Sigmar Holy Symbol",
+        "system": {},
+        "type": "trapping",
+      },
+    ],
+    {
+      "skipSpecialisationChoice": true,
+    },
+  ],
+]
+`;
+
+exports[`QueryHandlers.handleAddItemFromCompendium — write-arg characterization > snapshot: createEmbeddedDocuments args + result payload (skipSpecialisationChoice) > addfromcompendium-result 1`] = `
+{
+  "data": {
+    "actorId": "a1",
+    "actorName": "Hans",
+    "itemId": "added-0",
+    "itemName": "Sigmar Holy Symbol",
+    "itemType": "trapping",
+    "message": "Successfully added "Sigmar Holy Symbol" to Hans from compendium",
+  },
+  "success": true,
+}
+`;

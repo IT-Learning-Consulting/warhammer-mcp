@@ -31,12 +31,15 @@ import tseslint from 'typescript-eslint';
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('.', import.meta.url)), '..');
 const CAP_RULES = ['max-lines-per-function', 'complexity', 'max-depth', 'max-params', 'max-lines'];
+// skipComments: comments do NOT count toward the line caps (user policy 2026-06-16) — well-documented
+// verbatim extractions (e.g. services/actor.ts carries the original BUG-XXX rationale comments) must not
+// be penalised for their explanatory comments. Code + blank lines still count.
 const CAP_ERROR = {
-  'max-lines-per-function': ['error', 60],
+  'max-lines-per-function': ['error', { max: 60, skipComments: true }],
   complexity: ['error', 10],
   'max-depth': ['error', 3],
   'max-params': ['error', 4],
-  'max-lines': ['error', 400],
+  'max-lines': ['error', { max: 400, skipComments: true }],
 };
 const LINTABLE = /\.(ts|mjs|cjs|js)$/;
 const TEST_GLOBS = ['**/*.test.ts', '**/*.spec.ts', '**/__tests__/**/*.ts', '**/*.bench.ts', 'tests/**/*.ts'];
@@ -81,7 +84,7 @@ function makeEslint() {
           complexity: 'off',
           'max-depth': 'off',
           'max-params': 'off',
-          'max-lines': ['error', 600],
+          'max-lines': ['error', { max: 600, skipComments: true }],
         },
       },
       { files: TEST_GLOBS, rules: Object.fromEntries(CAP_RULES.map((r) => [r, 'off'])) },
