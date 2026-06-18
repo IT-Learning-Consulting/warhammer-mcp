@@ -27,6 +27,7 @@
 // handler-enforced confirm on clear-bulk). Source: phase11_pre_plan.md.
 
 import { requireModuleActive } from '../_shared/require-module-active.js';
+import { ErrorTokens } from '@foundry-mcp/shared';
 import { ModuleGmtoolkitInput, type ModuleGmtoolkitInputType } from './schemas.js';
 import { notify } from '../../../notify.js';
 import { verifyDocWrite } from '../../../utils/verifyWrite.js';
@@ -307,7 +308,7 @@ async function handleAdjustStatus(input: AdjustStatusInput): Promise<Envelope<un
   // DP-16 read-back.
   const value = Number(getByPath(resolveActor(input.actorId), `system.status.${input.status}.value`) ?? previousValue);
   if (value !== newValue) {
-    return { success: false, error: `GMTOOLKIT_STATUS_NOT_PERSISTED: ${field} read back ${value}, expected ${newValue}` };
+    return { success: false, error: `${ErrorTokens.GMTOOLKIT_STATUS_NOT_PERSISTED}: ${field} read back ${value}, expected ${newValue}` };
   }
   notify.updated('gmtoolkit', actor.name ?? input.actorId, { summary: `${input.status}: ${previousValue} → ${value} (${input.change >= 0 ? '+' : ''}${input.change})` });
   return { success: true, data: { actorId: input.actorId, actorName: actor.name ?? null, status: input.status, change: input.change, previousValue, value } };
@@ -337,7 +338,7 @@ async function handleToggleSceneLight(input: ToggleSceneLightInput): Promise<Env
   // its _source reflects the update without a re-fetch.
   const verifyFields = { ...patch };
   await scene.update(patch);
-  verifyDocWrite(scene, verifyFields, 'GMTOOLKIT_SCENE_LIGHT_NOT_PERSISTED');
+  verifyDocWrite(scene, verifyFields, ErrorTokens.GMTOOLKIT_SCENE_LIGHT_NOT_PERSISTED);
   notify.updated('gmtoolkit', scene.name ?? input.sceneId ?? '(active scene)', { summary: `scene light/vision: ${Object.keys(patch).join(', ')}` });
   return {
     success: true,
@@ -498,7 +499,7 @@ async function handleAddXp(input: AddXpInput): Promise<Envelope<unknown>> {
   // DP-16 read-back.
   const confirmedTotal = Number(resolveActor(input.actorId)?.system?.details?.experience?.total ?? prevTotal);
   if (confirmedTotal !== newTotal) {
-    return { success: false, error: `GMTOOLKIT_XP_NOT_PERSISTED: experience.total read back ${confirmedTotal}, expected ${newTotal}` };
+    return { success: false, error: `${ErrorTokens.GMTOOLKIT_XP_NOT_PERSISTED}: experience.total read back ${confirmedTotal}, expected ${newTotal}` };
   }
   notify.updated('gmtoolkit', actor.name ?? input.actorId, { summary: `XP ${input.amount >= 0 ? '+' : ''}${input.amount} (${input.reason}) → total ${newTotal}` });
   return {

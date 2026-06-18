@@ -72,14 +72,25 @@ export const ApplyDamageInput = z
 
 // Status snapshot (master D5)
 
+// Phase 11 (R11.1): resilience/resolve added + `.passthrough()` so the generated
+// apply-damage `outputSchema` faithfully describes (and does not forbid) the full
+// status snapshot the handler returns. The snapshot characterization shows all 8
+// pools present; `.passthrough()` keeps it forward-compatible against future fields.
+// Phase 11 fix (BUG-390): wounds is the only pool present on EVERY actor type;
+// fate/fortune/resilience/resolve are character-only (absent on npc/creature), and
+// the snapshot may carry undefined leaf values for missing pools. Only `wounds` is
+// required (and even its leaves optional); the rest are optional + `.passthrough()`
+// so apply-damage `.parse()` never throws regardless of the damaged actor's type.
 export const StatusSnapshot = z.object({
-  wounds: z.object({ value: z.number(), max: z.number() }),
-  criticalWounds: z.object({ value: z.number(), max: z.number() }),
-  fate: z.object({ value: z.number() }),
-  fortune: z.object({ value: z.number() }),
-  advantage: z.object({ value: z.number() }),
-  conditions: z.array(z.string()),
-});
+  wounds: z.object({ value: z.number().optional(), max: z.number().optional() }).passthrough(),
+  criticalWounds: z.object({ value: z.number().optional(), max: z.number().optional() }).passthrough().optional(),
+  fate: z.object({ value: z.number().optional() }).passthrough().optional(),
+  fortune: z.object({ value: z.number().optional() }).passthrough().optional(),
+  resilience: z.object({ value: z.number().optional() }).passthrough().optional(),
+  resolve: z.object({ value: z.number().optional() }).passthrough().optional(),
+  advantage: z.object({ value: z.number().optional() }).passthrough().optional(),
+  conditions: z.array(z.string()).optional(),
+}).passthrough();
 
 export const ApplyDamageOutput = z.object({
   actorId: z.string(),
@@ -87,10 +98,10 @@ export const ApplyDamageOutput = z.object({
     amount: z.number(),
     damageType: z.string(),
     hitLocation: z.string().optional(),
-  }),
+  }).passthrough(),
   before: StatusSnapshot,
   after: StatusSnapshot,
-});
+}).passthrough();
 
 export type GetCombatInput = z.infer<typeof GetCombatInput>;
 export type ListCombatantsInput = z.infer<typeof ListCombatantsInput>;

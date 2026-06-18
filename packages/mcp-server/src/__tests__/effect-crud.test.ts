@@ -25,7 +25,13 @@ function makeTool<T extends new (opts: any) => any>(Tool: T) {
   const foundryClient: any = {
     query: vi.fn(async (key: string, args: any) => {
       calls.push({ key, args });
-      return { success: true, data: { ok: true } };
+      // Phase 11 (R11.1): handlers now `.parse()` the return against the AE output
+      // DTOs — return a shape valid for Add/Update/Delete so dispatch tests still
+      // reach their call-shape assertions (the prior {ok:true} stub now fails parse).
+      return {
+        effectId: 'E1', effectName: 'Burning', parentType: 'Item',
+        parentId: 'I1', parentName: 'Fire Sword', updatedFields: [], deleted: true,
+      };
     }),
   };
   const tool: any = new Tool({ foundryClient, logger: makeLogger() });

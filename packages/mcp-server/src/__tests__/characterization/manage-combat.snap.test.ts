@@ -93,8 +93,7 @@ describe('ManageCombatTools — characterization', () => {
 
   it('end-combat — combat deleted', async () => {
     const r = await tool({
-      deleted: true,
-      combatId: 'combat12345678901',
+      ended: 'combat12345678901',
     }).handleEndCombat({});
     expect(r).toMatchSnapshot();
   });

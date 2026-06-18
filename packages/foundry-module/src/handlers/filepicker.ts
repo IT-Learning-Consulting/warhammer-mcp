@@ -14,6 +14,7 @@
 // CCR-Envelope: returns {success, data} or {success, error}.
 
 import { MODULE_ID } from '../constants.js';
+import { ErrorTokens } from '@foundry-mcp/shared';
 import { notify } from '../notify.js';
 
 // ── Local types ─────────────────────────────────────────────────────────────
@@ -314,7 +315,7 @@ export async function createDirectory(
     if (!dirs.includes(normalized)) {
       return {
         success: false,
-        error: `FILEPICKER_CREATE_DIRECTORY_NOT_PERSISTED: "${normalized}" not listed under "${parent}" after create`,
+        error: `${ErrorTokens.FILEPICKER_CREATE_DIRECTORY_NOT_PERSISTED}: "${normalized}" not listed under "${parent}" after create`,
       };
     }
 

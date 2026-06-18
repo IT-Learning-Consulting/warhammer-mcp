@@ -2,19 +2,33 @@
 
 exports[`ManageConditionsTools — characterization > apply-condition — fatigued applied (raw passthrough) 1`] = `
 {
-  "actorId": "actor001234567890",
-  "applied": true,
-  "conditionKey": "fatigued",
-  "value": 1,
+  "content": [
+    {
+      "text": "{"actorId":"actor001234567890","conditionKey":"fatigued","stackCount":1}",
+      "type": "text",
+    },
+  ],
+  "structuredContent": {
+    "actorId": "actor001234567890",
+    "conditionKey": "fatigued",
+    "stackCount": 1,
+  },
 }
 `;
 
 exports[`ManageConditionsTools — characterization > apply-condition — stunned with explicit value 2 1`] = `
 {
-  "actorId": "actor001234567890",
-  "applied": true,
-  "conditionKey": "stunned",
-  "value": 2,
+  "content": [
+    {
+      "text": "{"actorId":"actor001234567890","conditionKey":"stunned","stackCount":2}",
+      "type": "text",
+    },
+  ],
+  "structuredContent": {
+    "actorId": "actor001234567890",
+    "conditionKey": "stunned",
+    "stackCount": 2,
+  },
 }
 `;
 
@@ -43,9 +57,16 @@ exports[`ManageConditionsTools — characterization > list-conditions — two co
 
 exports[`ManageConditionsTools — characterization > remove-condition — fatigued 1 stack removed 1`] = `
 {
-  "actorId": "actor001234567890",
-  "conditionKey": "fatigued",
-  "count": 1,
-  "removed": true,
+  "content": [
+    {
+      "text": "{"actorId":"actor001234567890","conditionKey":"fatigued","remainingCount":0}",
+      "type": "text",
+    },
+  ],
+  "structuredContent": {
+    "actorId": "actor001234567890",
+    "conditionKey": "fatigued",
+    "remainingCount": 0,
+  },
 }
 `;

@@ -30,6 +30,7 @@
 //     (notify-migration-guard test catches direct chat-message construction).
 
 import {
+  ErrorTokens,
   CreateMacroInput,
   UpdateMacroInput,
   DeleteMacroInput,
@@ -491,7 +492,7 @@ export async function importMacroFromCompendium(
     // CCR-2a: re-read the new world macro.
     const persisted = (game as any).macros?.get(imported.id);
     if (!persisted) {
-      throw new Error(`MACRO_IMPORT_NOT_PERSISTED: imported macro "${imported.id}" missing from game.macros`);
+      throw new Error(`${ErrorTokens.MACRO_IMPORT_NOT_PERSISTED}: imported macro "${imported.id}" missing from game.macros`);
     }
 
     notify.created('macro', persisted._source?.name ?? persisted.name ?? imported.id, {
@@ -574,7 +575,7 @@ export async function setExecutionTarget(
     // DP-16 read-back.
     const verified = (macro.getFlag(ADV_MACROS, RUNFOR_KEY) as string) ?? '';
     if (target !== '' && verified !== target) {
-      throw new Error(`MACRO_SET_TARGET_NOT_PERSISTED: flag is "${verified}" after writing "${target}"`);
+      throw new Error(`${ErrorTokens.MACRO_SET_TARGET_NOT_PERSISTED}: flag is "${verified}" after writing "${target}"`);
     }
     notify.updated('macro', `Macro "${name}"`, { summary: `execution target → ${target || '(cleared)'}` });
     const data: SetExecutionTargetResponse = { macroId: input.macroId, name, target: verified, canRunAsGM };

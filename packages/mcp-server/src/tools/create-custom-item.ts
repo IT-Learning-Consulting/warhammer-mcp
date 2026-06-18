@@ -2,6 +2,8 @@ import {
   CreateCustomItemInputSchema,
   buildSystemForSubtype,
   buildEffectPayload,
+  CreateCustomItemOutput,
+  CREATE_CUSTOM_ITEM_OUTPUT_JSON_SCHEMA,
 } from '@foundry-mcp/shared';
 import { FoundryClient } from '../foundry-client.js';
 import { Logger } from '../logger.js';
@@ -203,6 +205,7 @@ Security: script / preApplyScript / enableScript fields are executed by Foundry 
           },
           required: ['itemType', 'name', 'destination'],
         },
+        outputSchema: CREATE_CUSTOM_ITEM_OUTPUT_JSON_SCHEMA,
       },
     ];
   }
@@ -296,6 +299,7 @@ Security: script / preApplyScript / enableScript fields are executed by Foundry 
       if (data.effectIds) structured.effectIds = data.effectIds;
     }
 
+    CreateCustomItemOutput.parse(structured);
     return {
       content: [{ type: 'text', text: prose }],
       structuredContent: structured,

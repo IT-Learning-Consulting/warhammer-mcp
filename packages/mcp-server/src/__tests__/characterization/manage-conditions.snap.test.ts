@@ -13,8 +13,7 @@ describe('ManageConditionsTools — characterization', () => {
     const r = await tool({
       actorId: 'actor001234567890',
       conditionKey: 'fatigued',
-      value: 1,
-      applied: true,
+      stackCount: 1,
     }).handleApplyCondition({
       actorId: 'actor001234567890',
       conditionKey: 'fatigued',
@@ -27,8 +26,7 @@ describe('ManageConditionsTools — characterization', () => {
     const r = await tool({
       actorId: 'actor001234567890',
       conditionKey: 'stunned',
-      value: 2,
-      applied: true,
+      stackCount: 2,
     }).handleApplyCondition({
       actorId: 'actor001234567890',
       conditionKey: 'stunned',
@@ -41,8 +39,7 @@ describe('ManageConditionsTools — characterization', () => {
     const r = await tool({
       actorId: 'actor001234567890',
       conditionKey: 'fatigued',
-      count: 1,
-      removed: true,
+      remainingCount: 0,
     }).handleRemoveCondition({
       actorId: 'actor001234567890',
       conditionKey: 'fatigued',

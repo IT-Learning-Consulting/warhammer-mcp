@@ -23,6 +23,8 @@ export * from './get-active-effect-by-name.js';
 export * from './ownership.js';
 export * from './targets.js';
 export * from './outputs.js';
+// Phase 11 mcp_code_quality_hardening — mutation-tool output DTOs + 18 outputSchema consts (R11.1).
+export * from './mutation-outputs.js';
 // Phase 5 mcp_crud_expansion — shared embedded-doc sub-schemas + helpers.
 export * from './light-data.js';
 export * from './texture-data.js';

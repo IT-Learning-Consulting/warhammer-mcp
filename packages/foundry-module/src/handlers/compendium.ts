@@ -41,6 +41,7 @@
 //     reaching this file.
 
 import {
+  ErrorTokens,
   CompendiumToolInput,
   type CompendiumToolInputType,
 } from '@foundry-mcp/shared';
@@ -793,7 +794,7 @@ async function createFolderInPack(input: any): Promise<Envelope<CreateFolderInPa
     }
 
     if (!newFolder?.id || !pack.folders?.get?.(newFolder.id)) {
-      return { success: false as const, error: 'COMPENDIUM_FOLDER_WRITE_NOT_PERSISTED: folder create returned but is not present in pack.folders' };
+      return { success: false as const, error: ErrorTokens.COMPENDIUM_FOLDER_WRITE_NOT_PERSISTED + ': folder create returned but is not present in pack.folders' };
     }
 
     notify.created('folder', `Folder "${newFolder.name ?? input.folderName}"`, {
@@ -1028,7 +1029,7 @@ async function deleteFolderInPack(input: any): Promise<Envelope<DeleteFolderInPa
 
     // DP-16 post-verify: root folder must be gone.
     if (pack.folders?.get?.(String(input.folderId))) {
-      return { success: false as const, error: `COMPENDIUM_FOLDER_WRITE_NOT_PERSISTED: folder "${input.folderId}" still present after delete` };
+      return { success: false as const, error: `${ErrorTokens.COMPENDIUM_FOLDER_WRITE_NOT_PERSISTED}: folder "${input.folderId}" still present after delete` };
     }
 
     notify.deleted('folder', `Folder "${folder.name ?? input.folderId}"`, {

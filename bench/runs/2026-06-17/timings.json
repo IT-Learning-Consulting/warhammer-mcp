@@ -2,34 +2,34 @@
   {
     "name": "passesEnhancedCriteria — no filters (pass-through)",
     "source": "in-process",
-    "hz": 28070332,
-    "meanNs": 36,
+    "hz": 27280704,
+    "meanNs": 37,
     "medianNs": 0,
-    "samples": 14035169
+    "samples": 13640352
   },
   {
     "name": "passesEnhancedCriteria — numeric threatLevel match",
     "source": "in-process",
-    "hz": 25784586,
-    "meanNs": 39,
-    "medianNs": 0,
-    "samples": 12892293
+    "hz": 14567858,
+    "meanNs": 69,
+    "medianNs": 100,
+    "samples": 7283929
   },
   {
     "name": "passesEnhancedCriteria — range threatLevel + creatureType + size",
     "source": "in-process",
-    "hz": 16433408,
-    "meanNs": 61,
+    "hz": 10342312,
+    "meanNs": 97,
     "medianNs": 100,
-    "samples": 8216704
+    "samples": 5172462
   },
   {
     "name": "passesEnhancedCriteria — all filters (early-exit on first mismatch)",
     "source": "in-process",
-    "hz": 12270628,
-    "meanNs": 81,
-    "medianNs": 100,
-    "samples": 6135314
+    "hz": 20110903,
+    "meanNs": 50,
+    "medianNs": 0,
+    "samples": 10056443
   },
   {
     "name": "getCharacterInfo — found by name (mocked actors)",
@@ -42,17 +42,17 @@
   {
     "name": "getCharacterInfo — not found (throws, mocked actors)",
     "source": "in-process",
-    "hz": 29181,
-    "meanNs": 34269,
-    "medianNs": 21800,
-    "samples": 14591
+    "hz": 43941,
+    "meanNs": 22758,
+    "medianNs": 21200,
+    "samples": 21971
   },
   {
     "name": "searchCompendium — empty packs (no match)",
     "source": "in-process",
-    "hz": 1631115,
-    "meanNs": 613,
-    "medianNs": 500,
-    "samples": 815558
+    "hz": 2010100,
+    "meanNs": 497,
+    "medianNs": 400,
+    "samples": 1005051
   }
 ]

@@ -18,6 +18,7 @@
 // NEVER calls ChatMessage.create directly (notify-migration-guard).
 
 import {
+  ErrorTokens,
   DiseaseToolInput,
   type DiseaseToolInputType,
   type DiseaseListResponse,
@@ -196,7 +197,7 @@ async function contractDisease(input: {
     // DP-16 post-verify: item must exist on actor
     const fresh = actor.items.get(createdItem.id);
     if (!fresh) {
-      throw new Error(`DISEASE_WRITE_NOT_PERSISTED: item "${createdItem.id}" not found on actor after create`);
+      throw new Error(`${ErrorTokens.DISEASE_WRITE_NOT_PERSISTED}: item "${createdItem.id}" not found on actor after create`);
     }
     return fresh;
   });
@@ -290,7 +291,7 @@ async function incrementDisease(input: {
     const changed = dur !== beforeDuration || inc !== beforeIncubation;
     if (!changed) {
       throw new Error(
-        `DISEASE_INCREMENT_NOT_PERSISTED: neither duration nor incubation value changed after increment`,
+        `${ErrorTokens.DISEASE_INCREMENT_NOT_PERSISTED}: neither duration nor incubation value changed after increment`,
       );
     }
     return { after: fresh, afterDuration: dur, afterIncubation: inc };
@@ -339,7 +340,7 @@ async function decrementDisease(input: {
     const changed = dur !== beforeDuration || inc !== beforeIncubation;
     if (!changed) {
       throw new Error(
-        `DISEASE_DECREMENT_NOT_PERSISTED: neither duration nor incubation value changed after decrement`,
+        `${ErrorTokens.DISEASE_DECREMENT_NOT_PERSISTED}: neither duration nor incubation value changed after decrement`,
       );
     }
     return { cured: false as const, after: fresh, afterDuration: dur, afterIncubation: inc };
@@ -473,7 +474,7 @@ async function finishDiseaseDuration(input: {
     const escalated = newDiseases.length > 0;    // (c) Lingering → new disease item
     if (!cured && !extended && !escalated) {
       throw new Error(
-        `DISEASE_FINISH_NOT_PERSISTED: finishDuration() left no observable change — ` +
+        `${ErrorTokens.DISEASE_FINISH_NOT_PERSISTED}: finishDuration() left no observable change — ` +
         `duration unchanged (${beforeDuration}→${afterDuration}), item still present, no new disease created`,
       );
     }
@@ -550,7 +551,7 @@ async function applyDiseaseSymptom(input: {
     const missing = symptomParts.filter((s) => !resultingNames.includes(s));
     if (missing.length > 0) {
       throw new Error(
-        `DISEASE_SYMPTOM_NOT_PERSISTED: requested symptoms not found in resulting AE set (missing: ${missing.join(', ')}; resulting: ${resultingNames.join(', ')})`,
+        `${ErrorTokens.DISEASE_SYMPTOM_NOT_PERSISTED}: requested symptoms not found in resulting AE set (missing: ${missing.join(', ')}; resulting: ${resultingNames.join(', ')})`,
       );
     }
     return { after: fresh, symptomAEs: aes };
@@ -599,7 +600,7 @@ async function cureDisease(input: {
     const stillExists = actor.items.get(input.diseaseItemId);
     if (stillExists) {
       throw new Error(
-        `DISEASE_CURE_NOT_PERSISTED: item "${input.diseaseItemId}" still exists after deleteEmbeddedDocuments`,
+        `${ErrorTokens.DISEASE_CURE_NOT_PERSISTED}: item "${input.diseaseItemId}" still exists after deleteEmbeddedDocuments`,
       );
     }
   });

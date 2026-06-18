@@ -21,6 +21,7 @@
 // HC1 / CCR-3: thin primitive — no CONFIG reads, no game-rule logic.
 
 import {
+  ErrorTokens,
   CardsToolInput,
   CardsCreateStackInput,
   CardsGetStackInput,
@@ -185,13 +186,13 @@ export async function createStack(data: unknown): Promise<Envelope<any>> {
     const cleaned = deepStripUndefined({ ...rest });
     const created: any = await (Cards as any).create(cleaned);
     if (!created) {
-      throw new Error('CARDS_WRITE_NOT_PERSISTED: Cards.create returned empty');
+      throw new Error(ErrorTokens.CARDS_WRITE_NOT_PERSISTED + ': Cards.create returned empty');
     }
     const persisted = (game as any).cards?.get(created.id);
     if (!persisted) {
-      throw new Error(`CARDS_WRITE_NOT_PERSISTED: Cards "${created.id}" missing from game.cards after create`);
+      throw new Error(`${ErrorTokens.CARDS_WRITE_NOT_PERSISTED}: Cards "${created.id}" missing from game.cards after create`);
     }
-    verifyDocWrite(persisted, { name: input.name, type: input.type }, 'CARDS_WRITE_NOT_PERSISTED');
+    verifyDocWrite(persisted, { name: input.name, type: input.type }, ErrorTokens.CARDS_WRITE_NOT_PERSISTED);
 
     notify.created('cards', `Card stack "${persisted._source.name}"`, { summary: input.type });
 
@@ -256,10 +257,10 @@ export async function updateStack(data: unknown): Promise<Envelope<any>> {
     await stack.update(requestedChanges);
     const persisted = (game as any).cards?.get(input.stackId);
     if (!persisted) {
-      throw new Error(`CARDS_WRITE_NOT_PERSISTED: Cards "${input.stackId}" missing after update`);
+      throw new Error(`${ErrorTokens.CARDS_WRITE_NOT_PERSISTED}: Cards "${input.stackId}" missing after update`);
     }
     // 'flags'/'ownership' are nested records — skip raw-value compare (F08).
-    verifyDocWrite(persisted, requestedChanges, 'CARDS_WRITE_NOT_PERSISTED', {
+    verifyDocWrite(persisted, requestedChanges, ErrorTokens.CARDS_WRITE_NOT_PERSISTED, {
       skipPaths: ['flags', 'ownership'],
     });
 
@@ -293,7 +294,7 @@ export async function deleteStack(data: unknown): Promise<Envelope<any>> {
     await stack.delete();
     const stillPresent = (game as any).cards?.get(input.stackId);
     if (stillPresent) {
-      throw new Error(`CARDS_WRITE_NOT_PERSISTED: Cards "${input.stackId}" still present after delete`);
+      throw new Error(`${ErrorTokens.CARDS_WRITE_NOT_PERSISTED}: Cards "${input.stackId}" still present after delete`);
     }
     notify.deleted('cards', `Card stack "${stackName}"`, {
       summary: cardCount > 0 ? `${cardCount} card(s) removed` : 'empty',
@@ -325,11 +326,11 @@ export async function duplicateStack(data: unknown): Promise<Envelope<any>> {
 
     const created: any = await (Cards as any).create(obj);
     if (!created) {
-      throw new Error('CARDS_WRITE_NOT_PERSISTED: duplicate Cards.create returned empty');
+      throw new Error(ErrorTokens.CARDS_WRITE_NOT_PERSISTED + ': duplicate Cards.create returned empty');
     }
     const persisted = (game as any).cards?.get(created.id);
     if (!persisted) {
-      throw new Error(`CARDS_WRITE_NOT_PERSISTED: duplicated Cards "${created.id}" missing after create`);
+      throw new Error(`${ErrorTokens.CARDS_WRITE_NOT_PERSISTED}: duplicated Cards "${created.id}" missing after create`);
     }
 
     notify.created('cards', `Card stack "${persisted._source.name}"`, { summary: `duplicate of ${input.stackId}` });
@@ -358,14 +359,14 @@ export async function addCard(data: unknown): Promise<Envelope<any>> {
     const arr = Array.isArray(createdDocs) ? createdDocs : [createdDocs];
     const createdCard = arr[0];
     if (!createdCard) {
-      throw new Error('CARD_WRITE_NOT_PERSISTED: createEmbeddedDocuments returned empty');
+      throw new Error(ErrorTokens.CARD_WRITE_NOT_PERSISTED + ': createEmbeddedDocuments returned empty');
     }
     const persistedStack = (game as any).cards?.get(input.stackId);
     const persistedCard = persistedStack?.cards?.get(createdCard.id);
     if (!persistedCard) {
-      throw new Error(`CARD_WRITE_NOT_PERSISTED: Card "${createdCard.id}" missing from stack after create`);
+      throw new Error(`${ErrorTokens.CARD_WRITE_NOT_PERSISTED}: Card "${createdCard.id}" missing from stack after create`);
     }
-    verifyDocWrite(persistedCard, { name: input.name }, 'CARD_WRITE_NOT_PERSISTED');
+    verifyDocWrite(persistedCard, { name: input.name }, ErrorTokens.CARD_WRITE_NOT_PERSISTED);
 
     notify.created('card', `Card "${input.name}"`, { summary: `in stack ${input.stackId}` });
 
@@ -402,10 +403,10 @@ export async function updateCard(data: unknown): Promise<Envelope<any>> {
     const persistedStack = (game as any).cards?.get(input.stackId);
     const persistedCard = persistedStack?.cards?.get(input.cardId);
     if (!persistedCard) {
-      throw new Error(`CARD_WRITE_NOT_PERSISTED: Card "${input.cardId}" missing after update`);
+      throw new Error(`${ErrorTokens.CARD_WRITE_NOT_PERSISTED}: Card "${input.cardId}" missing after update`);
     }
     // faces/back/flags are nested — skip raw-value compare (F08).
-    verifyDocWrite(persistedCard, requestedChanges, 'CARD_WRITE_NOT_PERSISTED', {
+    verifyDocWrite(persistedCard, requestedChanges, ErrorTokens.CARD_WRITE_NOT_PERSISTED, {
       skipPaths: ['faces', 'back', 'flags'],
     });
 
@@ -432,7 +433,7 @@ export async function deleteCard(data: unknown): Promise<Envelope<any>> {
     const persistedStack = (game as any).cards?.get(input.stackId);
     const stillPresent = persistedStack?.cards?.get(input.cardId);
     if (stillPresent) {
-      throw new Error(`CARD_WRITE_NOT_PERSISTED: Card "${input.cardId}" still present after delete`);
+      throw new Error(`${ErrorTokens.CARD_WRITE_NOT_PERSISTED}: Card "${input.cardId}" still present after delete`);
     }
     notify.deleted('card', `Card "${cardName}"`, { summary: `from stack ${input.stackId}` });
     return {
@@ -489,7 +490,7 @@ export async function flipCard(data: unknown): Promise<Envelope<any>> {
     const persistedStack = (game as any).cards?.get(input.stackId);
     const persistedCard = persistedStack?.cards?.get(input.cardId);
     if (!persistedCard) {
-      throw new Error(`CARD_WRITE_NOT_PERSISTED: Card "${input.cardId}" missing after flip`);
+      throw new Error(`${ErrorTokens.CARD_WRITE_NOT_PERSISTED}: Card "${input.cardId}" missing after flip`);
     }
     const newFace = persistedCard._source?.face ?? null;
     notify.updated('card', `Card "${persistedCard._source.name}"`, {

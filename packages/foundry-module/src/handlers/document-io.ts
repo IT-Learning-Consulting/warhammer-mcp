@@ -20,6 +20,7 @@
 // HC1 / CCR-3: no CONFIG.WFRP4E or game-rule references.
 
 import {
+  ErrorTokens,
   DocumentIoToolInput,
   DocumentIoExportInput,
   DocumentIoImportInput,
@@ -276,20 +277,20 @@ async function handleImportAsNew(
 
     const created: any = await DocClass.create(stripped);
     if (!created) {
-      throw new Error(`DOCUMENT_IO_WRITE_NOT_PERSISTED: ${input.documentType}.create returned empty`);
+      throw new Error(`${ErrorTokens.DOCUMENT_IO_WRITE_NOT_PERSISTED}: ${input.documentType}.create returned empty`);
     }
 
     // CCR-2a: re-read from the live collection.
     const persisted = collection.get(created.id);
     if (!persisted) {
       throw new Error(
-        `DOCUMENT_IO_WRITE_NOT_PERSISTED: created ${input.documentType} "${created.id}" missing from collection after create`,
+        `${ErrorTokens.DOCUMENT_IO_WRITE_NOT_PERSISTED}: created ${input.documentType} "${created.id}" missing from collection after create`,
       );
     }
 
     // Minimal field verification — prove at least the name persisted.
     if (stripped.name) {
-      verifyDocWrite(persisted, { name: stripped.name }, 'DOCUMENT_IO_WRITE_NOT_PERSISTED');
+      verifyDocWrite(persisted, { name: stripped.name }, ErrorTokens.DOCUMENT_IO_WRITE_NOT_PERSISTED);
     }
 
     // Assemble warnings.

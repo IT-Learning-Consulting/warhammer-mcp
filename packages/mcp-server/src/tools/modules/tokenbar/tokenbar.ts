@@ -9,6 +9,7 @@
 //   - Phase 9 module_integration_v1 — dossier §4 + §5.
 
 import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
+import { ErrorTokens } from '@foundry-mcp/shared';
 import { moduleNotActiveContent } from '../_shared/module-guard.js';
 import type { TokenbarMovementResult } from './schemas.js';
 
@@ -103,7 +104,7 @@ Example:
       return { content: [{ type: 'text' as const, text: formatMovement(data) }] };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      if (msg.includes('MODULE_NOT_ACTIVE')) {
+      if (msg.includes(ErrorTokens.MODULE_NOT_ACTIVE)) {
         return moduleNotActiveContent('module-tokenbar', msg);
       }
       return this.errorResponse(action, msg);

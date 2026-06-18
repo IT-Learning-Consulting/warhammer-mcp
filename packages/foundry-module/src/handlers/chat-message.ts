@@ -20,6 +20,7 @@
 //   - NEVER calls ChatMessage.create directly for GM toasts — that is notify.* territory.
 
 import {
+  ErrorTokens,
   ChatMessageCreateInput,
   ChatMessageUpdateInput,
   ChatMessageDeleteInput,
@@ -288,7 +289,7 @@ export async function deleteChatMessage(data: unknown): Promise<Envelope<any>> {
     // DP-16 post-verify: confirm removal
     if (messages.get(input.messageId)) {
       throw new Error(
-        `CHATMESSAGE_WRITE_NOT_PERSISTED: message "${input.messageId}" still present after delete`,
+        `${ErrorTokens.CHATMESSAGE_WRITE_NOT_PERSISTED}: message "${input.messageId}" still present after delete`,
       );
     }
 
@@ -410,7 +411,7 @@ export async function clearChatLog(data: unknown): Promise<Envelope<ChatMessageC
     const stillPresent = ids.filter((id) => messages.get(id));
     if (stillPresent.length > 0) {
       throw new Error(
-        `CHATMESSAGE_CLEAR_NOT_PERSISTED: ${stillPresent.length} targeted messages still present after clear`,
+        `${ErrorTokens.CHATMESSAGE_CLEAR_NOT_PERSISTED}: ${stillPresent.length} targeted messages still present after clear`,
       );
     }
 

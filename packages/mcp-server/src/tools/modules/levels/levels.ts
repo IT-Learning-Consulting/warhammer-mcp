@@ -10,7 +10,8 @@
 //   - F03: the formatter emits every field the handler returns.
 
 import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
-import { RegionId } from '@foundry-mcp/shared';
+import {
+  ErrorTokens, RegionId } from '@foundry-mcp/shared';
 import { moduleNotActiveContent } from '../_shared/module-guard.js';
 
 // ── Response shapes (DP-15 — typed, never <any>) ─────────────────────────────
@@ -221,7 +222,7 @@ Examples:
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      if (msg.includes('MODULE_NOT_ACTIVE') || msg.includes('MODULE_DEPENDENCY_NOT_ACTIVE')) {
+      if (msg.includes(ErrorTokens.MODULE_NOT_ACTIVE) || msg.includes(ErrorTokens.MODULE_DEPENDENCY_NOT_ACTIVE)) {
         return moduleNotActiveContent('module-levels', msg);
       }
       return this.errorResponse(action, msg);

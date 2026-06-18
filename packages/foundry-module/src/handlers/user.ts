@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import {
+  ErrorTokens,
     UserRoleName,
     USER_ROLE_NAMES,
     UserToolInput,
@@ -231,7 +232,7 @@ function verifyScalarFieldsPersisted(userId: string, changes: Record<string, unk
         const persistedValue = (persisted._source as Record<string, unknown> | undefined)?.[field];
         if (JSON.stringify(persistedValue) !== JSON.stringify(requestedValue)) {
             throw new Error(
-                `USER_WRITE_NOT_PERSISTED: field "${field}" expected ${JSON.stringify(requestedValue)} but found ${JSON.stringify(persistedValue)}`,
+                `${ErrorTokens.USER_WRITE_NOT_PERSISTED}: field "${field}" expected ${JSON.stringify(requestedValue)} but found ${JSON.stringify(persistedValue)}`,
             );
         }
     }
@@ -381,7 +382,7 @@ export async function updateUser(input: UpdateUserInputType): Promise<Envelope<U
                 const actual = freshPerms[key] ?? false;
                 if (actual !== expected) {
                     throw new Error(
-                        `USER_WRITE_NOT_PERSISTED: permissions[${JSON.stringify(key)}] expected ${JSON.stringify(expected)} but found ${JSON.stringify(actual)}`,
+                        `${ErrorTokens.USER_WRITE_NOT_PERSISTED}: permissions[${JSON.stringify(key)}] expected ${JSON.stringify(expected)} but found ${JSON.stringify(actual)}`,
                     );
                 }
             }
@@ -446,7 +447,7 @@ export async function setUserRole(input: SetUserRoleInputType): Promise<Envelope
         const persistedRoleValue = Number((persisted._source as Record<string, unknown> | undefined)?.role ?? persisted.role ?? -1);
         if (persistedRoleValue !== nextRoleValue) {
             throw new Error(
-                `USER_WRITE_NOT_PERSISTED: role expected ${nextRoleValue} but found ${persistedRoleValue}`,
+                `${ErrorTokens.USER_WRITE_NOT_PERSISTED}: role expected ${nextRoleValue} but found ${persistedRoleValue}`,
             );
         }
 
@@ -503,7 +504,7 @@ export async function hotbarAssign(input: UserHotbarAssignInputType): Promise<En
         const persistedHotbar = rawHotbar(persisted);
         if (persistedHotbar[String(input.slot)] !== input.macroId) {
             throw new Error(
-                `USER_WRITE_NOT_PERSISTED: hotbar slot ${input.slot} expected ${input.macroId} but found ${JSON.stringify(persistedHotbar[String(input.slot)] ?? null)}`,
+                `${ErrorTokens.USER_WRITE_NOT_PERSISTED}: hotbar slot ${input.slot} expected ${input.macroId} but found ${JSON.stringify(persistedHotbar[String(input.slot)] ?? null)}`,
             );
         }
 
@@ -552,7 +553,7 @@ export async function hotbarClear(input: UserHotbarClearInputType): Promise<Enve
         const persisted = resolveTargetUser(input.userId);
         const persistedHotbar = rawHotbar(persisted);
         if (Object.prototype.hasOwnProperty.call(persistedHotbar, String(input.slot))) {
-            throw new Error(`USER_WRITE_NOT_PERSISTED: hotbar slot ${input.slot} still present after clear`);
+            throw new Error(`${ErrorTokens.USER_WRITE_NOT_PERSISTED}: hotbar slot ${input.slot} still present after clear`);
         }
 
         notify.updated('user', `User "${persisted.name ?? input.userId}"`, {
@@ -583,7 +584,7 @@ export async function flagSet(input: UserFlagSetInputType): Promise<Envelope<Use
         const persistedValue = getFlagValue(persisted, input.scope, input.key);
         if (JSON.stringify(persistedValue) !== JSON.stringify(input.value)) {
             throw new Error(
-                `USER_WRITE_NOT_PERSISTED: flag ${input.scope}.${input.key} expected ${JSON.stringify(input.value)} but found ${JSON.stringify(persistedValue)}`,
+                `${ErrorTokens.USER_WRITE_NOT_PERSISTED}: flag ${input.scope}.${input.key} expected ${JSON.stringify(input.value)} but found ${JSON.stringify(persistedValue)}`,
             );
         }
 
@@ -627,7 +628,7 @@ export async function flagClear(input: UserFlagClearInputType): Promise<Envelope
         await targetUser.unsetFlag(input.scope, input.key);
         const persisted = resolveTargetUser(input.userId);
         if (flagExists(persisted, input.scope, input.key)) {
-            throw new Error(`USER_WRITE_NOT_PERSISTED: flag ${input.scope}.${input.key} still present after clear`);
+            throw new Error(`${ErrorTokens.USER_WRITE_NOT_PERSISTED}: flag ${input.scope}.${input.key} still present after clear`);
         }
 
         notify.updated('user', `User "${persisted.name ?? input.userId}"`, {

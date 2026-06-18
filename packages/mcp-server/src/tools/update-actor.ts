@@ -1,4 +1,9 @@
-import { UpdateActorInput } from '@foundry-mcp/shared';
+import {
+  UpdateActorInput,
+  UpdateActorOutput,
+  type UpdateActorOutputType,
+  UPDATE_ACTOR_OUTPUT_JSON_SCHEMA,
+} from '@foundry-mcp/shared';
 import { FoundryClient } from '../foundry-client.js';
 import { Logger } from '../logger.js';
 import { BaseTool, BaseToolOptions } from '../base-tool.js';
@@ -54,6 +59,7 @@ export class UpdateActorTool extends BaseTool {
           },
           required: ['actorId', 'updateData'],
         },
+        outputSchema: UPDATE_ACTOR_OUTPUT_JSON_SCHEMA,
       },
     ];
   }
@@ -61,6 +67,10 @@ export class UpdateActorTool extends BaseTool {
   async handle(args: any): Promise<any> {
     const parsed = UpdateActorInput.parse(args);
     this.logger.info('update-actor', { actorId: parsed.actorId, paths: Object.keys(parsed.updateData) });
-    return await this.query<any>('updateActor', parsed);
+    // Phase 11 (R11.1): envelope wrap; content[0].text === JSON.stringify(data)
+    // preserves the prior auto-wrapped wire text (additive structuredContent).
+    const data = await this.query<UpdateActorOutputType>('updateActor', parsed);
+    UpdateActorOutput.parse(data);
+    return { content: [{ type: 'text' as const, text: JSON.stringify(data) }], structuredContent: data };
   }
 }

@@ -11,6 +11,7 @@
 //   - Phase 3 module_integration_v1 acceptance criteria #1–12.
 
 import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
+import { ErrorTokens } from '@foundry-mcp/shared';
 import { moduleNotActiveContent } from '../_shared/module-guard.js';
 import type {
   ItemPileCreateResult,
@@ -473,7 +474,7 @@ GM required for all write actions.`,
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      if (msg.includes('MODULE_NOT_ACTIVE') || msg.includes('MODULE_DEPENDENCY_NOT_ACTIVE')) {
+      if (msg.includes(ErrorTokens.MODULE_NOT_ACTIVE) || msg.includes(ErrorTokens.MODULE_DEPENDENCY_NOT_ACTIVE)) {
         return moduleNotActiveContent('module-itempiles', msg);
       }
       return this.errorResponse(action, msg);

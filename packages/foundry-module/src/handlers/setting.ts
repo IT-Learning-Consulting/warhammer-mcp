@@ -19,6 +19,7 @@
 //   - Design Decision Q3: force:boolean + static blocklist + onChange-advisory.
 
 import {
+  ErrorTokens,
   SettingToolInput,
   type SettingViewModel,
   type SettingListItem,
@@ -114,14 +115,14 @@ async function handleSet(input: any): Promise<Envelope<any>> {
   } catch (e) {
     return {
       success: false,
-      error: `SETTING_WRITE_NOT_PERSISTED: could not read back "${ns}.${key}" after set — ${e instanceof Error ? e.message : String(e)}`,
+      error: `${ErrorTokens.SETTING_WRITE_NOT_PERSISTED}: could not read back "${ns}.${key}" after set — ${e instanceof Error ? e.message : String(e)}`,
     };
   }
 
   if (JSON.stringify(persistedValue) !== JSON.stringify(value)) {
     return {
       success: false,
-      error: `SETTING_WRITE_NOT_PERSISTED: "${ns}.${key}" was written but round-trip verify failed (wrote ${JSON.stringify(value)}, read back ${JSON.stringify(persistedValue)})`,
+      error: `${ErrorTokens.SETTING_WRITE_NOT_PERSISTED}: "${ns}.${key}" was written but round-trip verify failed (wrote ${JSON.stringify(value)}, read back ${JSON.stringify(persistedValue)})`,
     };
   }
 

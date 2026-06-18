@@ -19,6 +19,7 @@
 // CCR-Schema-Fidelity: input field paths mirror Foundry defineSchema 1:1.
 
 import {
+  ErrorTokens,
   JournalToolInput,
   type JournalToolInputType,
   type JournalCreateEntryInputType,
@@ -285,14 +286,14 @@ export async function createEntry(
     const JournalEntryCls = (globalThis as any).JournalEntry as any;
     const entry = await JournalEntryCls.create(entryPayload);
     if (!entry) {
-      throw new Error('JOURNAL_WRITE_NOT_PERSISTED: JournalEntry.create returned null unexpectedly');
+      throw new Error(ErrorTokens.JOURNAL_WRITE_NOT_PERSISTED + ': JournalEntry.create returned null unexpectedly');
     }
 
     // BUG-070 post-verify: confirm embedded counts match input.
     const pagesAfter: number = entry.pages?.size ?? 0;
     if (pagesAfter !== pagePayloads.length) {
       throw new Error(
-        `JOURNAL_WRITE_NOT_PERSISTED: createEntry expected ${pagePayloads.length} embedded ` +
+        `${ErrorTokens.JOURNAL_WRITE_NOT_PERSISTED}: createEntry expected ${pagePayloads.length} embedded ` +
         `pages but persisted ${pagesAfter}. Foundry may have silently dropped one or more pages — ` +
         `check F12 console for validation errors.`,
       );
@@ -300,7 +301,7 @@ export async function createEntry(
     const categoriesAfter: number = entry.categories?.size ?? 0;
     if (categoriesAfter !== categoryPayloads.length) {
       throw new Error(
-        `JOURNAL_WRITE_NOT_PERSISTED: createEntry expected ${categoryPayloads.length} embedded ` +
+        `${ErrorTokens.JOURNAL_WRITE_NOT_PERSISTED}: createEntry expected ${categoryPayloads.length} embedded ` +
         `categories but persisted ${categoriesAfter}.`,
       );
     }
@@ -346,7 +347,7 @@ export async function updateEntry(
     // reads persisted state, not the in-memory snapshot captured before the call.
     const fresh = (game as any).journal?.get(input.entryId);
     if (!fresh) {
-      throw new Error(`JOURNAL_WRITE_NOT_PERSISTED: entry "${input.entryId}" disappeared after update()`);
+      throw new Error(`${ErrorTokens.JOURNAL_WRITE_NOT_PERSISTED}: entry "${input.entryId}" disappeared after update()`);
     }
 
     // BUG-070 post-verify: re-read each requested field from fresh.
@@ -357,7 +358,7 @@ export async function updateEntry(
         const persisted = (fresh as any)[field];
         if (!persisted || typeof persisted !== 'object') {
           throw new Error(
-            `JOURNAL_WRITE_NOT_PERSISTED: ${field} expected an object post-update but found ` +
+            `${ErrorTokens.JOURNAL_WRITE_NOT_PERSISTED}: ${field} expected an object post-update but found ` +
             `${typeof persisted}`,
           );
         }
@@ -369,7 +370,7 @@ export async function updateEntry(
         const persistedId = (fresh._source as any)?.folder ?? null;
         if (persistedId !== (requestedValue ?? null)) {
           throw new Error(
-            `JOURNAL_WRITE_NOT_PERSISTED: folder expected ${JSON.stringify(requestedValue)} but ` +
+            `${ErrorTokens.JOURNAL_WRITE_NOT_PERSISTED}: folder expected ${JSON.stringify(requestedValue)} but ` +
             `post-update _source.folder is ${JSON.stringify(persistedId)}`,
           );
         }
@@ -378,7 +379,7 @@ export async function updateEntry(
       const persistedValue = (fresh as any)[field];
       if (persistedValue !== requestedValue) {
         throw new Error(
-          `JOURNAL_WRITE_NOT_PERSISTED: field "${field}" expected ${JSON.stringify(requestedValue)} ` +
+          `${ErrorTokens.JOURNAL_WRITE_NOT_PERSISTED}: field "${field}" expected ${JSON.stringify(requestedValue)} ` +
           `but post-update value is ${JSON.stringify(persistedValue)}.`,
         );
       }
@@ -431,7 +432,7 @@ export async function deleteEntry(
     // BUG-070 post-verify: confirm entry actually gone.
     if ((game as any).journal?.get(input.entryId)) {
       throw new Error(
-        `JOURNAL_WRITE_NOT_PERSISTED: entry "${input.entryId}" still present after delete()`,
+        `${ErrorTokens.JOURNAL_WRITE_NOT_PERSISTED}: entry "${input.entryId}" still present after delete()`,
       );
     }
 
@@ -544,13 +545,13 @@ export async function addPage(data: unknown): Promise<Envelope<JournalAddPageRes
     const sizeAfter: number = entry.pages?.size ?? 0;
     if (sizeAfter !== sizeBefore + 1) {
       throw new Error(
-        `JOURNAL_WRITE_NOT_PERSISTED: expected ${sizeBefore + 1} pages after addPage but ` +
+        `${ErrorTokens.JOURNAL_WRITE_NOT_PERSISTED}: expected ${sizeBefore + 1} pages after addPage but ` +
         `found ${sizeAfter}. Foundry may have silently dropped the page — check F12 console.`,
       );
     }
     if (!created || created.length !== 1) {
       throw new Error(
-        `JOURNAL_WRITE_NOT_PERSISTED: addPage createEmbeddedDocuments returned ${created?.length ?? 0} ` +
+        `${ErrorTokens.JOURNAL_WRITE_NOT_PERSISTED}: addPage createEmbeddedDocuments returned ${created?.length ?? 0} ` +
         `pages (expected 1)`,
       );
     }
@@ -614,18 +615,18 @@ export async function updatePage(
     const updated = entry.pages?.get(input.pageId);
     if (!updated) {
       throw new Error(
-        `JOURNAL_WRITE_NOT_PERSISTED: page "${input.pageId}" disappeared after updateEmbeddedDocuments`,
+        `${ErrorTokens.JOURNAL_WRITE_NOT_PERSISTED}: page "${input.pageId}" disappeared after updateEmbeddedDocuments`,
       );
     }
     if (input.changes.name !== undefined && updated.name !== input.changes.name) {
       throw new Error(
-        `JOURNAL_WRITE_NOT_PERSISTED: page name expected ${JSON.stringify(input.changes.name)} but ` +
+        `${ErrorTokens.JOURNAL_WRITE_NOT_PERSISTED}: page name expected ${JSON.stringify(input.changes.name)} but ` +
         `post-update value is ${JSON.stringify(updated.name)}`,
       );
     }
     if (input.changes.sort !== undefined && updated.sort !== input.changes.sort) {
       throw new Error(
-        `JOURNAL_WRITE_NOT_PERSISTED: page sort expected ${input.changes.sort} but post-update ` +
+        `${ErrorTokens.JOURNAL_WRITE_NOT_PERSISTED}: page sort expected ${input.changes.sort} but post-update ` +
         `value is ${updated.sort}`,
       );
     }
@@ -634,7 +635,7 @@ export async function updatePage(
       const persistedCatId = persistedCat?.id ?? persistedCat ?? null;
       if (persistedCatId !== input.changes.category) {
         throw new Error(
-          `JOURNAL_WRITE_NOT_PERSISTED: page category expected ${JSON.stringify(input.changes.category)} ` +
+          `${ErrorTokens.JOURNAL_WRITE_NOT_PERSISTED}: page category expected ${JSON.stringify(input.changes.category)} ` +
           `but post-update value is ${JSON.stringify(persistedCatId)}`,
         );
       }
@@ -646,7 +647,7 @@ export async function updatePage(
       const persistedContent = (updated as any)._source?.text?.content;
       if (persistedContent === null || persistedContent === undefined || persistedContent === '') {
         throw new Error(
-          `JOURNAL_WRITE_NOT_PERSISTED: page text.content was cleared after updateEmbeddedDocuments ` +
+          `${ErrorTokens.JOURNAL_WRITE_NOT_PERSISTED}: page text.content was cleared after updateEmbeddedDocuments ` +
           `(expected non-empty, got ${JSON.stringify(persistedContent)})`,
         );
       }
@@ -658,7 +659,7 @@ export async function updatePage(
         const persisted = (updated as any)[field];
         if (!persisted || typeof persisted !== 'object') {
           throw new Error(
-            `JOURNAL_WRITE_NOT_PERSISTED: ${field} expected an object post-update but found ${typeof persisted}`,
+            `${ErrorTokens.JOURNAL_WRITE_NOT_PERSISTED}: ${field} expected an object post-update but found ${typeof persisted}`,
           );
         }
       }
@@ -709,13 +710,13 @@ export async function deletePage(
     const sizeAfter: number = entry.pages?.size ?? 0;
     if (sizeAfter !== sizeBefore - 1) {
       throw new Error(
-        `JOURNAL_WRITE_NOT_PERSISTED: expected ${sizeBefore - 1} pages after deletePage but ` +
+        `${ErrorTokens.JOURNAL_WRITE_NOT_PERSISTED}: expected ${sizeBefore - 1} pages after deletePage but ` +
         `found ${sizeAfter}.`,
       );
     }
     if (entry.pages?.get(input.pageId)) {
       throw new Error(
-        `JOURNAL_WRITE_NOT_PERSISTED: page "${input.pageId}" still present after deleteEmbeddedDocuments`,
+        `${ErrorTokens.JOURNAL_WRITE_NOT_PERSISTED}: page "${input.pageId}" still present after deleteEmbeddedDocuments`,
       );
     }
 
@@ -782,12 +783,12 @@ export async function reorderPages(
       const page = entry.pages?.get(u._id);
       if (!page) {
         throw new Error(
-          `JOURNAL_WRITE_NOT_PERSISTED: page "${u._id}" disappeared after reorderPages`,
+          `${ErrorTokens.JOURNAL_WRITE_NOT_PERSISTED}: page "${u._id}" disappeared after reorderPages`,
         );
       }
       if (page.sort !== u.sort) {
         throw new Error(
-          `JOURNAL_WRITE_NOT_PERSISTED: page "${u._id}" sort expected ${u.sort} but post-update ` +
+          `${ErrorTokens.JOURNAL_WRITE_NOT_PERSISTED}: page "${u._id}" sort expected ${u.sort} but post-update ` +
           `value is ${page.sort}`,
         );
       }
@@ -837,13 +838,13 @@ export async function addCategory(
     const sizeAfter: number = entry.categories?.size ?? 0;
     if (sizeAfter !== sizeBefore + 1) {
       throw new Error(
-        `JOURNAL_WRITE_NOT_PERSISTED: expected ${sizeBefore + 1} categories after addCategory ` +
+        `${ErrorTokens.JOURNAL_WRITE_NOT_PERSISTED}: expected ${sizeBefore + 1} categories after addCategory ` +
         `but found ${sizeAfter}.`,
       );
     }
     if (!created || created.length !== 1) {
       throw new Error(
-        `JOURNAL_WRITE_NOT_PERSISTED: addCategory createEmbeddedDocuments returned ` +
+        `${ErrorTokens.JOURNAL_WRITE_NOT_PERSISTED}: addCategory createEmbeddedDocuments returned ` +
         `${created?.length ?? 0} categories (expected 1)`,
       );
     }
@@ -887,19 +888,19 @@ export async function updateCategory(
     const updated = entry.categories?.get(input.categoryId);
     if (!updated) {
       throw new Error(
-        `JOURNAL_WRITE_NOT_PERSISTED: category "${input.categoryId}" disappeared after ` +
+        `${ErrorTokens.JOURNAL_WRITE_NOT_PERSISTED}: category "${input.categoryId}" disappeared after ` +
         `updateEmbeddedDocuments`,
       );
     }
     if (input.changes.name !== undefined && updated.name !== input.changes.name) {
       throw new Error(
-        `JOURNAL_WRITE_NOT_PERSISTED: category name expected ${JSON.stringify(input.changes.name)} ` +
+        `${ErrorTokens.JOURNAL_WRITE_NOT_PERSISTED}: category name expected ${JSON.stringify(input.changes.name)} ` +
         `but post-update value is ${JSON.stringify(updated.name)}`,
       );
     }
     if (input.changes.sort !== undefined && updated.sort !== input.changes.sort) {
       throw new Error(
-        `JOURNAL_WRITE_NOT_PERSISTED: category sort expected ${input.changes.sort} but ` +
+        `${ErrorTokens.JOURNAL_WRITE_NOT_PERSISTED}: category sort expected ${input.changes.sort} but ` +
         `post-update value is ${updated.sort}`,
       );
     }
@@ -910,7 +911,7 @@ export async function updateCategory(
       const persisted = (updated as any).flags;
       if (!persisted || typeof persisted !== 'object') {
         throw new Error(
-          `JOURNAL_WRITE_NOT_PERSISTED: flags expected an object post-update but found ${typeof persisted}`,
+          `${ErrorTokens.JOURNAL_WRITE_NOT_PERSISTED}: flags expected an object post-update but found ${typeof persisted}`,
         );
       }
     }
@@ -974,7 +975,7 @@ export async function deleteCategory(
         const catId = cat?.id ?? cat ?? null;
         if (catId !== null) {
           throw new Error(
-            `JOURNAL_WRITE_NOT_PERSISTED: page "${id}" still references category ` +
+            `${ErrorTokens.JOURNAL_WRITE_NOT_PERSISTED}: page "${id}" still references category ` +
             `${JSON.stringify(input.categoryId)} after cascade-clear ` +
             `(post-update value: ${JSON.stringify(catId)})`,
           );
@@ -987,13 +988,13 @@ export async function deleteCategory(
     const sizeAfter: number = entry.categories?.size ?? 0;
     if (sizeAfter !== sizeBefore - 1) {
       throw new Error(
-        `JOURNAL_WRITE_NOT_PERSISTED: expected ${sizeBefore - 1} categories after deleteCategory ` +
+        `${ErrorTokens.JOURNAL_WRITE_NOT_PERSISTED}: expected ${sizeBefore - 1} categories after deleteCategory ` +
         `but found ${sizeAfter}.`,
       );
     }
     if (entry.categories?.get(input.categoryId)) {
       throw new Error(
-        `JOURNAL_WRITE_NOT_PERSISTED: category "${input.categoryId}" still present after delete`,
+        `${ErrorTokens.JOURNAL_WRITE_NOT_PERSISTED}: category "${input.categoryId}" still present after delete`,
       );
     }
 
@@ -1036,14 +1037,14 @@ export async function assignPageToCategory(
     const updated = entry.pages?.get(input.pageId);
     if (!updated) {
       throw new Error(
-        `JOURNAL_WRITE_NOT_PERSISTED: page "${input.pageId}" disappeared after assignPageToCategory`,
+        `${ErrorTokens.JOURNAL_WRITE_NOT_PERSISTED}: page "${input.pageId}" disappeared after assignPageToCategory`,
       );
     }
     const persistedCat = (updated as any).category;
     const persistedCatId = persistedCat?.id ?? persistedCat ?? null;
     if (persistedCatId !== input.categoryId) {
       throw new Error(
-        `JOURNAL_WRITE_NOT_PERSISTED: page category expected ${JSON.stringify(input.categoryId)} ` +
+        `${ErrorTokens.JOURNAL_WRITE_NOT_PERSISTED}: page category expected ${JSON.stringify(input.categoryId)} ` +
         `but post-update value is ${JSON.stringify(persistedCatId)}`,
       );
     }

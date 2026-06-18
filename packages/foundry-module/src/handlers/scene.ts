@@ -17,6 +17,7 @@
 // DP-19: serializeSceneViewModel surfaces every §6.2 PRD field.
 
 import {
+  ErrorTokens,
   SceneToolInput,
   SceneCreateInput,
   SceneUpdateInput,
@@ -382,19 +383,19 @@ export async function createScene(data: unknown): Promise<Envelope<SceneCreateRe
     const SceneCls = (globalThis as any).Scene as any;
     const created = await SceneCls.create(payload);
     if (!created) {
-      throw new Error('SCENE_WRITE_NOT_PERSISTED: Scene.create returned null unexpectedly');
+      throw new Error(ErrorTokens.SCENE_WRITE_NOT_PERSISTED + ': Scene.create returned null unexpectedly');
     }
 
     // DP-16 post-verify: re-read by id, confirm name matches.
     const persisted = (game as any).scenes?.get(created.id);
     if (!persisted) {
       throw new Error(
-        `SCENE_WRITE_NOT_PERSISTED: Scene "${created.id}" missing from game.scenes after create`,
+        `${ErrorTokens.SCENE_WRITE_NOT_PERSISTED}: Scene "${created.id}" missing from game.scenes after create`,
       );
     }
     if (persisted.name !== input.name) {
       throw new Error(
-        `SCENE_WRITE_NOT_PERSISTED: created Scene name "${persisted.name}" does not match ` +
+        `${ErrorTokens.SCENE_WRITE_NOT_PERSISTED}: created Scene name "${persisted.name}" does not match ` +
           `requested "${input.name}"`,
       );
     }
@@ -438,7 +439,7 @@ export async function updateScene(data: unknown): Promise<Envelope<SceneUpdateRe
         const persistedId = scene._source?.[field] ?? null;
         if (persistedId !== (requestedValue ?? null)) {
           throw new Error(
-            `SCENE_WRITE_NOT_PERSISTED: ${field} expected ${JSON.stringify(requestedValue)} ` +
+            `${ErrorTokens.SCENE_WRITE_NOT_PERSISTED}: ${field} expected ${JSON.stringify(requestedValue)} ` +
               `but post-update value is ${JSON.stringify(persistedId)}`,
           );
         }
@@ -459,7 +460,7 @@ export async function updateScene(data: unknown): Promise<Envelope<SceneUpdateRe
         const persisted = (scene._source as any)?.[field];
         if (persisted === undefined || persisted === null) {
           throw new Error(
-            `SCENE_WRITE_NOT_PERSISTED: nested field "${field}" missing after update`,
+            `${ErrorTokens.SCENE_WRITE_NOT_PERSISTED}: nested field "${field}" missing after update`,
           );
         }
         continue;
@@ -468,7 +469,7 @@ export async function updateScene(data: unknown): Promise<Envelope<SceneUpdateRe
       const persistedValue = (scene._source as any)?.[field];
       if (persistedValue !== requestedValue) {
         throw new Error(
-          `SCENE_WRITE_NOT_PERSISTED: field "${field}" expected ${JSON.stringify(requestedValue)} ` +
+          `${ErrorTokens.SCENE_WRITE_NOT_PERSISTED}: field "${field}" expected ${JSON.stringify(requestedValue)} ` +
             `but post-update _source value is ${JSON.stringify(persistedValue)}`,
         );
       }
@@ -515,13 +516,13 @@ export async function deleteScene(data: unknown): Promise<Envelope<SceneDeleteRe
     const postScene = (game as any).scenes?.get(input.sceneId);
     if (postScene) {
       throw new Error(
-        `SCENE_WRITE_NOT_PERSISTED: scene "${input.sceneId}" still present after delete()`,
+        `${ErrorTokens.SCENE_WRITE_NOT_PERSISTED}: scene "${input.sceneId}" still present after delete()`,
       );
     }
     const sizeAfter = (game as any).scenes?.size ?? 0;
     if (sizeAfter !== sizeBefore - 1) {
       throw new Error(
-        `SCENE_WRITE_NOT_PERSISTED: scenes.size expected ${sizeBefore - 1} after delete ` +
+        `${ErrorTokens.SCENE_WRITE_NOT_PERSISTED}: scenes.size expected ${sizeBefore - 1} after delete ` +
           `but found ${sizeAfter}`,
       );
     }
@@ -555,19 +556,19 @@ export async function cloneScene(data: unknown): Promise<Envelope<SceneCloneResp
     const overrides = deepStripUndefined({ name: input.newName, ...(input.overrides ?? {}) });
     const clone = await source.clone(overrides, { save: true });
     if (!clone) {
-      throw new Error('SCENE_WRITE_NOT_PERSISTED: Scene.clone returned null unexpectedly');
+      throw new Error(ErrorTokens.SCENE_WRITE_NOT_PERSISTED + ': Scene.clone returned null unexpectedly');
     }
 
     // DP-16 post-verify: clone exists in game.scenes with the requested newName.
     const persisted = (game as any).scenes?.get(clone.id);
     if (!persisted) {
       throw new Error(
-        `SCENE_WRITE_NOT_PERSISTED: cloned Scene "${clone.id}" missing from game.scenes`,
+        `${ErrorTokens.SCENE_WRITE_NOT_PERSISTED}: cloned Scene "${clone.id}" missing from game.scenes`,
       );
     }
     if (persisted.name !== input.newName) {
       throw new Error(
-        `SCENE_WRITE_NOT_PERSISTED: cloned Scene name "${persisted.name}" does not match ` +
+        `${ErrorTokens.SCENE_WRITE_NOT_PERSISTED}: cloned Scene name "${persisted.name}" does not match ` +
           `requested "${input.newName}"`,
       );
     }
@@ -616,7 +617,7 @@ export async function activateScene(data: unknown): Promise<Envelope<SceneActiva
     const refreshed = (game as any).scenes?.get(input.sceneId);
     if (!refreshed?.active) {
       throw new Error(
-        `SCENE_WRITE_NOT_PERSISTED: scene "${input.sceneId}" is not active after activate()`,
+        `${ErrorTokens.SCENE_WRITE_NOT_PERSISTED}: scene "${input.sceneId}" is not active after activate()`,
       );
     }
 
@@ -678,7 +679,7 @@ export async function thumbnailScene(
     });
     const thumbData = await scene.createThumbnail(opts);
     if (!thumbData || !thumbData.thumb) {
-      throw new Error('SCENE_WRITE_NOT_PERSISTED: createThumbnail returned no data');
+      throw new Error(ErrorTokens.SCENE_WRITE_NOT_PERSISTED + ': createThumbnail returned no data');
     }
     // BUG-116: Foundry returns a transparent placeholder data URL with
     // width=0/height=0 when the scene has no background image to thumbnail
@@ -882,7 +883,7 @@ export async function clearLayer(
     const sizeAfter = (scene as any)[prop]?.size ?? 0;
     if (sizeAfter !== 0) {
       throw new Error(
-        `SCENE_CLEAR_LAYER_NOT_PERSISTED: layer "${input.layer}" still has ${sizeAfter} docs after clear`,
+        `${ErrorTokens.SCENE_CLEAR_LAYER_NOT_PERSISTED}: layer "${input.layer}" still has ${sizeAfter} docs after clear`,
       );
     }
 
@@ -974,7 +975,7 @@ export async function lightingTransition(
     const persisted = (scene._source?.environment?.darknessLevel ?? scene.environment?.darknessLevel) as number;
     if (typeof persisted !== 'number' || Math.abs(persisted - target) > 1e-6) {
       throw new Error(
-        `SCENE_LIGHTING_NOT_PERSISTED: environment.darknessLevel is ${persisted}, expected ${target}`,
+        `${ErrorTokens.SCENE_LIGHTING_NOT_PERSISTED}: environment.darknessLevel is ${persisted}, expected ${target}`,
       );
     }
 
@@ -1042,7 +1043,7 @@ export async function importSceneFromCompendium(
     }
     const persisted = (game as any).scenes?.get(imported.id);
     if (!persisted) {
-      throw new Error(`SCENE_IMPORT_NOT_PERSISTED: imported scene "${imported.id}" missing from game.scenes`);
+      throw new Error(`${ErrorTokens.SCENE_IMPORT_NOT_PERSISTED}: imported scene "${imported.id}" missing from game.scenes`);
     }
 
     notify.created('scene', persisted.name as string, { summary: `imported from ${input.packId}` });

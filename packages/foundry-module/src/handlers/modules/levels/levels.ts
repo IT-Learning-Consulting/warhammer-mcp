@@ -19,6 +19,7 @@
 //   - CCR-3: notify.updated/created on every write; DP-16 post-write re-read.
 
 import { requireModuleActive } from '../_shared/require-module-active.js';
+import { ErrorTokens } from '@foundry-mcp/shared';
 import { getEmbeddedOrThrow } from '../../../utils/getEmbeddedOrThrow.js';
 import { ModuleLevelsInput, type ModuleLevelsInputType } from './schemas.js';
 import { notify } from '../../../notify.js';
@@ -316,7 +317,7 @@ async function handleSetVolumetricTemplate(input: SetVolumetricInput): Promise<E
   if (!isGM()) return { success: false, error: 'GM_REQUIRED: only the GM can set template depth' };
   // DEPENDENCY_GATED on levelsvolumetrictemplates.
   if (!moduleActive('levelsvolumetrictemplates')) {
-    return { success: false, error: 'MODULE_DEPENDENCY_NOT_ACTIVE: "levelsvolumetrictemplates" is required for set-volumetric-template but is not active.' };
+    return { success: false, error: ErrorTokens.MODULE_DEPENDENCY_NOT_ACTIVE + ': "levelsvolumetrictemplates" is required for set-volumetric-template but is not active.' };
   }
   if (input.elevation === undefined && input.special === undefined) {
     return { success: false, error: 'NO_FIELDS: provide elevation and/or special (depth)' };

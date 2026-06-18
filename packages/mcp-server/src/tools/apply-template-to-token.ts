@@ -1,4 +1,8 @@
-import { ApplyTemplateToTokenInput } from '@foundry-mcp/shared';
+import {
+  ApplyTemplateToTokenInput,
+  ApplyTemplateToTokenOutput,
+  APPLY_TEMPLATE_TO_TOKEN_OUTPUT_JSON_SCHEMA,
+} from '@foundry-mcp/shared';
 import { FoundryClient } from '../foundry-client.js';
 import { Logger } from '../logger.js';
 import { BaseTool, BaseToolOptions } from '../base-tool.js';
@@ -107,6 +111,7 @@ export class ApplyTemplateToTokenTool extends BaseTool {
           },
           required: ['sceneId', 'tokenId', 'templateUuid'],
         },
+        outputSchema: APPLY_TEMPLATE_TO_TOKEN_OUTPUT_JSON_SCHEMA,
       },
     ];
   }
@@ -120,6 +125,7 @@ export class ApplyTemplateToTokenTool extends BaseTool {
       hasPreResolved: !!parsed.preResolvedChoices,
     });
     const data = await this.query<Record<string, unknown>>('applyTemplateToToken', parsed);
+    ApplyTemplateToTokenOutput.parse(data);
     const d = data as any;
     const applied = d?.applied?.itemsByType ?? {};
     const text = `Applied template ${d?.templateName ?? d?.templateId ?? ''} to token ${d?.tokenId ?? ''} (${d?.actorName ?? d?.actorId ?? ''}): ` +

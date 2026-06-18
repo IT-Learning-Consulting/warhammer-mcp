@@ -147,46 +147,63 @@ export const ListCombatantsOutput = z.object({
 }).passthrough();
 export type ListCombatantsOutputType = z.infer<typeof ListCombatantsOutput>;
 
+// Phase 11 fix (BUG-390): CombatService.advanceCombat returns
+// { combatId, round, turn, combatantId } where turn AND combatantId are `null`
+// when the combat is not started / has no current combatant. `.optional()` rejects
+// an explicit null, so the nullable leaves are required for the real return.
 export const AdvanceCombatOutput = z.object({
   round: z.number(),
-  turn: z.number().optional(),
-  currentCombatantId: z.string().optional(),
+  turn: z.number().nullable().optional(),
+  combatantId: z.string().nullable().optional(),
+  currentCombatantId: z.string().nullable().optional(),
+  combatId: z.string().optional(),
   rolled: z.array(z.string()).optional(),
 }).passthrough();
 export type AdvanceCombatOutputType = z.infer<typeof AdvanceCombatOutput>;
 
+// Phase 11 fix (BUG-390): CombatService.addCombatants returns { added } only
+// (services/combat.ts:159) — combatId is not emitted; make it optional.
 export const AddCombatantsOutput = z.object({
   added: z.array(z.string()),
-  combatId: z.string(),
+  combatId: z.string().optional(),
 }).passthrough();
 export type AddCombatantsOutputType = z.infer<typeof AddCombatantsOutput>;
 
+// Phase 11 fix (BUG-390): CombatService.removeCombatants returns { removed } only
+// (services/combat.ts:184) — combatId is not emitted; make it optional.
 export const RemoveCombatantsOutput = z.object({
-  combatId: z.string(),
+  combatId: z.string().optional(),
   removed: z.array(z.string()),
 }).passthrough();
 export type RemoveCombatantsOutputType = z.infer<typeof RemoveCombatantsOutput>;
 
+// Phase 11 fix (BUG-390): CombatService.endCombat returns { ended: <id> }
+// (services/combat.ts:194), NOT { combatId, deleted }.
 export const EndCombatOutput = z.object({
-  combatId: z.string(),
-  deleted: z.boolean(),
+  ended: z.string(),
+  combatId: z.string().optional(),
+  deleted: z.boolean().optional(),
 }).passthrough();
 export type EndCombatOutputType = z.infer<typeof EndCombatOutput>;
 
 // --- manage-conditions.ts ---
+// Phase 11 fix (BUG-390): faithful to the real ConditionsService.applyCondition
+// return (services/conditions.ts:55) — { actorId, conditionKey, stackCount }. The
+// prior {applied, value} shape was invented from a snapshot mock and threw on every
+// real call. `.passthrough()` tolerates future fields.
 export const ApplyConditionOutput = z.object({
   actorId: z.string(),
-  applied: z.boolean(),
   conditionKey: z.string(),
-  value: z.number(),
+  stackCount: z.number(),
 }).passthrough();
 export type ApplyConditionOutputType = z.infer<typeof ApplyConditionOutput>;
 
+// Phase 11 fix (BUG-390): faithful to ConditionsService.removeCondition
+// (services/conditions.ts:83) — { actorId, conditionKey, remainingCount }.
 export const RemoveConditionOutput = z.object({
   actorId: z.string(),
   conditionKey: z.string(),
-  count: z.number(),
-  removed: z.boolean(),
+  remainingCount: z.number(),
 }).passthrough();
 export type RemoveConditionOutputType = z.infer<typeof RemoveConditionOutput>;
 
@@ -257,22 +274,29 @@ export const ListActorItemsOutput = z.object({
 export type ListActorItemsOutputType = z.infer<typeof ListActorItemsOutput>;
 
 // --- apply-template.ts (structuredContent shape, from da-template.snap) ---
+// Phase 11 (R11.1): the real foundry return is always complete, but the mcp-server
+// apply-template formatter is deliberately DEFENSIVE — it tolerates an absent
+// actorName (→ actorId fallback) and a partial/empty itemsByType (→ 0 counts), and
+// the characterization tests lock exactly those degenerate paths. Wiring `.parse()`
+// (Phase 11) on a strict version threw on those tolerated shapes (PRD over-narrowing
+// Risk). The fields stay DECLARED (faithful) but degenerate-tolerable ones are
+// `.optional()` so `.parse()` never throws on an output the tool legitimately emits.
 export const ApplyTemplateOutput = z.object({
-  success: z.boolean(),
+  success: z.boolean().optional(),
   actorId: z.string(),
-  actorName: z.string(),
+  actorName: z.string().optional(),
   templateId: z.string(),
-  templateName: z.string(),
+  templateName: z.string().optional(),
   applied: z.object({
-    name: z.string(),
-    characteristics: z.record(z.number()),
-    itemIds: z.array(z.string()),
+    name: z.string().optional(),
+    characteristics: z.record(z.number()).optional(),
+    itemIds: z.array(z.string()).optional(),
     itemsByType: z.object({
-      skill: z.number(),
-      spell: z.number(),
-      talent: z.number(),
-      trait: z.number(),
-      trapping: z.number(),
+      skill: z.number().optional(),
+      spell: z.number().optional(),
+      talent: z.number().optional(),
+      trait: z.number().optional(),
+      trapping: z.number().optional(),
     }).passthrough(),
   }).passthrough(),
   sceneId: z.string().optional(),
@@ -281,10 +305,14 @@ export const ApplyTemplateOutput = z.object({
 export type ApplyTemplateOutputType = z.infer<typeof ApplyTemplateOutput>;
 
 // --- actor-creation.ts ---
+// Phase 11 fix (BUG-390): the createActorFromCompendium query returns actor
+// summaries as { id, name, originalName } — there is NO `type` field, so it must
+// be optional (the prior required `type: z.string()` threw on every real create).
 const CreatedActorSummarySchema = z.object({
   id: z.string(),
   name: z.string(),
-  type: z.string(),
+  type: z.string().optional(),
+  originalName: z.string().optional(),
 }).passthrough();
 
 export const CreateActorFromCompendiumOutput = z.object({

@@ -24,6 +24,7 @@
 //               KEYBINDING_RESET_NOT_CONFIRMED, KEYBINDING_UNAVAILABLE.
 
 import {
+  ErrorTokens,
   KeybindingToolInput,
   type KeybindingToolInputType,
   type KeybindingGetInputType,
@@ -213,7 +214,7 @@ async function setAction(input: KeybindingSetInputType): Promise<Envelope<unknow
   const expected = mergeBindings(uneditableDefaults(config), requested);
   if (!bindingsEqual(persisted, expected)) {
     throw new Error(
-      `KEYBINDING_NOT_PERSISTED: post-write read for "${id}" did not match the expected bindings (uneditable + requested)`,
+      `${ErrorTokens.KEYBINDING_NOT_PERSISTED}: post-write read for "${id}" did not match the expected bindings (uneditable + requested)`,
     );
   }
 
@@ -237,7 +238,7 @@ async function resetActionBinding(input: KeybindingResetActionInputType): Promis
   const persisted = currentBindings(kb, id, input.namespace, input.keyAction);
   const expected = mergeBindings(uneditableDefaults(config), defaults);
   if (!bindingsEqual(persisted, expected)) {
-    throw new Error(`KEYBINDING_NOT_PERSISTED: reset for "${id}" did not restore defaults`);
+    throw new Error(`${ErrorTokens.KEYBINDING_NOT_PERSISTED}: reset for "${id}" did not restore defaults`);
   }
 
   notify.updated('keybinding', id, { summary: 'reset to defaults' });
@@ -283,7 +284,7 @@ async function resetAll(input: KeybindingResetAllInputType): Promise<Envelope<un
   const remaining = customizedActions(kb).length;
   if (remaining !== 0) {
     throw new Error(
-      `KEYBINDING_NOT_PERSISTED: resetDefaults left ${remaining} action(s) still differing from default`,
+      `${ErrorTokens.KEYBINDING_NOT_PERSISTED}: resetDefaults left ${remaining} action(s) still differing from default`,
     );
   }
 

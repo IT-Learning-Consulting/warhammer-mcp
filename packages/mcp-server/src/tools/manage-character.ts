@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ErrorTokens } from '@foundry-mcp/shared';
 import { FoundryClient } from "../foundry-client.js";
 import { Logger } from "../logger.js";
 import { BaseTool, BaseToolOptions } from "../base-tool.js";
@@ -467,7 +468,7 @@ Use for quick stat changes, character creation, testing, or corrections where yo
                     const equivalent = String(actual) === String(requestedValue);
                     if (!equivalent) {
                         throw new Error(
-                            `UPDATE_STATS_NOT_PERSISTED: ${apiKey} expected ${JSON.stringify(requestedValue)}, got ${JSON.stringify(actual)}`,
+                            `${ErrorTokens.UPDATE_STATS_NOT_PERSISTED}: ${apiKey} expected ${JSON.stringify(requestedValue)}, got ${JSON.stringify(actual)}`,
                         );
                     }
                 }
@@ -707,7 +708,7 @@ Use for quick stat changes, character creation, testing, or corrections where yo
             const actualTotal = verifyActor?.system?.details?.experience?.total;
             if (actualTotal !== expectedTotal) {
                 throw new Error(
-                    `XP_TOTAL_NOT_PERSISTED: expected ${expectedTotal}, got ${actualTotal}`,
+                    `${ErrorTokens.XP_TOTAL_NOT_PERSISTED}: expected ${expectedTotal}, got ${actualTotal}`,
                 );
             }
         }

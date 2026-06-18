@@ -12,6 +12,7 @@
 //       handler returns — a field computed but not surfaced is invisible to callers.
 
 import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
+import { ErrorTokens } from '@foundry-mcp/shared';
 import { moduleNotActiveContent } from '../_shared/module-guard.js';
 
 // ── Response shapes (DP-15 — concrete, never <any>) ──────────────────────────
@@ -187,7 +188,7 @@ Examples:
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      if (msg.includes('MODULE_NOT_ACTIVE') || msg.includes('MODULE_DEPENDENCY_NOT_ACTIVE')) {
+      if (msg.includes(ErrorTokens.MODULE_NOT_ACTIVE) || msg.includes(ErrorTokens.MODULE_DEPENDENCY_NOT_ACTIVE)) {
         return moduleNotActiveContent('module-autoanimations', msg);
       }
       return this.errorResponse(action, msg);

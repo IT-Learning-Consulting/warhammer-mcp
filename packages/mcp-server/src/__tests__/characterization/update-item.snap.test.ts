@@ -11,10 +11,12 @@ const tool = (mockReturn: any) => new UpdateItemTool(makeToolDeps(mockReturn));
 describe('UpdateItemTool — characterization', () => {
   it('update actor-embedded skill advances by actorId + itemId', async () => {
     const r = await tool({
-      updated: true,
-      itemId: 'item-skill-001',
+      success: true,
+      scope: 'actor',
       actorId: 'actor-abc',
-      verified: true,
+      itemId: 'item-skill-001',
+      itemName: 'Melee (Basic)',
+      updated: ['system.advances.value'],
     }).handle({
       actorId: 'actor-abc',
       itemId: 'item-skill-001',
@@ -25,10 +27,12 @@ describe('UpdateItemTool — characterization', () => {
 
   it('update world-scope item by name — raw passthrough', async () => {
     const r = await tool({
-      updated: true,
+      success: true,
+      scope: 'world',
+      actorId: null,
       itemId: 'item-world-002',
       itemName: 'Longsword',
-      verified: false,
+      updated: ['system.damage.value'],
     }).handle({
       destination: { type: 'world' },
       itemName: 'Longsword',

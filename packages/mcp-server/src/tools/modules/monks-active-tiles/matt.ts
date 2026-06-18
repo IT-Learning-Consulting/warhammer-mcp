@@ -15,8 +15,25 @@
 //   - CCR-G9: tool name = 'module-matt'; description documents conditionality + pre-flight.
 
 import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
-import { RegionBehaviorId, RegionId, SceneId, TileId, TokenId } from '@foundry-mcp/shared';
+import {
+  RegionBehaviorId,
+  RegionId,
+  SceneId,
+  TileId,
+  TokenId,
+  MattMutationOutput,
+  MATT_MUTATION_OUTPUT_JSON_SCHEMA,
+} from '@foundry-mcp/shared';
 import { type ModuleMattInputType } from './schemas.js';
+
+// Phase 11 (R11.1): mutation actions get structuredContent attached (the 14 write
+// actions); the 5 read actions (get-capabilities/get-trigger-tile/list-trigger-tiles/
+// validate-sequence/find-trigger-tile) keep their content-only return unchanged.
+const MATT_MUTATION_ACTIONS = new Set<string>([
+  'create-trigger-tile', 'update-trigger-config', 'replace-action-sequence', 'add-action',
+  'insert-action', 'update-action', 'remove-action', 'reorder-actions', 'duplicate-action',
+  'set-variables', 'reset-history', 'fire-trigger', 'fire-trigger-as', 'link-region-trigger',
+]);
 
 // ── Response shapes (DP-15) ────────────────────────────────────────────────────
 
@@ -397,6 +414,9 @@ Examples:
           },
           required: ['action'],
         },
+        // Phase 11 (R11.1): permissive passthrough outputSchema (user Q&A 2026-06-17).
+        // structuredContent is attached on the 14 mutation actions only (see run()).
+        outputSchema: MATT_MUTATION_OUTPUT_JSON_SCHEMA,
       },
     ];
   }
@@ -459,6 +479,12 @@ Examples:
   ) {
     try {
       const data = await this.query<T>('module-matt', args);
+      // Phase 11 (R11.1): mutation actions attach structuredContent (the raw data);
+      // content[0].text === fmt(data) is unchanged from before. Reads stay content-only.
+      if (MATT_MUTATION_ACTIONS.has(action)) {
+        MattMutationOutput.parse(data as Record<string, unknown>);
+        return { content: [{ type: 'text' as const, text: fmt(data) }], structuredContent: data };
+      }
       return text(fmt(data));
     } catch (e) {
       return this.errorResponse(action, e instanceof Error ? e.message : String(e));

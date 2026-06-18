@@ -17,7 +17,11 @@ function makeUpdateTool() {
   const foundryClient: any = {
     query: vi.fn(async (key: string, args: any) => {
       calls.push({ key, args });
-      return { success: true, data: { itemId: args?.itemId ?? 'id', itemName: 'x' } };
+      // Phase 11 (R11.1) + BUG-390 fix: UpdateItemTool `.parse()`s the return against
+      // UpdateItemOutput — return the REAL ItemService.updateItem shape
+      // ({ success, scope, itemId, itemName, updated: string[] }) so the dispatch
+      // call-shape assertions are still reached and `.parse()` does not throw.
+      return { success: true, scope: 'actor', itemId: args?.itemId ?? 'id', itemName: 'Item', updated: Object.keys(args?.updateData ?? {}) };
     }),
   };
   const tool = new UpdateItemTool({ foundryClient, logger: makeLogger() });

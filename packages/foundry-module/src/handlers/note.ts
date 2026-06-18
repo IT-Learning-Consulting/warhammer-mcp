@@ -20,6 +20,7 @@
 //     AND scans `j.pages.has(entryId)` across entries before declaring orphan.
 
 import {
+  ErrorTokens,
   NoteToolInput,
   NoteCreateInput,
   NoteUpdateInput,
@@ -275,7 +276,7 @@ export async function createNote(data: unknown): Promise<Envelope<NoteCreateResp
     const payload = deepStripUndefined(notePayload);
     const created = await scene.createEmbeddedDocuments('Note', [payload]);
     if (!created || created.length === 0) {
-      throw new Error('NOTE_WRITE_NOT_PERSISTED: createEmbeddedDocuments returned no doc');
+      throw new Error(ErrorTokens.NOTE_WRITE_NOT_PERSISTED + ': createEmbeddedDocuments returned no doc');
     }
     const persisted = getEmbeddedOrThrow<any>(scene, 'notes', created[0].id, 'Note');
 
@@ -323,7 +324,7 @@ export async function updateNote(data: unknown): Promise<Envelope<NoteUpdateResp
         const persistedId = fresh._source?.[field] ?? null;
         if (persistedId !== (requestedValue ?? null)) {
           throw new Error(
-            `NOTE_WRITE_NOT_PERSISTED: ${field} expected ${JSON.stringify(requestedValue)} ` +
+            `${ErrorTokens.NOTE_WRITE_NOT_PERSISTED}: ${field} expected ${JSON.stringify(requestedValue)} ` +
               `but post-update is ${JSON.stringify(persistedId)}`,
           );
         }
@@ -332,7 +333,7 @@ export async function updateNote(data: unknown): Promise<Envelope<NoteUpdateResp
       if (field === 'texture' || field === 'flags') {
         const persisted = (fresh._source as any)?.[field];
         if (persisted === undefined || persisted === null) {
-          throw new Error(`NOTE_WRITE_NOT_PERSISTED: nested field "${field}" missing after update`);
+          throw new Error(`${ErrorTokens.NOTE_WRITE_NOT_PERSISTED}: nested field "${field}" missing after update`);
         }
         continue;
       }
@@ -340,7 +341,7 @@ export async function updateNote(data: unknown): Promise<Envelope<NoteUpdateResp
       const persistedValue = (fresh._source as any)?.[field];
       if (persistedValue !== requestedValue) {
         throw new Error(
-          `NOTE_WRITE_NOT_PERSISTED: field "${field}" expected ${JSON.stringify(requestedValue)} ` +
+          `${ErrorTokens.NOTE_WRITE_NOT_PERSISTED}: field "${field}" expected ${JSON.stringify(requestedValue)} ` +
             `but post-update _source value is ${JSON.stringify(persistedValue)}`,
         );
       }
@@ -381,12 +382,12 @@ export async function deleteNote(data: unknown): Promise<Envelope<NoteDeleteResp
 
     const post = scene.notes?.get(input.noteId);
     if (post) {
-      throw new Error(`NOTE_WRITE_NOT_PERSISTED: note "${input.noteId}" still present after delete()`);
+      throw new Error(`${ErrorTokens.NOTE_WRITE_NOT_PERSISTED}: note "${input.noteId}" still present after delete()`);
     }
     const sizeAfter = scene.notes?.size ?? 0;
     if (sizeAfter !== sizeBefore - 1) {
       throw new Error(
-        `NOTE_WRITE_NOT_PERSISTED: scene.notes.size expected ${sizeBefore - 1} ` +
+        `${ErrorTokens.NOTE_WRITE_NOT_PERSISTED}: scene.notes.size expected ${sizeBefore - 1} ` +
           `but found ${sizeAfter}`,
       );
     }

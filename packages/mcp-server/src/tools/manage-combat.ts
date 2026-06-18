@@ -11,6 +11,14 @@ import {
   type AddCombatantsOutputType,
   type RemoveCombatantsOutputType,
   type EndCombatOutputType,
+  AdvanceCombatOutput,
+  AddCombatantsOutput,
+  RemoveCombatantsOutput,
+  EndCombatOutput,
+  ADVANCE_COMBAT_OUTPUT_JSON_SCHEMA,
+  ADD_COMBATANTS_OUTPUT_JSON_SCHEMA,
+  REMOVE_COMBATANTS_OUTPUT_JSON_SCHEMA,
+  END_COMBAT_OUTPUT_JSON_SCHEMA,
 } from '@foundry-mcp/shared';
 import { FoundryClient } from '../foundry-client.js';
 import { Logger } from '../logger.js';
@@ -105,6 +113,7 @@ export class ManageCombatTools extends BaseTool {
           },
           required: ['action'],
         },
+        outputSchema: ADVANCE_COMBAT_OUTPUT_JSON_SCHEMA,
       },
       {
         name: 'add-combatants',
@@ -136,6 +145,7 @@ export class ManageCombatTools extends BaseTool {
           },
           required: ['actorIds'],
         },
+        outputSchema: ADD_COMBATANTS_OUTPUT_JSON_SCHEMA,
       },
       {
         name: 'remove-combatants',
@@ -163,6 +173,7 @@ export class ManageCombatTools extends BaseTool {
           },
           required: ['combatantIds'],
         },
+        outputSchema: REMOVE_COMBATANTS_OUTPUT_JSON_SCHEMA,
       },
       {
         name: 'end-combat',
@@ -183,6 +194,7 @@ export class ManageCombatTools extends BaseTool {
             },
           },
         },
+        outputSchema: END_COMBAT_OUTPUT_JSON_SCHEMA,
       },
     ];
   }
@@ -207,24 +219,40 @@ export class ManageCombatTools extends BaseTool {
   async handleAdvanceCombat(args: any): Promise<any> {
     const parsed = AdvanceCombatInput.parse(args);
     this.logger.info('advance-combat', parsed);
-    return await this.query<AdvanceCombatOutputType>('advanceCombat', parsed);
+    // Phase 11 (R11.1): envelope wrap; text === JSON.stringify(data) preserves the
+    // prior auto-wrapped wire text (additive structuredContent).
+    const data = await this.query<AdvanceCombatOutputType>('advanceCombat', parsed);
+    AdvanceCombatOutput.parse(data);
+    return { content: [{ type: 'text' as const, text: JSON.stringify(data) }], structuredContent: data };
   }
 
   async handleAddCombatants(args: any): Promise<any> {
     const parsed = AddCombatantsInput.parse(args);
     this.logger.info('add-combatants', parsed);
-    return await this.query<AddCombatantsOutputType>('addCombatants', parsed);
+    // Phase 11 (R11.1): envelope wrap; text === JSON.stringify(data) preserves the
+    // prior auto-wrapped wire text (additive structuredContent).
+    const data = await this.query<AddCombatantsOutputType>('addCombatants', parsed);
+    AddCombatantsOutput.parse(data);
+    return { content: [{ type: 'text' as const, text: JSON.stringify(data) }], structuredContent: data };
   }
 
   async handleRemoveCombatants(args: any): Promise<any> {
     const parsed = RemoveCombatantsInput.parse(args);
     this.logger.info('remove-combatants', parsed);
-    return await this.query<RemoveCombatantsOutputType>('removeCombatants', parsed);
+    // Phase 11 (R11.1): envelope wrap; text === JSON.stringify(data) preserves the
+    // prior auto-wrapped wire text (additive structuredContent).
+    const data = await this.query<RemoveCombatantsOutputType>('removeCombatants', parsed);
+    RemoveCombatantsOutput.parse(data);
+    return { content: [{ type: 'text' as const, text: JSON.stringify(data) }], structuredContent: data };
   }
 
   async handleEndCombat(args: any): Promise<any> {
     const parsed = EndCombatInput.parse(args);
     this.logger.info('end-combat', parsed);
-    return await this.query<EndCombatOutputType>('endCombat', parsed);
+    // Phase 11 (R11.1): envelope wrap; text === JSON.stringify(data) preserves the
+    // prior auto-wrapped wire text (additive structuredContent).
+    const data = await this.query<EndCombatOutputType>('endCombat', parsed);
+    EndCombatOutput.parse(data);
+    return { content: [{ type: 'text' as const, text: JSON.stringify(data) }], structuredContent: data };
   }
 }

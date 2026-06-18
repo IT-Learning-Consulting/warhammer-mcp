@@ -23,6 +23,7 @@
 //     chat message is Foundry's own Combat#rollInitiative side effect, not an MCP-authored post).
 
 import {
+  ErrorTokens,
   CombatantToolInput,
   type CombatantToolInputType,
 } from '@foundry-mcp/shared';
@@ -114,7 +115,7 @@ async function updateCombatant(
 
     await c.update(input.changes);
 
-    const fresh = refetchCombatantOrThrow(combatId, input.combatantId, 'COMBATANT_UPDATE_NOT_PERSISTED');
+    const fresh = refetchCombatantOrThrow(combatId, input.combatantId, ErrorTokens.COMBATANT_UPDATE_NOT_PERSISTED);
 
     // CCR-2a: verify name/hidden/defeated strictly. `flags` is arbitrary module data
     // (passthrough, unverified); `img` is a FilePathField that Foundry may normalize a
@@ -126,7 +127,7 @@ async function updateCombatant(
       expectedFields[key] = value;
     }
     if (Object.keys(expectedFields).length > 0) {
-      verifyDocWrite(fresh, expectedFields, 'COMBATANT_UPDATE_NOT_PERSISTED', { readSource: true });
+      verifyDocWrite(fresh, expectedFields, ErrorTokens.COMBATANT_UPDATE_NOT_PERSISTED, { readSource: true });
     }
 
     notify.updated('combatant', c.name, { summary: `updated: ${Object.keys(input.changes).join(', ')}` });
@@ -150,8 +151,8 @@ async function setInitiative(
     // anchored to the same combatant — a raw combatant.update({initiative}) would not.
     await combat.setInitiative(c.id, input.value);
 
-    const fresh = refetchCombatantOrThrow(combatId, input.combatantId, 'COMBATANT_SET_INITIATIVE_NOT_PERSISTED');
-    verifyDocWrite(fresh, { initiative: input.value }, 'COMBATANT_SET_INITIATIVE_NOT_PERSISTED', {
+    const fresh = refetchCombatantOrThrow(combatId, input.combatantId, ErrorTokens.COMBATANT_SET_INITIATIVE_NOT_PERSISTED);
+    verifyDocWrite(fresh, { initiative: input.value }, ErrorTokens.COMBATANT_SET_INITIATIVE_NOT_PERSISTED, {
       readSource: true,
     });
 
@@ -187,11 +188,11 @@ async function clearInitiative(
     // does not corrupt the turn pointer, so a direct update is the correct primitive here.
     await c.update({ initiative: null });
 
-    const fresh = refetchCombatantOrThrow(combatId, input.combatantId, 'COMBATANT_CLEAR_INITIATIVE_NOT_PERSISTED');
+    const fresh = refetchCombatantOrThrow(combatId, input.combatantId, ErrorTokens.COMBATANT_CLEAR_INITIATIVE_NOT_PERSISTED);
     const actual = (foundry as any).utils.getProperty(fresh._source, 'initiative');
     if (actual !== null && actual !== undefined) {
       throw new Error(
-        `COMBATANT_CLEAR_INITIATIVE_NOT_PERSISTED: initiative is ${JSON.stringify(actual)}, expected null`,
+        `${ErrorTokens.COMBATANT_CLEAR_INITIATIVE_NOT_PERSISTED}: initiative is ${JSON.stringify(actual)}, expected null`,
       );
     }
 
@@ -222,11 +223,11 @@ async function rerollInitiative(
     if (input.formula) options.formula = input.formula;
     await combat.rollInitiative([c.id], options);
 
-    const fresh = refetchCombatantOrThrow(combatId, input.combatantId, 'COMBATANT_REROLL_INITIATIVE_NOT_PERSISTED');
+    const fresh = refetchCombatantOrThrow(combatId, input.combatantId, ErrorTokens.COMBATANT_REROLL_INITIATIVE_NOT_PERSISTED);
     const newInitiative = (foundry as any).utils.getProperty(fresh._source, 'initiative');
     if (typeof newInitiative !== 'number') {
       throw new Error(
-        `COMBATANT_REROLL_INITIATIVE_NOT_PERSISTED: initiative is ${JSON.stringify(newInitiative)}, expected a number`,
+        `${ErrorTokens.COMBATANT_REROLL_INITIATIVE_NOT_PERSISTED}: initiative is ${JSON.stringify(newInitiative)}, expected a number`,
       );
     }
 
@@ -259,8 +260,8 @@ async function setHidden(
 
     await c.update({ hidden: input.hidden });
 
-    const fresh = refetchCombatantOrThrow(combatId, input.combatantId, 'COMBATANT_SET_HIDDEN_NOT_PERSISTED');
-    verifyDocWrite(fresh, { hidden: input.hidden }, 'COMBATANT_SET_HIDDEN_NOT_PERSISTED', { readSource: true });
+    const fresh = refetchCombatantOrThrow(combatId, input.combatantId, ErrorTokens.COMBATANT_SET_HIDDEN_NOT_PERSISTED);
+    verifyDocWrite(fresh, { hidden: input.hidden }, ErrorTokens.COMBATANT_SET_HIDDEN_NOT_PERSISTED, { readSource: true });
 
     notify.updated('combatant', c.name, { summary: `hidden: ${input.hidden}` });
 
@@ -285,8 +286,8 @@ async function setDefeated(
     // updateCombatant hook — no extra MCP work is needed to apply/remove the skull overlay.
     await c.update({ defeated: input.defeated });
 
-    const fresh = refetchCombatantOrThrow(combatId, input.combatantId, 'COMBATANT_SET_DEFEATED_NOT_PERSISTED');
-    verifyDocWrite(fresh, { defeated: input.defeated }, 'COMBATANT_SET_DEFEATED_NOT_PERSISTED', { readSource: true });
+    const fresh = refetchCombatantOrThrow(combatId, input.combatantId, ErrorTokens.COMBATANT_SET_DEFEATED_NOT_PERSISTED);
+    verifyDocWrite(fresh, { defeated: input.defeated }, ErrorTokens.COMBATANT_SET_DEFEATED_NOT_PERSISTED, { readSource: true });
 
     notify.updated('combatant', c.name, { summary: `defeated: ${input.defeated}` });
 

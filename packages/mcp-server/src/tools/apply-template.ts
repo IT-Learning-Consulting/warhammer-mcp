@@ -1,6 +1,8 @@
 import {
   ApplyTemplateInput,
+  ApplyTemplateOutput,
   type ApplyTemplateOutputType,
+  APPLY_TEMPLATE_OUTPUT_JSON_SCHEMA,
 } from '@foundry-mcp/shared';
 import { FoundryClient } from '../foundry-client.js';
 import { Logger } from '../logger.js';
@@ -105,6 +107,7 @@ export class ApplyTemplateTool extends BaseTool {
           },
           required: ['actorId', 'templateUuid'],
         },
+        outputSchema: APPLY_TEMPLATE_OUTPUT_JSON_SCHEMA,
       },
     ];
   }
@@ -117,6 +120,7 @@ export class ApplyTemplateTool extends BaseTool {
       hasPreResolved: !!parsed.preResolvedChoices,
     });
     const data = await this.query<ApplyTemplateOutputType>('applyTemplate', parsed);
+    ApplyTemplateOutput.parse(data);
     const d = data;
     const applied = d?.applied?.itemsByType ?? {};
     const text = `Applied template ${d?.templateName ?? d?.templateId ?? ''} to ${d?.actorName ?? d?.actorId ?? ''}: ` +

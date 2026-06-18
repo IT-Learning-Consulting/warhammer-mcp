@@ -19,6 +19,7 @@
 // and `this.moduleId` → the imported MODULE_ID constant.
 
 import { MODULE_ID } from '../constants.js';
+import { ErrorTokens } from '@foundry-mcp/shared';
 import { notify } from '../notify.js';
 import { getOrCreateFolder } from './shared/folder-helpers.js';
 import { waitForActorUpdateCommit } from './shared/actor-update-observer.js';
@@ -53,7 +54,7 @@ export class ActorService {
     await actor.delete();
     // BUG-212 + PARITY-020: post-verify the deletion persisted.
     if (game.actors?.get(data.id)) {
-      throw new Error(`DELETE_ACTOR_NOT_PERSISTED: actor ${data.id} still present after delete (preDelete hook may have cancelled)`);
+      throw new Error(`${ErrorTokens.DELETE_ACTOR_NOT_PERSISTED}: actor ${data.id} still present after delete (preDelete hook may have cancelled)`);
     }
     notify.deleted('actor', actorName, { uuid: actorUuid });
     this.auditLog('deleteActor', data, 'success');
@@ -475,7 +476,7 @@ export class ActorService {
       const fresh = game.actors?.get(data.actorId);
       const freshCareer = fresh?.items?.get(data.careerItemId);
       if (!fresh || !freshCareer) {
-        throw new Error(`APPLY_NPC_CAREER_ADVANCE_NOT_PERSISTED: actor ${data.actorId} or career ${data.careerItemId} missing after advance`);
+        throw new Error(`${ErrorTokens.APPLY_NPC_CAREER_ADVANCE_NOT_PERSISTED}: actor ${data.actorId} or career ${data.careerItemId} missing after advance`);
       }
 
       notify.updated('actor', fresh.name ?? 'unknown', { summary: `advancing via ${freshCareer.name}`, uuid: (fresh as any).uuid });
@@ -546,7 +547,7 @@ export class ActorService {
       if (data.verifyPersistence !== false) {
         const fresh = (game.actors as any)?.get(actor.id);
         if (!fresh) {
-          throw new Error(`UPDATE_ACTOR_NOT_PERSISTED: actor ${actor.id} disappeared after update`);
+          throw new Error(`${ErrorTokens.UPDATE_ACTOR_NOT_PERSISTED}: actor ${actor.id} disappeared after update`);
         }
         const flat = (foundry as any).utils.flattenObject(data.updateData) as Record<string, unknown>;
         const drift: string[] = [];
@@ -561,7 +562,7 @@ export class ActorService {
         }
         if (drift.length > 0) {
           throw new Error(
-            `UPDATE_ACTOR_NOT_PERSISTED: ${drift.length} field(s) did not persist (DataModelValidationError? auto-derive overwrite?). Drift: ${drift.slice(0, 3).join('; ')}${drift.length > 3 ? `; +${drift.length - 3} more` : ''}`
+            `${ErrorTokens.UPDATE_ACTOR_NOT_PERSISTED}: ${drift.length} field(s) did not persist (DataModelValidationError? auto-derive overwrite?). Drift: ${drift.slice(0, 3).join('; ')}${drift.length > 3 ? `; +${drift.length - 3} more` : ''}`
           );
         }
       }

@@ -11,6 +11,7 @@
 // Anchors: DP-15 (concrete this.query<T> per action — never <any>); R2.4 (errors via BaseTool.errorResponse).
 
 import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
+import { ErrorTokens } from '@foundry-mcp/shared';
 import { moduleNotActiveContent } from '../_shared/module-guard.js';
 import type {
   ListCommandsResult,
@@ -164,7 +165,7 @@ Example: { action: "list-commands", filter: { module: "chat-commander-wfrp4e" } 
       return text(fmt(data));
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      if (msg.includes('MODULE_NOT_ACTIVE')) return moduleNotActiveContent('module-chat-commander', msg);
+      if (msg.includes(ErrorTokens.MODULE_NOT_ACTIVE)) return moduleNotActiveContent('module-chat-commander', msg);
       return this.errorResponse(action, msg);
     }
   }

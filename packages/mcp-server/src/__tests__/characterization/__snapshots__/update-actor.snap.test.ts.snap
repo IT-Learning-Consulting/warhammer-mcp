@@ -2,24 +2,57 @@
 
 exports[`UpdateActorTool — characterization > update characteristics advance — raw passthrough 1`] = `
 {
-  "actorId": "actor-001",
-  "updated": true,
-  "verified": true,
+  "content": [
+    {
+      "text": "{"success":true,"actorId":"actor-001","actorName":"Aldric","updated":["system.characteristics.ws.advances"]}",
+      "type": "text",
+    },
+  ],
+  "structuredContent": {
+    "actorId": "actor-001",
+    "actorName": "Aldric",
+    "success": true,
+    "updated": [
+      "system.characteristics.ws.advances",
+    ],
+  },
 }
 `;
 
 exports[`UpdateActorTool — characterization > update experience spent — raw passthrough 1`] = `
 {
-  "actorId": "actor-002",
-  "updated": true,
-  "verified": true,
+  "content": [
+    {
+      "text": "{"success":true,"actorId":"actor-002","actorName":"Brenna","updated":["system.details.experience.spent"]}",
+      "type": "text",
+    },
+  ],
+  "structuredContent": {
+    "actorId": "actor-002",
+    "actorName": "Brenna",
+    "success": true,
+    "updated": [
+      "system.details.experience.spent",
+    ],
+  },
 }
 `;
 
 exports[`UpdateActorTool — characterization > update with verifyPersistence false — raw passthrough 1`] = `
 {
-  "actorId": "actor-003",
-  "updated": true,
-  "verified": false,
+  "content": [
+    {
+      "text": "{"success":true,"actorId":"actor-003","actorName":"Cormac","updated":["system.status.encumbrance.value"]}",
+      "type": "text",
+    },
+  ],
+  "structuredContent": {
+    "actorId": "actor-003",
+    "actorName": "Cormac",
+    "success": true,
+    "updated": [
+      "system.status.encumbrance.value",
+    ],
+  },
 }
 `;

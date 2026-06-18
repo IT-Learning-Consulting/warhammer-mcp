@@ -10,6 +10,7 @@
 // Anchors: DP-15 (concrete this.query<T> per action — never <any>).
 
 import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
+import { ErrorTokens } from '@foundry-mcp/shared';
 import { moduleNotActiveContent } from '../_shared/module-guard.js';
 import type {
   TimeResult,
@@ -215,7 +216,7 @@ Example: { action: "advance", hours: 4 }`,
       return text(fmt(data));
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      if (msg.includes('MODULE_NOT_ACTIVE')) return moduleNotActiveContent('module-timekeeping', msg);
+      if (msg.includes(ErrorTokens.MODULE_NOT_ACTIVE)) return moduleNotActiveContent('module-timekeeping', msg);
       return this.errorResponse(action, msg);
     }
   }

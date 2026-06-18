@@ -9,6 +9,7 @@
 //   - Phase 9 module_integration_v1 — dossier §3 (CAP-01) + §5.
 
 import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
+import { ErrorTokens } from '@foundry-mcp/shared';
 import { moduleNotActiveContent } from '../_shared/module-guard.js';
 import type { RobakRollResult } from './schemas.js';
 
@@ -121,7 +122,7 @@ Example:
       return { content: [{ type: 'text' as const, text: formatRoll(data) }] };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      if (msg.includes('MODULE_NOT_ACTIVE')) {
+      if (msg.includes(ErrorTokens.MODULE_NOT_ACTIVE)) {
         return moduleNotActiveContent('module-robak', msg);
       }
       return this.errorResponse(action, msg);

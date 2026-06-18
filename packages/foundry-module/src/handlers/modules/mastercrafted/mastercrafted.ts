@@ -24,6 +24,7 @@
 // execute-craft; GM-gated writes). Source: phase14_pre_plan.md.
 
 import { requireModuleActive } from '../_shared/require-module-active.js';
+import { ErrorTokens } from '@foundry-mcp/shared';
 import { ModuleMastercraftedInput, type ModuleMastercraftedInputType } from './schemas.js';
 import { notify } from '../../../notify.js';
 import { verifyDocWrite, verifyFlagWrite } from '../../../utils/verifyWrite.js';
@@ -381,7 +382,7 @@ async function handleExecuteCraft(input: ExecuteInput): Promise<Envelope<unknown
     const updated = await inventoryActor.updateEmbeddedDocuments('Item', updates);
     if ((updated?.length ?? 0) !== updates.length) {
       throw new Error(
-        `MASTERCRAFTED_CONSUME_NOT_PERSISTED: updated ${updated?.length ?? 0}/${updates.length} ingredient stack(s)`,
+        `${ErrorTokens.MASTERCRAFTED_CONSUME_NOT_PERSISTED}: updated ${updated?.length ?? 0}/${updates.length} ingredient stack(s)`,
       );
     }
   }
@@ -389,7 +390,7 @@ async function handleExecuteCraft(input: ExecuteInput): Promise<Envelope<unknown
     const deleted = await inventoryActor.deleteEmbeddedDocuments('Item', toDelete);
     if ((deleted?.length ?? 0) !== toDelete.length) {
       throw new Error(
-        `MASTERCRAFTED_CONSUME_NOT_PERSISTED: deleted ${deleted?.length ?? 0}/${toDelete.length} consumed ingredient stack(s)`,
+        `${ErrorTokens.MASTERCRAFTED_CONSUME_NOT_PERSISTED}: deleted ${deleted?.length ?? 0}/${toDelete.length} consumed ingredient stack(s)`,
       );
     }
   }
@@ -398,7 +399,7 @@ async function handleExecuteCraft(input: ExecuteInput): Promise<Envelope<unknown
     // (else verifyDocWrite compares a partial sub-object against the full persisted field).
     const verifyFields = { ...actorUpdates };
     await inventoryActor.update(actorUpdates);
-    verifyDocWrite(inventoryActor, verifyFields, 'MASTERCRAFTED_CONSUME_NOT_PERSISTED');
+    verifyDocWrite(inventoryActor, verifyFields, ErrorTokens.MASTERCRAFTED_CONSUME_NOT_PERSISTED);
   }
 
   // 5. Deliver — instant (time 0/null→book default 0) creates items now; timed (>0) queues a pending flag.
@@ -414,7 +415,7 @@ async function handleExecuteCraft(input: ExecuteInput): Promise<Envelope<unknown
     };
     await actor.setFlag(MODULE_ID, pendingId, pendingValue);
     // R2.5 DP-16: a silent drop loses the queued craft (player never gets the item).
-    verifyFlagWrite(actor, MODULE_ID, pendingId, pendingValue, 'MASTERCRAFTED_PENDING_CRAFT_NOT_PERSISTED');
+    verifyFlagWrite(actor, MODULE_ID, pendingId, pendingValue, ErrorTokens.MASTERCRAFTED_PENDING_CRAFT_NOT_PERSISTED);
     newPending.push(pendingId);
     isTimed = true;
   } else if (productData.length) {
@@ -422,7 +423,7 @@ async function handleExecuteCraft(input: ExecuteInput): Promise<Envelope<unknown
     // R2.5 DP-16: confirm every crafted product item actually landed on the actor.
     if ((created?.length ?? 0) !== productData.length) {
       throw new Error(
-        `MASTERCRAFTED_PRODUCT_NOT_PERSISTED: created ${created?.length ?? 0}/${productData.length} crafted item(s)`,
+        `${ErrorTokens.MASTERCRAFTED_PRODUCT_NOT_PERSISTED}: created ${created?.length ?? 0}/${productData.length} crafted item(s)`,
       );
     }
   }
@@ -483,7 +484,7 @@ async function handleGrantDiscovery(input: GrantInput): Promise<Envelope<unknown
   // DP-16 — verify ownership read-back.
   const persisted = page.ownership?.[input.userId] ?? page._source?.ownership?.[input.userId];
   if (Number(persisted) !== level) {
-    return { success: false, error: `MASTERCRAFTED_OWNERSHIP_NOT_PERSISTED: read back ${persisted} after writing ${level}` };
+    return { success: false, error: `${ErrorTokens.MASTERCRAFTED_OWNERSHIP_NOT_PERSISTED}: read back ${persisted} after writing ${level}` };
   }
   notify.updated('mastercrafted', page.name, { summary: `discovery granted to ${input.userId} (level ${level})` });
   return { success: true, data: { pageUuid: input.pageUuid, name: page.name, userId: input.userId, level } };

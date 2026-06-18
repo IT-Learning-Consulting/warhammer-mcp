@@ -20,6 +20,7 @@
 // toggle-global; GM-gated writes). Source: phase14_pre_plan.md.
 
 import { requireModuleActive } from '../_shared/require-module-active.js';
+import { ErrorTokens } from '@foundry-mcp/shared';
 import { ModulePatrolInput, type ModulePatrolInputType } from './schemas.js';
 import { notify } from '../../../notify.js';
 import { verifyFlagWrite } from '../../../utils/verifyWrite.js';
@@ -185,10 +186,10 @@ async function handleEnableToken(input: EnableInput): Promise<Envelope<unknown>>
       await token.setFlag(MODULE_ID, 'pathNodeIndex', input.pathNodeIndex ?? 0);
       if (input.multiPath !== undefined) await token.setFlag(MODULE_ID, 'multiPath', input.multiPath);
       // R2.5 DP-16: a silent setFlag drop leaves the token never patrolling — verify the mode-critical flag.
-      verifyFlagWrite(token, MODULE_ID, 'makePatroller', true, 'PATROL_FLAG_NOT_PERSISTED');
+      verifyFlagWrite(token, MODULE_ID, 'makePatroller', true, ErrorTokens.PATROL_FLAG_NOT_PERSISTED);
     } else {
       await token.setFlag(MODULE_ID, 'enablePatrol', true);
-      verifyFlagWrite(token, MODULE_ID, 'enablePatrol', true, 'PATROL_FLAG_NOT_PERSISTED');
+      verifyFlagWrite(token, MODULE_ID, 'enablePatrol', true, ErrorTokens.PATROL_FLAG_NOT_PERSISTED);
     }
     if (input.spotting !== undefined) await token.setFlag(MODULE_ID, 'enableSpotting', input.spotting);
     results.push({ tokenUuid: uuid, tokenName: token.name, ok: true, mode: input.mode, flags: readFlags(token) });
@@ -260,7 +261,7 @@ async function setZoneDrawing(
   // DP-16 — verify the label round-trip.
   const persisted = drawing.text ?? drawing._source?.text;
   if (persisted !== label) {
-    return { success: false, error: `PATROL_DRAWING_LABEL_NOT_PERSISTED: read back "${persisted}" after writing "${label}"` };
+    return { success: false, error: `${ErrorTokens.PATROL_DRAWING_LABEL_NOT_PERSISTED}: read back "${persisted}" after writing "${label}"` };
   }
   notify.created('patrol', label, { summary: `${action} Drawing on "${scene.name}"` });
   return { success: true, data: { drawingId: drawing.id, sceneId, label, referenced: false } };
@@ -395,7 +396,7 @@ async function handleSetWaypoint(input: SetWaypointInput): Promise<Envelope<unkn
     await token.setFlag(MODULE_ID, 'pathNodeIndex', input.pathNodeIndex);
     if (input.pathID !== undefined) await token.setFlag(MODULE_ID, 'pathID', input.pathID);
     // R2.5 DP-16: a silent drop here would resume the patrol from the wrong node.
-    verifyFlagWrite(token, MODULE_ID, 'pathNodeIndex', input.pathNodeIndex, 'PATROL_FLAG_NOT_PERSISTED');
+    verifyFlagWrite(token, MODULE_ID, 'pathNodeIndex', input.pathNodeIndex, ErrorTokens.PATROL_FLAG_NOT_PERSISTED);
     results.push({ tokenUuid: uuid, tokenName: token.name, ok: true, pathNodeIndex: token.getFlag(MODULE_ID, 'pathNodeIndex') });
   }
   notify.updated('patrol', `${results.filter((r) => r.ok).length} token(s)`, { summary: `waypoint → ${input.pathNodeIndex}` });

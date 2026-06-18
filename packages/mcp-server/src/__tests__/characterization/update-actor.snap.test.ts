@@ -11,9 +11,10 @@ const tool = (mockReturn: any) => new UpdateActorTool(makeToolDeps(mockReturn));
 describe('UpdateActorTool — characterization', () => {
   it('update characteristics advance — raw passthrough', async () => {
     const r = await tool({
-      updated: true,
+      success: true,
       actorId: 'actor-001',
-      verified: true,
+      actorName: 'Aldric',
+      updated: ['system.characteristics.ws.advances'],
     }).handle({
       actorId: 'actor-001',
       updateData: { 'system.characteristics.ws.advances': 5 },
@@ -23,9 +24,10 @@ describe('UpdateActorTool — characterization', () => {
 
   it('update experience spent — raw passthrough', async () => {
     const r = await tool({
-      updated: true,
+      success: true,
       actorId: 'actor-002',
-      verified: true,
+      actorName: 'Brenna',
+      updated: ['system.details.experience.spent'],
     }).handle({
       actorId: 'actor-002',
       updateData: { 'system.details.experience.spent': 75 },
@@ -35,9 +37,10 @@ describe('UpdateActorTool — characterization', () => {
 
   it('update with verifyPersistence false — raw passthrough', async () => {
     const r = await tool({
-      updated: true,
+      success: true,
       actorId: 'actor-003',
-      verified: false,
+      actorName: 'Cormac',
+      updated: ['system.status.encumbrance.value'],
     }).handle({
       actorId: 'actor-003',
       updateData: { 'system.status.encumbrance.value': 3 },

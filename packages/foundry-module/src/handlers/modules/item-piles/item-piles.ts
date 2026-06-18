@@ -20,6 +20,7 @@
 // Sources: phase3_pre_plan.md §Confirmed facts; dossier §3, §4; item-piles.js source audit.
 
 import { requireModuleActive } from '../_shared/require-module-active.js';
+import { ErrorTokens } from '@foundry-mcp/shared';
 import { ModuleItempilesInput, type ModuleItempilesInputType } from './schemas.js';
 import { notify } from '../../../notify.js';
 import {
@@ -122,7 +123,7 @@ function bankerAuctioneerCheck(type: string | undefined): Envelope<never> | null
   if (type === 'banker' || type === 'auctioneer') {
     return {
       success: false,
-      error: `MODULE_DEPENDENCY_NOT_ACTIVE: pile type "${type}" requires a companion module that is not installed. Install "item_piles_bankers" (for banker) or "item_piles_auctioneer" (for auctioneer) via Foundry Module Manager.`,
+      error: `${ErrorTokens.MODULE_DEPENDENCY_NOT_ACTIVE}: pile type "${type}" requires a companion module that is not installed. Install "item_piles_bankers" (for banker) or "item_piles_auctioneer" (for auctioneer) via Foundry Module Manager.`,
     };
   }
   return null;

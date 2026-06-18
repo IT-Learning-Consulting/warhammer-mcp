@@ -17,6 +17,7 @@
 // CCR-Envelope: returns {success, data} or {success, error}.
 
 import { wrappedWrite } from '../transaction-manager.js';
+import { ErrorTokens } from '@foundry-mcp/shared';
 import { notify, type NotifyKind } from '../notify.js';
 import type {
   DocumentType,
@@ -200,7 +201,7 @@ function verifyOwnershipWrite(
   if (expected.default === true) {
     if (after.default !== expected.level) {
       throw new Error(
-        `OWNERSHIP_WRITE_NOT_PERSISTED: default level expected ${expected.level} ` +
+        `${ErrorTokens.OWNERSHIP_WRITE_NOT_PERSISTED}: default level expected ${expected.level} ` +
         `but post-update map shows ${after.default ?? 'MISSING'}. Foundry dropped the write silently — ` +
         `check F12 console for DataModelValidationError. Common causes: invalid userId, invalid level, ` +
         `schema constraint violation.`
@@ -209,7 +210,7 @@ function verifyOwnershipWrite(
   } else if (expected.userId !== undefined) {
     if (after[expected.userId] !== expected.level) {
       throw new Error(
-        `OWNERSHIP_WRITE_NOT_PERSISTED: user ${expected.userId} expected level ${expected.level} ` +
+        `${ErrorTokens.OWNERSHIP_WRITE_NOT_PERSISTED}: user ${expected.userId} expected level ${expected.level} ` +
         `but post-update map shows ${after[expected.userId] ?? 'MISSING'}. Foundry dropped the write silently — ` +
         `check F12 console for DataModelValidationError. Common causes: invalid userId, invalid level, ` +
         `schema constraint violation.`
@@ -389,7 +390,7 @@ export async function bulkSetDocumentOwnership(input: BulkSetDocumentOwnershipIn
             failed.push({
               target: { documentType, id: rd.resolvedId },
               error:
-                `OWNERSHIP_WRITE_NOT_PERSISTED: expected level ${level} but post-update map shows ` +
+                `${ErrorTokens.OWNERSHIP_WRITE_NOT_PERSISTED}: expected level ${level} but post-update map shows ` +
                 `${observed ?? 'MISSING'}. Foundry dropped this document from the batch (per ` +
                 `foundry_docs/abstract/classes/Document.md L558-576). Check F12 console for ` +
                 `DataModelValidationError. Most common causes: invalid userId, invalid level, ` +

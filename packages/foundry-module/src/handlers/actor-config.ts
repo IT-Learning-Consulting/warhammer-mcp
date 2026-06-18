@@ -15,6 +15,7 @@
 //   - NEVER calls ChatMessage.create — all GM feedback routes through notify.*
 
 import {
+  ErrorTokens,
   ActorConfigToolInput,
   type ActorConfigToolInputType,
 } from '@foundry-mcp/shared';
@@ -75,21 +76,21 @@ function verifyArtWrite(freshDoc: any, path: string, requestedSrc: string): stri
   if (requestedSrc === '') {
     if (path === 'img' && (actual === undefined || actual === null || actual === '')) {
       throw new Error(
-        `SET_ART_NOT_PERSISTED: art-clear left ${path} empty (expected Foundry to reset it to the default icon)`,
+        `${ErrorTokens.SET_ART_NOT_PERSISTED}: art-clear left ${path} empty (expected Foundry to reset it to the default icon)`,
       );
     }
     // BUG-294: for nullable texture paths the clear must have persisted — if the value is
     // still a non-empty string the write did not take.
     if (path !== 'img' && typeof actual === 'string' && actual !== '') {
       throw new Error(
-        `SET_ART_NOT_PERSISTED: art-clear on ${path} did not persist — field still holds "${actual}"`,
+        `${ErrorTokens.SET_ART_NOT_PERSISTED}: art-clear on ${path} did not persist — field still holds "${actual}"`,
       );
     }
     return actual ?? '';
   }
   if (JSON.stringify(actual) !== JSON.stringify(requestedSrc)) {
     throw new Error(
-      `SET_ART_NOT_PERSISTED: ${path}: expected ${JSON.stringify(requestedSrc)}, got ${JSON.stringify(actual)}`,
+      `${ErrorTokens.SET_ART_NOT_PERSISTED}: ${path}: expected ${JSON.stringify(requestedSrc)}, got ${JSON.stringify(actual)}`,
     );
   }
   return actual;
@@ -141,7 +142,7 @@ async function updatePrototypeToken(
       // Re-read from world collection for a fresh doc reference.
       const freshActor = (game.actors as any)?.get(input.actorId);
       if (freshActor) {
-        verifyDocWrite(freshActor, expectedFields, 'UPDATE_PROTOTYPE_TOKEN_NOT_PERSISTED', {
+        verifyDocWrite(freshActor, expectedFields, ErrorTokens.UPDATE_PROTOTYPE_TOKEN_NOT_PERSISTED, {
           readSource: true,
         });
       }

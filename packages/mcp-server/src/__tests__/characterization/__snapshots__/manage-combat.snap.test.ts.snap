@@ -2,35 +2,66 @@
 
 exports[`ManageCombatTools — characterization > add-combatants — two actors added 1`] = `
 {
-  "added": [
-    "comb001",
-    "comb002",
+  "content": [
+    {
+      "text": "{"added":["comb001","comb002"],"combatId":"combat12345678901"}",
+      "type": "text",
+    },
   ],
-  "combatId": "combat12345678901",
+  "structuredContent": {
+    "added": [
+      "comb001",
+      "comb002",
+    ],
+    "combatId": "combat12345678901",
+  },
 }
 `;
 
 exports[`ManageCombatTools — characterization > advance-combat — next turn 1`] = `
 {
-  "currentCombatantId": "comb002",
-  "round": 2,
-  "turn": 2,
+  "content": [
+    {
+      "text": "{"round":2,"turn":2,"currentCombatantId":"comb002"}",
+      "type": "text",
+    },
+  ],
+  "structuredContent": {
+    "currentCombatantId": "comb002",
+    "round": 2,
+    "turn": 2,
+  },
 }
 `;
 
 exports[`ManageCombatTools — characterization > advance-combat — rollNPC initiative 1`] = `
 {
-  "rolled": [
-    "comb002",
+  "content": [
+    {
+      "text": "{"rolled":["comb002"],"round":1}",
+      "type": "text",
+    },
   ],
-  "round": 1,
+  "structuredContent": {
+    "rolled": [
+      "comb002",
+    ],
+    "round": 1,
+  },
 }
 `;
 
 exports[`ManageCombatTools — characterization > end-combat — combat deleted 1`] = `
 {
-  "combatId": "combat12345678901",
-  "deleted": true,
+  "content": [
+    {
+      "text": "{"ended":"combat12345678901"}",
+      "type": "text",
+    },
+  ],
+  "structuredContent": {
+    "ended": "combat12345678901",
+  },
 }
 `;
 
@@ -116,9 +147,17 @@ exports[`ManageCombatTools — characterization > list-combatants — object pas
 
 exports[`ManageCombatTools — characterization > remove-combatants — one combatant removed 1`] = `
 {
-  "combatId": "combat12345678901",
-  "removed": [
-    "comb002",
+  "content": [
+    {
+      "text": "{"removed":["comb002"],"combatId":"combat12345678901"}",
+      "type": "text",
+    },
   ],
+  "structuredContent": {
+    "combatId": "combat12345678901",
+    "removed": [
+      "comb002",
+    ],
+  },
 }
 `;

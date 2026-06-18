@@ -17,6 +17,7 @@
 //   - dossiers/access-control.md + modules-docs/{LocknKey,LockView}/capability-manifest.json.
 
 import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
+import { ErrorTokens } from '@foundry-mcp/shared';
 import { moduleNotActiveContent } from '../_shared/module-guard.js';
 
 const TOOL_NAME = 'module-access-control' as const;
@@ -197,7 +198,7 @@ GM required for all write actions. Forced-viewport + circumvent + transfer requi
       return { content: [{ type: 'text' as const, text: this.formatResult(action, data) }] };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      if (msg.includes('MODULE_NOT_ACTIVE') || msg.includes('MODULE_DEPENDENCY_NOT_ACTIVE')) {
+      if (msg.includes(ErrorTokens.MODULE_NOT_ACTIVE) || msg.includes(ErrorTokens.MODULE_DEPENDENCY_NOT_ACTIVE)) {
         return moduleNotActiveContent(TOOL_NAME, msg);
       }
       return this.errorResponse(`${TOOL_NAME}/${action}`, msg);

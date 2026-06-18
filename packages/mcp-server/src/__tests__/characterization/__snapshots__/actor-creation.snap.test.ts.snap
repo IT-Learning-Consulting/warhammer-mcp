@@ -24,64 +24,80 @@ exports[`ActorCreationTools — characterization > create-actor — npc with sys
 
 exports[`ActorCreationTools — characterization > create-actor-from-compendium — multiple actors with token placement 1`] = `
 {
-  "details": {
-    "actors": [
-      {
-        "id": "gob001actor12345",
-        "name": "Snag",
-        "type": "creature",
-      },
-      {
-        "id": "gob002actor12345",
-        "name": "Fang",
-        "type": "creature",
-      },
-      {
-        "id": "gob003actor12345",
-        "name": "Nit",
-        "type": "creature",
-      },
-    ],
-    "errors": [],
-    "sourceEntry": {
-      "itemId": "goblin001234567",
-      "packId": "wfrp4e-core.bestiary",
+  "content": [
+    {
+      "text": "{"summary":"✅ Created 3 of 3 requested actors","success":true,"details":{"actors":[{"id":"gob001actor12345","name":"Snag","type":"creature"},{"id":"gob002actor12345","name":"Fang","type":"creature"},{"id":"gob003actor12345","name":"Nit","type":"creature"}],"sourceEntry":{"packId":"wfrp4e-core.bestiary","itemId":"goblin001234567"},"tokensPlaced":3,"errors":[]},"message":"✅ Created 3 of 3 requested actors\\n\\n• **Snag** (from wfrp4e-core.bestiary)\\n• **Fang** (from wfrp4e-core.bestiary)\\n• **Nit** (from wfrp4e-core.bestiary)\\n🎯 Added 3 tokens to the current scene"}",
+      "type": "text",
     },
-    "tokensPlaced": 3,
-  },
-  "message": "✅ Created 3 of 3 requested actors
+  ],
+  "structuredContent": {
+    "details": {
+      "actors": [
+        {
+          "id": "gob001actor12345",
+          "name": "Snag",
+          "type": "creature",
+        },
+        {
+          "id": "gob002actor12345",
+          "name": "Fang",
+          "type": "creature",
+        },
+        {
+          "id": "gob003actor12345",
+          "name": "Nit",
+          "type": "creature",
+        },
+      ],
+      "errors": [],
+      "sourceEntry": {
+        "itemId": "goblin001234567",
+        "packId": "wfrp4e-core.bestiary",
+      },
+      "tokensPlaced": 3,
+    },
+    "message": "✅ Created 3 of 3 requested actors
 
 • **Snag** (from wfrp4e-core.bestiary)
 • **Fang** (from wfrp4e-core.bestiary)
 • **Nit** (from wfrp4e-core.bestiary)
 🎯 Added 3 tokens to the current scene",
-  "success": true,
-  "summary": "✅ Created 3 of 3 requested actors",
+    "success": true,
+    "summary": "✅ Created 3 of 3 requested actors",
+  },
 }
 `;
 
 exports[`ActorCreationTools — characterization > create-actor-from-compendium — single actor, no scene placement 1`] = `
 {
-  "details": {
-    "actors": [
-      {
-        "id": "gobactor1234567",
-        "name": "Snaggletooth",
-        "type": "creature",
-      },
-    ],
-    "errors": [],
-    "sourceEntry": {
-      "itemId": "goblin001234567",
-      "packId": "wfrp4e-core.bestiary",
+  "content": [
+    {
+      "text": "{"summary":"✅ Created 1 of 1 requested actors","success":true,"details":{"actors":[{"id":"gobactor1234567","name":"Snaggletooth","type":"creature"}],"sourceEntry":{"packId":"wfrp4e-core.bestiary","itemId":"goblin001234567"},"tokensPlaced":0,"errors":[]},"message":"✅ Created 1 of 1 requested actors\\n\\n• **Snaggletooth** (from wfrp4e-core.bestiary)"}",
+      "type": "text",
     },
-    "tokensPlaced": 0,
-  },
-  "message": "✅ Created 1 of 1 requested actors
+  ],
+  "structuredContent": {
+    "details": {
+      "actors": [
+        {
+          "id": "gobactor1234567",
+          "name": "Snaggletooth",
+          "type": "creature",
+        },
+      ],
+      "errors": [],
+      "sourceEntry": {
+        "itemId": "goblin001234567",
+        "packId": "wfrp4e-core.bestiary",
+      },
+      "tokensPlaced": 0,
+    },
+    "message": "✅ Created 1 of 1 requested actors
 
 • **Snaggletooth** (from wfrp4e-core.bestiary)",
-  "success": true,
-  "summary": "✅ Created 1 of 1 requested actors",
+    "success": true,
+    "summary": "✅ Created 1 of 1 requested actors",
+  },
 }
 `;
 

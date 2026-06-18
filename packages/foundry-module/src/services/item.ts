@@ -17,6 +17,7 @@
 // handleTradeItem already does for tradeItem).
 
 import { notify } from '../notify.js';
+import { ErrorTokens } from '@foundry-mcp/shared';
 import { _resolveItem } from './shared/document-resolver.js';
 
 export class ItemService {
@@ -80,7 +81,7 @@ export class ItemService {
               .map(([path, expected]) => `${path}: expected ${JSON.stringify(expected)}, before ${JSON.stringify(beforeValues[path])}`)
               .join('; ');
             throw new Error(
-              `UPDATE_ITEM_NOT_PERSISTED: Item.update() returned undefined (preUpdate cancelled write?). Requested changes were not applied. ${preview}${cancelled.length > 3 ? `; +${cancelled.length - 3} more` : ''}`,
+              `${ErrorTokens.UPDATE_ITEM_NOT_PERSISTED}: Item.update() returned undefined (preUpdate cancelled write?). Requested changes were not applied. ${preview}${cancelled.length > 3 ? `; +${cancelled.length - 3} more` : ''}`,
             );
           }
         }
@@ -89,7 +90,7 @@ export class ItemService {
             ? (game.actors as any)?.get(owner?.id)?.items?.get(item.id)
             : (game.items as any)?.get(item.id);
         if (!freshItem) {
-          throw new Error(`UPDATE_ITEM_NOT_PERSISTED: item ${item.id} disappeared after update`);
+          throw new Error(`${ErrorTokens.UPDATE_ITEM_NOT_PERSISTED}: item ${item.id} disappeared after update`);
         }
         const drift: string[] = [];
         for (const [path, expected] of Object.entries(flatUpdate)) {
@@ -101,7 +102,7 @@ export class ItemService {
         }
         if (drift.length > 0) {
           throw new Error(
-            `UPDATE_ITEM_NOT_PERSISTED: ${drift.length} field(s) did not persist (DataModelValidationError? auto-derive overwrite?). Drift: ${drift.slice(0, 3).join('; ')}${drift.length > 3 ? `; +${drift.length - 3} more` : ''}`
+            `${ErrorTokens.UPDATE_ITEM_NOT_PERSISTED}: ${drift.length} field(s) did not persist (DataModelValidationError? auto-derive overwrite?). Drift: ${drift.slice(0, 3).join('; ')}${drift.length > 3 ? `; +${drift.length - 3} more` : ''}`
           );
         }
       }
@@ -311,7 +312,7 @@ export class ItemService {
       const freshQty = (freshItem as any)?.system?.quantity?.value ?? sourceQty;
       if (updateResult === undefined || freshQty !== sourceQty - data.quantity) {
         throw new Error(
-          `TRADE_ITEM_SOURCE_DECREMENT_NOT_PERSISTED: source quantity expected ${sourceQty - data.quantity} but found ${freshQty} (updateResult=${updateResult === undefined ? 'undefined' : 'ok'})`,
+          `${ErrorTokens.TRADE_ITEM_SOURCE_DECREMENT_NOT_PERSISTED}: source quantity expected ${sourceQty - data.quantity} but found ${freshQty} (updateResult=${updateResult === undefined ? 'undefined' : 'ok'})`,
         );
       }
 
@@ -550,22 +551,22 @@ export class ItemService {
     );
     for (const quality of parsed.addQualities) {
       if (!persistedQualityNames.has(String(quality.name).toLowerCase())) {
-        throw new Error(`MODIFY_ITEM_QUALITIES_NOT_PERSISTED: missing added quality "${quality.name}"`);
+        throw new Error(`${ErrorTokens.MODIFY_ITEM_QUALITIES_NOT_PERSISTED}: missing added quality "${quality.name}"`);
       }
     }
     for (const quality of parsed.removeQualities) {
       if (persistedQualityNames.has(quality.toLowerCase())) {
-        throw new Error(`MODIFY_ITEM_QUALITIES_NOT_PERSISTED: quality "${quality}" was not removed`);
+        throw new Error(`${ErrorTokens.MODIFY_ITEM_QUALITIES_NOT_PERSISTED}: quality "${quality}" was not removed`);
       }
     }
     for (const flaw of parsed.addFlaws) {
       if (!persistedFlawNames.has(String(flaw.name).toLowerCase())) {
-        throw new Error(`MODIFY_ITEM_QUALITIES_NOT_PERSISTED: missing added flaw "${flaw.name}"`);
+        throw new Error(`${ErrorTokens.MODIFY_ITEM_QUALITIES_NOT_PERSISTED}: missing added flaw "${flaw.name}"`);
       }
     }
     for (const flaw of parsed.removeFlaws) {
       if (persistedFlawNames.has(flaw.toLowerCase())) {
-        throw new Error(`MODIFY_ITEM_QUALITIES_NOT_PERSISTED: flaw "${flaw}" was not removed`);
+        throw new Error(`${ErrorTokens.MODIFY_ITEM_QUALITIES_NOT_PERSISTED}: flaw "${flaw}" was not removed`);
       }
     }
 

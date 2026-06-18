@@ -22,6 +22,7 @@
 
 
 import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
+import { ErrorTokens } from '@foundry-mcp/shared';
 import { moduleNotActiveContent } from '../_shared/module-guard.js';
 import { SCENE_ATMOSPHERE_TOOL_DEFINITIONS } from './definitions.js';
 import {
@@ -226,9 +227,9 @@ export class ModuleSceneAtmosphereTool extends BaseTool {
       // MODULE_NOT_ACTIVE, COMPANION_NOT_ACTIVE, and SOCKETLIB_NOT_ACTIVE all use
       // moduleNotActiveContent so the caller gets a typed, consistent error presentation.
       if (
-        msg.includes('MODULE_NOT_ACTIVE') ||
-        msg.includes('COMPANION_NOT_ACTIVE') ||
-        msg.includes('SOCKETLIB_NOT_ACTIVE')
+        msg.includes(ErrorTokens.MODULE_NOT_ACTIVE) ||
+        msg.includes(ErrorTokens.COMPANION_NOT_ACTIVE) ||
+        msg.includes(ErrorTokens.SOCKETLIB_NOT_ACTIVE)
       ) {
         return moduleNotActiveContent(TOOL_NAME, msg);
       }

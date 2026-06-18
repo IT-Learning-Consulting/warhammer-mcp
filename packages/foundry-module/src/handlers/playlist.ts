@@ -22,6 +22,7 @@
 //   - CCR-Delete-Safety: delete-playlist requires confirm: true on the schema.
 
 import {
+  ErrorTokens,
   PlaylistToolInput,
   PlaylistCreatePlaylistInput,
   PlaylistUpdatePlaylistInput,
@@ -218,7 +219,7 @@ export async function createPlaylist(data: unknown): Promise<Envelope<any>> {
     const cleaned = deepStripUndefined({ ...rest });
     const created: any = await (Playlist as any).create(cleaned);
     if (!created) {
-      throw new Error('PLAYLIST_WRITE_NOT_PERSISTED: Playlist.create returned empty');
+      throw new Error(ErrorTokens.PLAYLIST_WRITE_NOT_PERSISTED + ': Playlist.create returned empty');
     }
 
     let soundIds: string[] = [];
@@ -233,13 +234,13 @@ export async function createPlaylist(data: unknown): Promise<Envelope<any>> {
     const persisted = (game as any).playlists?.get(created.id);
     if (!persisted) {
       throw new Error(
-        `PLAYLIST_WRITE_NOT_PERSISTED: Playlist "${created.id}" missing from game.playlists after create`,
+        `${ErrorTokens.PLAYLIST_WRITE_NOT_PERSISTED}: Playlist "${created.id}" missing from game.playlists after create`,
       );
     }
     // F08 _source check on name (the only required field — sentinel for write success).
     if ((persisted._source as any)?.name !== input.name) {
       throw new Error(
-        `PLAYLIST_WRITE_NOT_PERSISTED: post-create _source.name = ${JSON.stringify((persisted._source as any)?.name)}, expected ${JSON.stringify(input.name)}`,
+        `${ErrorTokens.PLAYLIST_WRITE_NOT_PERSISTED}: post-create _source.name = ${JSON.stringify((persisted._source as any)?.name)}, expected ${JSON.stringify(input.name)}`,
       );
     }
 
@@ -279,7 +280,7 @@ export async function updatePlaylist(data: unknown): Promise<Envelope<any>> {
     const persisted = (game as any).playlists?.get(input.playlistId);
     if (!persisted) {
       throw new Error(
-        `PLAYLIST_WRITE_NOT_PERSISTED: Playlist "${input.playlistId}" missing after update`,
+        `${ErrorTokens.PLAYLIST_WRITE_NOT_PERSISTED}: Playlist "${input.playlistId}" missing after update`,
       );
     }
     const skip = new Set<string>(['flags']);
@@ -288,7 +289,7 @@ export async function updatePlaylist(data: unknown): Promise<Envelope<any>> {
       const persistedValue = (persisted._source as any)?.[field];
       if (persistedValue !== requestedValue) {
         throw new Error(
-          `PLAYLIST_WRITE_NOT_PERSISTED: field "${field}" expected ${JSON.stringify(requestedValue)} ` +
+          `${ErrorTokens.PLAYLIST_WRITE_NOT_PERSISTED}: field "${field}" expected ${JSON.stringify(requestedValue)} ` +
             `but post-update _source value is ${JSON.stringify(persistedValue)}`,
         );
       }
@@ -352,7 +353,7 @@ export async function deletePlaylist(data: unknown): Promise<Envelope<any>> {
     const stillPresent = (game as any).playlists?.get(input.playlistId);
     if (stillPresent) {
       throw new Error(
-        `PLAYLIST_WRITE_NOT_PERSISTED: Playlist "${input.playlistId}" still present after delete`,
+        `${ErrorTokens.PLAYLIST_WRITE_NOT_PERSISTED}: Playlist "${input.playlistId}" still present after delete`,
       );
     }
 
@@ -466,7 +467,7 @@ export async function playPlaylist(data: unknown): Promise<Envelope<any>> {
     // Re-read to surface persisted state. Probe B confirmed playAll is parameterless.
     const persisted = (game as any).playlists?.get(input.playlistId);
     if (!persisted) {
-      throw new Error(`PLAYLIST_WRITE_NOT_PERSISTED: Playlist "${input.playlistId}" missing after playAll`);
+      throw new Error(`${ErrorTokens.PLAYLIST_WRITE_NOT_PERSISTED}: Playlist "${input.playlistId}" missing after playAll`);
     }
     // BUG-201: assert _source.playing===true after playAll.
     // DISABLED-mode (mode:-1) is a legitimate no-op — playAll does not start DISABLED playlists.
@@ -488,7 +489,7 @@ export async function playPlaylist(data: unknown): Promise<Envelope<any>> {
     }
     if (persisted._source.playing !== true) {
       throw new Error(
-        `PLAYLIST_WRITE_NOT_PERSISTED: _source.playing is false after playAll (mode: ${JSON.stringify(persisted._source.mode)})`,
+        `${ErrorTokens.PLAYLIST_WRITE_NOT_PERSISTED}: _source.playing is false after playAll (mode: ${JSON.stringify(persisted._source.mode)})`,
       );
     }
 
@@ -520,13 +521,13 @@ export async function stopPlaylist(data: unknown): Promise<Envelope<any>> {
 
     const persisted = (game as any).playlists?.get(input.playlistId);
     if (!persisted) {
-      throw new Error(`PLAYLIST_WRITE_NOT_PERSISTED: Playlist "${input.playlistId}" missing after stopAll`);
+      throw new Error(`${ErrorTokens.PLAYLIST_WRITE_NOT_PERSISTED}: Playlist "${input.playlistId}" missing after stopAll`);
     }
     // BUG-202: assert _source.playing===false after stopAll.
     // Idempotent double-stop: already-stopped leaves playing:false → no throw.
     if (persisted._source.playing !== false) {
       throw new Error(
-        `PLAYLIST_WRITE_NOT_PERSISTED: _source.playing is still true after stopAll`,
+        `${ErrorTokens.PLAYLIST_WRITE_NOT_PERSISTED}: _source.playing is still true after stopAll`,
       );
     }
 
@@ -672,7 +673,7 @@ export async function bulkImportSounds(data: unknown): Promise<Envelope<any>> {
     const after = playlist.sounds?.size ?? 0;
     if (after !== before + payloads.length) {
       throw new Error(
-        `PLAYLIST_BULK_IMPORT_NOT_PERSISTED: expected ${before + payloads.length} sounds, found ${after}`,
+        `${ErrorTokens.PLAYLIST_BULK_IMPORT_NOT_PERSISTED}: expected ${before + payloads.length} sounds, found ${after}`,
       );
     }
 

@@ -1,12 +1,15 @@
 import { z } from 'zod';
 import {
+  ErrorTokens,
   FolderId,
   PackId,
   ItemId,
   type FoundryRawItem,
   type FoundryRawEffect,
   type GetCompendiumEntryFullOutputType,
+  CreateActorFromCompendiumOutput,
   type CreateActorFromCompendiumOutputType,
+  CREATE_ACTOR_FROM_COMPENDIUM_OUTPUT_JSON_SCHEMA,
 } from '@foundry-mcp/shared';
 import { FoundryClient } from '../foundry-client.js';
 import { Logger } from '../logger.js';
@@ -127,6 +130,7 @@ export class ActorCreationTools extends BaseTool {
           },
           required: ['packId', 'itemId', 'names'],
         },
+        outputSchema: CREATE_ACTOR_FROM_COMPENDIUM_OUTPUT_JSON_SCHEMA,
       },
       {
         name: 'create-actor',
@@ -275,8 +279,12 @@ export class ActorCreationTools extends BaseTool {
         hasErrors: !!result.errors,
       });
 
-      // Format response for Claude
-      return this.formatSimpleActorCreationResponse(result, packId, itemId, customNames.slice(0, finalQuantity));
+      // Format response for Claude. Phase 11 (R11.1): wrap in the MCP content
+      // envelope + structuredContent; content[0].text === JSON.stringify(out)
+      // preserves the prior auto-wrapped wire text (additive structuredContent).
+      const out = this.formatSimpleActorCreationResponse(result, packId, itemId, customNames.slice(0, finalQuantity));
+      CreateActorFromCompendiumOutput.parse(out);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(out) }], structuredContent: out };
 
     } catch (error) {
       this.logger.error('create-actor-from-compendium failed', error);
@@ -307,11 +315,11 @@ export class ActorCreationTools extends BaseTool {
 
       // DP-16 post-write verification (CCR-5 / BUG-070).
       if (!result?.id) {
-        throw new Error(`CREATE_ACTOR_NOT_PERSISTED: createActor returned no id for "${name}"`);
+        throw new Error(`${ErrorTokens.CREATE_ACTOR_NOT_PERSISTED}: createActor returned no id for "${name}"`);
       }
       if (result.name !== name) {
         throw new Error(
-          `CREATE_ACTOR_NOT_PERSISTED: persisted name "${result.name}" does not match requested "${name}"`,
+          `${ErrorTokens.CREATE_ACTOR_NOT_PERSISTED}: persisted name "${result.name}" does not match requested "${name}"`,
         );
       }
 

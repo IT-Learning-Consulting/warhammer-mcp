@@ -15,6 +15,7 @@
 // → `this.validateState()` (the injected seam).
 
 import { notify } from '../notify.js';
+import { ErrorTokens } from '@foundry-mcp/shared';
 import { verifyDocWrite } from '../utils/verifyWrite.js';
 import { _resolveActor, _resolveItem, _findEffect, _targetToResolverInput } from './shared/document-resolver.js';
 
@@ -93,7 +94,7 @@ export class EffectsService {
               autoDeleted: true,
             };
           }
-          throw new Error(`ADD_ACTIVE_EFFECT_NOT_PERSISTED: effect ${createdEffect.id} absent after create`);
+          throw new Error(`${ErrorTokens.ADD_ACTIVE_EFFECT_NOT_PERSISTED}: effect ${createdEffect.id} absent after create`);
         }
 
         notify.created('active-effect', createdEffect.name, {
@@ -243,7 +244,7 @@ export class EffectsService {
               `${path}: expected ${JSON.stringify(expected)}, before ${JSON.stringify(beforeValues[path])}`
             ).join('; ');
             throw new Error(
-              `UPDATE_ACTIVE_EFFECT_NOT_PERSISTED: effect.update() returned undefined. ${preview}`,
+              `${ErrorTokens.UPDATE_ACTIVE_EFFECT_NOT_PERSISTED}: effect.update() returned undefined. ${preview}`,
             );
           }
         }
@@ -253,7 +254,7 @@ export class EffectsService {
         try {
           freshEffect = _findEffect(actor, effect.id);
         } catch {
-          throw new Error(`UPDATE_ACTIVE_EFFECT_NOT_PERSISTED: effect ${effect.id} disappeared after update`);
+          throw new Error(`${ErrorTokens.UPDATE_ACTIVE_EFFECT_NOT_PERSISTED}: effect ${effect.id} disappeared after update`);
         }
         // BUG-342: foundry.utils.flattenObject treats arrays as LEAF values, so the whole
         // `system.scriptData` array is a single flat key. Its wfrp4e-managed `options`
@@ -262,13 +263,13 @@ export class EffectsService {
         // whole-array compare false-fails. Skip the array from the generic drift verify and
         // instead verify the caller-meaningful scriptData[0] fields (script/trigger/label) landed.
         const scriptDataSkip = touchedScript ? ['system.scriptData'] : [];
-        verifyDocWrite(freshEffect, flatUpdate, 'UPDATE_ACTIVE_EFFECT_NOT_PERSISTED', { skipPaths: scriptDataSkip });
+        verifyDocWrite(freshEffect, flatUpdate, ErrorTokens.UPDATE_ACTIVE_EFFECT_NOT_PERSISTED, { skipPaths: scriptDataSkip });
         if (touchedScript) {
           const sd0: any = (freshEffect as any).system?.scriptData?.[0] ?? {};
           for (const f of ['script', 'trigger', 'label'] as const) {
             if (typeof data.updates[f] === 'string' && sd0[f] !== data.updates[f]) {
               throw new Error(
-                `UPDATE_ACTIVE_EFFECT_NOT_PERSISTED: scriptData.${f} did not persist (expected ${JSON.stringify(data.updates[f])}, got ${JSON.stringify(sd0[f])})`,
+                `${ErrorTokens.UPDATE_ACTIVE_EFFECT_NOT_PERSISTED}: scriptData.${f} did not persist (expected ${JSON.stringify(data.updates[f])}, got ${JSON.stringify(sd0[f])})`,
               );
             }
           }
@@ -361,7 +362,7 @@ export class EffectsService {
             `${path}: expected ${JSON.stringify(expected)}, before ${JSON.stringify(beforeValues[path])}`
           ).join('; ');
           throw new Error(
-            `UPDATE_ACTIVE_EFFECT_NOT_PERSISTED: effect.update() returned undefined (preUpdate cancelled write?). ${preview}`,
+            `${ErrorTokens.UPDATE_ACTIVE_EFFECT_NOT_PERSISTED}: effect.update() returned undefined (preUpdate cancelled write?). ${preview}`,
           );
         }
       }
@@ -371,20 +372,20 @@ export class EffectsService {
       try {
         freshEffect = _findEffect(item, effect.id);
       } catch {
-        throw new Error(`UPDATE_ACTIVE_EFFECT_NOT_PERSISTED: effect ${effect.id} disappeared after update`);
+        throw new Error(`${ErrorTokens.UPDATE_ACTIVE_EFFECT_NOT_PERSISTED}: effect ${effect.id} disappeared after update`);
       }
       // BUG-342: foundry.utils.flattenObject treats arrays as LEAF values, so the whole
       // `system.scriptData` array is a single flat key whose wfrp4e-normalized `options`
       // sub-object never matches the MCP payload template (whole-array compare false-fails).
       // Skip it from the generic drift verify; verify the meaningful scriptData[0] fields instead.
       const scriptDataSkip = touchedScript ? ['system.scriptData'] : [];
-      verifyDocWrite(freshEffect, flatUpdate, 'UPDATE_ACTIVE_EFFECT_NOT_PERSISTED', { skipPaths: scriptDataSkip });
+      verifyDocWrite(freshEffect, flatUpdate, ErrorTokens.UPDATE_ACTIVE_EFFECT_NOT_PERSISTED, { skipPaths: scriptDataSkip });
       if (touchedScript) {
         const sd0: any = (freshEffect as any).system?.scriptData?.[0] ?? {};
         for (const f of ['script', 'trigger', 'label'] as const) {
           if (typeof data.updates[f] === 'string' && sd0[f] !== data.updates[f]) {
             throw new Error(
-              `UPDATE_ACTIVE_EFFECT_NOT_PERSISTED: scriptData.${f} did not persist (expected ${JSON.stringify(data.updates[f])}, got ${JSON.stringify(sd0[f])})`,
+              `${ErrorTokens.UPDATE_ACTIVE_EFFECT_NOT_PERSISTED}: scriptData.${f} did not persist (expected ${JSON.stringify(data.updates[f])}, got ${JSON.stringify(sd0[f])})`,
             );
           }
         }
@@ -442,7 +443,7 @@ export class EffectsService {
         await actor.deleteEmbeddedDocuments('ActiveEffect', [effectId]);
         // CCR-2a verify gone
         if (actor.effects.get(effectId)) {
-          throw new Error(`DELETE_ACTIVE_EFFECT_NOT_PERSISTED: effect ${effectId} still present after delete`);
+          throw new Error(`${ErrorTokens.DELETE_ACTIVE_EFFECT_NOT_PERSISTED}: effect ${effectId} still present after delete`);
         }
         notify.deleted('active-effect', effectName, { summary: `from ${actor.name}` });
         return {

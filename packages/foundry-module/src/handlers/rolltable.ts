@@ -31,6 +31,7 @@ import type {
   TableResultInputType,
 } from '@foundry-mcp/shared';
 import {
+  ErrorTokens,
   CreateRollTableInput,
   AddTableResultsInput,
   ListRollTablesInput,
@@ -243,7 +244,7 @@ export async function createRollTable(data: unknown): Promise<Envelope<{ id: str
       const sizeAfter: number = table.results.size as number;
       if (sizeAfter !== normalisedResults.length) {
         throw new Error(
-          `ROLLTABLE_WRITE_NOT_PERSISTED: createRollTable expected ${normalisedResults.length} ` +
+          `${ErrorTokens.ROLLTABLE_WRITE_NOT_PERSISTED}: createRollTable expected ${normalisedResults.length} ` +
           `embedded results but persisted ${sizeAfter}. Foundry may have silently dropped one or ` +
           `more results — check F12 console for validation errors.`,
         );
@@ -282,7 +283,7 @@ export async function addTableResults(data: unknown): Promise<Envelope<{ tableId
     const sizeAfter: number = table.results.size as number;
     if (sizeAfter !== sizeBefore + normalisedResults.length) {
       throw new Error(
-        `ROLLTABLE_WRITE_NOT_PERSISTED: expected ${sizeBefore + normalisedResults.length} results ` +
+        `${ErrorTokens.ROLLTABLE_WRITE_NOT_PERSISTED}: expected ${sizeBefore + normalisedResults.length} results ` +
         `after addTableResults but found ${sizeAfter}. Foundry may have silently dropped one or more ` +
         `results — check F12 console for validation errors.`,
       );
@@ -478,7 +479,7 @@ export async function updateRollTable(data: unknown): Promise<Envelope<{ tableId
       const persistedValue = (table as any)[field];
       if (JSON.stringify(persistedValue) !== JSON.stringify(requestedValue)) {
         throw new Error(
-          `ROLLTABLE_WRITE_NOT_PERSISTED: field "${field}" expected ${JSON.stringify(requestedValue)} ` +
+          `${ErrorTokens.ROLLTABLE_WRITE_NOT_PERSISTED}: field "${field}" expected ${JSON.stringify(requestedValue)} ` +
           `but post-update value is ${JSON.stringify(persistedValue)}. Foundry may have dropped ` +
           `the write silently — check F12 console for DataModelValidationError.`,
         );
@@ -532,7 +533,7 @@ export async function updateTableResults(
       const result = table.results.get(update._id);
       if (!result) {
         throw new Error(
-          `ROLLTABLE_WRITE_NOT_PERSISTED: result "${update._id}" disappeared after updateEmbeddedDocuments`,
+          `${ErrorTokens.ROLLTABLE_WRITE_NOT_PERSISTED}: result "${update._id}" disappeared after updateEmbeddedDocuments`,
         );
       }
       const { _id, ...fields } = update;
@@ -541,7 +542,7 @@ export async function updateTableResults(
         const persistedValue = (result as any)[field];
         if (JSON.stringify(persistedValue) !== JSON.stringify(requestedValue)) {
           throw new Error(
-            `ROLLTABLE_WRITE_NOT_PERSISTED: result "${update._id}" field "${field}" expected ` +
+            `${ErrorTokens.ROLLTABLE_WRITE_NOT_PERSISTED}: result "${update._id}" field "${field}" expected ` +
             `${JSON.stringify(requestedValue)} but post-update value is ${JSON.stringify(persistedValue)}.`,
           );
         }
@@ -589,14 +590,14 @@ export async function deleteTableResults(
     for (const resultId of input.resultIds) {
       if (table.results.get(resultId) !== undefined) {
         throw new Error(
-          `ROLLTABLE_WRITE_NOT_PERSISTED: result "${resultId}" still present after deleteEmbeddedDocuments`,
+          `${ErrorTokens.ROLLTABLE_WRITE_NOT_PERSISTED}: result "${resultId}" still present after deleteEmbeddedDocuments`,
         );
       }
     }
     const sizeAfter: number = table.results.size as number;
     if (sizeAfter !== sizeBefore - input.resultIds.length) {
       throw new Error(
-        `ROLLTABLE_WRITE_NOT_PERSISTED: expected ${sizeBefore - input.resultIds.length} results ` +
+        `${ErrorTokens.ROLLTABLE_WRITE_NOT_PERSISTED}: expected ${sizeBefore - input.resultIds.length} results ` +
         `after deleteTableResults but found ${sizeAfter}.`,
       );
     }
@@ -636,7 +637,7 @@ export async function normalizeRollTable(
     const normalized = await table.normalize();
     if (!normalized) {
       throw new Error(
-        `ROLLTABLE_WRITE_NOT_PERSISTED: normalize() returned null/undefined for table "${input.tableId}"`,
+        `${ErrorTokens.ROLLTABLE_WRITE_NOT_PERSISTED}: normalize() returned null/undefined for table "${input.tableId}"`,
       );
     }
 
@@ -644,7 +645,7 @@ export async function normalizeRollTable(
     const firstResult = table.results.contents[0];
     if (!firstResult || !Array.isArray(firstResult.range) || firstResult.range.length < 2) {
       throw new Error(
-        `ROLLTABLE_WRITE_NOT_PERSISTED: normalize() did not populate result ranges — ` +
+        `${ErrorTokens.ROLLTABLE_WRITE_NOT_PERSISTED}: normalize() did not populate result ranges — ` +
         `first result range is ${JSON.stringify(firstResult?.range)}`,
       );
     }
@@ -685,7 +686,7 @@ export async function resetRollTableResults(
     );
     if (!allCleared) {
       throw new Error(
-        `ROLLTABLE_WRITE_NOT_PERSISTED: resetResults() did not clear all drawn flags on ` +
+        `${ErrorTokens.ROLLTABLE_WRITE_NOT_PERSISTED}: resetResults() did not clear all drawn flags on ` +
         `table "${input.tableId}". Check F12 console for errors.`,
       );
     }
@@ -826,7 +827,7 @@ export async function importRollTableFromCompendium(
 
     if (!newDoc) {
       throw new Error(
-        `ROLLTABLE_WRITE_NOT_PERSISTED: importFromCompendium returned null for "${input.documentId}" ` +
+        `${ErrorTokens.ROLLTABLE_WRITE_NOT_PERSISTED}: importFromCompendium returned null for "${input.documentId}" ` +
         `from pack "${input.pack}"`,
       );
     }
@@ -839,7 +840,7 @@ export async function importRollTableFromCompendium(
     const worldTable = (game as any).tables?.get(newDoc.id);
     if (!worldTable) {
       throw new Error(
-        `ROLLTABLE_WRITE_NOT_PERSISTED: world table "${newDoc.id}" not found after importFromCompendium`,
+        `${ErrorTokens.ROLLTABLE_WRITE_NOT_PERSISTED}: world table "${newDoc.id}" not found after importFromCompendium`,
       );
     }
 
@@ -848,7 +849,7 @@ export async function importRollTableFromCompendium(
       const firstResult = worldTable.results.contents[0];
       if (!Array.isArray(firstResult?.range) || firstResult.range.length < 2) {
         throw new Error(
-          `ROLLTABLE_WRITE_NOT_PERSISTED: normalize requested but first result range is ` +
+          `${ErrorTokens.ROLLTABLE_WRITE_NOT_PERSISTED}: normalize requested but first result range is ` +
           `${JSON.stringify(firstResult?.range)} — normalize may have silently failed`,
         );
       }

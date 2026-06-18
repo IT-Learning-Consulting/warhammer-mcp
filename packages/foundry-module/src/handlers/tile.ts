@@ -14,6 +14,7 @@
 // F08 _source pattern emitted by factory's DP-16 loop.
 
 import {
+  ErrorTokens,
   TileToolInput,
   TileCreateInput,
   TileUpdateInput,
@@ -228,7 +229,7 @@ async function setTileZOrder(
     const persistedSort = (persisted._source?.sort ?? persisted.sort) as number;
     if (persistedSort !== targetSort) {
       throw new Error(
-        `TILE_ZORDER_NOT_PERSISTED: sort is ${persistedSort}, expected ${targetSort}`,
+        `${ErrorTokens.TILE_ZORDER_NOT_PERSISTED}: sort is ${persistedSort}, expected ${targetSort}`,
       );
     }
 

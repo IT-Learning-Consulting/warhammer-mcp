@@ -1,4 +1,8 @@
-import { ApplyDamageInput } from '@foundry-mcp/shared';
+import {
+  ApplyDamageInput,
+  ApplyDamageOutput,
+  APPLY_DAMAGE_OUTPUT_JSON_SCHEMA,
+} from '@foundry-mcp/shared';
 import { FoundryClient } from '../foundry-client.js';
 import { Logger } from '../logger.js';
 import { BaseTool, BaseToolOptions } from '../base-tool.js';
@@ -58,6 +62,7 @@ export class ApplyDamageTool extends BaseTool {
           },
           required: ['actorId', 'amount'],
         },
+        outputSchema: APPLY_DAMAGE_OUTPUT_JSON_SCHEMA,
       },
     ];
   }
@@ -65,6 +70,11 @@ export class ApplyDamageTool extends BaseTool {
   async handle(args: any): Promise<any> {
     const parsed = ApplyDamageInput.parse(args);
     this.logger.info('apply-damage', parsed);
-    return await this.query<any>('applyDamage', parsed);
+    // Phase 11 (R11.1): wrap the raw query payload in the MCP content envelope +
+    // structuredContent. content[0].text === JSON.stringify(data) keeps the wire
+    // text byte-identical to the backend's prior auto-wrap (additive structuredContent).
+    const data = await this.query<ApplyDamageOutput>('applyDamage', parsed);
+    ApplyDamageOutput.parse(data);
+    return { content: [{ type: 'text' as const, text: JSON.stringify(data) }], structuredContent: data };
   }
 }

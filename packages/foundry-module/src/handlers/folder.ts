@@ -21,6 +21,7 @@
 //   - NEVER calls ChatMessage.create — all GM feedback routes through notify.*
 
 import {
+  ErrorTokens,
   FolderCreateInput,
   FolderUpdateInput,
   FolderDeleteInput,
@@ -323,7 +324,7 @@ export async function deleteFolder(data: unknown): Promise<Envelope<any>> {
     // DP-16 post-verify: confirm removal
     if (folders.get(input.folderId)) {
       throw new Error(
-        `FOLDER_WRITE_NOT_PERSISTED: folder "${input.folderId}" still present after delete`,
+        `${ErrorTokens.FOLDER_WRITE_NOT_PERSISTED}: folder "${input.folderId}" still present after delete`,
       );
     }
 

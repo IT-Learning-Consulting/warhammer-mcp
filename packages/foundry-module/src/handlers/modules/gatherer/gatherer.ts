@@ -20,6 +20,7 @@
 // Anchors: DP-15 (typed), CCR-3 (notify on writes), CCR-4 (GM-gated writes). Source: phase14_pre_plan.md.
 
 import { requireModuleActive } from '../_shared/require-module-active.js';
+import { ErrorTokens } from '@foundry-mcp/shared';
 import { ModuleGathererInput, type ModuleGathererInputType } from './schemas.js';
 import { notify } from '../../../notify.js';
 
@@ -235,7 +236,7 @@ async function handleResetSpot(input: ResetInput): Promise<Envelope<unknown>> {
   // DP-16 — verify the runtime data is cleared.
   const remaining = page.getFlag?.(MODULE_ID, 'data');
   if (remaining != null) {
-    return { success: false, error: 'GATHERER_RESET_NOT_PERSISTED: flags.gatherer.data still present after unset' };
+    return { success: false, error: ErrorTokens.GATHERER_RESET_NOT_PERSISTED + ': flags.gatherer.data still present after unset' };
   }
   notify.updated('gatherer', page.name, { summary: 'spot reset (draws refreshed)' });
   return { success: true, data: { pageUuid: input.pageUuid, name: page.name, reset: true } };
@@ -312,7 +313,7 @@ async function handleCreateSpot(input: CreateSpotInput): Promise<Envelope<unknow
   if (!page) return { success: false, error: 'GATHERER_SPOT_NOT_CREATED' };
   const persistedTable = page.getFlag?.(MODULE_ID, 'table');
   if (persistedTable !== input.tableUuid) {
-    return { success: false, error: `GATHERER_SPOT_FLAG_NOT_PERSISTED: table read back "${persistedTable}"` };
+    return { success: false, error: `${ErrorTokens.GATHERER_SPOT_FLAG_NOT_PERSISTED}: table read back "${persistedTable}"` };
   }
   notify.created('gatherer', input.name, { summary: 'gather spot created' });
   return { success: true, data: { pageUuid: page.uuid, name: input.name, journalName: journal.name, written: gFlags } };
@@ -356,7 +357,7 @@ async function handleSetHarvestSource(input: SetHarvestSourceInput): Promise<Env
   if (input.draws !== undefined) await actor.setFlag(MODULE_ID, 'draws', input.draws);
   const persisted = actor.getFlag?.(MODULE_ID, 'gatherSheet');
   if (persisted !== input.gatherSheetUuid) {
-    return { success: false, error: `GATHERER_HARVEST_SOURCE_NOT_PERSISTED: read back "${persisted}"` };
+    return { success: false, error: `${ErrorTokens.GATHERER_HARVEST_SOURCE_NOT_PERSISTED}: read back "${persisted}"` };
   }
   notify.updated('gatherer', actor.name, { summary: 'harvest source linked' });
   return { success: true, data: { actorUuid: input.actorUuid, actorName: actor.name, gatherSheet: persisted, draws: input.draws } };

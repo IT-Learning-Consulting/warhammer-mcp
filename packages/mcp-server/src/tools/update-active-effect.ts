@@ -1,4 +1,10 @@
-import { UpdateActiveEffectInput, ACTIVE_EFFECT_TARGET_JSON_SCHEMA } from '@foundry-mcp/shared';
+import {
+  UpdateActiveEffectInput,
+  ACTIVE_EFFECT_TARGET_JSON_SCHEMA,
+  UpdateActiveEffectOutput,
+  type UpdateActiveEffectOutputType,
+  UPDATE_ACTIVE_EFFECT_OUTPUT_JSON_SCHEMA,
+} from '@foundry-mcp/shared';
 import { FoundryClient } from '../foundry-client.js';
 import { Logger } from '../logger.js';
 import { BaseTool, BaseToolOptions } from '../base-tool.js';
@@ -61,6 +67,7 @@ export class UpdateActiveEffectTool extends BaseTool {
           },
           required: ['target', 'updates'],
         },
+        outputSchema: UPDATE_ACTIVE_EFFECT_OUTPUT_JSON_SCHEMA,
       },
     ];
   }
@@ -76,6 +83,10 @@ export class UpdateActiveEffectTool extends BaseTool {
       effectName: parsed.effectName,
       updatedKeys: Object.keys(parsed.updates),
     });
-    return await this.query<any>('updateActiveEffect', parsed);
+    // Phase 11 (R11.1): envelope wrap; content[0].text === JSON.stringify(data)
+    // preserves the prior auto-wrapped wire text (additive structuredContent).
+    const data = await this.query<UpdateActiveEffectOutputType>('updateActiveEffect', parsed);
+    UpdateActiveEffectOutput.parse(data);
+    return { content: [{ type: 'text' as const, text: JSON.stringify(data) }], structuredContent: data };
   }
 }

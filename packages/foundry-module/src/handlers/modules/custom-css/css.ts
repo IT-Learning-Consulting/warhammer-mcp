@@ -17,6 +17,7 @@
 //   - CCR-3: notify.updated('setting', …) on every write; no notify on get.
 
 import { requireModuleActive } from '../_shared/require-module-active.js';
+import { ErrorTokens } from '@foundry-mcp/shared';
 import { ModuleCssInput, type ModuleCssInputType } from './schemas.js';
 import { notify } from '../../../notify.js';
 
@@ -85,7 +86,7 @@ async function writeWorldCss(css: string): Promise<string> {
   const verify: string = settings.get(MODULE_ID, 'worldStylesheet');
   if (verify !== value) {
     throw new Error(
-      `CSS_WRITE_NOT_PERSISTED: worldStylesheet read-back mismatch (expected ${value.length} chars, got ${verify?.length ?? 'undefined'})`,
+      `${ErrorTokens.CSS_WRITE_NOT_PERSISTED}: worldStylesheet read-back mismatch (expected ${value.length} chars, got ${verify?.length ?? 'undefined'})`,
     );
   }
   reapplyAndBroadcast();
@@ -101,7 +102,7 @@ async function writeUserCss(css: string): Promise<string> {
   const verify: string = settings.get(MODULE_ID, 'userStylesheet');
   if (verify !== value) {
     throw new Error(
-      `CSS_WRITE_NOT_PERSISTED: userStylesheet read-back mismatch (expected ${value.length} chars, got ${verify?.length ?? 'undefined'})`,
+      `${ErrorTokens.CSS_WRITE_NOT_PERSISTED}: userStylesheet read-back mismatch (expected ${value.length} chars, got ${verify?.length ?? 'undefined'})`,
     );
   }
   reapplyAndBroadcast();

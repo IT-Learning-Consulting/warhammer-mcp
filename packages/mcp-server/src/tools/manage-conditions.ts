@@ -2,9 +2,13 @@ import {
   ApplyConditionInput,
   RemoveConditionInput,
   ListConditionsInput,
+  ApplyConditionOutput,
+  RemoveConditionOutput,
   type ApplyConditionOutputType,
   type RemoveConditionOutputType,
   type ListConditionsOutputType,
+  APPLY_CONDITION_OUTPUT_JSON_SCHEMA,
+  REMOVE_CONDITION_OUTPUT_JSON_SCHEMA,
 } from '@foundry-mcp/shared';
 import { FoundryClient } from '../foundry-client.js';
 import { Logger } from '../logger.js';
@@ -79,6 +83,7 @@ export class ManageConditionsTools extends BaseTool {
           },
           required: ['actorId', 'conditionKey'],
         },
+        outputSchema: APPLY_CONDITION_OUTPUT_JSON_SCHEMA,
       },
       {
         name: 'remove-condition',
@@ -108,6 +113,7 @@ export class ManageConditionsTools extends BaseTool {
           },
           required: ['actorId', 'conditionKey'],
         },
+        outputSchema: REMOVE_CONDITION_OUTPUT_JSON_SCHEMA,
       },
       {
         name: 'list-conditions',
@@ -133,13 +139,21 @@ export class ManageConditionsTools extends BaseTool {
   async handleApplyCondition(args: any): Promise<any> {
     const parsed = ApplyConditionInput.parse(args);
     this.logger.info('apply-condition', parsed);
-    return await this.query<ApplyConditionOutputType>('applyCondition', parsed);
+    // Phase 11 (R11.1): envelope wrap; text === JSON.stringify(data) preserves the
+    // prior auto-wrapped wire text (additive structuredContent).
+    const data = await this.query<ApplyConditionOutputType>('applyCondition', parsed);
+    ApplyConditionOutput.parse(data);
+    return { content: [{ type: 'text' as const, text: JSON.stringify(data) }], structuredContent: data };
   }
 
   async handleRemoveCondition(args: any): Promise<any> {
     const parsed = RemoveConditionInput.parse(args);
     this.logger.info('remove-condition', parsed);
-    return await this.query<RemoveConditionOutputType>('removeCondition', parsed);
+    // Phase 11 (R11.1): envelope wrap; text === JSON.stringify(data) preserves the
+    // prior auto-wrapped wire text (additive structuredContent).
+    const data = await this.query<RemoveConditionOutputType>('removeCondition', parsed);
+    RemoveConditionOutput.parse(data);
+    return { content: [{ type: 'text' as const, text: JSON.stringify(data) }], structuredContent: data };
   }
 
   async handleListConditions(args: any): Promise<any> {

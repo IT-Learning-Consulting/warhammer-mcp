@@ -1,3 +1,4 @@
+import { ErrorTokens } from '@foundry-mcp/shared';
 // Module Integration v1 Phase 1 — Shared module-active guard.
 //
 // Called at the top of every module-* dispatcher. Returns a well-formed
@@ -25,13 +26,13 @@ function checkModule(moduleId: string): ModuleGuardError | null {
   if (!mod) {
     return {
       success: false,
-      error: `MODULE_NOT_ACTIVE: Foundry module "${moduleId}" is not installed. Install and activate it to use this tool.`,
+      error: `${ErrorTokens.MODULE_NOT_ACTIVE}: Foundry module "${moduleId}" is not installed. Install and activate it to use this tool.`,
     };
   }
   if (!mod.active) {
     return {
       success: false,
-      error: `MODULE_NOT_ACTIVE: Foundry module "${moduleId}" is installed but not active in the current world. Enable it in Module Management.`,
+      error: `${ErrorTokens.MODULE_NOT_ACTIVE}: Foundry module "${moduleId}" is installed but not active in the current world. Enable it in Module Management.`,
     };
   }
   return null;
@@ -63,7 +64,7 @@ export function requireModuleActive(
     if (!depMod || !depMod.active) {
       return {
         success: false,
-        error: `MODULE_DEPENDENCY_NOT_ACTIVE: "${dep}" is required by module-${primaryId} but is not active. Enable it in Module Management.`,
+        error: `${ErrorTokens.MODULE_DEPENDENCY_NOT_ACTIVE}: "${dep}" is required by module-${primaryId} but is not active. Enable it in Module Management.`,
       };
     }
   }
@@ -90,7 +91,7 @@ export function requireCompanionActive(companionId: string): ModuleGuardError | 
   if (!mod || !mod.active) {
     return {
       success: false,
-      error: `COMPANION_NOT_ACTIVE: Optional companion module "${companionId}" is not installed or not active. Install and enable it to use this action.`,
+      error: `${ErrorTokens.COMPANION_NOT_ACTIVE}: Optional companion module "${companionId}" is not installed or not active. Install and enable it to use this action.`,
     };
   }
   return null;

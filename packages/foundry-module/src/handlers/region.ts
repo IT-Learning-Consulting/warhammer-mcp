@@ -32,6 +32,7 @@
 // Risk 5.B contingency NOT triggered — all 7 subtypes typed via Zod discriminator.
 
 import {
+  ErrorTokens,
   RegionToolInput,
   RegionCreateInput,
   RegionUpdateInput,
@@ -224,7 +225,7 @@ export async function createRegion(data: unknown): Promise<Envelope<RegionCreate
     const payload = deepStripUndefined({ ...rest });
     const created = await scene.createEmbeddedDocuments('Region', [payload]);
     if (!created || created.length === 0) {
-      throw new Error('REGION_WRITE_NOT_PERSISTED: createEmbeddedDocuments returned no doc');
+      throw new Error(ErrorTokens.REGION_WRITE_NOT_PERSISTED + ': createEmbeddedDocuments returned no doc');
     }
     const persisted = getEmbeddedOrThrow<any>(scene, 'regions', created[0].id, 'Region');
 
@@ -265,7 +266,7 @@ export async function updateRegion(data: unknown): Promise<Envelope<RegionUpdate
       if (field === 'elevation' || field === 'shapes' || field === 'flags') {
         const persisted = (region._source as any)?.[field];
         if (persisted === undefined || persisted === null) {
-          throw new Error(`REGION_WRITE_NOT_PERSISTED: nested "${field}" missing after update`);
+          throw new Error(`${ErrorTokens.REGION_WRITE_NOT_PERSISTED}: nested "${field}" missing after update`);
         }
         continue;
       }
@@ -273,7 +274,7 @@ export async function updateRegion(data: unknown): Promise<Envelope<RegionUpdate
       const persistedValue = (region._source as any)?.[field];
       if (persistedValue !== requestedValue) {
         throw new Error(
-          `REGION_WRITE_NOT_PERSISTED: field "${field}" expected ${JSON.stringify(requestedValue)} ` +
+          `${ErrorTokens.REGION_WRITE_NOT_PERSISTED}: field "${field}" expected ${JSON.stringify(requestedValue)} ` +
             `but post-update _source value is ${JSON.stringify(persistedValue)}`,
         );
       }
@@ -312,12 +313,12 @@ export async function deleteRegion(data: unknown): Promise<Envelope<RegionDelete
 
     const post = scene.regions?.get(input.regionId);
     if (post) {
-      throw new Error(`REGION_WRITE_NOT_PERSISTED: region "${input.regionId}" still present`);
+      throw new Error(`${ErrorTokens.REGION_WRITE_NOT_PERSISTED}: region "${input.regionId}" still present`);
     }
     const sizeAfter = scene.regions?.size ?? 0;
     if (sizeAfter !== sizeBefore - 1) {
       throw new Error(
-        `REGION_WRITE_NOT_PERSISTED: scene.regions.size expected ${sizeBefore - 1} ` +
+        `${ErrorTokens.REGION_WRITE_NOT_PERSISTED}: scene.regions.size expected ${sizeBefore - 1} ` +
           `but found ${sizeAfter}`,
       );
     }
@@ -420,7 +421,7 @@ export async function createBehavior(
     });
     const created = await region.createEmbeddedDocuments('RegionBehavior', [payload]);
     if (!created || created.length === 0) {
-      throw new Error('BEHAVIOR_WRITE_NOT_PERSISTED: createEmbeddedDocuments returned no doc');
+      throw new Error(ErrorTokens.BEHAVIOR_WRITE_NOT_PERSISTED + ': createEmbeddedDocuments returned no doc');
     }
     const persisted = getEmbeddedOrThrow<any>(region, 'behaviors', created[0].id, 'RegionBehavior');
 
@@ -491,10 +492,10 @@ export async function updateBehavior(
     if (input.name !== undefined) scalarExpected['name'] = input.name;
     if (input.disabled !== undefined) scalarExpected['disabled'] = input.disabled;
     if (Object.keys(scalarExpected).length > 0) {
-      verifyDocWrite(persisted, scalarExpected, 'BEHAVIOR_WRITE_NOT_PERSISTED', { readSource: true });
+      verifyDocWrite(persisted, scalarExpected, ErrorTokens.BEHAVIOR_WRITE_NOT_PERSISTED, { readSource: true });
     }
     if (input.behavior && (persisted._source as any)?.system == null) {
-      throw new Error('BEHAVIOR_WRITE_NOT_PERSISTED: system was null/undefined after update');
+      throw new Error(ErrorTokens.BEHAVIOR_WRITE_NOT_PERSISTED + ': system was null/undefined after update');
     }
 
     notify.updated('region', persisted.type as string, {
@@ -539,13 +540,13 @@ export async function deleteBehavior(
     const post = region.behaviors?.get(input.behaviorId);
     if (post) {
       throw new Error(
-        `BEHAVIOR_WRITE_NOT_PERSISTED: behavior "${input.behaviorId}" still present after delete()`,
+        `${ErrorTokens.BEHAVIOR_WRITE_NOT_PERSISTED}: behavior "${input.behaviorId}" still present after delete()`,
       );
     }
     const sizeAfter = region.behaviors?.size ?? 0;
     if (sizeAfter !== sizeBefore - 1) {
       throw new Error(
-        `BEHAVIOR_WRITE_NOT_PERSISTED: region.behaviors.size expected ${sizeBefore - 1} ` +
+        `${ErrorTokens.BEHAVIOR_WRITE_NOT_PERSISTED}: region.behaviors.size expected ${sizeBefore - 1} ` +
           `but found ${sizeAfter}`,
       );
     }
@@ -587,7 +588,7 @@ export async function addShape(data: unknown): Promise<Envelope<RegionAddShapeRe
     const afterCount = Array.isArray(after) ? after.length : 0;
     if (afterCount !== prevCount + 1) {
       throw new Error(
-        `REGION_ADD_SHAPE_NOT_PERSISTED: shape count is ${afterCount}, expected ${prevCount + 1}`,
+        `${ErrorTokens.REGION_ADD_SHAPE_NOT_PERSISTED}: shape count is ${afterCount}, expected ${prevCount + 1}`,
       );
     }
 

@@ -19,6 +19,7 @@
 //   - DP-15 (typed), DP-16 (post-write verify), exhaustiveness via const _exhaustive:never.
 
 import { requireModuleActive } from '../_shared/require-module-active.js';
+import { ErrorTokens } from '@foundry-mcp/shared';
 import { ModuleMattInput, type ModuleMattInputType, type MattActionObjType } from './schemas.js';
 import {
   TRIGGER_MODES,
@@ -586,12 +587,12 @@ async function handleCreateTriggerTile(input: CreateInput): Promise<Envelope<unk
 
   const created = await scene.createEmbeddedDocuments('Tile', [tilePayload]);
   if (!created || created.length === 0) {
-    return { success: false, error: 'MATT_TILE_NOT_PERSISTED: createEmbeddedDocuments returned no doc' };
+    return { success: false, error: ErrorTokens.MATT_TILE_NOT_PERSISTED + ': createEmbeddedDocuments returned no doc' };
   }
   const persisted = scene.tiles.get(created[0].id);
   // DP-16 — re-read _source flags and confirm trigger persisted (BUG-329: shared helper;
   // throws MATT_TILE_NOT_PERSISTED on drift, surfaced via the dispatcher catch).
-  verifyDocWrite(persisted, { [`flags.${MATT_FLAG}.trigger`]: input.trigger }, 'MATT_TILE_NOT_PERSISTED');
+  verifyDocWrite(persisted, { [`flags.${MATT_FLAG}.trigger`]: input.trigger }, ErrorTokens.MATT_TILE_NOT_PERSISTED);
   const persistedFlags = (persisted?._source?.flags?.[MATT_FLAG] ?? {}) as Record<string, any>;
 
   const uuid = persisted.uuid ?? `Scene.${scene.id}.Tile.${persisted.id}`;
@@ -633,7 +634,7 @@ async function handleUpdateTriggerConfig(input: UpdateConfigInput): Promise<Enve
   for (const [k, v] of Object.entries(input.config ?? {})) {
     if (v !== undefined) expectedFields[`flags.${MATT_FLAG}.${k}`] = v;
   }
-  verifyDocWrite(tile, expectedFields, 'MATT_CONFIG_NOT_PERSISTED');
+  verifyDocWrite(tile, expectedFields, ErrorTokens.MATT_CONFIG_NOT_PERSISTED);
   const verified = Object.keys(expectedFields).map((p) => p.split('.').pop() as string);
   const persistedFlags = (tile._source?.flags?.[MATT_FLAG] ?? {}) as Record<string, any>;
 
@@ -718,7 +719,7 @@ async function writeActions(
   // DP-16 — re-read _source and confirm the count persisted.
   const persisted = readActions(tile);
   if (persisted.length !== newActions.length) {
-    return { success: false, error: `MATT_ACTIONS_NOT_PERSISTED: expected ${newActions.length} action(s), found ${persisted.length}` };
+    return { success: false, error: `${ErrorTokens.MATT_ACTIONS_NOT_PERSISTED}: expected ${newActions.length} action(s), found ${persisted.length}` };
   }
 
   const uuid = tile.uuid ?? `Scene.${scene.id}.Tile.${tile.id}`;
@@ -834,7 +835,7 @@ async function handleSetVariables(input: SetVariablesInput): Promise<Envelope<un
   const persisted = (readMattFlags(tile).variables ?? {}) as Record<string, unknown>;
   for (const [k, val] of Object.entries(input.variables)) {
     if (JSON.stringify(persisted[k]) !== JSON.stringify(val)) {
-      return { success: false, error: `MATT_VARIABLE_NOT_PERSISTED: "${k}" did not persist` };
+      return { success: false, error: `${ErrorTokens.MATT_VARIABLE_NOT_PERSISTED}: "${k}" did not persist` };
     }
   }
 
@@ -930,7 +931,7 @@ async function handleLinkRegionTrigger(input: LinkRegionInput): Promise<Envelope
 
   const created = await region.createEmbeddedDocuments('RegionBehavior', [payload]);
   if (!created || created.length === 0) {
-    return { success: false, error: 'MATT_REGION_LINK_NOT_PERSISTED: createEmbeddedDocuments returned no doc' };
+    return { success: false, error: ErrorTokens.MATT_REGION_LINK_NOT_PERSISTED + ': createEmbeddedDocuments returned no doc' };
   }
   const behavior = region.behaviors?.get(created[0].id);
 
@@ -938,7 +939,7 @@ async function handleLinkRegionTrigger(input: LinkRegionInput): Promise<Envelope
   const sysUuid = behavior?._source?.system?.uuid ?? behavior?.system?.uuid;
   const linked = Array.isArray(sysUuid) ? sysUuid.includes(input.tileUuid) : sysUuid === input.tileUuid;
   if (!linked) {
-    return { success: false, error: `MATT_REGION_LINK_NOT_PERSISTED: behavior system.uuid did not persist (got ${JSON.stringify(sysUuid)})` };
+    return { success: false, error: `${ErrorTokens.MATT_REGION_LINK_NOT_PERSISTED}: behavior system.uuid did not persist (got ${JSON.stringify(sysUuid)})` };
   }
 
   notify.created('region', 'monks-active-tiles.triggerTile', { summary: `→ tile ${input.tileUuid} on region ${region.name ?? input.regionId}` });

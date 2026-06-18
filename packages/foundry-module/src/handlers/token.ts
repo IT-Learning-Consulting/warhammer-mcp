@@ -26,6 +26,7 @@
 // _regions (Foundry internals).
 
 import {
+  ErrorTokens,
   TokenToolInput,
   TokenCreateInput,
   TokenUpdateInput,
@@ -243,7 +244,7 @@ export async function createToken(data: unknown): Promise<Envelope<TokenCreateRe
     const payload = deepStripUndefined({ ...rest });
     const created = await scene.createEmbeddedDocuments('Token', [payload]);
     if (!created || created.length === 0) {
-      throw new Error('TOKEN_WRITE_NOT_PERSISTED: createEmbeddedDocuments returned no doc');
+      throw new Error(ErrorTokens.TOKEN_WRITE_NOT_PERSISTED + ': createEmbeddedDocuments returned no doc');
     }
     const persisted = getEmbeddedOrThrow<any>(scene, 'tokens', created[0].id, 'Token');
 
@@ -289,7 +290,7 @@ export async function updateToken(data: unknown): Promise<Envelope<TokenUpdateRe
         const persistedId = fresh._source?.actorId ?? null;
         if (persistedId !== (requestedValue ?? null)) {
           throw new Error(
-            `TOKEN_WRITE_NOT_PERSISTED: actorId expected ${JSON.stringify(requestedValue)} ` +
+            `${ErrorTokens.TOKEN_WRITE_NOT_PERSISTED}: actorId expected ${JSON.stringify(requestedValue)} ` +
               `but post-update is ${JSON.stringify(persistedId)}`,
           );
         }
@@ -308,7 +309,7 @@ export async function updateToken(data: unknown): Promise<Envelope<TokenUpdateRe
       ) {
         const persisted = (fresh._source as any)?.[field];
         if (persisted === undefined || persisted === null) {
-          throw new Error(`TOKEN_WRITE_NOT_PERSISTED: nested field "${field}" missing after update`);
+          throw new Error(`${ErrorTokens.TOKEN_WRITE_NOT_PERSISTED}: nested field "${field}" missing after update`);
         }
         continue;
       }
@@ -316,7 +317,7 @@ export async function updateToken(data: unknown): Promise<Envelope<TokenUpdateRe
       const persistedValue = (fresh._source as any)?.[field];
       if (persistedValue !== requestedValue) {
         throw new Error(
-          `TOKEN_WRITE_NOT_PERSISTED: field "${field}" expected ${JSON.stringify(requestedValue)} ` +
+          `${ErrorTokens.TOKEN_WRITE_NOT_PERSISTED}: field "${field}" expected ${JSON.stringify(requestedValue)} ` +
             `but post-update _source value is ${JSON.stringify(persistedValue)}`,
         );
       }
@@ -356,12 +357,12 @@ export async function deleteToken(data: unknown): Promise<Envelope<TokenDeleteRe
     // DP-18: post-state assertion.
     const post = scene.tokens?.get(input.tokenId);
     if (post) {
-      throw new Error(`TOKEN_WRITE_NOT_PERSISTED: token "${input.tokenId}" still present after delete()`);
+      throw new Error(`${ErrorTokens.TOKEN_WRITE_NOT_PERSISTED}: token "${input.tokenId}" still present after delete()`);
     }
     const sizeAfter = scene.tokens?.size ?? 0;
     if (sizeAfter !== sizeBefore - 1) {
       throw new Error(
-        `TOKEN_WRITE_NOT_PERSISTED: scene.tokens.size expected ${sizeBefore - 1} ` +
+        `${ErrorTokens.TOKEN_WRITE_NOT_PERSISTED}: scene.tokens.size expected ${sizeBefore - 1} ` +
           `but found ${sizeAfter}`,
       );
     }
@@ -480,7 +481,7 @@ export async function addTokens(
     const verifyScene = getSceneOrThrow(sceneId);
     for (const id of tokenIds) {
       if (!verifyScene.tokens?.get(id)) {
-        throw new Error(`TOKEN_WRITE_NOT_PERSISTED: token "${id}" not found in scene.tokens after addActorsToScene`);
+        throw new Error(`${ErrorTokens.TOKEN_WRITE_NOT_PERSISTED}: token "${id}" not found in scene.tokens after addActorsToScene`);
       }
     }
 
@@ -522,12 +523,12 @@ export async function deleteTokenAction(
 
     // PARITY-018: mirror deleteToken's two-part DP-18 assert (presence + size-delta).
     if (scene.tokens?.get(input.tokenId)) {
-      throw new Error(`TOKEN_WRITE_NOT_PERSISTED: token "${input.tokenId}" still present after delete-token`);
+      throw new Error(`${ErrorTokens.TOKEN_WRITE_NOT_PERSISTED}: token "${input.tokenId}" still present after delete-token`);
     }
     const sizeAfter = scene.tokens?.size ?? 0;
     if (sizeAfter !== sizeBefore - 1) {
       throw new Error(
-        `TOKEN_WRITE_NOT_PERSISTED: scene.tokens.size expected ${sizeBefore - 1} but found ${sizeAfter}`,
+        `${ErrorTokens.TOKEN_WRITE_NOT_PERSISTED}: scene.tokens.size expected ${sizeBefore - 1} but found ${sizeAfter}`,
       );
     }
 

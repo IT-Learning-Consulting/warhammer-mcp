@@ -22,6 +22,7 @@
 // CCR-4 (GM-gated writes). Source: phase14_pre_plan.md.
 
 import { requireModuleActive } from '../_shared/require-module-active.js';
+import { ErrorTokens } from '@foundry-mcp/shared';
 import { ModuleTimekeepingInput, type ModuleTimekeepingInputType } from './schemas.js';
 import { notify } from '../../../notify.js';
 
@@ -397,7 +398,7 @@ async function handleSetSceneSync(input: SetSceneSyncInput): Promise<Envelope<un
   // DP-16 — post-write verify.
   const persisted = scene.getFlag(MODULE_ID, 'darknessSync');
   if (persisted !== input.sync) {
-    return { success: false, error: `TIMEKEEPING_SYNC_NOT_PERSISTED: read back "${persisted}" after writing "${input.sync}"` };
+    return { success: false, error: `${ErrorTokens.TIMEKEEPING_SYNC_NOT_PERSISTED}: read back "${persisted}" after writing "${input.sync}"` };
   }
   notify.updated('timekeeping', scene.name, { summary: `darknessSync = ${input.sync}` });
   return { success: true, data: { sceneId: input.sceneId, sceneName: scene.name, darknessSync: persisted } };
@@ -445,7 +446,7 @@ async function handleAddEvent(input: AddEventInput): Promise<Envelope<unknown>> 
   // DP-16 — verify the flag round-trip.
   const persistedTime = page.getFlag(MODULE_ID, 'eventTime');
   if (Number(persistedTime) !== input.eventTime) {
-    return { success: false, error: `TIMEKEEPING_EVENT_FLAG_NOT_PERSISTED: read back ${persistedTime} after writing ${input.eventTime}` };
+    return { success: false, error: `${ErrorTokens.TIMEKEEPING_EVENT_FLAG_NOT_PERSISTED}: read back ${persistedTime} after writing ${input.eventTime}` };
   }
   notify.created('timekeeping', input.name, { summary: `event @ worldTime ${input.eventTime}` });
   return {

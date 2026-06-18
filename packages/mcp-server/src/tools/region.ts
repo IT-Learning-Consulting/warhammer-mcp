@@ -25,6 +25,8 @@ import {
   type SceneId,
   type RegionId,
   type RegionBehaviorId,
+  RegionMutationOutput,
+  REGION_MUTATION_OUTPUT_JSON_SCHEMA,
 } from '@foundry-mcp/shared';
 import { BaseTool, BaseToolOptions } from '../base-tool.js';
 
@@ -255,6 +257,10 @@ export class RegionTool extends BaseTool {
           },
           required: ['action'],
         },
+        // Phase 11 (R11.1): permissive passthrough outputSchema (user Q&A 2026-06-17).
+        // Multi-action umbrella; structuredContent is attached on mutation-action
+        // returns only (create/update/delete + behavior CRUD + add-shape).
+        outputSchema: REGION_MUTATION_OUTPUT_JSON_SCHEMA,
       },
     ];
   }
@@ -291,7 +297,8 @@ export class RegionTool extends BaseTool {
       const text =
         `🗺️ **Region Created**\n\n${formatRegionView(data.region)}\n\n` +
         `_Requested fields: ${Object.keys(data.requestedChanges).filter((k) => k !== 'action' && k !== 'sceneId').join(', ') || '(name only)'}_`;
-      return { content: [{ type: 'text' as const, text }] };
+      RegionMutationOutput.parse(data);
+      return { content: [{ type: 'text' as const, text }], structuredContent: data };
     } catch (e) {
       return this.errorResponse('create', e instanceof Error ? e.message : String(e));
     }
@@ -302,7 +309,8 @@ export class RegionTool extends BaseTool {
       const data = await this.query<RegionUpdateResponse>('region', args);
       const text =
         `✏️ **Region Updated**\n\n**Changed fields:** ${data.changedFields.join(', ')}\n\n${formatRegionView(data.region)}`;
-      return { content: [{ type: 'text' as const, text }] };
+      RegionMutationOutput.parse(data);
+      return { content: [{ type: 'text' as const, text }], structuredContent: data };
     } catch (e) {
       return this.errorResponse('update', e instanceof Error ? e.message : String(e));
     }
@@ -313,7 +321,8 @@ export class RegionTool extends BaseTool {
       const data = await this.query<RegionDeleteResponse>('region', args);
       const text =
         `🗑️ **Region Deleted**\n\n**ID:** \`${data.deletedId}\`  **Scene:** \`${data.sceneId}\`\n**Remaining regions:** ${data.remainingRegions}\n\n⚠️ All embedded behaviors were also deleted.`;
-      return { content: [{ type: 'text' as const, text }] };
+      RegionMutationOutput.parse(data);
+      return { content: [{ type: 'text' as const, text }], structuredContent: data };
     } catch (e) {
       return this.errorResponse('delete', e instanceof Error ? e.message : String(e));
     }
@@ -355,7 +364,8 @@ export class RegionTool extends BaseTool {
       const data = await this.query<RegionBehaviorCreateResponse>('region', args);
       const text =
         `✅ **RegionBehavior Created**\n\n**Region:** \`${data.regionId}\`\n\n${formatBehavior(data.behavior)}`;
-      return { content: [{ type: 'text' as const, text }] };
+      RegionMutationOutput.parse(data);
+      return { content: [{ type: 'text' as const, text }], structuredContent: data };
     } catch (e) {
       return this.errorResponse('createBehavior', e instanceof Error ? e.message : String(e));
     }
@@ -366,7 +376,8 @@ export class RegionTool extends BaseTool {
       const data = await this.query<RegionBehaviorUpdateResponse>('region', args);
       const text =
         `✏️ **RegionBehavior Updated**\n\n**Region:** \`${data.regionId}\`\n**Changed fields:** ${data.changedFields.join(', ')}\n\n${formatBehavior(data.behavior)}`;
-      return { content: [{ type: 'text' as const, text }] };
+      RegionMutationOutput.parse(data);
+      return { content: [{ type: 'text' as const, text }], structuredContent: data };
     } catch (e) {
       return this.errorResponse('updateBehavior', e instanceof Error ? e.message : String(e));
     }
@@ -377,7 +388,8 @@ export class RegionTool extends BaseTool {
       const data = await this.query<RegionBehaviorDeleteResponse>('region', args);
       const text =
         `🗑️ **RegionBehavior Deleted**\n\n**Region:** \`${data.regionId}\`\n**Deleted ID:** \`${data.deletedBehaviorId}\`\n**Remaining behaviors:** ${data.remainingBehaviors}\n\n⚠️ Permanent.`;
-      return { content: [{ type: 'text' as const, text }] };
+      RegionMutationOutput.parse(data);
+      return { content: [{ type: 'text' as const, text }], structuredContent: data };
     } catch (e) {
       return this.errorResponse('deleteBehavior', e instanceof Error ? e.message : String(e));
     }
@@ -388,7 +400,8 @@ export class RegionTool extends BaseTool {
       const data = await this.query<RegionAddShapeResponse>('region', args);
       const text =
         `➕ **Shape Added**\n\n**Shapes now:** ${data.shapeCount}\n\n${formatRegionView(data.region)}`;
-      return { content: [{ type: 'text' as const, text }] };
+      RegionMutationOutput.parse(data);
+      return { content: [{ type: 'text' as const, text }], structuredContent: data };
     } catch (e) {
       return this.errorResponse('add-shape', e instanceof Error ? e.message : String(e));
     }

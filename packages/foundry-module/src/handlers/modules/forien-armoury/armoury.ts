@@ -19,6 +19,7 @@
 // equip/cantrip/configure-integration via z.literal(true)). Source: phase10_pre_plan.md.
 
 import { requireModuleActive } from '../_shared/require-module-active.js';
+import { ErrorTokens } from '@foundry-mcp/shared';
 import { ModuleArmouryInput, type ModuleArmouryInputType } from './schemas.js';
 import { notify } from '../../../notify.js';
 
@@ -437,7 +438,7 @@ async function handleRepairItem(input: RepairItemInput): Promise<Envelope<unknow
     ? Number(fresh?.system?.APdamage?.[input.location] ?? -1)
     : Number(fresh?.system?.damageToItem?.value ?? -1);
   if (confirmed !== input.newValue) {
-    return { success: false, error: `ARMOURY_REPAIR_NOT_PERSISTED: ${field} read back ${confirmed}, expected ${input.newValue}` };
+    return { success: false, error: `${ErrorTokens.ARMOURY_REPAIR_NOT_PERSISTED}: ${field} read back ${confirmed}, expected ${input.newValue}` };
   }
   notify.updated('armoury', item.name ?? 'item', { summary: `${field}: ${previousValue} → ${input.newValue}` });
   return { success: true, data: { itemId: item.id, name: item.name, field, previousValue, newValue: input.newValue } };
@@ -517,7 +518,7 @@ async function handleConfigureIntegration(input: IntegrationInput): Promise<Enve
   const key = INTEGRATION_KEYS[input.integration];
   // setCurrencies/rolltablesImport require item-piles active; surface a clear error rather than a no-op.
   if (input.integration !== 'atlResetPresets' && !game?.modules?.get?.('item-piles')?.active) {
-    return { success: false, error: `MODULE_DEPENDENCY_NOT_ACTIVE: "item-piles" is required for ${input.integration}` };
+    return { success: false, error: `${ErrorTokens.MODULE_DEPENDENCY_NOT_ACTIVE}: "item-piles" is required for ${input.integration}` };
   }
   await game.settings.set(MODULE_ID, key, true);
   notify.updated('armoury', `integration:${input.integration}`, { summary: `one-shot ${key} fired` });

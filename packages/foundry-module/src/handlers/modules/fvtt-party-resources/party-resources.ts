@@ -24,6 +24,7 @@
 // create/delete). Source: phase11_pre_plan.md.
 
 import { requireModuleActive } from '../_shared/require-module-active.js';
+import { ErrorTokens } from '@foundry-mcp/shared';
 import { ModulePartyResourcesInput, type ModulePartyResourcesInputType } from './schemas.js';
 import { notify } from '../../../notify.js';
 
@@ -290,7 +291,7 @@ async function handleCreate(input: CreateInput): Promise<Envelope<unknown>> {
 
   // DP-16 — confirm the id is now registered + readable.
   if (!resourceList().includes(input.resourceId)) {
-    return { success: false, error: `PARTY_RESOURCES_CREATE_NOT_PERSISTED: "${input.resourceId}" did not appear in resource_list` };
+    return { success: false, error: `${ErrorTokens.PARTY_RESOURCES_CREATE_NOT_PERSISTED}: "${input.resourceId}" did not appear in resource_list` };
   }
   const snapshot = readResource(input.resourceId);
   notify.created('party-resources', snapshot.name || input.resourceId, { summary: `track created (value ${snapshot.value}, ${snapshot.min}..${snapshot.max})` });
@@ -311,7 +312,7 @@ async function handleDelete(input: DeleteInput): Promise<Envelope<unknown>> {
 
   // DP-16 — confirm the id is gone.
   if (resourceList().includes(input.resourceId)) {
-    return { success: false, error: `PARTY_RESOURCES_DELETE_NOT_PERSISTED: "${input.resourceId}" still present in resource_list` };
+    return { success: false, error: `${ErrorTokens.PARTY_RESOURCES_DELETE_NOT_PERSISTED}: "${input.resourceId}" still present in resource_list` };
   }
   notify.deleted('party-resources', name, { summary: `track removed (settings keys orphaned)` });
   return { success: true, data: { resourceId: input.resourceId, removed: true, remaining: next.length } };

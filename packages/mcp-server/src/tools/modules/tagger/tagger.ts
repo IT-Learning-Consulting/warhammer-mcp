@@ -10,7 +10,8 @@
 //   - Phase 5 module_integration_v1 acceptance criteria #1–4.
 
 import { z } from 'zod';
-import { SceneId } from '@foundry-mcp/shared';
+import {
+  ErrorTokens, SceneId } from '@foundry-mcp/shared';
 import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
 import { moduleNotActiveContent } from '../_shared/module-guard.js';
 
@@ -209,7 +210,7 @@ Examples:
       return { content: [{ type: 'text' as const, text }] };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      if (msg.includes('MODULE_NOT_ACTIVE')) {
+      if (msg.includes(ErrorTokens.MODULE_NOT_ACTIVE)) {
         return moduleNotActiveContent('module-tagger', msg);
       }
       return this.errorResponse(action, msg);
