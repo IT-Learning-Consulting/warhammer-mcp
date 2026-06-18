@@ -503,6 +503,7 @@ export class RollTableTool extends BaseTool {
                     text: `🎲 **Roll Table Created**\n\n**Name:** ${args.name}\n**Formula:** ${args.formula}\n**Entries:** ${entryCount}\n**ID:** ${table.id || "N/A"}\n\n✅ Roll table is ready to use. Use the 'roll' action to roll on this table.`,
                 },
             ],
+            structuredContent: table as unknown as Record<string, unknown>,
         };
     }
 
@@ -523,6 +524,7 @@ export class RollTableTool extends BaseTool {
                         text: `📋 **No Roll Tables Found**\n\nThere are no roll tables in this world yet. Create one using the 'create' action.`,
                     },
                 ],
+                structuredContent: { tables } as unknown as Record<string, unknown>,
             };
         }
 
@@ -541,6 +543,7 @@ export class RollTableTool extends BaseTool {
 
         return {
             content: [{ type: "text", text: resultText }],
+            structuredContent: { tables } as unknown as Record<string, unknown>,
         };
     }
 
@@ -581,6 +584,7 @@ export class RollTableTool extends BaseTool {
 
         return {
             content: [{ type: "text", text: resultText }],
+            structuredContent: table as unknown as Record<string, unknown>,
         };
     }
 
@@ -613,6 +617,7 @@ export class RollTableTool extends BaseTool {
 
         return {
             content: [{ type: "text", text: resultText }],
+            structuredContent: result as unknown as Record<string, unknown>,
         };
     }
 
@@ -638,6 +643,7 @@ export class RollTableTool extends BaseTool {
                     text: `🗑️ **Roll Table Deleted**\n\nThe roll table has been permanently removed from the world.`,
                 },
             ],
+            structuredContent: { deleted: true, tableId: args.tableId } as unknown as Record<string, unknown>,
         };
     }
 
@@ -655,6 +661,7 @@ export class RollTableTool extends BaseTool {
                     type: "text" as const,
                     text: `✏️ **Roll Table Updated**\n\n**Table ID:** ${response.tableId}\n**Changed Fields:** ${Object.keys(response.changes).join(", ")}`,
                 }],
+                structuredContent: response as unknown as Record<string, unknown>,
             };
         } catch (e) {
             return this.errorResponse("update", e instanceof Error ? e.message : String(e));
@@ -673,6 +680,7 @@ export class RollTableTool extends BaseTool {
                     type: "text" as const,
                     text: `➕ **Results Added**\n\n**Table ID:** ${response.tableId}\n**Added:** ${response.addedCount} result${response.addedCount !== 1 ? "s" : ""}`,
                 }],
+                structuredContent: response as unknown as Record<string, unknown>,
             };
         } catch (e) {
             return this.errorResponse("add-results", e instanceof Error ? e.message : String(e));
@@ -691,6 +699,7 @@ export class RollTableTool extends BaseTool {
                     type: "text" as const,
                     text: `✏️ **Table Results Updated**\n\n**Table ID:** ${response.tableId}\n**Updated:** ${response.updatedCount} result${response.updatedCount !== 1 ? "s" : ""}`,
                 }],
+                structuredContent: response as unknown as Record<string, unknown>,
             };
         } catch (e) {
             return this.errorResponse("update-results", e instanceof Error ? e.message : String(e));
@@ -709,6 +718,7 @@ export class RollTableTool extends BaseTool {
                     type: "text" as const,
                     text: `🗑️ **Table Results Deleted**\n\n**Table ID:** ${response.tableId}\n**Deleted:** ${response.deletedCount} result${response.deletedCount !== 1 ? "s" : ""}\n\n⚠️ This operation is permanent and cannot be undone.`,
                 }],
+                structuredContent: response as unknown as Record<string, unknown>,
             };
         } catch (e) {
             return this.errorResponse("delete-results", e instanceof Error ? e.message : String(e));
@@ -726,6 +736,7 @@ export class RollTableTool extends BaseTool {
                     type: "text" as const,
                     text: `📐 **Roll Table Normalized**\n\n**Table ID:** ${response.tableId}\n**Results:** ${response.resultCount}\n\n⚠️ All result ranges have been recalculated from weights — any manually-set ranges have been overwritten.`,
                 }],
+                structuredContent: response as unknown as Record<string, unknown>,
             };
         } catch (e) {
             return this.errorResponse("normalize", e instanceof Error ? e.message : String(e));
@@ -743,6 +754,7 @@ export class RollTableTool extends BaseTool {
                     type: "text" as const,
                     text: `🔄 **Roll Table Reset**\n\n**Table ID:** ${response.tableId}\n**Results:** ${response.resultCount}\n\nAll drawn flags cleared — all results are available to draw again.`,
                 }],
+                structuredContent: response as unknown as Record<string, unknown>,
             };
         } catch (e) {
             return this.errorResponse("reset", e instanceof Error ? e.message : String(e));
@@ -778,6 +790,7 @@ export class RollTableTool extends BaseTool {
 
             return {
                 content: [{ type: "text" as const, text }],
+                structuredContent: response as unknown as Record<string, unknown>,
             };
         } catch (e) {
             return this.errorResponse("draw-many", e instanceof Error ? e.message : String(e));
@@ -797,6 +810,7 @@ export class RollTableTool extends BaseTool {
                     type: "text" as const,
                     text: `📦 **Table Imported**\n\n**New Table ID:** ${response.newTableId}\n**Name:** ${response.name}\n**Normalized:** ${response.normalized ? "yes" : "no"}`,
                 }],
+                structuredContent: response as unknown as Record<string, unknown>,
             };
         } catch (e) {
             return this.errorResponse("import-from-compendium", e instanceof Error ? e.message : String(e));

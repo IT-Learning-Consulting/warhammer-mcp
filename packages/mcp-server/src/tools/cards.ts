@@ -238,14 +238,14 @@ export class CardsTool extends BaseTool {
   private async handleCreateStack(args: ArgsFor<'create-stack'>) {
     try {
       const data = await this.query<StackResponse>('cards', args);
-      return { content: [{ type: 'text' as const, text: `**Card Stack Created**\n\n${formatStack(data.stack)}` }] };
+      return { content: [{ type: 'text' as const, text: `**Card Stack Created**\n\n${formatStack(data.stack)}` }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) { return this.errorResponse('create-stack', e instanceof Error ? e.message : String(e)); }
   }
 
   private async handleGetStack(args: ArgsFor<'get-stack'>) {
     try {
       const data = await this.query<StackResponse>('cards', args);
-      return { content: [{ type: 'text' as const, text: formatStack(data.stack) }] };
+      return { content: [{ type: 'text' as const, text: formatStack(data.stack) }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) { return this.errorResponse('get-stack', e instanceof Error ? e.message : String(e)); }
   }
 
@@ -253,21 +253,21 @@ export class CardsTool extends BaseTool {
     try {
       const data = await this.query<StackListResponse>('cards', args);
       if (data.stacks === undefined) {
-        return { content: [{ type: 'text' as const, text: `**Card stack count**\n\n**Total:** ${data.total ?? 0}` }] };
+        return { content: [{ type: 'text' as const, text: `**Card stack count**\n\n**Total:** ${data.total ?? 0}` }], structuredContent: data as unknown as Record<string, unknown> };
       }
       if (data.stacks.length === 0) {
-        return { content: [{ type: 'text' as const, text: '**No card stacks found**' }] };
+        return { content: [{ type: 'text' as const, text: '**No card stacks found**' }], structuredContent: data as unknown as Record<string, unknown> };
       }
       const lines = data.stacks.map((s) => `- \`${s.id}\` · ${s.type} · "${s.name}" · ${s.cardCount} card(s)`);
       const total = data.total ?? data.stacks.length;
-      return { content: [{ type: 'text' as const, text: `**Card stacks** (${total})\n\n${lines.join('\n')}` }] };
+      return { content: [{ type: 'text' as const, text: `**Card stacks** (${total})\n\n${lines.join('\n')}` }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) { return this.errorResponse('list-stacks', e instanceof Error ? e.message : String(e)); }
   }
 
   private async handleUpdateStack(args: ArgsFor<'update-stack'>) {
     try {
       const data = await this.query<StackResponse>('cards', args);
-      return { content: [{ type: 'text' as const, text: `**Card Stack Updated**\n\n**Changed:** ${(data.changedFields ?? []).join(', ')}\n\n${formatStack(data.stack)}` }] };
+      return { content: [{ type: 'text' as const, text: `**Card Stack Updated**\n\n**Changed:** ${(data.changedFields ?? []).join(', ')}\n\n${formatStack(data.stack)}` }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) { return this.errorResponse('update-stack', e instanceof Error ? e.message : String(e)); }
   }
 
@@ -275,16 +275,16 @@ export class CardsTool extends BaseTool {
     try {
       const data = await this.query<StackDeleteResponse>('cards', args);
       if (data.dryRun) {
-        return { content: [{ type: 'text' as const, text: `**Delete preview (dryRun)**\n\n**Stack:** "${data.stackName}" \`${data.stackId}\`\n**Cards that would be removed:** ${data.embeddedCardCount}\n\nRe-run with confirm:true (no dryRun) to delete.` }] };
+        return { content: [{ type: 'text' as const, text: `**Delete preview (dryRun)**\n\n**Stack:** "${data.stackName}" \`${data.stackId}\`\n**Cards that would be removed:** ${data.embeddedCardCount}\n\nRe-run with confirm:true (no dryRun) to delete.` }], structuredContent: data as unknown as Record<string, unknown> };
       }
-      return { content: [{ type: 'text' as const, text: `**Card Stack Deleted**\n\n**ID:** \`${data.stackId}\`\n**Cards removed:** ${data.deletedCardCount}\n\n⚠️ Permanent.` }] };
+      return { content: [{ type: 'text' as const, text: `**Card Stack Deleted**\n\n**ID:** \`${data.stackId}\`\n**Cards removed:** ${data.deletedCardCount}\n\n⚠️ Permanent.` }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) { return this.errorResponse('delete-stack', e instanceof Error ? e.message : String(e)); }
   }
 
   private async handleDuplicateStack(args: ArgsFor<'duplicate-stack'>) {
     try {
       const data = await this.query<StackResponse>('cards', args);
-      return { content: [{ type: 'text' as const, text: `**Card Stack Duplicated**\n\n**Source:** \`${data.sourceId}\` → **New:** \`${data.id}\`\n\n${formatStack(data.stack)}` }] };
+      return { content: [{ type: 'text' as const, text: `**Card Stack Duplicated**\n\n**Source:** \`${data.sourceId}\` → **New:** \`${data.id}\`\n\n${formatStack(data.stack)}` }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) { return this.errorResponse('duplicate-stack', e instanceof Error ? e.message : String(e)); }
   }
 
@@ -293,7 +293,7 @@ export class CardsTool extends BaseTool {
   private async handleAddCard(args: ArgsFor<'add-card'>) {
     try {
       const data = await this.query<CardResponse>('cards', args);
-      return { content: [{ type: 'text' as const, text: `**Card Added**\n\n${formatCard(data.card)}` }] };
+      return { content: [{ type: 'text' as const, text: `**Card Added**\n\n${formatCard(data.card)}` }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) { return this.errorResponse('add-card', e instanceof Error ? e.message : String(e)); }
   }
 
@@ -301,21 +301,21 @@ export class CardsTool extends BaseTool {
     try {
       const data = await this.query<CardResponse>('cards', args);
       const redactNote = data.redacted ? '\n\n_(faces redacted for the supplied perspective)_' : '';
-      return { content: [{ type: 'text' as const, text: `${formatCard(data.card)}${redactNote}` }] };
+      return { content: [{ type: 'text' as const, text: `${formatCard(data.card)}${redactNote}` }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) { return this.errorResponse('get-card', e instanceof Error ? e.message : String(e)); }
   }
 
   private async handleUpdateCard(args: ArgsFor<'update-card'>) {
     try {
       const data = await this.query<CardResponse>('cards', args);
-      return { content: [{ type: 'text' as const, text: `**Card Updated**\n\n**Changed:** ${(data.changedFields ?? []).join(', ')}\n\n${formatCard(data.card)}` }] };
+      return { content: [{ type: 'text' as const, text: `**Card Updated**\n\n**Changed:** ${(data.changedFields ?? []).join(', ')}\n\n${formatCard(data.card)}` }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) { return this.errorResponse('update-card', e instanceof Error ? e.message : String(e)); }
   }
 
   private async handleDeleteCard(args: ArgsFor<'delete-card'>) {
     try {
       const data = await this.query<CardDeleteResponse>('cards', args);
-      return { content: [{ type: 'text' as const, text: `**Card Deleted**\n\n**ID:** \`${data.deletedId}\` from stack \`${data.stackId}\`\n**Remaining cards:** ${data.remainingCardCount}\n\n⚠️ Permanent.` }] };
+      return { content: [{ type: 'text' as const, text: `**Card Deleted**\n\n**ID:** \`${data.deletedId}\` from stack \`${data.stackId}\`\n**Remaining cards:** ${data.remainingCardCount}\n\n⚠️ Permanent.` }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) { return this.errorResponse('delete-card', e instanceof Error ? e.message : String(e)); }
   }
 
@@ -323,17 +323,17 @@ export class CardsTool extends BaseTool {
     try {
       const data = await this.query<CardListResponse>('cards', args);
       if (data.cards === undefined) {
-        return { content: [{ type: 'text' as const, text: `**Card count**\n\n**Total:** ${data.total ?? 0}` }] };
+        return { content: [{ type: 'text' as const, text: `**Card count**\n\n**Total:** ${data.total ?? 0}` }], structuredContent: data as unknown as Record<string, unknown> };
       }
       if (data.cards.length === 0) {
-        return { content: [{ type: 'text' as const, text: '**No cards in stack**' }] };
+        return { content: [{ type: 'text' as const, text: '**No cards in stack**' }], structuredContent: data as unknown as Record<string, unknown> };
       }
       const lines = data.cards.map((c) => {
         const faceState = c.face === null ? 'face-down' : `face ${c.face}`;
         const facesPart = c.faceCount === undefined ? ' · _redacted_' : ` · ${c.faceCount} face(s)`;
         return `- \`${c.id}\` · "${c.name}" · ${faceState}${c.drawn ? ' · drawn' : ''}${facesPart}`;
       });
-      return { content: [{ type: 'text' as const, text: `**Cards** (${data.total ?? data.cards.length})\n\n${lines.join('\n')}` }] };
+      return { content: [{ type: 'text' as const, text: `**Cards** (${data.total ?? data.cards.length})\n\n${lines.join('\n')}` }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) { return this.errorResponse('list-cards', e instanceof Error ? e.message : String(e)); }
   }
 
@@ -341,7 +341,7 @@ export class CardsTool extends BaseTool {
     try {
       const data = await this.query<FlipResponse>('cards', args);
       const state = data.face === null ? 'face-down (back shown)' : `face ${data.face}`;
-      return { content: [{ type: 'text' as const, text: `**Card Flipped** → ${state}\n\n${formatCard(data.card)}` }] };
+      return { content: [{ type: 'text' as const, text: `**Card Flipped** → ${state}\n\n${formatCard(data.card)}` }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) { return this.errorResponse('flip-card', e instanceof Error ? e.message : String(e)); }
   }
 
@@ -350,7 +350,7 @@ export class CardsTool extends BaseTool {
   private async handleShuffle(args: ArgsFor<'shuffle'>) {
     try {
       const data = await this.query<ShuffleResponse>('cards', args);
-      return { content: [{ type: 'text' as const, text: `**Stack Shuffled**\n\n**Stack:** \`${data.stackId}\` · ${data.cardCount} card(s)` }] };
+      return { content: [{ type: 'text' as const, text: `**Stack Shuffled**\n\n**Stack:** \`${data.stackId}\` · ${data.cardCount} card(s)` }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) { return this.errorResponse('shuffle', e instanceof Error ? e.message : String(e)); }
   }
 
@@ -358,9 +358,9 @@ export class CardsTool extends BaseTool {
     try {
       const data = await this.query<RecallResponse>('cards', args);
       if (data.dryRun) {
-        return { content: [{ type: 'text' as const, text: `**Recall preview (dryRun)**\n\n**Stack:** \`${data.stackId}\` (${data.stackType})\n**Cards held:** ${data.cardCount}\n**Projected return:** ${data.projectedReturn}\n\nRe-run with confirm:true (no dryRun) to recall.` }] };
+        return { content: [{ type: 'text' as const, text: `**Recall preview (dryRun)**\n\n**Stack:** \`${data.stackId}\` (${data.stackType})\n**Cards held:** ${data.cardCount}\n**Projected return:** ${data.projectedReturn}\n\nRe-run with confirm:true (no dryRun) to recall.` }], structuredContent: data as unknown as Record<string, unknown> };
       }
-      return { content: [{ type: 'text' as const, text: `**Stack Recalled**\n\n**Stack:** \`${data.stackId}\` (${data.stackType}) · now ${data.cardCount} card(s)` }] };
+      return { content: [{ type: 'text' as const, text: `**Stack Recalled**\n\n**Stack:** \`${data.stackId}\` (${data.stackType}) · now ${data.cardCount} card(s)` }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) { return this.errorResponse('recall', e instanceof Error ? e.message : String(e)); }
   }
 
@@ -370,38 +370,38 @@ export class CardsTool extends BaseTool {
     try {
       const data = await this.query<DealResponse>('cards', args);
       if (data.dryRun) {
-        return { content: [{ type: 'text' as const, text: `**Deal preview (dryRun)**\n\n**Deck:** \`${data.deckId}\` — ${data.sourceDeckCardCount} available\n**Hands:** ${data.destinationCount} × ${data.cardsPerHand} = ${(data.destinationCount ?? 0) * (data.cardsPerHand ?? 0)} cards\n**Deck after:** ${data.cardsAfterDeal}\n**Sufficient:** ${data.sufficient ? 'yes' : 'NO — would be rejected'}\n\nRe-run with confirm:true (no dryRun) to deal.` }] };
+        return { content: [{ type: 'text' as const, text: `**Deal preview (dryRun)**\n\n**Deck:** \`${data.deckId}\` — ${data.sourceDeckCardCount} available\n**Hands:** ${data.destinationCount} × ${data.cardsPerHand} = ${(data.destinationCount ?? 0) * (data.cardsPerHand ?? 0)} cards\n**Deck after:** ${data.cardsAfterDeal}\n**Sufficient:** ${data.sufficient ? 'yes' : 'NO — would be rejected'}\n\nRe-run with confirm:true (no dryRun) to deal.` }], structuredContent: data as unknown as Record<string, unknown> };
       }
       const handLines = (data.hands ?? []).map((h) => `  - \`${h.stackId}\`: ${h.cardCount} card(s)`).join('\n');
-      return { content: [{ type: 'text' as const, text: `**Cards Dealt**\n\n**Deck:** \`${data.deckId}\` · dealt ${data.dealt} · ${data.deckAvailableAfter} available after\n${handLines}` }] };
+      return { content: [{ type: 'text' as const, text: `**Cards Dealt**\n\n**Deck:** \`${data.deckId}\` · dealt ${data.dealt} · ${data.deckAvailableAfter} available after\n${handLines}` }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) { return this.errorResponse('deal', e instanceof Error ? e.message : String(e)); }
   }
 
   private async handleDraw(args: ArgsFor<'draw'>) {
     try {
       const data = await this.query<DrawResponse>('cards', args);
-      return { content: [{ type: 'text' as const, text: `**Cards Drawn**\n\n**Hand:** \`${data.handId}\` drew ${data.drawnCount} from \`${data.deckId}\` (hand now ${data.handCardCount})\n**Drawn ids:** ${data.drawnCardIds.map((i) => `\`${i}\``).join(', ')}` }] };
+      return { content: [{ type: 'text' as const, text: `**Cards Drawn**\n\n**Hand:** \`${data.handId}\` drew ${data.drawnCount} from \`${data.deckId}\` (hand now ${data.handCardCount})\n**Drawn ids:** ${data.drawnCardIds.map((i) => `\`${i}\``).join(', ')}` }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) { return this.errorResponse('draw', e instanceof Error ? e.message : String(e)); }
   }
 
   private async handlePass(args: ArgsFor<'pass'>) {
     try {
       const data = await this.query<PassResponse>('cards', args);
-      return { content: [{ type: 'text' as const, text: `**Cards Passed**\n\n\`${data.fromStackId}\` → \`${data.toStackId}\` · ${data.passedCount} card(s)\n**Passed ids:** ${data.passedCardIds.map((i) => `\`${i}\``).join(', ')}` }] };
+      return { content: [{ type: 'text' as const, text: `**Cards Passed**\n\n\`${data.fromStackId}\` → \`${data.toStackId}\` · ${data.passedCount} card(s)\n**Passed ids:** ${data.passedCardIds.map((i) => `\`${i}\``).join(', ')}` }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) { return this.errorResponse('pass', e instanceof Error ? e.message : String(e)); }
   }
 
   private async handlePlay(args: ArgsFor<'play'>) {
     try {
       const data = await this.query<PlayDiscardResponse>('cards', args);
-      return { content: [{ type: 'text' as const, text: `**Card Played**\n\n\`${data.cardId}\` from \`${data.fromStackId}\` → \`${data.toStackId}\` (new id \`${data.newCardId}\`)` }] };
+      return { content: [{ type: 'text' as const, text: `**Card Played**\n\n\`${data.cardId}\` from \`${data.fromStackId}\` → \`${data.toStackId}\` (new id \`${data.newCardId}\`)` }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) { return this.errorResponse('play', e instanceof Error ? e.message : String(e)); }
   }
 
   private async handleDiscard(args: ArgsFor<'discard'>) {
     try {
       const data = await this.query<PlayDiscardResponse>('cards', args);
-      return { content: [{ type: 'text' as const, text: `**Card Discarded**\n\n\`${data.cardId}\` from \`${data.fromStackId}\` → \`${data.toStackId}\` (new id \`${data.newCardId}\`)` }] };
+      return { content: [{ type: 'text' as const, text: `**Card Discarded**\n\n\`${data.cardId}\` from \`${data.fromStackId}\` → \`${data.toStackId}\` (new id \`${data.newCardId}\`)` }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) { return this.errorResponse('discard', e instanceof Error ? e.message : String(e)); }
   }
 }

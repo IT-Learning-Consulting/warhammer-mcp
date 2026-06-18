@@ -347,7 +347,7 @@ Examples:
         try {
             const data = await this.query<ChatMessageExportLogResponse>('chat-message', args);
             const text = `📜 **Chat Log Export** (${data.format}, ${data.messageCount} messages)\n\n${data.content || '_(no messages)_'}`;
-            return { content: [{ type: 'text' as const, text }] };
+            return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
         } catch (e) {
             return this.errorResponse('export-chat-log', e instanceof Error ? e.message : String(e));
         }
@@ -358,10 +358,10 @@ Examples:
             const data = await this.query<ChatMessageClearLogResponse>('chat-message', args);
             if (data.dryRun) {
                 const text = `🔎 **Clear chat-log preview**\n\n**Would delete ${data.totalCount}** message(s):\n- public: ${data.byVisibility.public}\n- GM-only: ${data.byVisibility.gmOnly}\n- whispered: ${data.byVisibility.whispered}\n\nOldest: ${data.oldest ? new Date(data.oldest).toISOString() : '—'} · Newest: ${data.newest ? new Date(data.newest).toISOString() : '—'}\n\n_Re-run with confirm:true (dryRun omitted) to delete._`;
-                return { content: [{ type: 'text' as const, text }] };
+                return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
             }
             const text = `🧹 **Chat log cleared**\n\nDeleted **${data.deletedCount}** message(s) (public ${data.byVisibility.public} / GM ${data.byVisibility.gmOnly} / whisper ${data.byVisibility.whispered}).`;
-            return { content: [{ type: 'text' as const, text }] };
+            return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
         } catch (e) {
             return this.errorResponse('clear-chat-log', e instanceof Error ? e.message : String(e));
         }
@@ -383,7 +383,7 @@ Examples:
                 msg.speaker.alias ? `- **Speaker:** ${msg.speaker.alias}` : '',
                 `- **Style:** ${msg.style}`,
             ].filter(Boolean).join('\n');
-            return { content: [{ type: 'text' as const, text }] };
+            return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
         } catch (e) {
             return this.errorResponse('create', e instanceof Error ? e.message : String(e));
         }
@@ -399,7 +399,7 @@ Examples:
                 '',
                 formatChatMessageView(data.message),
             ].join('\n');
-            return { content: [{ type: 'text' as const, text }] };
+            return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
         } catch (e) {
             return this.errorResponse('update', e instanceof Error ? e.message : String(e));
         }
@@ -414,7 +414,7 @@ Examples:
                 `- **Deleted ID:** \`${data.deletedId}\``,
                 `- **Remaining messages:** ${data.remainingCount}`,
             ].join('\n');
-            return { content: [{ type: 'text' as const, text }] };
+            return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
         } catch (e) {
             return this.errorResponse('delete', e instanceof Error ? e.message : String(e));
         }
@@ -423,7 +423,7 @@ Examples:
     private async handleGet(args: ArgsFor<'get'>) {
         try {
             const data = await this.query<ChatMessageGetResponse>('chat-message', args);
-            return { content: [{ type: 'text' as const, text: formatChatMessageView(data.message) }] };
+            return { content: [{ type: 'text' as const, text: formatChatMessageView(data.message) }], structuredContent: data as unknown as Record<string, unknown> };
         } catch (e) {
             return this.errorResponse('get', e instanceof Error ? e.message : String(e));
         }
@@ -434,12 +434,12 @@ Examples:
             const data = await this.query<ChatMessageListResponse>('chat-message', args);
             const items = data.items ?? [];
             if (items.length === 0) {
-                return { content: [{ type: 'text' as const, text: 'No chat messages found matching criteria.' }] };
+                return { content: [{ type: 'text' as const, text: 'No chat messages found matching criteria.' }], structuredContent: data as unknown as Record<string, unknown> };
             }
             const lines = items.map(formatListItem);
             const paginationNote = `\n\nPage ${data.page} of ${data.pageCount} (${data.total} total)`;
             const text = `Chat Messages${paginationNote}\n\n${lines.join('\n')}`;
-            return { content: [{ type: 'text' as const, text }] };
+            return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
         } catch (e) {
             return this.errorResponse('list', e instanceof Error ? e.message : String(e));
         }

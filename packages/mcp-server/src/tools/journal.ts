@@ -268,6 +268,7 @@ export class JournalTool extends BaseTool {
             text: `📢 **Shown to Players**\n\n**Entry:** ${data.name} (\`${data.entryId}\`)\n\n_(Transient — socket broadcast, no persisted state.)_`,
           },
         ],
+        structuredContent: data as unknown as Record<string, unknown>,
       };
     } catch (e) {
       return { content: [{ type: 'text' as const, text: `❌ **journal/show-to-players failed**\n\n${e instanceof Error ? e.message : String(e)}` }], isError: true };
@@ -284,6 +285,7 @@ export class JournalTool extends BaseTool {
             text: `📑 **Journal Duplicated**\n\n**New:** ${data.name} (\`${data.newId}\`)\n**Source:** \`${data.sourceId}\``,
           },
         ],
+        structuredContent: data as unknown as Record<string, unknown>,
       };
     } catch (e) {
       return { content: [{ type: 'text' as const, text: `❌ **journal/duplicate-entry failed**\n\n${e instanceof Error ? e.message : String(e)}` }], isError: true };
@@ -300,6 +302,7 @@ export class JournalTool extends BaseTool {
             text: `📓 **Journal Entry Created**\n\n**Name:** ${data.name}\n**ID:** ${data.id}\n**Pages:** ${data.pageIds.length}\n**Categories:** ${data.categoryIds.length}`,
           },
         ],
+        structuredContent: data as unknown as Record<string, unknown>,
       };
     } catch (e) {
       return this.errorResponse('create-entry', e instanceof Error ? e.message : String(e));
@@ -316,6 +319,7 @@ export class JournalTool extends BaseTool {
             text: `✏️ **Journal Entry Updated**\n\n**ID:** ${data.entryId}\n**Changed Fields:** ${Object.keys(data.changes).filter((k) => k !== '_id').join(', ')}`,
           },
         ],
+        structuredContent: data as unknown as Record<string, unknown>,
       };
     } catch (e) {
       return this.errorResponse('update-entry', e instanceof Error ? e.message : String(e));
@@ -332,6 +336,7 @@ export class JournalTool extends BaseTool {
             text: `🗑️ **Journal Entry Deleted**\n\n**ID:** ${data.entryId}\n\n⚠️ Permanent. All pages and categories removed.${formatAffectedDocs(data.affectedDocs)}`,
           },
         ],
+        structuredContent: data as unknown as Record<string, unknown>,
       };
     } catch (e) {
       return this.errorResponse('delete-entry', e instanceof Error ? e.message : String(e));
@@ -351,6 +356,7 @@ export class JournalTool extends BaseTool {
           content: [
             { type: 'text' as const, text: '📋 **No Journals Found**\n\nNo entries match the filter.' },
           ],
+          structuredContent: { entries: sanitised } as unknown as Record<string, unknown>,
         };
       }
       // BUG-074: when includeContent:true, inline each entry's first text-page
@@ -368,7 +374,7 @@ export class JournalTool extends BaseTool {
         return line;
       });
       const text = `📋 **Journals** (${sanitised.length})\n\n${lines.join('\n')}`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: { entries: sanitised } as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('list-entries', e instanceof Error ? e.message : String(e));
     }
@@ -386,6 +392,7 @@ export class JournalTool extends BaseTool {
               text: `📖 **Journal Entry (shallow)**\n\n**Name:** ${data.name}\n**ID:** ${data.id}\n**Pages:** ${data.pageCount}\n**Categories:** ${data.categoryCount}\n**Page IDs:** ${data.pageIds.join(', ')}`,
             },
           ],
+          structuredContent: data as unknown as Record<string, unknown>,
         };
       }
       // Deep — sanitize HTML in text-page content before echo.
@@ -434,7 +441,7 @@ export class JournalTool extends BaseTool {
           }
         }
       }
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: { ...data, pages: sanitisedPages } as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('get-entry', e instanceof Error ? e.message : String(e));
     }
@@ -450,6 +457,7 @@ export class JournalTool extends BaseTool {
             text: `➕ **Page Added**\n\n**Entry:** ${data.entryId}\n**Page ID:** ${data.pageId}\n**Type:** ${data.type}`,
           },
         ],
+        structuredContent: data as unknown as Record<string, unknown>,
       };
     } catch (e) {
       return this.errorResponse('add-page', e instanceof Error ? e.message : String(e));
@@ -466,6 +474,7 @@ export class JournalTool extends BaseTool {
             text: `✏️ **Page Updated**\n\n**Entry:** ${data.entryId}\n**Page:** ${data.pageId}\n**Changed Fields:** ${Object.keys(data.changes).join(', ')}`,
           },
         ],
+        structuredContent: data as unknown as Record<string, unknown>,
       };
     } catch (e) {
       return this.errorResponse('update-page', e instanceof Error ? e.message : String(e));
@@ -482,6 +491,7 @@ export class JournalTool extends BaseTool {
             text: `🗑️ **Page Deleted**\n\n**Entry:** ${data.entryId}\n**Page:** ${data.pageId}${formatAffectedDocs(data.affectedDocs)}`,
           },
         ],
+        structuredContent: data as unknown as Record<string, unknown>,
       };
     } catch (e) {
       return this.errorResponse('delete-page', e instanceof Error ? e.message : String(e));
@@ -498,6 +508,7 @@ export class JournalTool extends BaseTool {
             text: `🔀 **Pages Reordered**\n\n**Entry:** ${data.entryId}\n**Pages:** ${data.pageCount}\n**New order:** ${data.pageIds.join(' → ')}`,
           },
         ],
+        structuredContent: data as unknown as Record<string, unknown>,
       };
     } catch (e) {
       return this.errorResponse('reorder-pages', e instanceof Error ? e.message : String(e));
@@ -514,6 +525,7 @@ export class JournalTool extends BaseTool {
             text: `🗂️ **Category Added**\n\n**Entry:** ${data.entryId}\n**Category ID:** ${data.categoryId}\n**Name:** ${data.name}`,
           },
         ],
+        structuredContent: data as unknown as Record<string, unknown>,
       };
     } catch (e) {
       return this.errorResponse('add-category', e instanceof Error ? e.message : String(e));
@@ -530,6 +542,7 @@ export class JournalTool extends BaseTool {
             text: `✏️ **Category Updated**\n\n**Entry:** ${data.entryId}\n**Category:** ${data.categoryId}\n**Changed Fields:** ${Object.keys(data.changes).join(', ')}`,
           },
         ],
+        structuredContent: data as unknown as Record<string, unknown>,
       };
     } catch (e) {
       return this.errorResponse('update-category', e instanceof Error ? e.message : String(e));
@@ -549,6 +562,7 @@ export class JournalTool extends BaseTool {
               (data.affectedPages.length > 0 ? ` (${data.affectedPages.join(', ')})` : ''),
           },
         ],
+        structuredContent: data as unknown as Record<string, unknown>,
       };
     } catch (e) {
       return this.errorResponse('delete-category', e instanceof Error ? e.message : String(e));
@@ -566,6 +580,7 @@ export class JournalTool extends BaseTool {
             text: `🔗 **Page ${verb}**\n\n**Entry:** ${data.entryId}\n**Page:** ${data.pageId}`,
           },
         ],
+        structuredContent: data as unknown as Record<string, unknown>,
       };
     } catch (e) {
       return this.errorResponse(

@@ -420,7 +420,7 @@ export class MacroTool extends BaseTool {
   private async handleSetExecutionTarget(args: ArgsFor<'set-execution-target'>) {
     try {
       const data = await this.query<SetExecutionTargetResponse>('macro', args);
-      return { content: [{ type: 'text' as const, text: formatSetExecutionTarget(data) }] };
+      return { content: [{ type: 'text' as const, text: formatSetExecutionTarget(data) }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('set-execution-target', e instanceof Error ? e.message : String(e));
     }
@@ -429,7 +429,7 @@ export class MacroTool extends BaseTool {
   private async handleListWorldScripts(args: ArgsFor<'list-world-scripts'>) {
     try {
       const data = await this.query<ListWorldScriptsResponse>('macro', args);
-      return { content: [{ type: 'text' as const, text: formatListWorldScripts(data) }] };
+      return { content: [{ type: 'text' as const, text: formatListWorldScripts(data) }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('list-world-scripts', e instanceof Error ? e.message : String(e));
     }
@@ -438,7 +438,7 @@ export class MacroTool extends BaseTool {
   private async handleGetExecutionTarget(args: ArgsFor<'get-execution-target'>) {
     try {
       const data = await this.query<GetExecutionTargetResponse>('macro', args);
-      return { content: [{ type: 'text' as const, text: formatGetExecutionTarget(data) }] };
+      return { content: [{ type: 'text' as const, text: formatGetExecutionTarget(data) }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('get-execution-target', e instanceof Error ? e.message : String(e));
     }
@@ -449,7 +449,7 @@ export class MacroTool extends BaseTool {
   private async handleExecuteByName(args: ArgsFor<'execute-by-name'>) {
     try {
       const data = await this.query<MacroExecuteResponse>('macro', args);
-      return { content: [{ type: 'text' as const, text: formatExecuteResult(data) }] };
+      return { content: [{ type: 'text' as const, text: formatExecuteResult(data) }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('execute-by-name', e instanceof Error ? e.message : String(e));
     }
@@ -459,7 +459,7 @@ export class MacroTool extends BaseTool {
     try {
       const data = await this.query<MacroImportResponse>('macro', args);
       const text = `📥 **Macro Imported**\n\nFrom pack \`${data.sourcePack}\`\n\n${formatMacroView(data.macro)}`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('import-from-compendium', e instanceof Error ? e.message : String(e));
     }
@@ -471,7 +471,7 @@ export class MacroTool extends BaseTool {
       const reqKeys = Object.keys(data.requestedChanges).filter((k) => k !== 'action').join(', ');
       const text =
         `Macro Created\n\n${formatMacroView(data.macro)}\n\n**Requested fields:** ${reqKeys || '(name/type only)'}`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('create', e instanceof Error ? e.message : String(e));
     }
@@ -482,7 +482,7 @@ export class MacroTool extends BaseTool {
       const data = await this.query<MacroUpdateResponse>('macro', args);
       const text =
         `Macro Updated\n\n**Changed fields:** ${data.changedFields.join(', ')}\n\n${formatMacroView(data.macro)}`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('update', e instanceof Error ? e.message : String(e));
     }
@@ -494,7 +494,7 @@ export class MacroTool extends BaseTool {
     }
     try {
       const data = await this.query<MacroDeleteResponse>('macro', args);
-      return { content: [{ type: 'text' as const, text: formatDeleteResponse(data) }] };
+      return { content: [{ type: 'text' as const, text: formatDeleteResponse(data) }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('delete', e instanceof Error ? e.message : String(e));
     }
@@ -503,7 +503,7 @@ export class MacroTool extends BaseTool {
   private async handleGet(args: ArgsFor<'get'>) {
     try {
       const data = await this.query<MacroGetResponse>('macro', args);
-      return { content: [{ type: 'text' as const, text: formatMacroView(data.macro) }] };
+      return { content: [{ type: 'text' as const, text: formatMacroView(data.macro) }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('get', e instanceof Error ? e.message : String(e));
     }
@@ -517,23 +517,23 @@ export class MacroTool extends BaseTool {
         const p = data as MacroListPaginatedResponse;
         const lines = p.items.map(formatMacroListItem);
         const text = `Macros (page ${p.page} of ${p.pageCount}, ${p.total} total)\n\n${lines.join('\n') || '_(none)_'}`;
-        return { content: [{ type: 'text' as const, text }] };
+        return { content: [{ type: 'text' as const, text }], structuredContent: p as unknown as Record<string, unknown> };
       }
 
       if ('filterApplied' in data) {
         const c = data as MacroListCountResponse;
         const filterLine = c.filterApplied ? `\n**Filter applied:** ${c.filterApplied}` : '';
         const text = `Macro count\n\n**Total:** ${c.total}${filterLine}`;
-        return { content: [{ type: 'text' as const, text }] };
+        return { content: [{ type: 'text' as const, text }], structuredContent: c as unknown as Record<string, unknown> };
       }
 
       const bare = data as MacroListBareResponse;
       if (bare.items.length === 0) {
-        return { content: [{ type: 'text' as const, text: 'No Macros found.' }] };
+        return { content: [{ type: 'text' as const, text: 'No Macros found.' }], structuredContent: bare as unknown as Record<string, unknown> };
       }
       const lines = bare.items.map(formatMacroListItem);
       const text = `Macros (${bare.items.length})\n\n${lines.join('\n')}`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: bare as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('list', e instanceof Error ? e.message : String(e));
     }
@@ -548,7 +548,7 @@ export class MacroTool extends BaseTool {
     }
     try {
       const data = await this.query<MacroExecuteResponse>('macro', args);
-      return { content: [{ type: 'text' as const, text: formatExecuteResult(data) }] };
+      return { content: [{ type: 'text' as const, text: formatExecuteResult(data) }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('execute', e instanceof Error ? e.message : String(e));
     }

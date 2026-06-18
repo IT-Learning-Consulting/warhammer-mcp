@@ -629,15 +629,15 @@ Use for quick stat changes, character creation, testing, or corrections where yo
         const updateData: Record<string, any> = {};
 
         if (args.noteType === "gmnotes") {
-            // BUG-321: character actors use system.gmnotes.value;
-            // npc/creature actors use system.details.gmnotes.value — mirror handleUpdateStats branching
-            const isCharacterType = character.type === 'character';
-            const gmnotesPath = isCharacterType ? 'system.gmnotes.value' : 'system.details.gmnotes.value';
-            const currentNotes = isCharacterType
-                ? (character.system?.gmnotes?.value || '')
-                : (character.system?.details?.gmnotes?.value || '');
+            // BUG-390: gmnotes is canonically `system.details.gmnotes.value` for ALL actor types.
+            // The wfrp4e `details` template defines gmnotes and character/npc/creature all include it
+            // (template.json); the character sheet binds GM Notes to system.details.gmnotes.value
+            // (character-notes.hbs), and get-character reads that path. The prior BUG-321 character→
+            // system.gmnotes.value split wrote a non-schema top-level path the sheet + get-character
+            // never read (and silently dropped any existing notes on append). Unified here.
+            const currentNotes = character.system?.details?.gmnotes?.value || '';
             const newContent = args.append ? currentNotes + '\n\n' + args.content : args.content;
-            updateData[gmnotesPath] = newContent;
+            updateData['system.details.gmnotes.value'] = newContent;
         } else {
             const currentBio = character.system?.details?.biography?.value || '';
             const newContent = args.append ? currentBio + '\n\n' + args.content : args.content;

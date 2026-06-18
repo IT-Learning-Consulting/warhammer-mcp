@@ -257,7 +257,7 @@ export class NoteTool extends BaseTool {
         (data.journalEntry
           ? `\n\n🔗 **Auto-linked Journal Entry:** \`${data.journalEntry.id}\` (first page: \`${data.journalEntry.firstPageId ?? 'none'}\`)`
           : '');
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('create', e instanceof Error ? e.message : String(e));
     }
@@ -268,7 +268,7 @@ export class NoteTool extends BaseTool {
       const data = await this.query<NoteUpdateResponse>('note', args);
       const text =
         `✏️ **Note Updated**\n\n**Changed fields:** ${data.changedFields.join(', ')}\n\n${formatNoteView(data.note)}`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('update', e instanceof Error ? e.message : String(e));
     }
@@ -279,7 +279,7 @@ export class NoteTool extends BaseTool {
       const data = await this.query<NoteDeleteResponse>('note', args);
       const text =
         `🗑️ **Note Deleted**\n\n**ID:** \`${data.deletedId}\`\n**Scene:** \`${data.sceneId}\`\n**Remaining notes on scene:** ${data.remainingNotes}\n\n⚠️ Permanent.`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('delete', e instanceof Error ? e.message : String(e));
     }
@@ -288,7 +288,7 @@ export class NoteTool extends BaseTool {
   private async handleGet(args: ArgsFor<'get'>) {
     try {
       const data = await this.query<NoteGetResponse>('note', args);
-      return { content: [{ type: 'text' as const, text: formatNoteView(data.note) }] };
+      return { content: [{ type: 'text' as const, text: formatNoteView(data.note) }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('get', e instanceof Error ? e.message : String(e));
     }
@@ -300,11 +300,11 @@ export class NoteTool extends BaseTool {
 
       if (data.countOnly) {
         const text = `📌 **Note count**\n\n**Total:** ${data.total}${data.filterApplied ? `\n**Filter:** "${data.filterApplied}"` : ''}`;
-        return { content: [{ type: 'text' as const, text }] };
+        return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
       }
 
       if (data.notes.length === 0) {
-        return { content: [{ type: 'text' as const, text: '📌 **No Notes Found**' }] };
+        return { content: [{ type: 'text' as const, text: '📌 **No Notes Found**' }], structuredContent: data as unknown as Record<string, unknown> };
       }
 
       const lines = data.notes.map(formatNoteListItem);
@@ -313,7 +313,7 @@ export class NoteTool extends BaseTool {
         : ` (${data.total})`;
       const filterNote = data.filterApplied ? `\n_Filter: "${data.filterApplied}"_` : '';
       const text = `📌 **Notes**${pageInfo}\n${filterNote}\n${lines.join('\n')}`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('list', e instanceof Error ? e.message : String(e));
     }

@@ -262,11 +262,11 @@ Examples:
         try {
             const data = await this.query<UserListResponse>('user', args);
             if (data.items.length === 0) {
-                return { content: [{ type: 'text' as const, text: 'No Users found.' }] };
+                return { content: [{ type: 'text' as const, text: 'No Users found.' }], structuredContent: data as unknown as Record<string, unknown> };
             }
             const lines = data.items.map(formatUserListItem);
             const text = `Users (${data.items.length} of ${data.total})\n\n- **Offset:** ${data.offset}\n- **Limit:** ${data.limit}\n\n${lines.join('\n')}`;
-            return { content: [{ type: 'text' as const, text }] };
+            return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
         } catch (e) {
             return this.errorResponse('list', e instanceof Error ? e.message : String(e));
         }
@@ -275,7 +275,7 @@ Examples:
     private async handleGet(args: ArgsFor<'get'>) {
         try {
             const data = await this.query<UserGetResponse>('user', args);
-            return { content: [{ type: 'text' as const, text: formatUserView(data.user, data.hotbar) }] };
+            return { content: [{ type: 'text' as const, text: formatUserView(data.user, data.hotbar) }], structuredContent: data as unknown as Record<string, unknown> };
         } catch (e) {
             return this.errorResponse('get', e instanceof Error ? e.message : String(e));
         }
@@ -291,7 +291,7 @@ Examples:
         try {
             const data = await this.query<UserUpdateResponse>('user', args);
             const text = `User Updated\n\n**Changed fields:** ${data.changedFields.join(', ')}\n\n${formatUserView(data.user, null)}`;
-            return { content: [{ type: 'text' as const, text }] };
+            return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
         } catch (e) {
             return this.errorResponse('update', e instanceof Error ? e.message : String(e));
         }
@@ -310,7 +310,7 @@ Examples:
                 '',
                 formatUserView(data.user, null),
             ].join('\n');
-            return { content: [{ type: 'text' as const, text }] };
+            return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
         } catch (e) {
             return this.errorResponse('set-role', e instanceof Error ? e.message : String(e));
         }
@@ -319,7 +319,7 @@ Examples:
     private async handleHotbarList(args: ArgsFor<'hotbar-list'>) {
         try {
             const data = await this.query<UserHotbarListResponse>('user', args);
-            return { content: [{ type: 'text' as const, text: formatHotbarList(data) }] };
+            return { content: [{ type: 'text' as const, text: formatHotbarList(data) }], structuredContent: data as unknown as Record<string, unknown> };
         } catch (e) {
             return this.errorResponse('hotbar-list', e instanceof Error ? e.message : String(e));
         }
@@ -338,7 +338,7 @@ Examples:
                 `- **Overwrote previous slot value:** ${data.overwrote ? 'yes' : 'no'}`,
                 `- **Previous macro ID:** ${data.previousMacroId ?? '_(none)_'}`,
             ].join('\n');
-            return { content: [{ type: 'text' as const, text }] };
+            return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
         } catch (e) {
             return this.errorResponse('hotbar-assign', e instanceof Error ? e.message : String(e));
         }
@@ -356,7 +356,7 @@ Examples:
                 `- **Already empty:** ${data.alreadyEmpty ? 'yes' : 'no'}`,
                 `- **Previous macro ID:** ${data.previousMacroId ?? '_(none)_'}`,
             ].join('\n');
-            return { content: [{ type: 'text' as const, text }] };
+            return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
         } catch (e) {
             return this.errorResponse('hotbar-clear', e instanceof Error ? e.message : String(e));
         }
@@ -373,7 +373,7 @@ Examples:
                 `- **Flag:** ${data.scope}.${data.key}`,
                 `- **Value:** ${preview}`,
             ].join('\n');
-            return { content: [{ type: 'text' as const, text }] };
+            return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
         } catch (e) {
             return this.errorResponse('flag-set', e instanceof Error ? e.message : String(e));
         }
@@ -389,7 +389,7 @@ Examples:
                 `- **Flag:** ${data.scope}.${data.key}`,
                 `- **Cleared:** ${data.cleared ? 'yes' : 'no'}`,
             ].join('\n');
-            return { content: [{ type: 'text' as const, text }] };
+            return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
         } catch (e) {
             return this.errorResponse('flag-clear', e instanceof Error ? e.message : String(e));
         }

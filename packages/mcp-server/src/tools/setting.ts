@@ -185,7 +185,7 @@ Examples:
     private async handleGet(args: ArgsFor<'get'>) {
         try {
             const data = await this.query<SettingGetResponse>('setting', args);
-            return { content: [{ type: 'text' as const, text: formatSettingView(data.setting) }] };
+            return { content: [{ type: 'text' as const, text: formatSettingView(data.setting) }], structuredContent: data as unknown as Record<string, unknown> };
         } catch (e) {
             return this.errorResponse('get', e instanceof Error ? e.message : String(e));
         }
@@ -201,7 +201,7 @@ Examples:
                 '',
                 `Verified: ${data.verified ? 'yes' : 'no'}`,
             ].join('\n');
-            return { content: [{ type: 'text' as const, text }] };
+            return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
         } catch (e) {
             return this.errorResponse('set', e instanceof Error ? e.message : String(e));
         }
@@ -211,14 +211,14 @@ Examples:
         try {
             const data = await this.query<SettingListResponse>('setting', args);
             if (!data.items) {
-                return { content: [{ type: 'text' as const, text: `Total settings: ${data.total}` }] };
+                return { content: [{ type: 'text' as const, text: `Total settings: ${data.total}` }], structuredContent: data as unknown as Record<string, unknown> };
             }
             if (data.items.length === 0) {
-                return { content: [{ type: 'text' as const, text: 'No settings found matching criteria.' }] };
+                return { content: [{ type: 'text' as const, text: 'No settings found matching criteria.' }], structuredContent: data as unknown as Record<string, unknown> };
             }
             const lines = data.items.map(formatSettingListItem);
             const text = `Settings (${data.total} total)\n\n${lines.join('\n')}`;
-            return { content: [{ type: 'text' as const, text }] };
+            return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
         } catch (e) {
             return this.errorResponse('list', e instanceof Error ? e.message : String(e));
         }
@@ -228,14 +228,14 @@ Examples:
         try {
             const data = await this.query<SettingListWorldDbResponse>('setting', args);
             if (!data.items) {
-                return { content: [{ type: 'text' as const, text: `Total persisted settings: ${data.total}` }] };
+                return { content: [{ type: 'text' as const, text: `Total persisted settings: ${data.total}` }], structuredContent: data as unknown as Record<string, unknown> };
             }
             if (data.items.length === 0) {
-                return { content: [{ type: 'text' as const, text: 'No persisted settings found matching criteria.' }] };
+                return { content: [{ type: 'text' as const, text: 'No persisted settings found matching criteria.' }], structuredContent: data as unknown as Record<string, unknown> };
             }
             const lines = data.items.map(formatWorldDbItem);
             const text = `Persisted World Settings (${data.total} total)\n\n${lines.join('\n')}`;
-            return { content: [{ type: 'text' as const, text }] };
+            return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
         } catch (e) {
             return this.errorResponse('list-world-db', e instanceof Error ? e.message : String(e));
         }

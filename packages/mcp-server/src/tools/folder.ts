@@ -276,7 +276,7 @@ Examples:
                 `- **Depth:** ${data.folder.depth}`,
                 `- **Parent:** ${data.folder.folder ?? '_(root)_'}`,
             ].join('\n');
-            return { content: [{ type: 'text' as const, text }] };
+            return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
         } catch (e) {
             return this.errorResponse('create', e instanceof Error ? e.message : String(e));
         }
@@ -292,7 +292,7 @@ Examples:
                 '',
                 formatFolderView(data.folder),
             ].join('\n');
-            return { content: [{ type: 'text' as const, text }] };
+            return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
         } catch (e) {
             return this.errorResponse('update', e instanceof Error ? e.message : String(e));
         }
@@ -307,7 +307,7 @@ Examples:
                 `- **Deleted ID:** \`${data.deletedId}\``,
                 `- **Remaining folders:** ${data.remainingCount}`,
             ].join('\n');
-            return { content: [{ type: 'text' as const, text }] };
+            return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
         } catch (e) {
             return this.errorResponse('delete', e instanceof Error ? e.message : String(e));
         }
@@ -316,7 +316,7 @@ Examples:
     private async handleGet(args: ArgsFor<'get'>) {
         try {
             const data = await this.query<FolderGetResponse>('folder', args);
-            return { content: [{ type: 'text' as const, text: formatFolderView(data.folder) }] };
+            return { content: [{ type: 'text' as const, text: formatFolderView(data.folder) }], structuredContent: data as unknown as Record<string, unknown> };
         } catch (e) {
             return this.errorResponse('get', e instanceof Error ? e.message : String(e));
         }
@@ -327,18 +327,18 @@ Examples:
             const data = await this.query<FolderListResponse>('folder', args);
             if (typeof data.total === 'number' && !data.items) {
                 const filterNote = data.filterApplied ? ` (filter: ${data.filterApplied})` : '';
-                return { content: [{ type: 'text' as const, text: `Total folders: ${data.total}${filterNote}` }] };
+                return { content: [{ type: 'text' as const, text: `Total folders: ${data.total}${filterNote}` }], structuredContent: data as unknown as Record<string, unknown> };
             }
             const items = data.items ?? [];
             if (items.length === 0) {
-                return { content: [{ type: 'text' as const, text: 'No folders found matching criteria.' }] };
+                return { content: [{ type: 'text' as const, text: 'No folders found matching criteria.' }], structuredContent: data as unknown as Record<string, unknown> };
             }
             const lines = items.map(formatFolderListItem);
             const paginationNote = data.pageCount != null
                 ? `\n\nPage ${data.page ?? 1} of ${data.pageCount} (${data.total ?? items.length} total)`
                 : ` (${items.length} folders)`;
             const text = `Folders${paginationNote}\n\n${lines.join('\n')}`;
-            return { content: [{ type: 'text' as const, text }] };
+            return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
         } catch (e) {
             return this.errorResponse('list', e instanceof Error ? e.message : String(e));
         }
@@ -349,13 +349,13 @@ Examples:
             const data = await this.query<FolderListContentsResponse>('folder', args);
             const recursiveNote = data.recursive ? ' (recursive)' : ' (shallow)';
             if (data.count === 0) {
-                return { content: [{ type: 'text' as const, text: `Folder "${data.folderName}"${recursiveNote} is empty.` }] };
+                return { content: [{ type: 'text' as const, text: `Folder "${data.folderName}"${recursiveNote} is empty.` }], structuredContent: data as unknown as Record<string, unknown> };
             }
             const lines = data.items.map((item) =>
                 `- \`${item.id}\` ${item.name} [${item.documentType}]${item.uuid ? ` · ${item.uuid}` : ''}`,
             );
             const text = `Folder Contents — "${data.folderName}"${recursiveNote}\n\n${lines.join('\n')}\n\nTotal: ${data.count}`;
-            return { content: [{ type: 'text' as const, text }] };
+            return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
         } catch (e) {
             return this.errorResponse('list-contents', e instanceof Error ? e.message : String(e));
         }

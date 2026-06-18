@@ -209,7 +209,7 @@ export class LightTool extends BaseTool {
       const text =
         `💡 **AmbientLight Created**\n\n${formatLightView(data.light)}\n\n` +
         `_Requested fields: ${Object.keys(data.requestedChanges).filter((k) => k !== 'action' && k !== 'sceneId').join(', ') || '(x/y only)'}_`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('create', e instanceof Error ? e.message : String(e));
     }
@@ -220,7 +220,7 @@ export class LightTool extends BaseTool {
       const data = await this.query<LightUpdateResponse>('light', args);
       const text =
         `✏️ **AmbientLight Updated**\n\n**Changed fields:** ${data.changedFields.join(', ')}\n\n${formatLightView(data.light)}`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('update', e instanceof Error ? e.message : String(e));
     }
@@ -231,7 +231,7 @@ export class LightTool extends BaseTool {
       const data = await this.query<LightDeleteResponse>('light', args);
       const text =
         `🗑️ **AmbientLight Deleted**\n\n**ID:** \`${data.deletedId}\`\n**Remaining lights on scene:** ${data.remainingLights}\n\n⚠️ Permanent.`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('delete', e instanceof Error ? e.message : String(e));
     }
@@ -240,7 +240,7 @@ export class LightTool extends BaseTool {
   private async handleGet(args: ArgsFor<'get'>) {
     try {
       const data = await this.query<LightGetResponse>('light', args);
-      return { content: [{ type: 'text' as const, text: formatLightView(data.light) }] };
+      return { content: [{ type: 'text' as const, text: formatLightView(data.light) }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('get', e instanceof Error ? e.message : String(e));
     }
@@ -254,22 +254,22 @@ export class LightTool extends BaseTool {
         const p = data as LightListPaginatedResponse;
         const lines = p.lights.map(formatLightListItem);
         const text = `💡 **AmbientLights** (page ${p.page} of ${p.pageCount}, ${p.total} total)\n\n${lines.join('\n') || '_(none)_'}`;
-        return { content: [{ type: 'text' as const, text }] };
+        return { content: [{ type: 'text' as const, text }], structuredContent: p as unknown as Record<string, unknown> };
       }
 
       if ('filterApplied' in data) {
         const c = data as LightListCountResponse;
         const text = `💡 **AmbientLight count**\n\n**Total:** ${c.total}${c.filterApplied ? '\n**Filter applied**' : ''}`;
-        return { content: [{ type: 'text' as const, text }] };
+        return { content: [{ type: 'text' as const, text }], structuredContent: c as unknown as Record<string, unknown> };
       }
 
       const bare = data as LightListBareResponse;
       if (bare.lights.length === 0) {
-        return { content: [{ type: 'text' as const, text: '💡 **No AmbientLights Found**' }] };
+        return { content: [{ type: 'text' as const, text: '💡 **No AmbientLights Found**' }], structuredContent: bare as unknown as Record<string, unknown> };
       }
       const lines = bare.lights.map(formatLightListItem);
       const text = `💡 **AmbientLights** (${bare.lights.length})\n\n${lines.join('\n')}`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: bare as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('list', e instanceof Error ? e.message : String(e));
     }

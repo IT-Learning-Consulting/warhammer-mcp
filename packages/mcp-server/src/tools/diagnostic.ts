@@ -249,6 +249,7 @@ export class DiagnosticTool extends BaseTool {
                 `Buffer: ${data.bufferSize}/200${data.bufferFull ? ' (full, FIFO eviction active)' : ''}.`,
             },
           ],
+          structuredContent: data as unknown as Record<string, unknown>,
         };
       }
 
@@ -268,6 +269,7 @@ export class DiagnosticTool extends BaseTool {
               `${lines.join('\n')}`,
           },
         ],
+        structuredContent: data as unknown as Record<string, unknown>,
       };
     } catch (e) {
       return this.errorResponse('recent-errors', e instanceof Error ? e.message : String(e));
@@ -307,7 +309,7 @@ export class DiagnosticTool extends BaseTool {
           if (keys.length > 20) lines.push(`- … (${keys.length - 20} more)`);
         }
       }
-      return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+      return { content: [{ type: 'text' as const, text: lines.join('\n') }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('world-issues', e instanceof Error ? e.message : String(e));
     }
@@ -339,7 +341,7 @@ export class DiagnosticTool extends BaseTool {
           `_Note: SupportDetails.generateSupportReport() unavailable — values derived from game.version / game.system / game.world._`,
         );
       }
-      return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+      return { content: [{ type: 'text' as const, text: lines.join('\n') }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('support-snapshot', e instanceof Error ? e.message : String(e));
     }
@@ -359,7 +361,7 @@ export class DiagnosticTool extends BaseTool {
           lines.push(`- \`${f.key}\` expected ${f.expected}, actual ${f.actual}`);
         }
       }
-      return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+      return { content: [{ type: 'text' as const, text: lines.join('\n') }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('validate-wfrp-config', e instanceof Error ? e.message : String(e));
     }
@@ -391,7 +393,7 @@ export class DiagnosticTool extends BaseTool {
           `_Counts-only mode (scope.type=world without confirmExpensive). Re-call with \`scope.confirmExpensive: true\` to see per-doc details._`,
         );
       }
-      return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+      return { content: [{ type: 'text' as const, text: lines.join('\n') }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('scan-broken-uuids', e instanceof Error ? e.message : String(e));
     }
@@ -423,7 +425,7 @@ export class DiagnosticTool extends BaseTool {
           `_Counts-only mode (scope.type=world without confirmExpensive). Re-call with \`scope.confirmExpensive: true\` for details._`,
         );
       }
-      return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+      return { content: [{ type: 'text' as const, text: lines.join('\n') }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('scan-career-refs', e instanceof Error ? e.message : String(e));
     }
@@ -471,7 +473,7 @@ export class DiagnosticTool extends BaseTool {
           `_Counts-only mode (scope.type=world without confirmExpensive). Re-call with \`scope.confirmExpensive: true\` for details._`,
         );
       }
-      return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+      return { content: [{ type: 'text' as const, text: lines.join('\n') }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('validate-ae-scripts', e instanceof Error ? e.message : String(e));
     }
@@ -517,7 +519,7 @@ export class DiagnosticTool extends BaseTool {
       if (ownerKeys.length > 0) {
         lines.push(``, `**Ownership:** ${ownerKeys.map((k) => `${k}=${data.ownership[k]}`).join(', ')}`);
       }
-      return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+      return { content: [{ type: 'text' as const, text: lines.join('\n') }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('inspect-document', e instanceof Error ? e.message : String(e));
     }
@@ -554,7 +556,7 @@ export class DiagnosticTool extends BaseTool {
         }
         if (sorted.length > 50) lines.push(`- … (${sorted.length - 50} more)`);
       }
-      return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+      return { content: [{ type: 'text' as const, text: lines.join('\n') }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('hook-inventory', e instanceof Error ? e.message : String(e));
     }
@@ -577,7 +579,7 @@ export class DiagnosticTool extends BaseTool {
         }
         if (data.modules.length > 100) lines.push(``, `… (${data.modules.length - 100} more)`);
       }
-      return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+      return { content: [{ type: 'text' as const, text: lines.join('\n') }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('module-inventory', e instanceof Error ? e.message : String(e));
     }
@@ -612,7 +614,7 @@ export class DiagnosticTool extends BaseTool {
         }
         if (settings.length > 50) lines.push(`- … (${settings.length - 50} more)`);
       }
-      return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+      return { content: [{ type: 'text' as const, text: lines.join('\n') }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('settings-inventory', e instanceof Error ? e.message : String(e));
     }

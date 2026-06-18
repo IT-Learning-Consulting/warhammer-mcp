@@ -255,7 +255,7 @@ export class DrawingTool extends BaseTool {
     try {
       const data = await this.query<DrawingCreateResponse>('drawing', args);
       const text = `**Drawing Created**\n\n${formatDrawingView(data.drawing)}`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('create', e instanceof Error ? e.message : String(e));
     }
@@ -266,7 +266,7 @@ export class DrawingTool extends BaseTool {
       const data = await this.query<DrawingUpdateResponse>('drawing', args);
       const text =
         `**Drawing Updated**\n\n**Changed fields:** ${data.changedFields.join(', ')}\n\n${formatDrawingView(data.drawing)}`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('update', e instanceof Error ? e.message : String(e));
     }
@@ -277,7 +277,7 @@ export class DrawingTool extends BaseTool {
       const data = await this.query<DrawingDeleteResponse>('drawing', args);
       const text =
         `**Drawing Deleted**\n\n**ID:** \`${data.deletedId}\`\n**Scene:** \`${data.sceneId}\`\n**Remaining drawings:** ${data.remainingDrawings}\n\n⚠️ Permanent.`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('delete', e instanceof Error ? e.message : String(e));
     }
@@ -286,7 +286,7 @@ export class DrawingTool extends BaseTool {
   private async handleGet(args: ArgsFor<'get'>) {
     try {
       const data = await this.query<DrawingGetResponse>('drawing', args);
-      return { content: [{ type: 'text' as const, text: formatDrawingView(data.drawing) }] };
+      return { content: [{ type: 'text' as const, text: formatDrawingView(data.drawing) }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('get', e instanceof Error ? e.message : String(e));
     }
@@ -299,18 +299,18 @@ export class DrawingTool extends BaseTool {
       // countOnly path: factory returns {total, filterApplied} with no drawings array.
       if (data.drawings === undefined) {
         const text = `**Drawing count**\n\n**Total:** ${data.total ?? 0}`;
-        return { content: [{ type: 'text' as const, text }] };
+        return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
       }
 
       if (data.drawings.length === 0) {
-        return { content: [{ type: 'text' as const, text: '**No Drawings Found**' }] };
+        return { content: [{ type: 'text' as const, text: '**No Drawings Found**' }], structuredContent: data as unknown as Record<string, unknown> };
       }
 
       const lines = data.drawings.map(formatDrawingListItem);
       const total = data.total ?? data.drawings.length;
       const pageInfo = data.page !== undefined ? ` (page ${data.page}, ${total} total)` : ` (${total})`;
       const text = `**Drawings**${pageInfo}\n\n${lines.join('\n')}`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('list', e instanceof Error ? e.message : String(e));
     }
@@ -321,7 +321,7 @@ export class DrawingTool extends BaseTool {
       const data = await this.query<DrawingDuplicateResponse>('drawing', args);
       const text =
         `**Drawing Duplicated**\n\n**Source:** \`${data.sourceId}\` → **New:** \`${data.drawing.id}\`\n\n${formatDrawingView(data.drawing)}`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('duplicate', e instanceof Error ? e.message : String(e));
     }

@@ -219,7 +219,7 @@ export class TemplateTool extends BaseTool {
     try {
       const data = await this.query<TemplateDuplicateResponse>('template', args);
       const text = `🧬 **MeasuredTemplate Duplicated**\n\n_From \`${data.sourceId}\`_\n\n${formatTemplateView(data.template)}`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('duplicate', e instanceof Error ? e.message : String(e));
     }
@@ -231,7 +231,7 @@ export class TemplateTool extends BaseTool {
       const text =
         `📐 **MeasuredTemplate Created**\n\n${formatTemplateView(data.template)}\n\n` +
         `_Requested fields: ${Object.keys(data.requestedChanges).filter((k) => k !== 'action' && k !== 'sceneId').join(', ') || '(x/y only)'}_`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('create', e instanceof Error ? e.message : String(e));
     }
@@ -242,7 +242,7 @@ export class TemplateTool extends BaseTool {
       const data = await this.query<TemplateUpdateResponse>('template', args);
       const text =
         `✏️ **MeasuredTemplate Updated**\n\n**Changed fields:** ${data.changedFields.join(', ')}\n\n${formatTemplateView(data.template)}`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('update', e instanceof Error ? e.message : String(e));
     }
@@ -253,7 +253,7 @@ export class TemplateTool extends BaseTool {
       const data = await this.query<TemplateDeleteResponse>('template', args);
       const text =
         `🗑️ **MeasuredTemplate Deleted**\n\n**ID:** \`${data.deletedId}\`\n**Scene:** \`${data.sceneId}\`\n**Remaining templates on scene:** ${data.remainingTemplates}\n\n⚠️ Permanent.`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('delete', e instanceof Error ? e.message : String(e));
     }
@@ -262,7 +262,7 @@ export class TemplateTool extends BaseTool {
   private async handleGet(args: ArgsFor<'get'>) {
     try {
       const data = await this.query<TemplateGetResponse>('template', args);
-      return { content: [{ type: 'text' as const, text: formatTemplateView(data.template) }] };
+      return { content: [{ type: 'text' as const, text: formatTemplateView(data.template) }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('get', e instanceof Error ? e.message : String(e));
     }
@@ -274,17 +274,17 @@ export class TemplateTool extends BaseTool {
 
       if (data.countOnly) {
         const text = `📐 **MeasuredTemplate count**\n\n**Total:** ${data.total}`;
-        return { content: [{ type: 'text' as const, text }] };
+        return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
       }
 
       if (data.templates.length === 0) {
-        return { content: [{ type: 'text' as const, text: '📐 **No MeasuredTemplates Found**' }] };
+        return { content: [{ type: 'text' as const, text: '📐 **No MeasuredTemplates Found**' }], structuredContent: data as unknown as Record<string, unknown> };
       }
 
       const pageCount = Math.ceil(data.total / data.pageSize);
       const lines = data.templates.map(formatTemplateListItem);
       const text = `📐 **MeasuredTemplates** (page ${data.page} of ${pageCount}, ${data.total} total)\n\n${lines.join('\n')}`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('list', e instanceof Error ? e.message : String(e));
     }

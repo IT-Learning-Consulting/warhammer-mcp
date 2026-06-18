@@ -285,7 +285,7 @@ Examples:
     private async handleAuditOrphans(args: ArgsFor<'audit-orphans'>) {
         try {
             const data = await this.query<AuditOrphansResponse>('cross-doc-fk', args);
-            return { content: [{ type: 'text' as const, text: formatAuditOrphansResponse(data) }] };
+            return { content: [{ type: 'text' as const, text: formatAuditOrphansResponse(data) }], structuredContent: data as unknown as Record<string, unknown> };
         } catch (e) {
             return this.errorResponse('audit-orphans', e instanceof Error ? e.message : String(e));
         }
@@ -294,7 +294,7 @@ Examples:
     private async handleAuditDocument(args: ArgsFor<'audit-document'>) {
         try {
             const data = await this.query<AuditDocumentResponse>('cross-doc-fk', args);
-            return { content: [{ type: 'text' as const, text: formatAuditDocumentResponse(data) }] };
+            return { content: [{ type: 'text' as const, text: formatAuditDocumentResponse(data) }], structuredContent: data as unknown as Record<string, unknown> };
         } catch (e) {
             return this.errorResponse('audit-document', e instanceof Error ? e.message : String(e));
         }
@@ -303,7 +303,7 @@ Examples:
     private async handleRepairOrphans(args: ArgsFor<'repair-orphans'>) {
         try {
             const data = await this.query<RepairOrphansResponse>('cross-doc-fk', args);
-            return { content: [{ type: 'text' as const, text: formatRepairOrphansResponse(data) }] };
+            return { content: [{ type: 'text' as const, text: formatRepairOrphansResponse(data) }], structuredContent: data as unknown as Record<string, unknown> };
         } catch (e) {
             return this.errorResponse('repair-orphans', e instanceof Error ? e.message : String(e));
         }

@@ -250,7 +250,7 @@ export class TileTool extends BaseTool {
     try {
       const data = await this.query<TileDuplicateResponse>('tile', args);
       const text = `🧬 **Tile Duplicated**\n\n_From \`${data.sourceId}\`_\n\n${formatTileView(data.tile)}`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('duplicate', e instanceof Error ? e.message : String(e));
     }
@@ -260,7 +260,7 @@ export class TileTool extends BaseTool {
     try {
       const data = await this.query<TileZOrderResponse>('tile', args);
       const text = `🔀 **Tile ${action}**\n\nsort now ${data.tile.sort}\n\n${formatTileView(data.tile)}`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse(action, e instanceof Error ? e.message : String(e));
     }
@@ -275,7 +275,7 @@ export class TileTool extends BaseTool {
       const text =
         `🟩 **Tile Created**\n\n${formatTileView(data.tile)}\n\n` +
         `_Requested fields: ${changedKeys}_`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('create', e instanceof Error ? e.message : String(e));
     }
@@ -286,7 +286,7 @@ export class TileTool extends BaseTool {
       const data = await this.query<TileUpdateResponse>('tile', args);
       const text =
         `✏️ **Tile Updated**\n\n**Changed fields:** ${data.changedFields.join(', ')}\n\n${formatTileView(data.tile)}`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('update', e instanceof Error ? e.message : String(e));
     }
@@ -297,7 +297,7 @@ export class TileTool extends BaseTool {
       const data = await this.query<TileDeleteResponse>('tile', args);
       const text =
         `🗑️ **Tile Deleted**\n\n**ID:** \`${data.deletedId}\`\n**Scene:** \`${data.sceneId}\`\n\n⚠️ Permanent.`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('delete', e instanceof Error ? e.message : String(e));
     }
@@ -306,7 +306,7 @@ export class TileTool extends BaseTool {
   private async handleGet(args: ArgsFor<'get'>) {
     try {
       const data = await this.query<TileGetResponse>('tile', args);
-      return { content: [{ type: 'text' as const, text: formatTileView(data.tile) }] };
+      return { content: [{ type: 'text' as const, text: formatTileView(data.tile) }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('get', e instanceof Error ? e.message : String(e));
     }
@@ -318,11 +318,11 @@ export class TileTool extends BaseTool {
 
       if (data.countOnly) {
         const text = `🟩 **Tile count**\n\n**Total:** ${data.total}`;
-        return { content: [{ type: 'text' as const, text }] };
+        return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
       }
 
       if (data.tiles.length === 0) {
-        return { content: [{ type: 'text' as const, text: '🟩 **No Tiles Found**' }] };
+        return { content: [{ type: 'text' as const, text: '🟩 **No Tiles Found**' }], structuredContent: data as unknown as Record<string, unknown> };
       }
 
       const lines = data.tiles.map(formatTileListItem);
@@ -330,7 +330,7 @@ export class TileTool extends BaseTool {
         ? ` (page ${data.page}, ${data.total} total)`
         : ` (${data.total})`;
       const text = `🟩 **Tiles**${pageInfo}\n\n${lines.join('\n')}`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('list', e instanceof Error ? e.message : String(e));
     }

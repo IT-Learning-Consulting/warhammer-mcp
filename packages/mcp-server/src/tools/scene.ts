@@ -319,7 +319,7 @@ export class SceneTool extends BaseTool {
       const text = `🎬 **Scene Created**\n\n${formatSceneView(data.scene)}\n\n_Requested fields: ${
         Object.keys(data.requestedChanges).filter((k) => k !== 'action').join(', ') || '(name only)'
       }_`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('create', e instanceof Error ? e.message : String(e));
     }
@@ -329,7 +329,7 @@ export class SceneTool extends BaseTool {
     try {
       const data = await this.query<SceneUpdateResponse>('scene', args);
       const text = `✏️ **Scene Updated**\n\n**Changed fields:** ${data.changedFields.join(', ')}\n\n${formatSceneView(data.scene)}`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('update', e instanceof Error ? e.message : String(e));
     }
@@ -339,7 +339,7 @@ export class SceneTool extends BaseTool {
     try {
       const data = await this.query<SceneDeleteResponse>('scene', args);
       const text = `🗑️ **Scene Deleted**\n\n**Name:** ${data.deletedName}\n**ID:** \`${data.deletedId}\`\n**Remaining scenes:** ${data.remainingScenes}\n\n⚠️ Permanent. All embedded tokens/walls/lights/notes/regions/sounds/drawings/templates/tiles removed.${formatAffectedDocs(data.affectedDocs)}`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('delete', e instanceof Error ? e.message : String(e));
     }
@@ -349,7 +349,7 @@ export class SceneTool extends BaseTool {
     try {
       const data = await this.query<SceneCloneResponse>('scene', args);
       const text = `🪞 **Scene Cloned**\n\n**Source:** ${data.source.name} (\`${data.source.id}\`)\n\n${formatSceneView(data.clone)}`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('clone', e instanceof Error ? e.message : String(e));
     }
@@ -361,7 +361,7 @@ export class SceneTool extends BaseTool {
       const text = `▶️ **Scene Activated**\n\n**Name:** ${data.activatedName}\n**ID:** \`${data.activatedId}\`\n${
         data.previousActiveId ? `**Previous active:** \`${data.previousActiveId}\`` : '_(no previous active scene)_'
       }`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('activate', e instanceof Error ? e.message : String(e));
     }
@@ -371,7 +371,7 @@ export class SceneTool extends BaseTool {
     try {
       const data = await this.query<SceneViewResponse>('scene', args);
       const text = `👁️ **Scene Viewed (local user)**\n\n**Name:** ${data.viewedName}\n**ID:** \`${data.viewedId}\`\n\n_(World-active state unchanged. Use 'activate' to set the game-wide active scene.)_`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('view', e instanceof Error ? e.message : String(e));
     }
@@ -381,7 +381,7 @@ export class SceneTool extends BaseTool {
     try {
       const data = await this.query<SceneThumbnailResponse>('scene', args);
       const text = `🖼️ **Thumbnail Regenerated**\n\n**Scene:** ${data.sceneName} (\`${data.sceneId}\`)\n**Dimensions:** ${data.width} × ${data.height}\n**Format:** ${data.format}\n**Data URL (truncated):** \`${data.thumbDataUrl.slice(0, 60)}...\` (${data.thumbDataUrl.length} chars total)`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('thumbnail', e instanceof Error ? e.message : String(e));
     }
@@ -401,7 +401,7 @@ export class SceneTool extends BaseTool {
           `- Linked: ${data.tokenSummary.hasActors}, Unlinked: ${data.tokenSummary.withoutActors}\n\n` +
           formatTokensSummary(data.tokens);
       }
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('get', e instanceof Error ? e.message : String(e));
     }
@@ -420,25 +420,25 @@ export class SceneTool extends BaseTool {
             `- **${s.name}**${s.active ? ' _(active)_' : ''} · \`${s.id}\` · ${s.width ?? '?'}×${s.height ?? '?'}`,
         );
         const text = `📋 **Scenes** (page ${p.page} of ${p.pageCount}, ${p.total} total)\n\n${lines.join('\n') || '_(no scenes)_'}`;
-        return { content: [{ type: 'text' as const, text }] };
+        return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
       }
       if ('filterApplied' in data) {
         const c = data as Extract<SceneListResponse, { filterApplied: string | null }>;
         const text = `📋 **Scene count**\n\n**Total:** ${c.total}${c.filterApplied ? `\n**Filter:** "${c.filterApplied}"` : ''}`;
-        return { content: [{ type: 'text' as const, text }] };
+        return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
       }
       const bare = data as Extract<SceneListResponse, { scenes: unknown[] }> & {
         scenes: Array<{ id: string; name: string; active: boolean; navigation: boolean; width: number | null; height: number | null; folder: string | null }>;
       };
       if (bare.scenes.length === 0) {
-        return { content: [{ type: 'text' as const, text: '📋 **No Scenes Found**' }] };
+        return { content: [{ type: 'text' as const, text: '📋 **No Scenes Found**' }], structuredContent: data as unknown as Record<string, unknown> };
       }
       const lines = bare.scenes.map(
         (s) =>
           `- **${s.name}**${s.active ? ' _(active)_' : ''} · \`${s.id}\` · ${s.width ?? '?'}×${s.height ?? '?'}`,
       );
       const text = `📋 **Scenes** (${bare.scenes.length})\n\n${lines.join('\n')}`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('list', e instanceof Error ? e.message : String(e));
     }
@@ -456,10 +456,10 @@ export class SceneTool extends BaseTool {
           .join('\n');
         const more = data.items.length > 25 ? `\n_…and ${data.items.length - 25} more_` : '';
         const text = `🔎 **Clear-layer preview — ${data.layer}**\n\n**Would delete ${data.count} doc(s)** on scene \`${data.sceneId}\`:\n${preview || '_(layer already empty)_'}${more}\n\n_Re-run with \`dryRun:false\` + \`confirm:true\` to delete._`;
-        return { content: [{ type: 'text' as const, text }] };
+        return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
       }
       const text = `🧹 **Layer cleared — ${data.layer}**\n\nDeleted **${data.count}** doc(s) on scene \`${data.sceneId}\`.`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('clear-layer', e instanceof Error ? e.message : String(e));
     }
@@ -469,7 +469,7 @@ export class SceneTool extends BaseTool {
     try {
       const data = await this.query<SceneResetFogResponse>('scene', args);
       const text = `🌫️ **Fog reset**\n\nScene \`${data.sceneId}\` — FogExploration docs remaining: **${data.fogDocsRemaining}**.`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('reset-fog', e instanceof Error ? e.message : String(e));
     }
@@ -479,7 +479,7 @@ export class SceneTool extends BaseTool {
     try {
       const data = await this.query<SceneLightingTransitionResponse>('scene', args);
       const text = `🌗 **Lighting transition**\n\nScene \`${data.sceneId}\` — darknessLevel now **${data.darknessLevel}** (target ${data.target}).`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('lighting-transition', e instanceof Error ? e.message : String(e));
     }
@@ -489,7 +489,7 @@ export class SceneTool extends BaseTool {
     try {
       const data = await this.query<ScenePreloadResponse>('scene', args);
       const text = `⏬ **Scene preloaded**\n\n**${data.sceneName}** (\`${data.sceneId}\`) pushed to all clients. _(Transient — no persisted state.)_`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('preload', e instanceof Error ? e.message : String(e));
     }
@@ -499,7 +499,7 @@ export class SceneTool extends BaseTool {
     try {
       const data = await this.query<SceneImportFromCompendiumResponse>('scene', args);
       const text = `📥 **Scene Imported**\n\nFrom pack \`${data.sourcePack}\`\n\n${formatSceneView(data.scene)}`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('import-from-compendium', e instanceof Error ? e.message : String(e));
     }

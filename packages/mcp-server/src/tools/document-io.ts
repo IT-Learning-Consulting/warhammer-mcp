@@ -191,21 +191,21 @@ IMPORTANT: This tool implements CLONE / TEMPLATE semantics, NOT backup/restore.
   private async handleExport(args: ArgsFor<'export'>) {
     try {
       const data = await this.query<ExportResponse>('document-io', args);
-      return { content: [{ type: 'text' as const, text: formatExport(data) }] };
+      return { content: [{ type: 'text' as const, text: formatExport(data) }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) { return this.errorResponse('export', e instanceof Error ? e.message : String(e)); }
   }
 
   private async handleImportAsNew(args: ArgsFor<'import-as-new'>) {
     try {
       const data = await this.query<ImportResponse>('document-io', args);
-      return { content: [{ type: 'text' as const, text: formatImport(data) }] };
+      return { content: [{ type: 'text' as const, text: formatImport(data) }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) { return this.errorResponse('import-as-new', e instanceof Error ? e.message : String(e)); }
   }
 
   private async handlePreview(args: ArgsFor<'preview'>) {
     try {
       const data = await this.query<PreviewResponse>('document-io', args);
-      return { content: [{ type: 'text' as const, text: formatPreview(data) }] };
+      return { content: [{ type: 'text' as const, text: formatPreview(data) }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) { return this.errorResponse('preview', e instanceof Error ? e.message : String(e)); }
   }
 }

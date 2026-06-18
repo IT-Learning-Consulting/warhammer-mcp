@@ -224,7 +224,7 @@ export class SoundTool extends BaseTool {
     try {
       const data = await this.query<SoundDuplicateResponse>('sound', args);
       const text = `🧬 **AmbientSound Duplicated**\n\n_From \`${data.sourceId}\`_\n\n${formatSoundView(data.sound)}`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('duplicate', e instanceof Error ? e.message : String(e));
     }
@@ -236,7 +236,7 @@ export class SoundTool extends BaseTool {
       const text =
         `🔊 **AmbientSound Created**\n\n${formatSoundView(data.sound)}\n\n` +
         `_Requested fields: ${Object.keys(data.requestedChanges).filter((k) => k !== 'action' && k !== 'sceneId').join(', ') || '(x/y only)'}_`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('create', e instanceof Error ? e.message : String(e));
     }
@@ -247,7 +247,7 @@ export class SoundTool extends BaseTool {
       const data = await this.query<SoundUpdateResponse>('sound', args);
       const text =
         `✏️ **AmbientSound Updated**\n\n**Changed fields:** ${data.changedFields.join(', ')}\n\n${formatSoundView(data.sound)}`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('update', e instanceof Error ? e.message : String(e));
     }
@@ -258,7 +258,7 @@ export class SoundTool extends BaseTool {
       const data = await this.query<SoundDeleteResponse>('sound', args);
       const text =
         `🗑️ **AmbientSound Deleted**\n\n**ID:** \`${data.deletedId}\`\n**Remaining sounds on scene:** ${data.remainingSounds}\n\n⚠️ Permanent.`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('delete', e instanceof Error ? e.message : String(e));
     }
@@ -267,7 +267,7 @@ export class SoundTool extends BaseTool {
   private async handleGet(args: ArgsFor<'get'>) {
     try {
       const data = await this.query<SoundGetResponse>('sound', args);
-      return { content: [{ type: 'text' as const, text: formatSoundView(data.sound) }] };
+      return { content: [{ type: 'text' as const, text: formatSoundView(data.sound) }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('get', e instanceof Error ? e.message : String(e));
     }
@@ -281,22 +281,22 @@ export class SoundTool extends BaseTool {
         const p = data as SoundListPaginatedResponse;
         const lines = p.sounds.map(formatSoundListItem);
         const text = `🔊 **AmbientSounds** (page ${p.page} of ${p.pageCount}, ${p.total} total)\n\n${lines.join('\n') || '_(none)_'}`;
-        return { content: [{ type: 'text' as const, text }] };
+        return { content: [{ type: 'text' as const, text }], structuredContent: p as unknown as Record<string, unknown> };
       }
 
       if ('filterApplied' in data) {
         const c = data as SoundListCountResponse;
         const text = `🔊 **AmbientSound count**\n\n**Total:** ${c.total}${c.filterApplied ? `\n**Filter applied:** ${c.filterApplied}` : ''}`;
-        return { content: [{ type: 'text' as const, text }] };
+        return { content: [{ type: 'text' as const, text }], structuredContent: c as unknown as Record<string, unknown> };
       }
 
       const bare = data as SoundListBareResponse;
       if (bare.sounds.length === 0) {
-        return { content: [{ type: 'text' as const, text: '🔊 **No AmbientSounds Found**' }] };
+        return { content: [{ type: 'text' as const, text: '🔊 **No AmbientSounds Found**' }], structuredContent: bare as unknown as Record<string, unknown> };
       }
       const lines = bare.sounds.map(formatSoundListItem);
       const text = `🔊 **AmbientSounds** (${bare.sounds.length})\n\n${lines.join('\n')}`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: bare as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('list', e instanceof Error ? e.message : String(e));
     }
