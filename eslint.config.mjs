@@ -108,6 +108,48 @@ export default tseslint.config(
     },
   },
 
+  // 4b - Phase 13 (R13.2) hygiene-sweep advisory rules. WARN-only — they NEVER gate the build
+  //      (`npm run build` runs no lint step; lint-ratchet enforces the complexity caps ONLY, via its own
+  //      self-contained config). They flag, for organic cleanup, the magic strings/numbers R13.2 did not
+  //      mechanically migrate: residual inline module-id literals (the +27 requireModuleActive(...) /
+  //      game.modules.get(...) sites the acceptance left alone) and raw numeric caps. Scoped to
+  //      foundry-module src; constants/ (the named-constant home) + tests are exempt.
+  //      Uses @typescript-eslint/no-magic-numbers (TS-aware superset of core no-magic-numbers — ignores
+  //      numeric-literal types/enums that the core rule false-flags on .ts).
+  {
+    files: ['packages/foundry-module/src/**/*.ts'],
+    ignores: ['**/constants/**', ...TEST_GLOBS],
+    rules: {
+      'no-restricted-syntax': [
+        'warn',
+        {
+          selector: "CallExpression[callee.name='requireModuleActive'] > Literal[value]",
+          message:
+            'Inline module-id literal — import the named constant from constants/moduleIds.js (Phase 13 R13.2).',
+        },
+        {
+          selector: "CallExpression[callee.property.name='get'][callee.object.property.name='modules'] > Literal[value]",
+          message:
+            'Inline module-id literal in game.modules.get(...) — import from constants/moduleIds.js (Phase 13 R13.2).',
+        },
+      ],
+      '@typescript-eslint/no-magic-numbers': [
+        'warn',
+        {
+          ignore: [-1, 0, 1, 2],
+          ignoreArrayIndexes: true,
+          ignoreDefaultValues: true,
+          ignoreClassFieldInitialValues: true,
+          ignoreEnums: true,
+          ignoreNumericLiteralTypes: true,
+          ignoreReadonlyClassProperties: true,
+          enforceConst: false,
+          detectObjects: false,
+        },
+      ],
+    },
+  },
+
   // 5 - Type-aware linting for PRODUCTION .ts only (R0.5). Existing violations were fixed, so these stay ERROR.
   {
     files: ['**/*.ts'],

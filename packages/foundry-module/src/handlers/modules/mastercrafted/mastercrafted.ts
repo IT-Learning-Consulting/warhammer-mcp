@@ -28,10 +28,10 @@ import { ErrorTokens } from '@foundry-mcp/shared';
 import { ModuleMastercraftedInput, type ModuleMastercraftedInputType } from './schemas.js';
 import { notify } from '../../../notify.js';
 import { verifyDocWrite, verifyFlagWrite } from '../../../utils/verifyWrite.js';
+import { MASTERCRAFTED as MODULE_ID } from '../../../constants/moduleIds.js';
 
 type Envelope<T> = { success: true; data: T } | { success: false; error: string };
 
-const MODULE_ID = 'mastercrafted';
 const RECIPE_PAGE_TYPE = 'mastercrafted.mastercrafted';
 
 function isGM(): boolean {

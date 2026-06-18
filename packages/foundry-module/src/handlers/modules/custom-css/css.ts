@@ -20,10 +20,11 @@ import { requireModuleActive } from '../_shared/require-module-active.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
 import { ModuleCssInput, type ModuleCssInputType } from './schemas.js';
 import { notify } from '../../../notify.js';
+import { CUSTOM_CSS as MODULE_ID } from '../../../constants/moduleIds.js';
+import { MODULE_CUSTOM_CSS } from '../../../constants/socketEvents.js';
 
 type Envelope<T> = { success: true; data: T } | { success: false; error: string };
 
-const MODULE_ID = 'custom-css';
 const SENTINEL = '/* Custom CSS */';
 
 // ── Local helpers ──────────────────────────────────────────────────────────────
@@ -72,7 +73,7 @@ function reapplyAndBroadcast(): void {
   }
   // Payload-free broadcast: each other client re-reads settings and re-injects.
   try {
-    (globalThis as any).game?.socket?.emit?.('module.custom-css');
+    (globalThis as any).game?.socket?.emit?.(MODULE_CUSTOM_CSS);
   } catch {
     // socket best-effort.
   }

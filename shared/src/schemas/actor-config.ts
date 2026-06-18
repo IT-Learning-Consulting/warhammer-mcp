@@ -14,10 +14,9 @@
 
 import { z } from 'zod';
 import { ActorId } from './branded-ids.js';
+import { FOUNDRY_ID } from './primitives.js';
 import { LightDataSchema } from './light-data.js';
 import { TextureDataSchema } from './texture-data.js';
-
-const FOUNDRY_ID = z.string().min(1);
 
 // TOKEN_DISPOSITIONS: SECRET=-2, HOSTILE=-1, NEUTRAL=0, FRIENDLY=1
 const DispositionEnum = z.number().int().min(-2).max(1);

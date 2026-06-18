@@ -50,6 +50,7 @@ import {
 } from '@foundry-mcp/shared';
 import { wrappedWrite } from '../transaction-manager.js';
 import { notify } from '../notify.js';
+import { SMALL_PAGE_SIZE } from '../constants/toolLimits.js';
 import { verifyDocWrite } from '../utils/verifyWrite.js';
 import {
   validateGMAccess,
@@ -231,7 +232,7 @@ export async function listStacks(data: unknown): Promise<Envelope<any>> {
     };
   }
   if (input.page !== undefined || input.pageSize !== undefined) {
-    const pageSize = input.pageSize ?? 20;
+    const pageSize = input.pageSize ?? SMALL_PAGE_SIZE;
     const page = input.page ?? 1;
     const pageCount = Math.max(1, Math.ceil(total / pageSize));
     const offset = (page - 1) * pageSize;
@@ -460,7 +461,7 @@ export async function listCards(data: unknown): Promise<Envelope<any>> {
   let pageSize: number | undefined;
   let pageCount: number | undefined;
   if (input.page !== undefined || input.pageSize !== undefined) {
-    pageSize = input.pageSize ?? 20;
+    pageSize = input.pageSize ?? SMALL_PAGE_SIZE;
     page = input.page ?? 1;
     pageCount = Math.max(1, Math.ceil(total / pageSize));
     const offset = (page - 1) * pageSize;

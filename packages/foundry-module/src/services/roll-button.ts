@@ -12,6 +12,7 @@
 // plus a data-attribute sentinel, replacing the previous leaky jQuery click re-binding.
 
 import { MODULE_ID } from '../constants.js';
+import { MODULE_WARHAMMER_MCP } from '../constants/socketEvents.js';
 import { notify } from '../notify.js';
 import { getRollButtonMessageId } from '../utils/roll-button-store.js';
 
@@ -320,7 +321,7 @@ export class RollButtonService {
         // Send socket request to GM
         if (game.socket) {
           // BUG-274: game.user may be null; use optional access.
-          game.socket.emit('module.warhammer-mcp', {
+          game.socket.emit(MODULE_WARHAMMER_MCP, {
             type: 'requestMessageUpdate',
             buttonId: buttonId,
             userId: userId,

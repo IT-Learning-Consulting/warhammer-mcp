@@ -2,6 +2,8 @@
 // Branded Foundry document-ID types (Phase 1 — R1.1) — exported first so every
 // schema module and tool can import them through the barrel.
 export * from './branded-ids.js';
+// Phase 13 — R13.3: canonical polymorphic (un-branded) doc-id primitive (FOUNDRY_ID).
+export * from './primitives.js';
 export * from './actor.js';
 export * from './item.js';
 export * from './compendium.js';

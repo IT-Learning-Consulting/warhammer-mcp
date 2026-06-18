@@ -19,6 +19,7 @@ import {
 } from '@foundry-mcp/shared';
 import { wrappedWrite } from '../transaction-manager.js';
 import { notify } from '../notify.js';
+import { MAX_PAGE_SIZE } from '../constants/toolLimits.js';
 
 // ── GM gate helper (inline, mirrors folder.ts + diagnostic.ts pattern) ────────
 
@@ -58,7 +59,7 @@ function listWorldItems(input: Extract<ItemDirectoryToolInputType, { action: 'li
     : allItems;
 
   const page = input.page ?? 1;
-  const pageSize = input.pageSize ?? 100;
+  const pageSize = input.pageSize ?? MAX_PAGE_SIZE;
   const total = filtered.length;
   const start = (page - 1) * pageSize;
   const paged = filtered.slice(start, start + pageSize);

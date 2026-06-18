@@ -1,6 +1,11 @@
-import { MODULE_ID, ERROR_MESSAGES } from './constants.js';
+import { ERROR_MESSAGES } from './constants.js';
 import { notify } from './notify.js';
 import { findActorByIdentifier } from './utils/actor-lookup.js';
+// Phase 13: the pure sanitize cluster (4 functions) was extracted from FoundryDataAccess to a shared
+// util — the surviving READ methods below still sanitize their output through it; the relocated
+// audit-log writer (now a private QueryHandlers method) imports the same util. Carry-in: the audit-log
+// writer + the 4 sanitize methods no longer live on FoundryDataAccess.
+import { sanitizeData } from './utils/sanitize-data.js';
 // Phase 7 (R7.1): shared document/folder/observer helpers extracted VERBATIM to services/shared/.
 // Used by the surviving effect READS here (getActiveEffectByName / listActiveEffects) + the actor/item/
 // effect mutation methods until they migrate to their services in 7.4-7.6 (which import the same helpers).
@@ -70,7 +75,8 @@ interface WorldUser {
 // (now-promoted) ActorService — is gone. FoundryDataAccess has no constructor dependencies.
 
 export class FoundryDataAccess {
-  private moduleId: string = MODULE_ID;
+  // Phase 13: the `moduleId` field was removed — its only users (the sanitize cluster's console.warn
+  // labels + the relocated audit-log writer's flag namespace) were extracted/relocated, leaving it dead.
   // Phase 5 (R4.3): Contract — the player-rolls + roll-button + player-lookup cluster has fully left
   // FoundryDataAccess. QueryHandlers (the composition layer) now owns those three services and the live
   // call sites (queries.ts handleRequestPlayerRolls + main.ts roll-button hooks/socket) call them directly.
@@ -82,8 +88,7 @@ export class FoundryDataAccess {
   // promoted to QueryHandlers and their 16 facade delegates deleted. The compendiumSearch ctor dependency
   // (which only fed the promoted ActorService) was also dropped, leaving FoundryDataAccess dependency-free.
   // The READ surfaces stay here (listActorItems, getCompendiumDocumentFull, getActiveEffectByName,
-  // listActiveEffects, getCharacterInfo, listActors, getWfrp4eConfig, applyDamage, validateFoundryState,
-  // auditLog).
+  // listActiveEffects, getCharacterInfo, listActors, getWfrp4eConfig, applyDamage, validateFoundryState).
 
   /**
    * Get character/actor information by name or ID
@@ -120,13 +125,13 @@ export class FoundryDataAccess {
       name: actor.name || '',
       type: actor.type,
       ...(actor.img ? { img: actor.img } : {}),
-      system: this.sanitizeData(actor.system),
+      system: sanitizeData(actor.system),
       items: Array.from(actor.items || []).map((item: any) => ({
         id: item.id,
         name: item.name,
         type: item.type,
         ...(item.img ? { img: item.img } : {}),
-        system: this.sanitizeData(item.system),
+        system: sanitizeData(item.system),
       })),
       effects: Array.from(actor.effects || []).map((effect: any) => ({
         id: effect.id,
@@ -200,134 +205,6 @@ export class FoundryDataAccess {
   }
 
   /**
-   * Sanitize data to remove sensitive information and make it JSON-safe
-   */
-  private sanitizeData(data: any): any {
-    if (data === null || data === undefined) {
-      return data;
-    }
-
-    if (typeof data !== 'object') {
-      return data;
-    }
-
-    try {
-      // removeSensitiveFields now returns a sanitized copy
-      const sanitized = this.removeSensitiveFields(data);
-
-      // Use custom JSON serializer to avoid deprecated property warnings
-      const jsonString = this.safeJSONStringify(sanitized);
-      return JSON.parse(jsonString);
-    } catch (error) {
-      console.warn(`[${this.moduleId}] Failed to sanitize data:`, error);
-      return {};
-    }
-  }
-
-  /**
-   * Remove sensitive fields from data object with circular reference protection
-   * Returns a sanitized copy instead of modifying the original
-   */
-  private removeSensitiveFields(obj: any, visited: WeakSet<object> = new WeakSet(), depth: number = 0): any {
-    // Handle primitives
-    if (obj === null || typeof obj !== 'object') {
-      return obj;
-    }
-
-    // Safety depth limit to prevent extremely deep recursion
-    if (depth > 50) {
-      console.warn(`[${this.moduleId}] Sanitization depth limit reached at depth ${depth}`);
-      return { $ref: 'maxDepth', depth };
-    }
-
-    // Check for circular reference
-    if (visited.has(obj)) {
-      return { $ref: 'cycle' };
-    }
-
-    // Mark this object as visited
-    visited.add(obj);
-
-    try {
-      // Handle arrays
-      if (Array.isArray(obj)) {
-        return obj.map(item => this.removeSensitiveFields(item, visited, depth + 1));
-      }
-
-      // Create a new sanitized object
-      const sanitized: any = {};
-
-      for (const [key, value] of Object.entries(obj)) {
-        // Skip sensitive and problematic fields entirely
-        if (this.isSensitiveOrProblematicField(key)) {
-          continue;
-        }
-
-        // Skip most private properties except essential ones
-        if (key.startsWith('_') && !['_id', '_stats', '_source'].includes(key)) {
-          continue;
-        }
-
-        // Recursively sanitize the value
-        sanitized[key] = this.removeSensitiveFields(value, visited, depth + 1);
-      }
-
-      return sanitized;
-
-    } catch (error) {
-      console.warn(`[${this.moduleId}] Error during sanitization at depth ${depth}:`, error);
-      return { $ref: 'sanitizationFailed', error: error instanceof Error ? error.message : 'Unknown' };
-    }
-  }
-
-  /**
-   * Check if a field should be excluded from sanitized output
-   */
-  private isSensitiveOrProblematicField(key: string): boolean {
-    // BUG-386: 'key' removed from this list. In Foundry persisted document data the field literally
-    // named `key` is legitimate, load-bearing data — most notably the ActiveEffect change target path
-    // ({ key: "system.characteristics.s.initial", value, mode }) — never a credential. Stripping it
-    // made correctly-keyed AE changes project as keyless, producing a false "BROKEN/keyless" diagnosis
-    // that nearly triggered 15 destructive "fixes" on a locked pack. Foundry documents carry no secret
-    // `key`; genuine credentials are covered by 'password'/'token'/'secret'/'auth'/'credential'/'session'.
-    const sensitiveKeys = [
-      'password', 'token', 'secret', 'auth',
-      'credential', 'session', 'cookie', 'private'
-    ];
-
-    const problematicKeys = [
-      'parent', '_parent', 'collection', 'apps', 'document', '_document',
-      'constructor', 'prototype', '__proto__', 'valueOf', 'toString'
-    ];
-
-    // Skip deprecated ability save properties that trigger warnings
-    const deprecatedKeys = [
-      'save' // Skip the deprecated 'save' property on abilities
-    ];
-
-    return sensitiveKeys.includes(key) || problematicKeys.includes(key) || deprecatedKeys.includes(key);
-  }
-
-  /**
-   * Custom JSON serializer that handles Foundry objects safely
-   */
-  private safeJSONStringify(obj: any): string {
-    try {
-      return JSON.stringify(obj, (key, value) => {
-        // Skip deprecated properties during JSON serialization
-        if (key === 'save' && typeof value === 'object' && value !== null) {
-          // If this looks like a deprecated ability save object, skip it
-          return undefined;
-        }
-        return value;
-      });
-    } catch (error) {
-      console.warn(`[${this.moduleId}] JSON stringify failed, using fallback:`, error);
-      return '{}';
-    }
-  }
-
-  /**
    * Validate that Foundry is ready and world is active
    */
   validateFoundryState(): void {
@@ -341,40 +218,6 @@ export class FoundryDataAccess {
 
     if (!game.user) {
       throw new Error('No active user');
-    }
-  }
-
-
-  /**
-   * Audit log for write operations
-   */
-  // Phase 6 (R5.2): public so QueryHandlers can wire the promoted ScenePlacementService's auditLog seam
-  // to this method (scene-placement audit entries still land in the same world-flag log).
-  public auditLog(operation: string, data: any, result: 'success' | 'failure', error?: string): void {
-    // Always audit write operations (no setting required)
-    const logEntry = {
-      timestamp: new Date().toISOString(),
-      operation,
-      user: game.user?.name || 'Unknown',
-      userId: game.user?.id || 'unknown',
-      world: game.world?.id || 'unknown',
-      data: this.sanitizeData(data),
-      result,
-      error,
-    };
-
-
-    // Store in flags for persistence (optional)
-    if (game.world && (game.world as any).setFlag) {
-      const auditLogs = (game.world as any).getFlag(this.moduleId, 'auditLogs') || [];
-      auditLogs.push(logEntry);
-
-      // Keep only last 100 entries to prevent bloat
-      if (auditLogs.length > 100) {
-        auditLogs.splice(0, auditLogs.length - 100);
-      }
-
-      (game.world as any).setFlag(this.moduleId, 'auditLogs', auditLogs);
     }
   }
 
@@ -414,8 +257,8 @@ export class FoundryDataAccess {
       img: (document as any).img || undefined,
       pack: packId,
       packLabel: pack.metadata.label,
-      system: this.sanitizeData((document as any).system || {}),
-      fullData: this.sanitizeData(document.toObject()),
+      system: sanitizeData((document as any).system || {}),
+      fullData: sanitizeData(document.toObject()),
     };
 
     // Add items if the actor has them
@@ -425,7 +268,7 @@ export class FoundryDataAccess {
         name: item.name,
         type: item.type,
         img: item.img || undefined,
-        system: this.sanitizeData(item.system || {}),
+        system: sanitizeData(item.system || {}),
       }));
     }
 
@@ -436,7 +279,7 @@ export class FoundryDataAccess {
         name: effect.name || effect.label || 'Unknown Effect',
         icon: effect.icon || undefined,
         disabled: effect.disabled || false,
-        duration: this.sanitizeData(effect.duration || {}),
+        duration: sanitizeData(effect.duration || {}),
       }));
     }
 

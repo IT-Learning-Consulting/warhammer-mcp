@@ -24,10 +24,9 @@
 import { requireModuleActive } from '../_shared/require-module-active.js';
 import { ModuleChatCommanderInput, type ModuleChatCommanderInputType } from './schemas.js';
 import { notify } from '../../../notify.js';
+import { CHAT_COMMANDS as MODULE_ID } from '../../../constants/moduleIds.js';
 
 type Envelope<T> = { success: true; data: T } | { success: false; error: string };
-
-const MODULE_ID = '_chatcommands';
 const ADV_MACROS = 'advanced-macros';
 // BUG-383 (live-smoke correction): the built-in WFRP4e chat commands (/avail, /char, /cond,
 // /corruption, /credit, /exp, /fear, /name, /pay, /prop, /table, /terror, /trade, /travel) are

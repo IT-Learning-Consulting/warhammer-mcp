@@ -22,10 +22,10 @@ import { requireModuleActive } from '../_shared/require-module-active.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
 import { ModuleArmouryInput, type ModuleArmouryInputType } from './schemas.js';
 import { notify } from '../../../notify.js';
+import { FORIEN_ARMOURY as MODULE_ID } from '../../../constants/moduleIds.js';
 
 type Envelope<T> = { success: true; data: T } | { success: false; error: string };
 
-const MODULE_ID = 'forien-armoury';
 const PACK_ID = 'forien-armoury.forien-armoury';
 
 // ── Local helpers ──────────────────────────────────────────────────────────────

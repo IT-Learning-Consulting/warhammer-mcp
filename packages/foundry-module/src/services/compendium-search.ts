@@ -13,6 +13,7 @@ import type {
   CreatureIndexReader,
   EnhancedCreatureIndex,
 } from '../service-interfaces.js';
+import { SEARCH_RESULT_LIMIT, TOP_PACKS_LIMIT } from '../constants/toolLimits.js';
 
 export class CompendiumSearchService {
   constructor(
@@ -60,7 +61,7 @@ export class CompendiumSearchService {
     // Full per-subtype indexing is Phase 4; this filter stops cross-type results leaking.
     const finalResults = itemType ? results.filter(r => r.type === itemType) : results;
 
-    return finalResults.slice(0, 50); // Final limit
+    return finalResults.slice(0, SEARCH_RESULT_LIMIT); // Final limit
   }
 
   /**
@@ -449,7 +450,7 @@ export class CompendiumSearchService {
 
     // Get unique pack information
     const uniquePacks = Array.from(new Set(enhancedCreatures.map(c => c.pack)));
-    const topPacks = uniquePacks.slice(0, 5).map(packId => {
+    const topPacks = uniquePacks.slice(0, TOP_PACKS_LIMIT).map(packId => {
       const sampleCreature = enhancedCreatures.find(c => c.pack === packId);
       return {
         id: packId,

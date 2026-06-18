@@ -1,4 +1,5 @@
 import { MODULE_ID } from './constants.js';
+import { MODULE_WARHAMMER_MCP } from './constants/socketEvents.js';
 import { SocketBridge } from './socket-bridge.js';
 import { QueryHandlers } from './queries.js';
 import { ModuleSettings } from './settings.js';
@@ -617,7 +618,7 @@ Hooks.once('ready', async () => {
     // Phase 10 (R10.1): routed through lifecycle.registerSocket so cleanup()/teardownAll() calls
     // socket.off — previously this listener was never removed and survived reconnects.
 
-    lifecycle.registerSocket('main', 'module.warhammer-mcp', async (data: any) => {
+    lifecycle.registerSocket('main', MODULE_WARHAMMER_MCP, async (data: any) => {
 
       try {
         // Handle ChatMessage update requests (GM only)
@@ -834,7 +835,7 @@ async function runWfrpTestAction(a: any, actor: any, scope: any, g: any): Promis
         // GM so those cards are authored GM-side and gmroll-whispered; the player never sees them.
         const amActiveGM = game.user?.isGM && game.users?.activeGM?.isSelf;
         if (game.users?.activeGM && !amActiveGM) {
-          game.socket?.emit('module.warhammer-mcp', { type: 'wfrpContractDisease', actorId: actor.id, uuid: a.uuid, name: a.name, alias: a.alias });
+          game.socket?.emit(MODULE_WARHAMMER_MCP, { type: 'wfrpContractDisease', actorId: actor.id, uuid: a.uuid, name: a.name, alias: a.alias });
         } else {
           // GM client (or no GM online — fallback): apply locally. wfrp4e _onCreate auto-starts incubation.
           const src = await g.fromUuid(a.uuid);

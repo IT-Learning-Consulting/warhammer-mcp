@@ -27,10 +27,10 @@ import { requireModuleActive } from '../_shared/require-module-active.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
 import { ModulePartyResourcesInput, type ModulePartyResourcesInputType } from './schemas.js';
 import { notify } from '../../../notify.js';
+import { PARTY_RESOURCES as MODULE_ID } from '../../../constants/moduleIds.js';
 
 type Envelope<T> = { success: true; data: T } | { success: false; error: string };
 
-const MODULE_ID = 'fvtt-party-resources';
 const LIST_KEY = 'resource_list';
 
 // ── Local helpers ──────────────────────────────────────────────────────────────

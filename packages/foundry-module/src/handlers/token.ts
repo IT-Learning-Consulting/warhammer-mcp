@@ -51,6 +51,7 @@ import { wrappedWrite } from '../transaction-manager.js';
 import { buildOperationReceipt } from '../services/shared/operation-receipt.js';
 import { getEmbeddedOrThrow } from '../utils/getEmbeddedOrThrow.js';
 import { notify } from '../notify.js';
+import { DEFAULT_PAGE_SIZE } from '../constants/toolLimits.js';
 // R2.2 dedup: canonical deepStripUndefined (was a local byte-identical copy).
 import { deepStripUndefined } from '../utils/embeddedCRUDFactory.js';
 
@@ -429,7 +430,7 @@ export async function listTokens(data: unknown): Promise<Envelope<TokenListRespo
 
     const total = tokens.length;
     const page = input.page ?? 1;
-    const pageSize = input.pageSize ?? 50;
+    const pageSize = input.pageSize ?? DEFAULT_PAGE_SIZE;
     const items = input.countOnly ? [] : tokens.slice((page - 1) * pageSize, page * pageSize);
 
     return {

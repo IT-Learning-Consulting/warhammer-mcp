@@ -6,7 +6,8 @@
 import { MODULE_ID } from '../constants.js';
 import { notify } from '../notify.js';
 import * as lifecycle from '../utils/lifecycle.js';
-import type { CreatureIndexReader, EnhancedCreatureIndex, PersistentEnhancedIndex, PackFingerprint } from '../service-interfaces.js';
+import { FOUNDRY_DOCUMENT_TYPES } from '../constants/foundryDocumentTypes.js';
+import type { CreatureIndexReader, EnhancedCreatureIndex, PersistentEnhancedIndex, PackFingerprint, SearchIndexStatus } from '../service-interfaces.js';
 
 /**
  * Persistent Enhanced Creature Index System
@@ -80,6 +81,38 @@ export class PersistentCreatureIndex implements CreatureIndexReader {
         message: `Failed to rebuild index: ${error instanceof Error ? error.message : 'Unknown error'}`
       };
     }
+  }
+
+  /**
+   * Report the persisted-index status without forcing a rebuild (R13.1). Loads the persisted
+   * index file (if any) and computes `stale` via the SAME isIndexValid() path the read path
+   * (getEnhancedIndex) uses, so the reported freshness matches what the next query will do.
+   *
+   * Invalidation model (the five hook triggers + the two read-time checks):
+   *   1. createDocument / 2. updateDocument / 3. deleteDocument on a compendium actor whose
+   *      type ∈ {npc, character, creature} → invalidateIndex() (gated on the `autoRebuildIndex`
+   *      setting). Creature-type is included as of R13.1 (BUG-357 added creature-type actors to
+   *      the build at extractEnhancedDataFromPack; the gate previously omitted it, so editing a
+   *      bestiary creature left the index silently stale).
+   *   4. createCompendium / 5. deleteCompendium of an `Actor` pack → invalidateIndex().
+   *   Read-time (isIndexValid): the persisted index is rejected (→ rebuild) when its
+   *      metadata.version ≠ INDEX_VERSION, when any current Actor pack's fingerprint
+   *      (id-label-documentCount checksum) differs from the saved one, or when a saved pack no
+   *      longer exists. Module activate/deactivate changes the Actor pack-SET and is detected
+   *      lazily here (a new pack has no saved fingerprint → stale; a removed pack → stale).
+   *   Caveat: the fingerprint is count-based, so an in-place stat edit that does not change a
+   *      pack's document count is NOT fingerprint-detected (the hook-driven invalidation above is).
+   */
+  async getStatus(): Promise<SearchIndexStatus> {
+    const persisted = await this.loadPersistedIndex();
+    const stale = !persisted || !this.isIndexValid(persisted);
+    return {
+      builtAt: persisted?.metadata.timestamp ?? null,
+      stale,
+      version: this.INDEX_VERSION,
+      totalCreatures: persisted?.metadata.totalCreatures ?? 0,
+      packCount: persisted?.metadata.packFingerprints.size ?? 0,
+    };
   }
 
   /** Load persisted index from JSON file */
@@ -161,7 +194,7 @@ export class PersistentCreatureIndex implements CreatureIndexReader {
     }
 
     // Check each pack fingerprint
-    const actorPacks = Array.from(game.packs?.values() || []).filter((pack: any) => pack.metadata?.type === 'Actor');
+    const actorPacks = Array.from(game.packs?.values() || []).filter((pack: any) => pack.metadata?.type === FOUNDRY_DOCUMENT_TYPES.ACTOR);
 
     for (const pack of actorPacks) {
       const currentFingerprint = this.generatePackFingerprint(pack as any);
@@ -194,37 +227,48 @@ export class PersistentCreatureIndex implements CreatureIndexReader {
 
     // Listen for compendium document changes
     lifecycle.registerHook('creature-index', 'createDocument', (document: any) => {
-      if (document.pack && (document.type === 'npc' || document.type === 'character')) {
+      if (this.isIndexedCompendiumActor(document)) {
         void this.invalidateIndex();
       }
     });
 
     lifecycle.registerHook('creature-index', 'updateDocument', (document: any) => {
-      if (document.pack && (document.type === 'npc' || document.type === 'character')) {
+      if (this.isIndexedCompendiumActor(document)) {
         void this.invalidateIndex();
       }
     });
 
     lifecycle.registerHook('creature-index', 'deleteDocument', (document: any) => {
-      if (document.pack && (document.type === 'npc' || document.type === 'character')) {
+      if (this.isIndexedCompendiumActor(document)) {
         void this.invalidateIndex();
       }
     });
 
     // Listen for pack creation/deletion
     lifecycle.registerHook('creature-index', 'createCompendium', (pack: any) => {
-      if (pack.metadata.type === 'Actor') {
+      if (pack.metadata.type === FOUNDRY_DOCUMENT_TYPES.ACTOR) {
         void this.invalidateIndex();
       }
     });
 
     lifecycle.registerHook('creature-index', 'deleteCompendium', (pack: any) => {
-      if (pack.metadata.type === 'Actor') {
+      if (pack.metadata.type === FOUNDRY_DOCUMENT_TYPES.ACTOR) {
         void this.invalidateIndex();
       }
     });
 
     this.hooksRegistered = true;
+  }
+
+  /**
+   * True for a compendium document whose type participates in the creature index.
+   * R13.1: includes 'creature' — extractEnhancedDataFromPack indexes npc/character/creature
+   * (BUG-357), so all three must trigger invalidation; the gate previously omitted 'creature',
+   * leaving the index silently stale after a bestiary-creature edit.
+   */
+  private isIndexedCompendiumActor(document: any): boolean {
+    return Boolean(document?.pack)
+      && (document.type === 'npc' || document.type === 'character' || document.type === 'creature');
   }
 
   /** Deregister all five cache-invalidation hooks (Phase 10 R10.1). Aborts the
@@ -341,7 +385,7 @@ export class PersistentCreatureIndex implements CreatureIndexReader {
 
     try {
 
-      const actorPacks = Array.from(game.packs?.values() || []).filter((pack: any) => pack.metadata?.type === 'Actor');
+      const actorPacks = Array.from(game.packs?.values() || []).filter((pack: any) => pack.metadata?.type === FOUNDRY_DOCUMENT_TYPES.ACTOR);
       const enhancedCreatures: EnhancedCreatureIndex[] = [];
       const packFingerprints = new Map<string, PackFingerprint>();
 

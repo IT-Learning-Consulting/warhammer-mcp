@@ -34,8 +34,8 @@ import { notify } from '../../../notify.js';
 import { verifyDocWrite } from '../../../utils/verifyWrite.js';
 // R2.2 dedup: canonical deepStripUndefined (was a local byte-identical copy; browser-safe — tree-shaken, same bundle as verifyWrite/notify).
 import { deepStripUndefined } from '../../../utils/embeddedCRUDFactory.js';
+import { MONKS_ACTIVE_TILES as MATT_MODULE_ID } from '../../../constants/moduleIds.js';
 
-const MATT_MODULE_ID = 'monks-active-tiles';
 const MATT_FLAG = 'monks-active-tiles';
 
 // ── Envelope ──────────────────────────────────────────────────────────────────

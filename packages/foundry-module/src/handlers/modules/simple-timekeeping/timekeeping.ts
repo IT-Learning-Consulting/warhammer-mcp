@@ -25,10 +25,10 @@ import { requireModuleActive } from '../_shared/require-module-active.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
 import { ModuleTimekeepingInput, type ModuleTimekeepingInputType } from './schemas.js';
 import { notify } from '../../../notify.js';
+import { SIMPLE_TIMEKEEPING as MODULE_ID } from '../../../constants/moduleIds.js';
 
 type Envelope<T> = { success: true; data: T } | { success: false; error: string };
 
-const MODULE_ID = 'simple-timekeeping';
 const SECONDS_PER_DAY = 86400;
 
 // Imperial Calendar moon cycles (days). Phase is best-effort from worldTime day-count (offset-naive).

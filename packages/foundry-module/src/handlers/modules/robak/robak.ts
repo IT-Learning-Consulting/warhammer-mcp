@@ -18,10 +18,9 @@
 import { requireModuleActive } from '../_shared/require-module-active.js';
 import { ModuleRobakInput, type ModuleRobakInputType } from './schemas.js';
 import { notify } from '../../../notify.js';
+import { ROBAK_MACROS_AND_MORE as MODULE_ID } from '../../../constants/moduleIds.js';
 
 type Envelope<T> = { success: true; data: T } | { success: false; error: string };
-
-const MODULE_ID = 'wfrp4e-macros-and-more';
 
 // `SocketHandlers` is a wfrp4e *global lexical* binding — a top-level `class` declared in the
 // CLASSIC-script wfrp4e.js (system.json `scripts:[...]`, no esmodules). Such a binding is resolvable

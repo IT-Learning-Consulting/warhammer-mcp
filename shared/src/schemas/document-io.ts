@@ -16,8 +16,7 @@
 
 import { z } from 'zod';
 import { FolderId } from './branded-ids.js';
-
-const FOUNDRY_ID = z.string().min(1);
+import { FOUNDRY_ID } from './primitives.js';
 
 // Authoritative 8-type documentType enum (PRD R8.1).
 // Collection map lives in cross-doc-fk.ts getDocCollection().

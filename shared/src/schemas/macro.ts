@@ -19,10 +19,9 @@
 
 import { z } from 'zod';
 import { MacroId, FolderId, ActorId, TokenId, PackId } from './branded-ids.js';
+import { FOUNDRY_ID } from './primitives.js';
 
 // ── Shared primitives ──────────────────────────────────────────────────────
-
-const FOUNDRY_ID = z.string().min(1);
 
 // Phase 0 probe: live StringField.choices on Macro.schema.fields.scope.
 const MACRO_SCOPE = z.enum(['global', 'actors', 'actor']);

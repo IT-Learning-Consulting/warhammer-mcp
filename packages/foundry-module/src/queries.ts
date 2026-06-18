@@ -6,6 +6,10 @@ import { PersistentCreatureIndex, CompendiumSearchService, RollRequestService, R
 import { wrappedWrite } from './transaction-manager.js';
 import { assertAllowedActorFields } from './services/shared/actor-field-allowlist.js';
 import { notify } from './notify.js';
+// Phase 13 (auditLog re-narrow carry-in): auditLog relocated here off the DA facade; the sanitize cluster
+// it used became a shared pure util, and the ring-buffer cap a named tool-limit constant.
+import { sanitizeData } from './utils/sanitize-data.js';
+import { AUDIT_LOG_RING_BUFFER } from './constants/toolLimits.js';
 // Phase 1 mcp_crud_expansion — polymorphic ownership handlers.
 import {
   setDocumentOwnership as setDocumentOwnershipHandler,
@@ -251,8 +255,8 @@ export class QueryHandlers {
   public conditions: ConditionsService;
   // Phase 6 (R5.2): scene-placement promoted to QueryHandlers and ctor-injected into FoundryDataAccess so
   // external handlers (handlers/scene.ts, handlers/token.ts) and the 2 internal self-callers
-  // (createActors/createActor) share one instance. Its auditLog seam binds to dataAccess.auditLog so
-  // scene-placement audit entries are unchanged (HC1).
+  // (createActors/createActor) share one instance. Its auditLog seam binds to this.auditLog (Phase 13:
+  // relocated off the DA facade) so scene-placement audit entries are unchanged (HC1).
   public scenePlacement: ScenePlacementService;
   // Phase 7 (R6.3): Contract — template-apply promoted off FoundryDataAccess to QueryHandlers (mirrors the
   // Phase-6 combat/conditions promotion). The 2 template handlers below call this directly now; the facade
@@ -275,7 +279,7 @@ export class QueryHandlers {
     // this.dataAccess lazily (only invoked at runtime, after construction completes).
     this.scenePlacement = new ScenePlacementService(
       validateState,
-      (operation, data, result, error) => this.dataAccess.auditLog(operation, data, result, error),
+      (operation, data, result, error) => this.auditLog(operation, data, result, error),
     );
     // Phase 8 (R7.3): scenePlacement + compendiumSearch injections dropped — FoundryDataAccess no longer
     // constructs the actor/item/effect services (promoted to QueryHandlers below), so it is dependency-free.
@@ -287,17 +291,52 @@ export class QueryHandlers {
     this.conditions = new ConditionsService(validateState);
     this.templateApply = new TemplateApplyService(validateState);
     // Phase 8 (R7.3): promoted actor/item/effect services. Callbacks reference this.dataAccess lazily
-    // (invoked only at runtime, after construction completes) and reuse the surviving DA facade methods
-    // (auditLog + getCompendiumDocumentFull stay public on FoundryDataAccess).
+    // (invoked only at runtime, after construction completes) and reuse the surviving DA facade method
+    // (getCompendiumDocumentFull stays public on FoundryDataAccess; auditLog relocated to this.auditLog
+    // in Phase 13).
     this.effectsService = new EffectsService(validateState);
     this.itemService = new ItemService(validateState);
     this.actorService = new ActorService(
       this.scenePlacement,
       this.compendiumSearch,
       validateState,
-      (operation, data, result, error) => this.dataAccess.auditLog(operation, data, result, error),
+      (operation, data, result, error) => this.auditLog(operation, data, result, error),
       (packId, documentId) => this.dataAccess.getCompendiumDocumentFull(packId, documentId),
     );
+  }
+
+  /**
+   * Audit log for write operations. Phase 13 (carry-in): relocated from FoundryDataAccess so the DA no
+   * longer exposes a public auditLog — the only callers forcing it public were the two service auditLog
+   * seams in the constructor above. Writes to the `auditLogs` world flag (ring buffer, last
+   * AUDIT_LOG_RING_BUFFER entries); sanitizes via the shared util the cluster was extracted to. Behavior
+   * is byte-identical to the former DA method.
+   */
+  private auditLog(operation: string, data: any, result: 'success' | 'failure', error?: string): void {
+    // Always audit write operations (no setting required)
+    const logEntry = {
+      timestamp: new Date().toISOString(),
+      operation,
+      user: game.user?.name || 'Unknown',
+      userId: game.user?.id || 'unknown',
+      world: game.world?.id || 'unknown',
+      data: sanitizeData(data),
+      result,
+      error,
+    };
+
+    // Store in flags for persistence (optional)
+    if (game.world && (game.world as any).setFlag) {
+      const auditLogs = (game.world as any).getFlag(MODULE_ID, 'auditLogs') || [];
+      auditLogs.push(logEntry);
+
+      // Keep only last AUDIT_LOG_RING_BUFFER entries to prevent bloat
+      if (auditLogs.length > AUDIT_LOG_RING_BUFFER) {
+        auditLogs.splice(0, auditLogs.length - AUDIT_LOG_RING_BUFFER);
+      }
+
+      (game.world as any).setFlag(MODULE_ID, 'auditLogs', auditLogs);
+    }
   }
 
   /**

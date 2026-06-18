@@ -24,9 +24,11 @@
 // at the use site — an umbrella "WorldDocumentId" brand would falsely imply cross-type
 // substitutability.
 //
-// FOUNDRY_ID is intentionally NOT exported here. The 23 local `const FOUNDRY_ID`
-// redeclarations are migrated field-by-field to named brands in this phase; centralizing
-// the remaining (polymorphic) ones into a shared primitive is deferred to PRD Phase 13.
+// FOUNDRY_ID is intentionally NOT exported here. Phase 1 migrated ~19 of the original
+// local `const FOUNDRY_ID` redeclarations to named brands; the 4 genuinely-polymorphic
+// ones that remained were centralized into the shared `FOUNDRY_ID` primitive in
+// `primitives.ts` in PRD Phase 13 (R13.3). Branded ids still inline `z.string().min(1)`
+// — the brand is the distinguishing value, so they do NOT compose the primitive.
 
 import { z } from 'zod';
 

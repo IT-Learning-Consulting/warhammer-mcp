@@ -56,6 +56,24 @@ export interface PersistentEnhancedIndex {
   creatures: EnhancedCreatureIndex[];
 }
 
+/**
+ * Observable status of the persisted creature search index (R13.1). Returned by
+ * PersistentCreatureIndex.getStatus() so diagnostics/tools can report cache freshness
+ * without forcing a (possibly expensive) rebuild.
+ */
+export interface SearchIndexStatus {
+  /** metadata.timestamp of the persisted index (ms epoch), or null if no index file is built yet. */
+  builtAt: number | null;
+  /** True when there is no valid persisted index — the next getEnhancedIndex() will rebuild. */
+  stale: boolean;
+  /** The current INDEX_VERSION the service builds against. */
+  version: string;
+  /** Creature count in the persisted index (0 when none built / stale). */
+  totalCreatures: number;
+  /** Number of pack fingerprints recorded in the persisted index (0 when none built). */
+  packCount: number;
+}
+
 export interface CompendiumSearchResult {
   id: string;
   name: string;

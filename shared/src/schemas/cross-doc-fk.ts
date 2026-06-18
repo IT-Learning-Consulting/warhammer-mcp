@@ -15,8 +15,7 @@
 // NO `z.any` / `<any>` anywhere in new code.
 
 import { z } from 'zod';
-
-const FOUNDRY_ID = z.string().min(1);
+import { FOUNDRY_ID } from './primitives.js';
 
 // World + embedded doc types Phase 10 catalog covers. Walker iterates these.
 // Source: foundry_docs/CONST/variables/WORLD_DOCUMENT_TYPES.md + embedded subset

@@ -24,10 +24,9 @@ import { ErrorTokens } from '@foundry-mcp/shared';
 import { ModulePatrolInput, type ModulePatrolInputType } from './schemas.js';
 import { notify } from '../../../notify.js';
 import { verifyFlagWrite } from '../../../utils/verifyWrite.js';
+import { PATROL as MODULE_ID } from '../../../constants/moduleIds.js';
 
 type Envelope<T> = { success: true; data: T } | { success: false; error: string };
-
-const MODULE_ID = 'patrol';
 const ALL_FLAGS = ['enablePatrol', 'enableSpotting', 'makePatroller', 'multiPath', 'patrolPathName', 'pathNodeIndex', 'pathID'];
 
 function isGM(): boolean {

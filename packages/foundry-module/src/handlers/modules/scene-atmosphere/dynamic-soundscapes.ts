@@ -55,13 +55,13 @@
 //   - DP-16 post-write verify
 
 import { notify } from '../../../notify.js';
+import { DYNAMIC_SOUNDSCAPES as MODULE_ID } from '../../../constants/moduleIds.js';
 import type { ModuleSceneAtmosphereInputType } from './schemas.js';
 
 type Envelope<T> = { success: true; data: T } | { success: false; error: string };
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const MODULE_ID = 'dynamic-soundscapes';
 const SOUNDSCAPES_FOLDER = 'Soundscapes';
 /** Playlist mode: DISABLED (-1) — required by the module for all soundscape playlists. */
 const PLAYLIST_MODE_DISABLED = -1;

@@ -31,10 +31,9 @@ import { ErrorTokens } from '@foundry-mcp/shared';
 import { ModuleGmtoolkitInput, type ModuleGmtoolkitInputType } from './schemas.js';
 import { notify } from '../../../notify.js';
 import { verifyDocWrite } from '../../../utils/verifyWrite.js';
+import { WFRP_GM_TOOLKIT as MODULE_ID } from '../../../constants/moduleIds.js';
 
 type Envelope<T> = { success: true; data: T } | { success: false; error: string };
-
-const MODULE_ID = 'wfrp4e-gm-toolkit';
 
 // ── Local helpers ──────────────────────────────────────────────────────────────
 
