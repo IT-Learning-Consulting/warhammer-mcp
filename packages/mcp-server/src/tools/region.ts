@@ -331,7 +331,7 @@ export class RegionTool extends BaseTool {
   private async handleGet(args: ArgsFor<'get'>) {
     try {
       const data = await this.query<RegionGetResponse>('region', args);
-      return { content: [{ type: 'text' as const, text: formatRegionView(data.region) }] };
+      return { content: [{ type: 'text' as const, text: formatRegionView(data.region) }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('get', e instanceof Error ? e.message : String(e));
     }
@@ -343,17 +343,17 @@ export class RegionTool extends BaseTool {
 
       if (data.countOnly) {
         const text = `🗺️ **Region count**\n\n**Total:** ${data.total}${data.filterApplied ? `\n**Filter:** \`${data.filterApplied}\`` : ''}`;
-        return { content: [{ type: 'text' as const, text }] };
+        return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
       }
 
       if (data.regions.length === 0) {
-        return { content: [{ type: 'text' as const, text: '🗺️ **No Regions Found**' }] };
+        return { content: [{ type: 'text' as const, text: '🗺️ **No Regions Found**' }], structuredContent: data as unknown as Record<string, unknown> };
       }
 
       const pageInfo = `page ${data.page} · ${data.total} total`;
       const lines = data.regions.map(formatRegionListItem);
       const text = `🗺️ **Regions** (${pageInfo})\n\n${lines.join('\n')}`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('list', e instanceof Error ? e.message : String(e));
     }

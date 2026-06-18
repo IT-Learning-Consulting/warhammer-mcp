@@ -480,12 +480,14 @@ Examples:
     try {
       const data = await this.query<T>('module-matt', args);
       // Phase 11 (R11.1): mutation actions attach structuredContent (the raw data);
-      // content[0].text === fmt(data) is unchanged from before. Reads stay content-only.
+      // content[0].text === fmt(data) is unchanged from before.
+      // BUG-395 round 2: read actions now also attach structuredContent so structured-field
+      // probes don't false-FAIL. Text content is unchanged; errors/MODULE_NOT_ACTIVE stay text-only.
       if (MATT_MUTATION_ACTIONS.has(action)) {
         MattMutationOutput.parse(data as Record<string, unknown>);
         return { content: [{ type: 'text' as const, text: fmt(data) }], structuredContent: data };
       }
-      return text(fmt(data));
+      return { content: [{ type: 'text' as const, text: fmt(data) }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse(action, e instanceof Error ? e.message : String(e));
     }

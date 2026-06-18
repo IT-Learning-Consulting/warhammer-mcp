@@ -347,7 +347,7 @@ export class TokenTool extends BaseTool {
   private async handleGet(args: ArgsFor<'get'>) {
     try {
       const data = await this.query<TokenGetResponse>('token', args);
-      return { content: [{ type: 'text' as const, text: formatTokenView(data.token) }] };
+      return { content: [{ type: 'text' as const, text: formatTokenView(data.token) }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('get', e instanceof Error ? e.message : String(e));
     }
@@ -359,7 +359,7 @@ export class TokenTool extends BaseTool {
 
       if (data.countOnly) {
         const text = `🎭 **Token count**\n\n**Total:** ${data.total}${data.filterApplied ? `\n**Filter:** \`${data.filterApplied}\`` : ''}`;
-        return { content: [{ type: 'text' as const, text }] };
+        return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
       }
 
       if (data.tokens.length === 0) {
@@ -369,7 +369,7 @@ export class TokenTool extends BaseTool {
       const pageInfo = `page ${data.page} · ${data.tokens.length} of ${data.total} total`;
       const lines = data.tokens.map(formatTokenListItem);
       const text = `🎭 **Tokens** (${pageInfo})\n\n${lines.join('\n')}`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('list', e instanceof Error ? e.message : String(e));
     }

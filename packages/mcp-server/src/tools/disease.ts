@@ -129,6 +129,7 @@ export class DiseaseTool extends BaseTool {
             text: `🦠 **Diseases on actor \`${data.actorId}\`** (${data.total})\n\n${lines.join('\n')}`,
           },
         ],
+        structuredContent: data as unknown as Record<string, unknown>,
       };
     } catch (e) {
       return this.errorResponse('list', e instanceof Error ? e.message : String(e));
@@ -146,6 +147,7 @@ export class DiseaseTool extends BaseTool {
               text: `✅ **${args.actorId} resisted ${data.diseaseName}** — Endurance test passed.`,
             },
           ],
+          structuredContent: data as unknown as Record<string, unknown>,
         };
       }
       const d = data.disease;
@@ -163,6 +165,7 @@ export class DiseaseTool extends BaseTool {
                 : ''),
           },
         ],
+        structuredContent: data as unknown as Record<string, unknown>,
       };
     } catch (e) {
       return this.errorResponse('contract', e instanceof Error ? e.message : String(e));
@@ -182,6 +185,7 @@ export class DiseaseTool extends BaseTool {
               `Duration: **${data.duration.value}** ${data.duration.unit}${data.duration.active ? ' _(active)_' : ''}`,
           },
         ],
+        structuredContent: data as unknown as Record<string, unknown>,
       };
     } catch (e) {
       return this.errorResponse('start', e instanceof Error ? e.message : String(e));
@@ -200,6 +204,7 @@ export class DiseaseTool extends BaseTool {
               `Incubation: ${data.incubation.value} · Duration: ${data.duration.value}${data.duration.active ? ' (active)' : ''}`,
           },
         ],
+        structuredContent: data as unknown as Record<string, unknown>,
       };
     } catch (e) {
       return this.errorResponse('increment', e instanceof Error ? e.message : String(e));
@@ -218,6 +223,7 @@ export class DiseaseTool extends BaseTool {
               `Incubation: ${data.incubation.value} · Duration: ${data.duration.value}${data.duration.active ? ' (active)' : ''}`,
           },
         ],
+        structuredContent: data as unknown as Record<string, unknown>,
       };
     } catch (e) {
       return this.errorResponse('decrement', e instanceof Error ? e.message : String(e));
@@ -236,7 +242,7 @@ export class DiseaseTool extends BaseTool {
           text += `\n\n⚠️ New disease created: **${data.newDiseaseName}** \`${data.newDiseaseId}\``;
         }
       }
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('finish-duration', e instanceof Error ? e.message : String(e));
     }
@@ -255,6 +261,7 @@ export class DiseaseTool extends BaseTool {
               `Active effects: ${data.activeEffectCount}`,
           },
         ],
+        structuredContent: data as unknown as Record<string, unknown>,
       };
     } catch (e) {
       return this.errorResponse('apply-symptom', e instanceof Error ? e.message : String(e));
@@ -271,6 +278,7 @@ export class DiseaseTool extends BaseTool {
             text: `💊 **${data.diseaseName} cured** — removed from actor \`${data.actorId}\`.`,
           },
         ],
+        structuredContent: data as unknown as Record<string, unknown>,
       };
     } catch (e) {
       return this.errorResponse('cure', e instanceof Error ? e.message : String(e));

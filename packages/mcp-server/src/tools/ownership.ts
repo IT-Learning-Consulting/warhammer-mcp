@@ -286,6 +286,7 @@ export class OwnershipTool extends BaseTool {
             `**Permission:** ${this.getLevelName(level)}\n\n` +
             `${this.getLevelDescription(level)}`,
         }],
+        structuredContent: data as unknown as Record<string, unknown>,
       };
     } catch (e) {
       return this.errorResponse("assign", e instanceof Error ? e.message : String(e));
@@ -311,6 +312,7 @@ export class OwnershipTool extends BaseTool {
           type: "text",
           text: `🚫 **Ownership Removed**\n\n**Document:** ${input.documentType} (${data.resolvedId ?? input.id ?? input.name})\n**User:** ${input.userId}\n\nNo permissions for this user on this document.`,
         }],
+        structuredContent: data as unknown as Record<string, unknown>,
       };
     } catch (e) {
       return this.errorResponse("remove", e instanceof Error ? e.message : String(e));
@@ -337,6 +339,7 @@ export class OwnershipTool extends BaseTool {
             text: `📋 **Ownership for ${input.documentType} (${data.resolvedId ?? input.id ?? input.name})**\n\n` +
               `_${data.reason ?? "no ownership"}_ — ${input.documentType} has no per-user ownership map (ADR-024).`,
           }],
+          structuredContent: data as unknown as Record<string, unknown>,
         };
       }
 
@@ -352,7 +355,7 @@ export class OwnershipTool extends BaseTool {
           body += `${this.getLevelIcon(lvl as number)} **${userId}**: ${this.getLevelName(lvl as number)}\n`;
         }
       }
-      return { content: [{ type: "text", text: body }] };
+      return { content: [{ type: "text", text: body }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse("list", e instanceof Error ? e.message : String(e));
     }
@@ -379,7 +382,7 @@ export class OwnershipTool extends BaseTool {
           body += `  - ❌ ${JSON.stringify(f.target)}: ${f.error}\n`;
         }
       }
-      return { content: [{ type: "text", text: body }] };
+      return { content: [{ type: "text", text: body }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse("bulk-set", e instanceof Error ? e.message : String(e));
     }
@@ -403,6 +406,7 @@ export class OwnershipTool extends BaseTool {
             `**Document:** ${input.documentType} (${data.resolvedId ?? input.id ?? input.name})\n` +
             `All per-user entries cleared; default restored to NONE.`,
         }],
+        structuredContent: data as unknown as Record<string, unknown>,
       };
     } catch (e) {
       return this.errorResponse("reset", e instanceof Error ? e.message : String(e));

@@ -284,7 +284,7 @@ export class DiceRollTools extends BaseTool {
         `- **Result:** ${data.result}`;
       if (data.terms.length) text += `\n- **Terms:**\n${termLines}`;
       if (data.messageId) text += `\n- **Message:** \`${data.messageId}\``;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('roll', e instanceof Error ? e.message : String(e));
     }
@@ -294,7 +294,7 @@ export class DiceRollTools extends BaseTool {
     try {
       const data = await this.query<DiceRollValidateResponse>('dice-roll', args);
       const text = `🎲 **Validate** \`${data.formula}\`\n\n- **Valid:** ${data.valid ? '✅ yes' : '❌ no'}`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('validate', e instanceof Error ? e.message : String(e));
     }
@@ -308,7 +308,7 @@ export class DiceRollTools extends BaseTool {
         `- **Mean:** ${data.mean.toFixed(2)}\n` +
         `- **Min:** ${data.min}\n` +
         `- **Max:** ${data.max}`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('simulate', e instanceof Error ? e.message : String(e));
     }

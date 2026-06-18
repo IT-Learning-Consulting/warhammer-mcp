@@ -153,7 +153,7 @@ export class KeybindingTools extends BaseTool {
         .join('\n');
       const text =
         `⌨️ **Keybindings**${scope} — ${data.total} action(s)\n\n${lines || '_(none)_'}`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('list', e instanceof Error ? e.message : String(e));
     }
@@ -168,7 +168,7 @@ export class KeybindingTools extends BaseTool {
         `- **Default:** ${fmtBindings(data.editable)}\n` +
         `- **Precedence:** ${data.precedence}${data.restricted ? ' · GM-only' : ''}` +
         (data.hint ? `\n- **Hint:** ${data.hint}` : '');
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('get', e instanceof Error ? e.message : String(e));
     }
@@ -178,7 +178,7 @@ export class KeybindingTools extends BaseTool {
     try {
       const data = await this.query<KeybindingSetResponse>('keybinding', args);
       const text = `⌨️ **Set** \`${data.id}\` → ${fmtBindings(data.bindings)} _(client only)_`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('set', e instanceof Error ? e.message : String(e));
     }
@@ -188,7 +188,7 @@ export class KeybindingTools extends BaseTool {
     try {
       const data = await this.query<KeybindingResetActionResponse>('keybinding', args);
       const text = `⌨️ **Reset** \`${data.id}\` → ${fmtBindings(data.bindings)} _(defaults, client only)_`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('reset-action', e instanceof Error ? e.message : String(e));
     }
@@ -203,10 +203,10 @@ export class KeybindingTools extends BaseTool {
           `⌨️ **Reset-all preview** — ${data.count} customized action(s) would reset:\n\n` +
           `${items || '_(none — all already at defaults)_'}\n\n` +
           `Pass \`confirm:true\` to execute (irreversible, client only).`;
-        return { content: [{ type: 'text' as const, text }] };
+        return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
       }
       const text = `⌨️ **Reset-all** — restored ${data.count} action(s) to defaults _(client only)_`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('reset-all', e instanceof Error ? e.message : String(e));
     }
@@ -225,7 +225,7 @@ export class KeybindingTools extends BaseTool {
       const scope = args.precedenceFilter ? ` (${args.precedenceFilter} tier)` : '';
       const text =
         `⌨️ **Keybinding conflicts**${scope} — ${data.total} collision(s)\n\n${lines || '_(none)_'}`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('find-conflicts', e instanceof Error ? e.message : String(e));
     }

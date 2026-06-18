@@ -162,7 +162,14 @@ Example: { action: "list-commands", filter: { module: "chat-commander-wfrp4e" } 
   private async run<T>(action: string, args: Record<string, unknown>, fmt: (d: T) => string) {
     try {
       const data = await this.query<T>('module-chat-commander', args);
-      return { content: [{ type: 'text' as const, text: fmt(data) }], structuredContent: data as Record<string, unknown> };
+      // BUG-397: a nullable read (get-command miss → data:null) must NOT emit
+      // `structuredContent: null` — the MCP result schema requires a record (optional
+      // permits `undefined`, not `null`) and backend.ts only passes a result through
+      // untouched when structuredContent is present, so omitting it double-wraps. Emit a
+      // `{found:false}` record on a miss; the text block still renders "command not found".
+      const structured: Record<string, unknown> =
+        data === null || data === undefined ? { found: false } : (data as Record<string, unknown>);
+      return { content: [{ type: 'text' as const, text: fmt(data) }], structuredContent: structured };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (msg.includes(ErrorTokens.MODULE_NOT_ACTIVE)) return moduleNotActiveContent('module-chat-commander', msg);
