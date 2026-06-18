@@ -108,6 +108,14 @@ export class ApplyTemplateToTokenTool extends BaseTool {
               },
               additionalProperties: false,
             },
+            dryRun: {
+              type: 'boolean',
+              description:
+                'Phase 12 (R12.1): preview-only. When true, returns the planned name change, characteristic ' +
+                'advances, the items that WOULD be added, and the token-rename (WRITE #3) it WOULD perform — ' +
+                'performing zero writes. Unpinned group/specialisation/spell picks are randomised; pin them ' +
+                'via preResolvedChoices for a deterministic preview.',
+            },
           },
           required: ['sceneId', 'tokenId', 'templateUuid'],
         },
@@ -123,10 +131,27 @@ export class ApplyTemplateToTokenTool extends BaseTool {
       tokenId: parsed.tokenId,
       templateUuid: parsed.templateUuid,
       hasPreResolved: !!parsed.preResolvedChoices,
+      dryRun: !!parsed.dryRun,
     });
     const data = await this.query<Record<string, unknown>>('applyTemplateToToken', parsed);
     ApplyTemplateToTokenOutput.parse(data);
     const d = data as any;
+    // Phase 12 R12.1: dryRun preview includes the WRITE #3 token-rename that WOULD be performed.
+    if (d?.dryRun) {
+      const deltas = Object.entries(d.characteristicDeltas ?? {})
+        .map(([k, v]) => `${k} +${v}`)
+        .join(', ');
+      const itemCount = Array.isArray(d.writes)
+        ? (d.writes.find((w: any) => w?.op === 'createEmbeddedDocuments')?.itemCount ?? 0)
+        : 0;
+      const renameNote = d.tokenRename?.wouldRename
+        ? `rename token to "${d.tokenRename.plannedName}"`
+        : 'leave token name unchanged';
+      const text = `[DRY RUN] apply-template-to-token ${d?.templateName ?? d?.templateId ?? ''} → token ${d?.tokenId ?? ''} ` +
+        `(${d?.actorName ?? d?.actorId ?? ''}) WOULD: ${renameNote}; advance ${deltas || 'no characteristics'}; ` +
+        `add ${itemCount} item(s). No writes performed.`;
+      return { content: [{ type: 'text' as const, text }], structuredContent: data };
+    }
     const applied = d?.applied?.itemsByType ?? {};
     const text = `Applied template ${d?.templateName ?? d?.templateId ?? ''} to token ${d?.tokenId ?? ''} (${d?.actorName ?? d?.actorId ?? ''}): ` +
       `${applied.skill ?? 0} skills, ${applied.talent ?? 0} talents, ` +

@@ -499,6 +499,65 @@ describe('dataAccess.applyTemplate — wildcard (Any) resolution (BUG-051)', () 
   });
 });
 
+describe('dataAccess.applyTemplate — Phase 12 dryRun (R12.1)', () => {
+  it('dryRun:true returns a plan preview and performs ZERO writes', async () => {
+    const qh = makeHandlers();
+    const actor = makeActor({ id: 'act-1', name: 'Skeleton', type: 'creature' });
+    (globalThis as any).game.actors = new Map([['act-1', actor]]);
+    const template = makeTemplate({
+      alterName: { pre: 'Wight', post: '' },
+      characteristics: { ws: 15 },
+      skills: [{ name: 'Intimidate', advances: 20 }],
+    });
+    (globalThis as any).warhammer.utility.findItemId = async () => template;
+
+    const result = await qh.templateApply.applyTemplate({ actorId: 'act-1', templateUuid: 'x', dryRun: true });
+
+    expect(result.dryRun).toBe(true);
+    expect(result.newName).toBe('Wight Skeleton');
+    expect(result.characteristicDeltas.ws).toBe(15);
+    expect(Array.isArray(result.writes)).toBe(true);
+    expect(result.note).toMatch(/Preview only/);
+    // The whole point of dryRun — no actor.update, no createEmbeddedDocuments.
+    expect(actor.__updates).toHaveLength(0);
+    expect(actor.__creates).toHaveLength(0);
+    // dryRun carries no operation receipt (no writes to record).
+    expect(result.operationId).toBeUndefined();
+  });
+
+  it('projects planned items to {name,type} summaries (bounded preview, not full snapshots)', async () => {
+    const qh = makeHandlers();
+    const actor = makeActor({ id: 'act-1', name: 'Skeleton', type: 'creature' });
+    (globalThis as any).game.actors = new Map([['act-1', actor]]);
+    const template = makeTemplate({ skills: [{ name: 'Intimidate', advances: 20 }] });
+    (globalThis as any).warhammer.utility.findItemId = async () => template;
+
+    const result = await qh.templateApply.applyTemplate({ actorId: 'act-1', templateUuid: 'x', dryRun: true });
+    const createWrite = result.writes.find((w: any) => w.op === 'createEmbeddedDocuments');
+    expect(createWrite.itemCount).toBeGreaterThan(0);
+    expect(createWrite.items[0]).toEqual(expect.objectContaining({ name: expect.any(String), type: expect.any(String) }));
+  });
+});
+
+describe('dataAccess.applyTemplate — Phase 12 operation receipt (R12.2)', () => {
+  it('a real apply returns operationId + createdDocumentIds (= item ids) + updatedDocumentIds ([actorId])', async () => {
+    const qh = makeHandlers();
+    const actor = makeActor({ id: 'act-1', name: 'Skeleton', type: 'creature' });
+    (globalThis as any).game.actors = new Map([['act-1', actor]]);
+    const template = makeTemplate({ skills: [{ name: 'Intimidate', advances: 20 }], talents: [{ name: 'Frightening', advances: 1 }] });
+    (globalThis as any).warhammer.utility.findItemId = async () => template;
+
+    const result = await qh.templateApply.applyTemplate({ actorId: 'act-1', templateUuid: 'x' });
+
+    expect(typeof result.operationId).toBe('string');
+    expect(result.operationId.length).toBeGreaterThan(0);
+    expect(result.createdDocumentIds).toEqual(result.applied.itemIds);
+    expect(result.createdDocumentIds.length).toBeGreaterThan(0);
+    expect(result.updatedDocumentIds).toEqual(['act-1']);
+    expect(result.deletedDocumentIds).toEqual([]);
+  });
+});
+
 describe('dataAccess.applyTemplate — stacking', () => {
   it('applying two templates sequentially embeds two fromTemplate-flagged batches', async () => {
     const qh = makeHandlers();

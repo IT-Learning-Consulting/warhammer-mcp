@@ -322,6 +322,60 @@ describe('dataAccess.applyTemplateToToken — happy path (delta write)', () => {
   });
 });
 
+describe('dataAccess.applyTemplateToToken — Phase 12 dryRun (R12.1)', () => {
+  it('dryRun:true returns the plan + WRITE#3 token-rename preview and performs ZERO writes', async () => {
+    const qh = makeHandlers();
+    const synthetic = makeSyntheticActor({ id: 'goblin', name: 'Goblin' });
+    const scene = makeScene({ id: 's1', tokens: [{ id: 't1', actorLink: false, actor: synthetic, actorId: 'goblin' }] });
+    (globalThis as any).game.scenes = new Map([['s1', scene]]);
+    const template = makeTemplate({ alterName: { pre: 'Skirmisher', post: '' }, characteristics: { ws: 5 } });
+    (globalThis as any).warhammer.utility.findItemId = async () => template;
+
+    const result = await qh.templateApply.applyTemplateToToken({ sceneId: 's1', tokenId: 't1', templateUuid: 'x', dryRun: true });
+
+    expect(result.dryRun).toBe(true);
+    expect(result.sceneId).toBe('s1');
+    expect(result.tokenId).toBe('t1');
+    // WRITE #3 preview: would rename, but does NOT.
+    expect(result.tokenRename).toEqual({ wouldRename: true, plannedName: 'Skirmisher Goblin (1)' });
+    expect(synthetic.__updates).toHaveLength(0);
+    expect(synthetic.__creates).toHaveLength(0);
+    const tokenDoc = scene.tokens.get('t1') as any;
+    expect(tokenDoc.__updates).toHaveLength(0);
+    expect(result.operationId).toBeUndefined();
+  });
+
+  it('dryRun reports wouldRename:false for a non-renaming template', async () => {
+    const qh = makeHandlers();
+    const synthetic = makeSyntheticActor({ id: 'cw', name: 'Chaos Warrior' });
+    const scene = makeScene({ id: 's1', tokens: [{ id: 't1', actorLink: false, actor: synthetic, actorId: 'cw' }] });
+    (globalThis as any).game.scenes = new Map([['s1', scene]]);
+    const template = makeTemplate({ alterName: { pre: '', post: '' } });
+    (globalThis as any).warhammer.utility.findItemId = async () => template;
+
+    const result = await qh.templateApply.applyTemplateToToken({ sceneId: 's1', tokenId: 't1', templateUuid: 'x', dryRun: true });
+    expect(result.tokenRename.wouldRename).toBe(false);
+  });
+});
+
+describe('dataAccess.applyTemplateToToken — Phase 12 operation receipt (R12.2)', () => {
+  it('a real apply returns operationId + createdDocumentIds (= item ids) + updatedDocumentIds ([actorId, tokenId])', async () => {
+    const qh = makeHandlers();
+    const synthetic = makeSyntheticActor({ id: 'goblin', name: 'Goblin' });
+    const scene = makeScene({ id: 's1', tokens: [{ id: 't1', actorLink: false, actor: synthetic, actorId: 'goblin' }] });
+    (globalThis as any).game.scenes = new Map([['s1', scene]]);
+    const template = makeTemplate({ skills: [{ name: 'Stealth (Rural)', advances: 10 }] });
+    (globalThis as any).warhammer.utility.findItemId = async () => template;
+
+    const result = await qh.templateApply.applyTemplateToToken({ sceneId: 's1', tokenId: 't1', templateUuid: 'x' });
+    expect(typeof result.operationId).toBe('string');
+    expect(result.operationId.length).toBeGreaterThan(0);
+    expect(result.createdDocumentIds).toEqual(result.applied.itemIds);
+    expect(result.updatedDocumentIds).toEqual(['goblin', 't1']);
+    expect(result.deletedDocumentIds).toEqual([]);
+  });
+});
+
 describe('dataAccess.applyTemplateToToken — preResolvedChoices parity with apply-template', () => {
   it('honors preResolvedChoices.specialisations identically to applyTemplate', async () => {
     const qh = makeHandlers();

@@ -95,6 +95,9 @@ const TokenTurnMarkerInput = z
   })
   .strict();
 
+// Phase 12 R12.3: this explicit field map (consumed by a .strict() schema below) ALREADY satisfies the
+// field-allow-list requirement for update-token — no second runtime layer is added (only update-actor, the
+// sole tool with a generic z.record patch, needed one). Regression-tested in __tests__ (Phase 4).
 const TokenWritableFields = {
   name: z.string().optional(),
   displayName: DisplayModeEnum.optional(),

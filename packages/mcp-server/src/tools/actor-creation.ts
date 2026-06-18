@@ -43,6 +43,12 @@ interface CreateActorFromCompendiumRaw {
   tokensPlaced: number;
   actors: Array<{ id: string; name: string; type: string }>;
   errors: unknown[];
+  // Phase 12 R12.2: operation receipt forwarded from the foundry-module service return.
+  operationId?: string;
+  createdDocumentIds?: string[];
+  updatedDocumentIds?: string[];
+  deletedDocumentIds?: string[];
+  warnings?: string[];
 }
 
 export class ActorCreationTools extends BaseTool {
@@ -452,6 +458,13 @@ export class ActorCreationTools extends BaseTool {
         errors: result.errors,
       },
       message: summary + '\n\n' + details + sceneInfo + errorInfo,
+      // Phase 12 R12.2: forward the operation receipt the foundry-module service emitted (hand-assembled
+      // structuredContent does NOT auto-passthrough, so each field is explicitly carried here).
+      operationId: result.operationId,
+      createdDocumentIds: result.createdDocumentIds,
+      updatedDocumentIds: result.updatedDocumentIds,
+      deletedDocumentIds: result.deletedDocumentIds,
+      warnings: result.warnings,
     };
   }
 }

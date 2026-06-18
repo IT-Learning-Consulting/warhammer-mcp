@@ -386,7 +386,9 @@ export class TokenTool extends BaseTool {
         `**Scene:** \`${data.sceneId}\`\n` +
         `**Placed:** ${data.added} token(s) · **Placement:** ${data.placement}\n\n` +
         `**Token IDs:**\n${idList}`;
-      return { content: [{ type: 'text' as const, text }] };
+      // Phase 12 R12.2: expose the operation receipt (+ add fields) via structuredContent. token.add has no
+      // outputSchema/DTO (plan decision), so the raw query result flows through untyped; text is unchanged.
+      return { content: [{ type: 'text' as const, text }], structuredContent: data };
     } catch (e) {
       return this.errorResponse('add', e instanceof Error ? e.message : String(e));
     }

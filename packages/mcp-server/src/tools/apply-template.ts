@@ -104,6 +104,14 @@ export class ApplyTemplateTool extends BaseTool {
               },
               additionalProperties: false,
             },
+            dryRun: {
+              type: 'boolean',
+              description:
+                'Phase 12 (R12.1): preview-only. When true, returns the planned name change, characteristic ' +
+                'advances, and the list of items that WOULD be added — performing zero writes. NOTE: unpinned ' +
+                'group/specialisation/spell picks are resolved with randomness, so an unconstrained preview ' +
+                'shows one possible resolution; pin them via preResolvedChoices for a deterministic preview.',
+            },
           },
           required: ['actorId', 'templateUuid'],
         },
@@ -118,10 +126,27 @@ export class ApplyTemplateTool extends BaseTool {
       actorId: parsed.actorId,
       templateUuid: parsed.templateUuid,
       hasPreResolved: !!parsed.preResolvedChoices,
+      dryRun: !!parsed.dryRun,
     });
     const data = await this.query<ApplyTemplateOutputType>('applyTemplate', parsed);
     ApplyTemplateOutput.parse(data);
-    const d = data;
+    const d = data as ApplyTemplateOutputType & {
+      dryRun?: boolean;
+      newName?: string;
+      characteristicDeltas?: Record<string, number>;
+      writes?: Array<{ op: string; itemCount?: number }>;
+    };
+    // Phase 12 R12.1: dryRun preview renders the planned change without claiming items were applied.
+    if (d?.dryRun) {
+      const deltas = Object.entries(d.characteristicDeltas ?? {})
+        .map(([k, v]) => `${k} +${v}`)
+        .join(', ');
+      const itemCount = d.writes?.find((w) => w.op === 'createEmbeddedDocuments')?.itemCount ?? 0;
+      const text = `[DRY RUN] apply-template ${d?.templateName ?? d?.templateId ?? ''} → ${d?.actorName ?? d?.actorId ?? ''} WOULD: ` +
+        `rename to "${d?.newName ?? '(unchanged)'}"; advance ${deltas || 'no characteristics'}; add ${itemCount} item(s). ` +
+        `No writes performed.`;
+      return { content: [{ type: 'text' as const, text }], structuredContent: data };
+    }
     const applied = d?.applied?.itemsByType ?? {};
     const text = `Applied template ${d?.templateName ?? d?.templateId ?? ''} to ${d?.actorName ?? d?.actorId ?? ''}: ` +
       `${applied.skill ?? 0} skills, ${applied.talent ?? 0} talents, ` +

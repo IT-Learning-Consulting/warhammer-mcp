@@ -127,7 +127,7 @@ Examples:
     private async handleIsActive(args: ArgsFor<'is-active'>) {
         try {
             const data = await this.query<ProbeIsActiveResponse>('module-probe', args);
-            return { content: [{ type: 'text' as const, text: formatIsActive(data) }] };
+            return { content: [{ type: 'text' as const, text: formatIsActive(data) }], structuredContent: data as unknown as Record<string, unknown> };
         } catch (e) {
             return this.errorResponse('is-active', e instanceof Error ? e.message : String(e));
         }
@@ -136,7 +136,7 @@ Examples:
     private async handleListActive(args: ArgsFor<'list-active'>) {
         try {
             const data = await this.query<ProbeListActiveResponse>('module-probe', args);
-            return { content: [{ type: 'text' as const, text: formatListActive(data) }] };
+            return { content: [{ type: 'text' as const, text: formatListActive(data) }], structuredContent: data as unknown as Record<string, unknown> };
         } catch (e) {
             return this.errorResponse('list-active', e instanceof Error ? e.message : String(e));
         }

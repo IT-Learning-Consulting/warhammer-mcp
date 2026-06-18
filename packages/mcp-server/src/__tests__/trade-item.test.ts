@@ -30,6 +30,8 @@ function makeTool() {
         itemId: 'new-item-id',
         itemName: 'Longsword',
         quantities: { from: 0, to: 1 },
+        // Phase 12 R12.2: the real foundry-module tradeItem now returns an operation receipt.
+        operationId: 'op-trade-1', createdDocumentIds: ['new-item-id'], updatedDocumentIds: [], deletedDocumentIds: [args.itemId], warnings: [],
       };
     }),
   };
@@ -101,15 +103,20 @@ describe('trade-item — tool dispatch', () => {
     });
   });
 
-  it('returns human-readable success string with quantity breakdown', async () => {
+  it('returns an envelope: human-readable text + structuredContent carrying the operation receipt', async () => {
     const { tool } = makeTool();
     const out = await tool.handle({
       fromActorId: 'actor-a',
       toActorId: 'actor-b',
       itemId: 'item-x',
     });
-    expect(out).toContain('Longsword');
-    expect(out).toContain('actor-a');
-    expect(out).toContain('actor-b');
+    const text = out.content[0].text;
+    expect(text).toContain('Longsword');
+    expect(text).toContain('actor-a');
+    expect(text).toContain('actor-b');
+    // Phase 12 R12.2: trade-item now exposes structuredContent so the operation receipt reaches the client.
+    expect(out.structuredContent.itemId).toBe('new-item-id');
+    expect(out.structuredContent.operationId).toBe('op-trade-1');
+    expect(out.structuredContent.deletedDocumentIds).toEqual(['item-x']);
   });
 });

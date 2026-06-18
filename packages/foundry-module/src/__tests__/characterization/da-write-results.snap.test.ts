@@ -313,7 +313,8 @@ describe('FoundryDataAccess.createItem — characterization', () => {
       itemData: { name: 'Torch', type: 'trapping' },
       destination: { type: 'world' },
     });
-    expect(result).toMatchSnapshot();
+    // Phase 12 R12.2: operationId is a random foundry.utils.randomID() — matched by type, not value.
+    expect(result).toMatchSnapshot({ operationId: expect.any(String) });
   });
 
   it('snapshot: actor-scope with returnFullPayload=true includes itemData+effectIds', async () => {

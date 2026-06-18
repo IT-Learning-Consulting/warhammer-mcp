@@ -48,6 +48,7 @@ import {
   formatFKLink,
 } from '@foundry-mcp/shared';
 import { wrappedWrite } from '../transaction-manager.js';
+import { buildOperationReceipt } from '../services/shared/operation-receipt.js';
 import { getEmbeddedOrThrow } from '../utils/getEmbeddedOrThrow.js';
 import { notify } from '../notify.js';
 // R2.2 dedup: canonical deepStripUndefined (was a local byte-identical copy).
@@ -102,6 +103,12 @@ export interface TokenAddResponse {
   added: number;
   tokenIds: string[];
   placement: string;
+  // Phase 12 R12.2: operation receipt fields (optional so the satisfies-check stays additive).
+  operationId?: string;
+  createdDocumentIds?: string[];
+  updatedDocumentIds?: string[];
+  deletedDocumentIds?: string[];
+  warnings?: string[];
 }
 
 export type TokenResponse =
@@ -494,6 +501,8 @@ export async function addTokens(
         added: (result?.added as number) ?? tokenIds.length,
         tokenIds,
         placement: (result?.placement as string) ?? input.placement ?? 'random',
+        // Phase 12 R12.2: operation receipt — created = the placed token ids (no errors array; this path throws).
+        ...buildOperationReceipt({ created: tokenIds }),
       } satisfies TokenAddResponse,
     };
   }, input.sceneId ? { sceneId: input.sceneId } : undefined);

@@ -150,4 +150,6 @@ export const ApplyTemplateInput = z.object({
     spells:          z.record(z.array(z.string())).optional(),
     trappings:       z.record(z.string()).optional(),
   }).strict().optional(),
+  // Phase 12 R12.1: dryRun → return the serialized template-apply plan, perform zero writes.
+  dryRun: z.boolean().optional(),
 }).strict();

@@ -119,7 +119,7 @@ Example:
     this.logger.info('Executing module-robak action', { action });
     try {
       const data = await this.query<RobakRollResult>('module-robak', args);
-      return { content: [{ type: 'text' as const, text: formatRoll(data) }] };
+      return { content: [{ type: 'text' as const, text: formatRoll(data) }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (msg.includes(ErrorTokens.MODULE_NOT_ACTIVE)) {

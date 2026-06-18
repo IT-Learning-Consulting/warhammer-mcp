@@ -19,6 +19,7 @@ describe('CreateCustomItemTool — characterization', () => {
       scope: 'world',
       folderId: 'folder-001',
       folderPath: ['Homebrew', 'Weapons'],
+      operationId: 'op-cci-001', createdDocumentIds: ['item-new-001'], updatedDocumentIds: [], deletedDocumentIds: [], warnings: [],
     }).handle({
       itemType: 'weapon',
       name: 'Fire Sword',
@@ -37,6 +38,7 @@ describe('CreateCustomItemTool — characterization', () => {
       scope: 'actor',
       actorId: 'actor-001',
       actorName: 'Hans',
+      operationId: 'op-cci-002', createdDocumentIds: ['item-new-002'], updatedDocumentIds: [], deletedDocumentIds: [], warnings: [],
     }).handle({
       itemType: 'spell',
       name: 'Firebolt',
@@ -55,6 +57,7 @@ describe('CreateCustomItemTool — characterization', () => {
       scope: 'world',
       folderId: null,
       folderPath: [],
+      operationId: 'op-cci-003', createdDocumentIds: ['item-new-003'], updatedDocumentIds: [], deletedDocumentIds: [], warnings: [],
     }).handle({
       itemType: 'prayer',
       name: "Sigmar's Fiery Hammer",

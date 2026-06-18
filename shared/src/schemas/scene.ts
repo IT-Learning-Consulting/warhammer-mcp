@@ -683,5 +683,7 @@ export const ApplyTemplateToTokenInput = z
     tokenId: TokenId,
     templateUuid: ApplyTemplateInput.shape.templateUuid,
     preResolvedChoices: ApplyTemplateInput.shape.preResolvedChoices,
+    // Phase 12 R12.1: dryRun → return the serialized plan (incl. the WRITE #3 token-rename note), perform zero writes.
+    dryRun: ApplyTemplateInput.shape.dryRun,
   })
   .strict();

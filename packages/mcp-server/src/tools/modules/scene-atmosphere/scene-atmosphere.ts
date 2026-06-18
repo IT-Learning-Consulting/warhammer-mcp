@@ -221,7 +221,7 @@ export class ModuleSceneAtmosphereTool extends BaseTool {
     try {
       const data = await this.query<SceneAtmosphereResult>(TOOL_NAME, args);
       const text = this.formatResult(action, data);
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as Record<string, unknown> };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       // MODULE_NOT_ACTIVE, COMPANION_NOT_ACTIVE, and SOCKETLIB_NOT_ACTIVE all use

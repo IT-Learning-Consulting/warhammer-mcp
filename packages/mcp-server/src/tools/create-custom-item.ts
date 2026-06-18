@@ -299,6 +299,14 @@ Security: script / preApplyScript / enableScript fields are executed by Foundry 
       if (data.effectIds) structured.effectIds = data.effectIds;
     }
 
+    // Phase 12 R12.2: forward the operation receipt the foundry-module service emitted (hand-assembled
+    // structuredContent does NOT auto-passthrough — each field is explicitly carried into `structured`).
+    structured.operationId = data.operationId;
+    structured.createdDocumentIds = data.createdDocumentIds;
+    structured.updatedDocumentIds = data.updatedDocumentIds;
+    structured.deletedDocumentIds = data.deletedDocumentIds;
+    structured.warnings = data.warnings;
+
     CreateCustomItemOutput.parse(structured);
     return {
       content: [{ type: 'text', text: prose }],

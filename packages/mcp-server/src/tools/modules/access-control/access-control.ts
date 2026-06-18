@@ -195,7 +195,7 @@ GM required for all write actions. Forced-viewport + circumvent + transfer requi
     this.logger.info(`Executing ${TOOL_NAME} action`, { action });
     try {
       const data = await this.query<AccessControlResult>(TOOL_NAME, args);
-      return { content: [{ type: 'text' as const, text: this.formatResult(action, data) }] };
+      return { content: [{ type: 'text' as const, text: this.formatResult(action, data) }], structuredContent: data as Record<string, unknown> };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (msg.includes(ErrorTokens.MODULE_NOT_ACTIVE) || msg.includes(ErrorTokens.MODULE_DEPENDENCY_NOT_ACTIVE)) {

@@ -186,7 +186,8 @@ describe('template-apply engine — applyTemplate (world actor) write capture', 
       write1_actorUpdate: actor.__updates,
       write2_createEmbedded: actor.__creates,
       result,
-    }).toMatchSnapshot();
+    // Phase 12 R12.2: operationId is a random foundry.utils.randomID() — matched by type, not value.
+    }).toMatchSnapshot({ result: { operationId: expect.any(String) } });
     // WRITE #1 carries the skipExperienceChecks option; on a world actor (isToken=false)
     // the name update includes prototypeToken.name (BUG-275 only skips it for token deltas).
     expect(actor.__updates[0]!.options.skipExperienceChecks).toBe(true);
@@ -228,7 +229,8 @@ describe('template-apply engine — applyTemplateToToken (synthetic delta) write
       write3_tokenNameSync: tokenDoc.__updates,
       worldActorUntouched: { updates: worldActor.__updates.length, creates: worldActor.__creates.length },
       result,
-    }).toMatchSnapshot();
+    // Phase 12 R12.2: operationId is a random foundry.utils.randomID() — matched by type, not value.
+    }).toMatchSnapshot({ result: { operationId: expect.any(String) } });
     // Token-delta isolation: the world actor is never written.
     expect(worldActor.__updates).toHaveLength(0);
     expect(worldActor.__creates).toHaveLength(0);

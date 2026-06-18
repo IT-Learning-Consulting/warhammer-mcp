@@ -26,11 +26,17 @@ exports[`ActorCreationTools — characterization > create-actor-from-compendium 
 {
   "content": [
     {
-      "text": "{"summary":"✅ Created 3 of 3 requested actors","success":true,"details":{"actors":[{"id":"gob001actor12345","name":"Snag","type":"creature"},{"id":"gob002actor12345","name":"Fang","type":"creature"},{"id":"gob003actor12345","name":"Nit","type":"creature"}],"sourceEntry":{"packId":"wfrp4e-core.bestiary","itemId":"goblin001234567"},"tokensPlaced":3,"errors":[]},"message":"✅ Created 3 of 3 requested actors\\n\\n• **Snag** (from wfrp4e-core.bestiary)\\n• **Fang** (from wfrp4e-core.bestiary)\\n• **Nit** (from wfrp4e-core.bestiary)\\n🎯 Added 3 tokens to the current scene"}",
+      "text": "{"summary":"✅ Created 3 of 3 requested actors","success":true,"details":{"actors":[{"id":"gob001actor12345","name":"Snag","type":"creature"},{"id":"gob002actor12345","name":"Fang","type":"creature"},{"id":"gob003actor12345","name":"Nit","type":"creature"}],"sourceEntry":{"packId":"wfrp4e-core.bestiary","itemId":"goblin001234567"},"tokensPlaced":3,"errors":[]},"message":"✅ Created 3 of 3 requested actors\\n\\n• **Snag** (from wfrp4e-core.bestiary)\\n• **Fang** (from wfrp4e-core.bestiary)\\n• **Nit** (from wfrp4e-core.bestiary)\\n🎯 Added 3 tokens to the current scene","operationId":"op-cafc-3","createdDocumentIds":["gob001actor12345","gob002actor12345","gob003actor12345"],"updatedDocumentIds":[],"deletedDocumentIds":[],"warnings":[]}",
       "type": "text",
     },
   ],
   "structuredContent": {
+    "createdDocumentIds": [
+      "gob001actor12345",
+      "gob002actor12345",
+      "gob003actor12345",
+    ],
+    "deletedDocumentIds": [],
     "details": {
       "actors": [
         {
@@ -62,8 +68,11 @@ exports[`ActorCreationTools — characterization > create-actor-from-compendium 
 • **Fang** (from wfrp4e-core.bestiary)
 • **Nit** (from wfrp4e-core.bestiary)
 🎯 Added 3 tokens to the current scene",
+    "operationId": "op-cafc-3",
     "success": true,
     "summary": "✅ Created 3 of 3 requested actors",
+    "updatedDocumentIds": [],
+    "warnings": [],
   },
 }
 `;
@@ -72,11 +81,15 @@ exports[`ActorCreationTools — characterization > create-actor-from-compendium 
 {
   "content": [
     {
-      "text": "{"summary":"✅ Created 1 of 1 requested actors","success":true,"details":{"actors":[{"id":"gobactor1234567","name":"Snaggletooth","type":"creature"}],"sourceEntry":{"packId":"wfrp4e-core.bestiary","itemId":"goblin001234567"},"tokensPlaced":0,"errors":[]},"message":"✅ Created 1 of 1 requested actors\\n\\n• **Snaggletooth** (from wfrp4e-core.bestiary)"}",
+      "text": "{"summary":"✅ Created 1 of 1 requested actors","success":true,"details":{"actors":[{"id":"gobactor1234567","name":"Snaggletooth","type":"creature"}],"sourceEntry":{"packId":"wfrp4e-core.bestiary","itemId":"goblin001234567"},"tokensPlaced":0,"errors":[]},"message":"✅ Created 1 of 1 requested actors\\n\\n• **Snaggletooth** (from wfrp4e-core.bestiary)","operationId":"op-cafc-1","createdDocumentIds":["gobactor1234567"],"updatedDocumentIds":[],"deletedDocumentIds":[],"warnings":[]}",
       "type": "text",
     },
   ],
   "structuredContent": {
+    "createdDocumentIds": [
+      "gobactor1234567",
+    ],
+    "deletedDocumentIds": [],
     "details": {
       "actors": [
         {
@@ -95,8 +108,11 @@ exports[`ActorCreationTools — characterization > create-actor-from-compendium 
     "message": "✅ Created 1 of 1 requested actors
 
 • **Snaggletooth** (from wfrp4e-core.bestiary)",
+    "operationId": "op-cafc-1",
     "success": true,
     "summary": "✅ Created 1 of 1 requested actors",
+    "updatedDocumentIds": [],
+    "warnings": [],
   },
 }
 `;

@@ -22,6 +22,7 @@ import { MODULE_ID } from '../constants.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
 import { notify } from '../notify.js';
 import { getOrCreateFolder } from './shared/folder-helpers.js';
+import { buildOperationReceipt } from './shared/operation-receipt.js';
 import { waitForActorUpdateCommit } from './shared/actor-update-observer.js';
 import { formatActorUpdateSummary } from './shared/actor-update-summary.js';
 import type {
@@ -298,7 +299,9 @@ export class ActorService {
       }
 
       this.auditLog('createActorFromCompendiumEntry', request, 'success');
-      return result;
+      // Phase 12 R12.2: operation receipt — created = the new actor ids; warnings = per-actor failures.
+      // Placed token ids are NOT surfaced by scenePlacement (only tokensPlaced count) → faithfully omitted.
+      return { ...result, ...buildOperationReceipt({ created: createdActors.map(a => a.id), warnings: errors }) };
 
     } catch (error) {
       notify.error('Failed to create actor from compendium entry', error instanceof Error ? error : new Error(String(error)));
@@ -506,6 +509,12 @@ export class ActorService {
       if (!actor) {
         throw new Error(`Actor not found with ID: ${data.actorId}`);
       }
+
+      // Phase 12 R12.3: the field allow-list is enforced at the QUERY HANDLER (queries.ts handleUpdateActor),
+      // the single boundary every real caller crosses (the update-actor tool AND manage-character, which writes
+      // via this.query('updateActor')). It is deliberately NOT here so this service stays a general-purpose
+      // Foundry-write utility (its formatter-characterization oracles legitimately exercise derived/internal
+      // fields). See execution report for the service→handler placement rationale.
 
       // Capture previous values before update for better notifications
       const previousValues: Record<string, any> = {};

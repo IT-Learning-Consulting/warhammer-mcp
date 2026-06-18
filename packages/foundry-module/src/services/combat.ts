@@ -10,6 +10,7 @@
 
 import { notify } from '../notify.js';
 import { findSceneTokenByActorId } from '../utils/scene-token-lookup.js';
+import { buildOperationReceipt, type OperationReceipt } from './shared/operation-receipt.js';
 
 export class CombatService {
   constructor(private readonly validateState: () => void) {}
@@ -114,14 +115,18 @@ export class CombatService {
     combatId?: string | undefined;
     actorIds: string[];
     sceneId?: string | undefined;
-  }): Promise<{ added: string[] }> {
+  }): Promise<{ added: string[]; combatId?: string } & OperationReceipt> {
     this.validateState();
     let combat: any = this.resolveCombat(data.combatId);
 
+    // Phase 12 R12.2: track whether THIS call created the Combat doc, so the receipt only reports it as
+    // created when it actually was (an existing combat resolved by combatId/active is not "created" here).
+    let combatWasCreated = false;
     if (!combat) {
       const sceneId = data.sceneId ?? (game as any).scenes?.active?.id;
       if (!sceneId) throw new Error('No active scene and no sceneId provided');
       combat = await (Combat as any).create({ scene: sceneId, active: true });
+      combatWasCreated = true;
     }
 
     const scene: any = combat.scene ?? (game as any).scenes?.get(data.sceneId) ?? (game as any).scenes?.active;
@@ -156,7 +161,14 @@ export class CombatService {
         summary: `to combat ${combat.id}`,
       });
     }
-    return { added: created.map((c: any) => c.id).filter(Boolean) };
+    // Phase 12 R12.2: surface combatId (DTO already carries the optional field) + operation receipt.
+    // createdDocumentIds = the combatant ids, plus the Combat doc id only when this call created it.
+    const added = created.map((c: any) => c.id).filter(Boolean);
+    return {
+      added,
+      ...(combat?.id ? { combatId: combat.id as string } : {}),
+      ...buildOperationReceipt({ created: [...(combatWasCreated && combat?.id ? [combat.id] : []), ...added] }),
+    };
   }
 
   async removeCombatants(data: {

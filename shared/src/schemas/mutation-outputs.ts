@@ -64,6 +64,22 @@ export const ApplyTemplateToTokenOutput = z.object({
     }).passthrough(),
     items: z.array(z.any()).optional(),
   }).passthrough().optional(),
+  // Phase 12 R12.1: dryRun preview fields (present only when dryRun:true).
+  dryRun: z.boolean().optional(),
+  newName: z.string().optional(),
+  characteristicDeltas: z.record(z.number()).optional(),
+  writes: z.array(z.any()).optional(),
+  tokenRename: z.object({
+    wouldRename: z.boolean(),
+    plannedName: z.string().optional(),
+  }).passthrough().optional(),
+  note: z.string().optional(),
+  // Phase 12 R12.2: operation-receipt fields (always present on a real apply; absent on dryRun).
+  operationId: z.string().optional(),
+  createdDocumentIds: z.array(z.string()).optional(),
+  updatedDocumentIds: z.array(z.string()).optional(),
+  deletedDocumentIds: z.array(z.string()).optional(),
+  warnings: z.array(z.string()).optional(),
 }).passthrough();
 export type ApplyTemplateToTokenOutputType = z.infer<typeof ApplyTemplateToTokenOutput>;
 
@@ -106,6 +122,12 @@ export const CreateCustomItemOutput = z.object({
   actorName: z.string().nullable().optional(),   // actor scope
   itemData: z.any().optional(),                  // returnFullPayload only
   effectIds: z.any().optional(),                 // returnFullPayload only
+  // Phase 12 R12.2: operation-receipt fields (forwarded from the service through formatResult).
+  operationId: z.string().optional(),
+  createdDocumentIds: z.array(z.string()).optional(),
+  updatedDocumentIds: z.array(z.string()).optional(),
+  deletedDocumentIds: z.array(z.string()).optional(),
+  warnings: z.array(z.string()).optional(),
 }).passthrough();
 export type CreateCustomItemOutputType = z.infer<typeof CreateCustomItemOutput>;
 

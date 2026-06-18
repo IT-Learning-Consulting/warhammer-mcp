@@ -4,13 +4,20 @@ exports[`CreateCustomItemTool — characterization > create prayer (miracle type
 
 exports[`CreateCustomItemTool — characterization > create prayer (miracle type) at world scope — prose + structured lock 2`] = `
 {
+  "createdDocumentIds": [
+    "item-new-003",
+  ],
+  "deletedDocumentIds": [],
   "folderId": null,
   "folderPath": [],
   "itemId": "item-new-003",
   "itemName": "Sigmar's Fiery Hammer",
   "itemType": "prayer",
+  "operationId": "op-cci-003",
   "scope": "world",
   "success": true,
+  "updatedDocumentIds": [],
+  "warnings": [],
 }
 `;
 
@@ -20,11 +27,18 @@ exports[`CreateCustomItemTool — characterization > create spell on actor scope
 {
   "actorId": "actor-001",
   "actorName": "Hans",
+  "createdDocumentIds": [
+    "item-new-002",
+  ],
+  "deletedDocumentIds": [],
   "itemId": "item-new-002",
   "itemName": "Firebolt",
   "itemType": "spell",
+  "operationId": "op-cci-002",
   "scope": "actor",
   "success": true,
+  "updatedDocumentIds": [],
+  "warnings": [],
 }
 `;
 
@@ -32,6 +46,10 @@ exports[`CreateCustomItemTool — characterization > create weapon at world scop
 
 exports[`CreateCustomItemTool — characterization > create weapon at world scope — prose + structured lock 2`] = `
 {
+  "createdDocumentIds": [
+    "item-new-001",
+  ],
+  "deletedDocumentIds": [],
   "folderId": "folder-001",
   "folderPath": [
     "Homebrew",
@@ -40,7 +58,10 @@ exports[`CreateCustomItemTool — characterization > create weapon at world scop
   "itemId": "item-new-001",
   "itemName": "Fire Sword",
   "itemType": "weapon",
+  "operationId": "op-cci-001",
   "scope": "world",
   "success": true,
+  "updatedDocumentIds": [],
+  "warnings": [],
 }
 `;

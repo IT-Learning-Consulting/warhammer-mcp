@@ -19,6 +19,7 @@
 import { notify } from '../notify.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
 import { _resolveItem } from './shared/document-resolver.js';
+import { buildOperationReceipt } from './shared/operation-receipt.js';
 
 export class ItemService {
   constructor(private readonly validateState: () => void) {}
@@ -252,6 +253,11 @@ export class ItemService {
         base.itemData = created.toObject();
         base.effectIds = (created.effects as any)?.map((e: any) => e.id) ?? [];
       }
+      // Phase 12 R12.2: operation receipt — created = the item only. The leaf folderId is intentionally NOT
+      // in createdDocumentIds: _ensureFolderChain reuses existing folders silently and does not report which
+      // (if any) it created, so claiming the folder was created would be unfaithful. folderId stays available
+      // in the `folderId` field above. (Plan deferral: tracking created folders needs an _ensureFolderChain refactor.)
+      Object.assign(base, buildOperationReceipt({ created: [created.id] }));
       return base;
     } catch (error) {
       throw new Error(
@@ -332,6 +338,8 @@ export class ItemService {
         itemName,
         itemType,
         quantities: { from: sourceQty - data.quantity, to: data.quantity },
+        // Phase 12 R12.2: partial trade — dest item created, source item quantity UPDATED (not deleted).
+        ...buildOperationReceipt({ created: [destItem?.id], updated: [data.itemId] }),
       };
     }
 
@@ -355,6 +363,8 @@ export class ItemService {
       itemName,
       itemType,
       quantities: { from: 0, to: sourceQty },
+      // Phase 12 R12.2: full trade — dest item created, source item DELETED.
+      ...buildOperationReceipt({ created: [destItem?.id], deleted: [data.itemId] }),
     };
   }
 

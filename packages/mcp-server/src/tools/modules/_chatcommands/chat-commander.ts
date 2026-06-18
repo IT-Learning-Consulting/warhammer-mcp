@@ -162,7 +162,7 @@ Example: { action: "list-commands", filter: { module: "chat-commander-wfrp4e" } 
   private async run<T>(action: string, args: Record<string, unknown>, fmt: (d: T) => string) {
     try {
       const data = await this.query<T>('module-chat-commander', args);
-      return text(fmt(data));
+      return { content: [{ type: 'text' as const, text: fmt(data) }], structuredContent: data as Record<string, unknown> };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (msg.includes(ErrorTokens.MODULE_NOT_ACTIVE)) return moduleNotActiveContent('module-chat-commander', msg);

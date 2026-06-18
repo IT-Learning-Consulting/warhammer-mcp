@@ -51,7 +51,7 @@ export class TradeItemTool extends BaseTool {
     ];
   }
 
-  async handle(args: unknown): Promise<string> {
+  async handle(args: unknown): Promise<any> {
     const parsed = TradeItemInput.parse(args);
     this.logger.info('trade-item', {
       from: parsed.fromActorId,
@@ -65,6 +65,9 @@ export class TradeItemTool extends BaseTool {
     const q = data.quantities
       ? ` (source: ${data.quantities.from === 0 ? 'item fully removed (was qty ' + (parsed.quantity ?? 'all') + ')' : 'qty ' + data.quantities.from + ' remaining'}; destination: qty ${data.quantities.to})`
       : '';
-    return `Traded **${data.itemName ?? parsed.itemId}** from ${data.fromActorId ?? parsed.fromActorId} → ${data.toActorId ?? parsed.toActorId}${q}.`;
+    const text = `Traded **${data.itemName ?? parsed.itemId}** from ${data.fromActorId ?? parsed.fromActorId} → ${data.toActorId ?? parsed.toActorId}${q}.`;
+    // Phase 12 R12.2: expose the operation receipt (+ trade fields) via structuredContent. trade-item has no
+    // outputSchema/DTO (plan decision), so the raw query result flows through untyped; text is unchanged.
+    return { content: [{ type: 'text' as const, text }], structuredContent: data };
   }
 }

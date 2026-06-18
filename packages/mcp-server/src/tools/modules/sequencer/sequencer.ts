@@ -227,7 +227,7 @@ Examples:
       } else {
         text = formatEffects(data as SequencerEffectsResult, action);
       }
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as Record<string, unknown> };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (msg.includes(ErrorTokens.MODULE_NOT_ACTIVE)) {

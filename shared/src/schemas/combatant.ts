@@ -21,6 +21,9 @@ import { CombatantId, CombatId } from './branded-ids.js';
 // update-combatant writable allow-list — exactly the safe BaseCombatant.defineSchema()
 // fields. .strict() rejects everything else (actorId/tokenId/sceneId FKs, type, system,
 // group, and crucially `initiative` — routed to the dedicated set/clear/reroll actions).
+// Phase 12 R12.3: this strict schema ALREADY satisfies the field-allow-list requirement for
+// update-combatant — no second runtime layer is added (only update-actor needed one, since it
+// was the sole tool with a generic z.record patch). Regression-tested in __tests__ (Phase 4).
 const CombatantUpdateChanges = z
   .object({
     name: z.string().optional(),

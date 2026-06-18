@@ -382,96 +382,114 @@ GM required for all write actions.`,
     this.logger.info('Executing module-itempiles action', { action });
     try {
       let text: string;
+      let data: unknown;
       switch (action) {
         case 'create-pile': {
           const d = await this.query<ItemPileCreateResult>('module-itempiles', args);
           text = formatCreate(d);
+          data = d;
           break;
         }
         case 'update-pile': {
           const d = await this.query<ItemPileUpdateResult>('module-itempiles', args);
           text = formatUpdate(d);
+          data = d;
           break;
         }
         case 'delete-pile': {
           const d = await this.query<ItemPileDeleteResult>('module-itempiles', args);
           text = formatDelete(d);
+          data = d;
           break;
         }
         case 'set-pile-state': {
           const d = await this.query<ItemPileSetStateResult>('module-itempiles', args);
           text = formatSetState(d);
+          data = d;
           break;
         }
         case 'get-contents': {
           const d = await this.query<ItemPileGetContentsResult>('module-itempiles', args);
           text = formatGetContents(d);
+          data = d;
           break;
         }
         case 'add-items': {
           const d = await this.query<ItemPileAddItemsResult>('module-itempiles', args);
           text = formatAddItems(d);
+          data = d;
           break;
         }
         case 'remove-items': {
           const d = await this.query<ItemPileRemoveItemsResult>('module-itempiles', args);
           text = formatRemoveItems(d);
+          data = d;
           break;
         }
         case 'transfer-items': {
           const d = await this.query<ItemPileTransferItemsResult>('module-itempiles', args);
           text = formatTransferItems(d);
+          data = d;
           break;
         }
         case 'add-currency': {
           const d = await this.query<ItemPileAddCurrencyResult>('module-itempiles', args);
           text = formatAddCurrency(d);
+          data = d;
           break;
         }
         case 'remove-currency': {
           const d = await this.query<ItemPileRemoveCurrencyResult>('module-itempiles', args);
           text = formatRemoveCurrency(d);
+          data = d;
           break;
         }
         case 'transfer-currency': {
           const d = await this.query<ItemPileTransferCurrencyResult>('module-itempiles', args);
           text = formatTransferCurrency(d);
+          data = d;
           break;
         }
         case 'split-loot': {
           const d = await this.query<ItemPileSplitLootResult>('module-itempiles', args);
           text = formatSplitLoot(d);
+          data = d;
           break;
         }
         case 'vault-info': {
           const d = await this.query<ItemPileVaultInfoResult>('module-itempiles', args);
           text = formatVaultInfo(d);
+          data = d;
           break;
         }
         case 'roll-item-table': {
           const d = await this.query<ItemPileRollTableResult>('module-itempiles', args);
           text = formatRollTable(d);
+          data = d;
           break;
         }
         case 'refresh-merchant': {
           const d = await this.query<ItemPileRefreshMerchantResult>('module-itempiles', args);
           text = formatRefreshMerchant(d);
+          data = d;
           break;
         }
         case 'trade-items': {
           const d = await this.query<ItemPileTradeResult>('module-itempiles', args);
           text = formatTrade(d);
+          data = d;
           break;
         }
         case 'update-price-modifiers': {
           const d = await this.query<ItemPilePriceModifiersResult>('module-itempiles', args);
           text = formatPriceModifiers(d);
+          data = d;
           break;
         }
         default:
           return this.errorResponse(action, `Unknown action "${action}"`);
       }
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as Record<string, unknown> };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (msg.includes(ErrorTokens.MODULE_NOT_ACTIVE) || msg.includes(ErrorTokens.MODULE_DEPENDENCY_NOT_ACTIVE)) {

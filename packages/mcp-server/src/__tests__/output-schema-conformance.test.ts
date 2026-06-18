@@ -55,9 +55,11 @@ interface ConformanceCase {
 const CASES: ConformanceCase[] = [
   {
     toolName: 'apply-template',
+    // Phase 12 R12.2: mock includes the operation-receipt fields the real apply emits (capture-faithful).
     makeTool: () => new ApplyTemplateTool(makeToolDeps({
       success: true, actorId: 'a1', actorName: 'Grunt', templateId: 't1', templateName: 'Soldier',
       applied: { name: 'Soldier', characteristics: { ws: 5 }, itemIds: ['i1'], itemsByType: { skill: 2, spell: 0, talent: 1, trait: 0, trapping: 3 } },
+      operationId: 'op-at1', createdDocumentIds: ['i1'], updatedDocumentIds: ['a1'], deletedDocumentIds: [], warnings: [],
     })),
     args: { actorId: 'a1', templateUuid: 'Compendium.wfrp4e-owb1.items.Item.t1' },
   },
@@ -66,6 +68,7 @@ const CASES: ConformanceCase[] = [
     makeTool: () => new ApplyTemplateToTokenTool(makeToolDeps({
       templateId: 't1', templateName: 'Soldier', tokenId: 'tok1', actorId: 'a1', actorName: 'Goblin', sceneId: 's1',
       applied: { itemsByType: { skill: 2, talent: 1, spell: 0, trapping: 3 }, items: [] },
+      operationId: 'op-att1', createdDocumentIds: [], updatedDocumentIds: ['a1', 'tok1'], deletedDocumentIds: [], warnings: [],
     })),
     args: { sceneId: 's1', tokenId: 'tok1', templateUuid: 'Compendium.wfrp4e-owb1.items.Item.t1' },
   },
@@ -90,6 +93,7 @@ const CASES: ConformanceCase[] = [
     toolName: 'create-custom-item',
     makeTool: () => new CreateCustomItemTool(makeToolDeps({
       success: true, scope: 'world', itemId: 'i1', itemName: 'Fire Sword', itemType: 'weapon', folderId: null, folderPath: [],
+      operationId: 'op-cci1', createdDocumentIds: ['i1'], updatedDocumentIds: [], deletedDocumentIds: [], warnings: [],
     })),
     args: { itemType: 'weapon', name: 'Fire Sword', destination: { type: 'world' } },
   },
@@ -119,6 +123,8 @@ const CASES: ConformanceCase[] = [
     makeTool: () => new ActorCreationTools(makeToolDeps({
       // Real createActorFromCompendium summaries carry { id, name, originalName } — NO `type` (BUG-390).
       totalCreated: 1, totalRequested: 1, tokensPlaced: 0, actors: [{ id: 'a1', name: 'Bob', originalName: 'Goblin' }], errors: [],
+      // Phase 12 R12.2: receipt forwarded through formatSimpleActorCreationResponse.
+      operationId: 'op-cafc1', createdDocumentIds: ['a1'], updatedDocumentIds: [], deletedDocumentIds: [], warnings: [],
     })),
     args: { packId: 'wfrp4e-core.bestiary', itemId: 'item1234567890ab', names: ['Bob'] },
   },
@@ -129,7 +135,11 @@ const CASES: ConformanceCase[] = [
   },
   {
     toolName: 'add-combatants',
-    makeTool: () => new ManageCombatTools(makeToolDeps({ added: ['c1'] })),
+    // Phase 12 R12.2: combatId now surfaced + receipt (createdDocumentIds = combatants + any new combat).
+    makeTool: () => new ManageCombatTools(makeToolDeps({
+      added: ['c1'], combatId: 'cmb1',
+      operationId: 'op-ac1', createdDocumentIds: ['c1'], updatedDocumentIds: [], deletedDocumentIds: [], warnings: [],
+    })),
     args: { actorIds: ['a1'] },
   },
   {

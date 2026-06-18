@@ -7,6 +7,7 @@
 // WRITE #3 (token name-sync) stays in applyTemplateToToken (post-engine, BUG-055).
 
 import { notify } from '../notify.js';
+import { buildOperationReceipt } from './shared/operation-receipt.js';
 
 interface PreResolvedChoices {
   skillGroups?: Record<string, string> | undefined;
@@ -40,6 +41,7 @@ export class TemplateApplyService {
     actorId: string;
     templateUuid: string;
     preResolvedChoices?: PreResolvedChoices | undefined;
+    dryRun?: boolean | undefined;
   }): Promise<any> {
     this.validateState();
 
@@ -58,7 +60,14 @@ export class TemplateApplyService {
       }
 
       const templateId: string = (template as any).id ?? data.templateUuid;
-      return await this._runTemplateApply(actor, template, templateId, data.preResolvedChoices ?? {});
+      // Phase 12 R12.1: dryRun → build the plan (read-only) and return a serialized preview; zero writes.
+      if (data.dryRun) {
+        const plan = await this.planTemplateApply(actor, template, templateId, data.preResolvedChoices ?? {});
+        return this.serializePlanPreview(plan, actor);
+      }
+      // Phase 12 R12.2: operation receipt — created = the embedded item ids; updated = the actor itself.
+      const result = await this._runTemplateApply(actor, template, templateId, data.preResolvedChoices ?? {});
+      return { ...result, ...buildOperationReceipt({ created: result?.applied?.itemIds, updated: [result?.actorId] }) };
     } catch (error) {
       throw new Error(`Failed to apply template: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
@@ -72,6 +81,7 @@ export class TemplateApplyService {
     tokenId: string;
     templateUuid: string;
     preResolvedChoices?: PreResolvedChoices | undefined;
+    dryRun?: boolean | undefined;
   }): Promise<any> {
     this.validateState();
 
@@ -104,6 +114,26 @@ export class TemplateApplyService {
       }
 
       const templateId: string = (template as any).id ?? data.templateUuid;
+
+      // Phase 12 R12.1: dryRun → serialize the plan + the WRITE #3 token-rename it WOULD perform; zero writes.
+      if (data.dryRun) {
+        const plan = await this.planTemplateApply(actor, template, templateId, data.preResolvedChoices ?? {});
+        const preview = this.serializePlanPreview(plan, actor);
+        const tplSys = (template as any).system ?? {};
+        const alterPre = (tplSys.alterName?.pre ?? '').trim();
+        const alterPost = (tplSys.alterName?.post ?? '').trim();
+        const templateRenames = alterPre.length > 0 || alterPost.length > 0;
+        let tokenRename: { wouldRename: boolean; plannedName?: string } = { wouldRename: false };
+        if (templateRenames && typeof plan.newName === 'string' && plan.newName.length > 0) {
+          const siblingCount = Array.from(scene.tokens?.values() ?? []).filter((t: any) => {
+            if (!t || t.id === data.tokenId) return false;
+            const n = t.name ?? '';
+            return n === plan.newName || n.startsWith(`${plan.newName} (`);
+          }).length;
+          tokenRename = { wouldRename: true, plannedName: `${plan.newName} (${siblingCount + 1})` };
+        }
+        return { ...preview, sceneId: data.sceneId, tokenId: data.tokenId, tokenRename };
+      }
 
       // Redirect template-triggered condition scripts away from the world actor.
       const baseActor: any = (globalThis as any).game?.actors?.get(tokenDoc.actorId);
@@ -157,7 +187,13 @@ export class TemplateApplyService {
         tooltip: { tokenDoc, message: `+${(template as any).name}` },
       });
 
-      return { ...result, sceneId: data.sceneId, tokenId: data.tokenId };
+      // Phase 12 R12.2: operation receipt — created = embedded item ids; updated = the actor delta + its token.
+      return {
+        ...result,
+        sceneId: data.sceneId,
+        tokenId: data.tokenId,
+        ...buildOperationReceipt({ created: result?.applied?.itemIds, updated: [result?.actorId, data.tokenId] }),
+      };
     } catch (error) {
       throw new Error(`Failed to apply template to token: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
@@ -426,6 +462,33 @@ export class TemplateApplyService {
           trapping: created.filter((i: any) => !['skill', 'talent', 'spell', 'trait'].includes(i.type)).length,
         },
       },
+    };
+  }
+
+  // Phase 12 R12.1: serialize a planTemplateApply() result for a dryRun preview (HC1: zero writes). Drops the
+  // live `actor` Document (non-serializable) and projects the createEmbeddedDocuments items to {name,type}
+  // summaries so the preview stays bounded (full item snapshots would bloat the wire by 10s of KB). The
+  // `note` is load-bearing: planTemplateApply resolves unpinned group/specialisation/spell choices with
+  // Math.random(), so an unconstrained dryRun shows ONE possible resolution — a later real apply may pick
+  // differently unless preResolvedChoices pin every choice.
+  private serializePlanPreview(plan: TemplateApplyPlan, actor: any): any {
+    const updateWrite = plan.writes[0] as Extract<TemplateWrite, { op: 'actor.update' }>;
+    const createWrite = plan.writes[1] as Extract<TemplateWrite, { op: 'createEmbeddedDocuments' }>;
+    const plannedItems = (createWrite.items ?? []).map((i: any) => ({ name: i?.name, type: i?.type }));
+    return {
+      success: true,
+      dryRun: true,
+      actorId: actor.id,
+      actorName: actor.name,
+      templateId: plan.templateId,
+      templateName: plan.templateName,
+      newName: plan.newName,
+      characteristicDeltas: plan.characteristicDeltas,
+      writes: [
+        { op: 'actor.update', updateData: updateWrite.updateData },
+        { op: 'createEmbeddedDocuments', documentType: createWrite.documentType, itemCount: plannedItems.length, items: plannedItems },
+      ],
+      note: 'Preview only — no writes performed. Unconstrained group/specialisation/spell picks may resolve differently on a real apply unless pinned via preResolvedChoices.',
     };
   }
 

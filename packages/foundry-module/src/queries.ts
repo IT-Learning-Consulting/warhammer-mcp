@@ -4,6 +4,7 @@ import { FoundryDataAccess } from './data-access.js';
 // Phase 4 (R3.3): QueryHandlers owns the extracted creature-index + compendium-search services.
 import { PersistentCreatureIndex, CompendiumSearchService, RollRequestService, RollButtonService, PlayerLookupService, CombatService, ConditionsService, ScenePlacementService, TemplateApplyService, ActorService, ItemService, EffectsService } from './services/index.js';
 import { wrappedWrite } from './transaction-manager.js';
+import { assertAllowedActorFields } from './services/shared/actor-field-allowlist.js';
 import { notify } from './notify.js';
 // Phase 1 mcp_crud_expansion — polymorphic ownership handlers.
 import {
@@ -1113,6 +1114,12 @@ export class QueryHandlers {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       const parsed = UpdateActorInput.strict().parse(data ?? {});
+      // Phase 12 R12.3: reject non-allow-listed updateData leaves at the handler boundary — the single entry
+      // every real caller crosses (the update-actor tool AND manage-character, which writes via
+      // this.query('updateActor')). Resolve the actor for its type; if it's gone, skip and let updateActor
+      // throw the canonical not-found error (no write happens either way).
+      const actorForType = (game as any).actors?.get(parsed.actorId);
+      if (actorForType) assertAllowedActorFields(parsed.updateData, actorForType.type);
       return await wrappedWrite('updateActor', async () => ({ success: true, data: await this.actorService.updateActor(parsed) }));
     });
   }

@@ -166,6 +166,12 @@ export type AdvanceCombatOutputType = z.infer<typeof AdvanceCombatOutput>;
 export const AddCombatantsOutput = z.object({
   added: z.array(z.string()),
   combatId: z.string().optional(),
+  // Phase 12 R12.2: operation-receipt fields (combatId is now populated by the service; created = combatants + new combat).
+  operationId: z.string().optional(),
+  createdDocumentIds: z.array(z.string()).optional(),
+  updatedDocumentIds: z.array(z.string()).optional(),
+  deletedDocumentIds: z.array(z.string()).optional(),
+  warnings: z.array(z.string()).optional(),
 }).passthrough();
 export type AddCombatantsOutputType = z.infer<typeof AddCombatantsOutput>;
 
@@ -287,6 +293,8 @@ export const ApplyTemplateOutput = z.object({
   actorName: z.string().optional(),
   templateId: z.string(),
   templateName: z.string().optional(),
+  // Phase 12 R12.1: `applied` is absent on a dryRun preview (no items created), so it must be optional.
+  // Loosening required→optional is additive-compatible: real apply returns still carry it. Snapshot-locked.
   applied: z.object({
     name: z.string().optional(),
     characteristics: z.record(z.number()).optional(),
@@ -298,9 +306,21 @@ export const ApplyTemplateOutput = z.object({
       trait: z.number().optional(),
       trapping: z.number().optional(),
     }).passthrough(),
-  }).passthrough(),
+  }).passthrough().optional(),
   sceneId: z.string().optional(),
   tokenId: z.string().optional(),
+  // Phase 12 R12.1: dryRun preview fields (present only when dryRun:true).
+  dryRun: z.boolean().optional(),
+  newName: z.string().optional(),
+  characteristicDeltas: z.record(z.number()).optional(),
+  writes: z.array(z.any()).optional(),
+  note: z.string().optional(),
+  // Phase 12 R12.2: operation-receipt fields (always present on a real apply; absent on dryRun).
+  operationId: z.string().optional(),
+  createdDocumentIds: z.array(z.string()).optional(),
+  updatedDocumentIds: z.array(z.string()).optional(),
+  deletedDocumentIds: z.array(z.string()).optional(),
+  warnings: z.array(z.string()).optional(),
 }).passthrough();
 export type ApplyTemplateOutputType = z.infer<typeof ApplyTemplateOutput>;
 
@@ -325,6 +345,12 @@ export const CreateActorFromCompendiumOutput = z.object({
     errors: z.array(z.any()).optional(),
   }).passthrough(),
   message: z.string(),
+  // Phase 12 R12.2: operation-receipt fields (forwarded from the service through formatSimpleActorCreationResponse).
+  operationId: z.string().optional(),
+  createdDocumentIds: z.array(z.string()).optional(),
+  updatedDocumentIds: z.array(z.string()).optional(),
+  deletedDocumentIds: z.array(z.string()).optional(),
+  warnings: z.array(z.string()).optional(),
 }).passthrough();
 export type CreateActorFromCompendiumOutputType = z.infer<typeof CreateActorFromCompendiumOutput>;
 

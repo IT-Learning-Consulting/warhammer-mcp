@@ -101,7 +101,7 @@ Example:
     this.logger.info('Executing module-tokenbar action', { action });
     try {
       const data = await this.query<TokenbarMovementResult>('module-tokenbar', args);
-      return { content: [{ type: 'text' as const, text: formatMovement(data) }] };
+      return { content: [{ type: 'text' as const, text: formatMovement(data) }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (msg.includes(ErrorTokens.MODULE_NOT_ACTIVE)) {

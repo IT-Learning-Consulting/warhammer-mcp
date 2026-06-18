@@ -135,13 +135,20 @@ exports[`FoundryDataAccess.createItem — characterization > snapshot: actor-sco
 
 exports[`FoundryDataAccess.createItem — characterization > snapshot: world-scope creation returns folderId + folderPath 1`] = `
 {
+  "createdDocumentIds": [
+    "item-snap-002",
+  ],
+  "deletedDocumentIds": [],
   "folderId": null,
   "folderPath": [],
   "itemId": "item-snap-002",
   "itemName": "Torch",
   "itemType": "trapping",
+  "operationId": Any<String>,
   "scope": "world",
   "success": true,
+  "updatedDocumentIds": [],
+  "warnings": [],
 }
 `;
 

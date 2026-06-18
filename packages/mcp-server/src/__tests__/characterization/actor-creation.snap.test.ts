@@ -46,6 +46,7 @@ describe('ActorCreationTools — characterization', () => {
       tokensPlaced: 0,
       actors: [{ id: 'gobactor1234567', name: 'Snaggletooth', type: 'creature' }],
       errors: [],
+      operationId: 'op-cafc-1', createdDocumentIds: ['gobactor1234567'], updatedDocumentIds: [], deletedDocumentIds: [], warnings: [],
     }).handleCreateActorFromCompendium({
       packId: 'wfrp4e-core.bestiary',
       itemId: 'goblin001234567',
@@ -66,6 +67,7 @@ describe('ActorCreationTools — characterization', () => {
         { id: 'gob003actor12345', name: 'Nit',  type: 'creature' },
       ],
       errors: [],
+      operationId: 'op-cafc-3', createdDocumentIds: ['gob001actor12345', 'gob002actor12345', 'gob003actor12345'], updatedDocumentIds: [], deletedDocumentIds: [], warnings: [],
     }).handleCreateActorFromCompendium({
       packId: 'wfrp4e-core.bestiary',
       itemId: 'goblin001234567',

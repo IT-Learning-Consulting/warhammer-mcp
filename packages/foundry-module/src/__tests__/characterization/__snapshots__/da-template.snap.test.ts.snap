@@ -30,9 +30,19 @@ exports[`template-apply engine — applyTemplate (world actor) write capture > c
       },
       "name": "Wight Skeleton",
     },
+    "createdDocumentIds": [
+      "new-0",
+      "new-1",
+    ],
+    "deletedDocumentIds": [],
+    "operationId": Any<String>,
     "success": true,
     "templateId": "tpl-wight",
     "templateName": "Wight",
+    "updatedDocumentIds": [
+      "act-1",
+    ],
+    "warnings": [],
   },
   "write1_actorUpdate": [
     {
@@ -94,11 +104,21 @@ exports[`template-apply engine — applyTemplateToToken (synthetic delta) write 
       },
       "name": "Skirmisher Goblin",
     },
+    "createdDocumentIds": [
+      "new-0",
+    ],
+    "deletedDocumentIds": [],
+    "operationId": Any<String>,
     "sceneId": "s1",
     "success": true,
     "templateId": "tpl-skirmisher",
     "templateName": "Skirmisher",
     "tokenId": "t1",
+    "updatedDocumentIds": [
+      "goblin",
+      "t1",
+    ],
+    "warnings": [],
   },
   "worldActorUntouched": {
     "creates": 0,

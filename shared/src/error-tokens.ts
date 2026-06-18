@@ -27,6 +27,12 @@ export const ErrorTokens = {
   COMPANION_NOT_ACTIVE: 'COMPANION_NOT_ACTIVE',
   SOCKETLIB_NOT_ACTIVE: 'SOCKETLIB_NOT_ACTIVE',
 
+  // ── Input-validation rejection tokens (Phase 12 R12.3) ──
+  // Pre-write INPUT rejection (the field never reaches actor.update), NOT a post-write verify failure —
+  // deliberately omits the `_NOT_PERSISTED` suffix so transaction-manager's /NOT_PERSISTED|VERIFY_FAILED/
+  // rollback regex does NOT match it (a rejected field had nothing to roll back).
+  FIELD_NOT_ALLOWED: 'FIELD_NOT_ALLOWED',
+
   // ── *_NOT_PERSISTED post-write-verification tokens (DP-16) ──
   WRITE_NOT_PERSISTED: 'WRITE_NOT_PERSISTED',
   ADD_ACTIVE_EFFECT_NOT_PERSISTED: 'ADD_ACTIVE_EFFECT_NOT_PERSISTED',
