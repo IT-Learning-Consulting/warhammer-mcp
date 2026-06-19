@@ -692,6 +692,13 @@ export async function thumbnailScene(
       );
     }
 
+    // BUG (scenes#12): Foundry's `createThumbnail` returns the SOURCE texture dimensions in
+    // `thumbData.width/height` (the `thumb` data URL itself is the scaled image), so reporting them
+    // as the thumbnail's width/height was misleading (a 300×100 request returned e.g. 8500×5500).
+    // Report the REQUESTED thumbnail dimensions instead, and derive `format` from the ACTUAL data-URL
+    // bytes so the reported format never contradicts the payload (headless PIXI may emit png despite a
+    // webp request).
+    const actualFormat = /^data:image\/([a-z0-9]+)/i.exec(thumbData.thumb)?.[1] ?? input.format ?? 'webp';
     return {
       success: true as const,
       data: {
@@ -699,9 +706,9 @@ export async function thumbnailScene(
         sceneId: input.sceneId,
         sceneName: scene.name as string,
         thumbDataUrl: thumbData.thumb,
-        width: thumbData.width ?? input.width ?? 300,
-        height: thumbData.height ?? input.height ?? 100,
-        format: thumbData.format ?? input.format ?? 'webp',
+        width: input.width ?? 300,
+        height: input.height ?? 100,
+        format: actualFormat,
       } satisfies SceneThumbnailResponse,
     };
   });

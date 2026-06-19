@@ -188,7 +188,7 @@ function resolveUserId(userIdInput: string): string {
 function verifyOwnershipWrite(
   _updateResult: any,
   doc: any,
-  expected: { userId?: string | undefined; default?: boolean | undefined; level: number }
+  expected: { userId?: string | undefined; default?: boolean | undefined; level: number; exclusive?: boolean | undefined }
 ): void {
   // Ground truth is the post-state, not the update() return value.
   // `doc.update()` returns `Promise<undefined | Document>` (foundry_docs/abstract/classes/Document.md
@@ -206,6 +206,19 @@ function verifyOwnershipWrite(
         `check F12 console for DataModelValidationError. Common causes: invalid userId, invalid level, ` +
         `schema constraint violation.`
       );
+    }
+    // BUG-399: a RESET must leave the map default-only. Foundry v13 `Document#update` MERGES the
+    // `ownership` sub-object, so a plain `{default:0}` write leaves pre-existing per-user keys intact
+    // (a "reset" that doesn't revoke an elevated per-user grant). The caller deletes them via `-=` keys;
+    // this asserts the post-state actually has no residual per-user entries.
+    if (expected.exclusive === true) {
+      const residual = Object.keys(after).filter((k) => k !== 'default');
+      if (residual.length > 0) {
+        throw new Error(
+          `${ErrorTokens.OWNERSHIP_WRITE_NOT_PERSISTED}: reset left residual per-user entries [${residual.join(', ')}] — ` +
+          `Foundry merged instead of replacing. The reset must delete every per-user key (\`-=<userId>\`), not just zero default.`
+        );
+      }
     }
   } else if (expected.userId !== undefined) {
     if (after[expected.userId] !== expected.level) {
@@ -440,10 +453,17 @@ export async function resetDocumentOwnership(input: ResetDocumentOwnershipInputT
   const doc = resolution.doc;
 
   return await wrappedWrite('resetDocumentOwnership', async () => {
-    const cleared: Record<string, number> = { default: 0 };
-    const updateResult = await doc.update({ ownership: cleared });
-    // BUG-070 prevention: verify the reset actually persisted.
-    verifyOwnershipWrite(updateResult, doc, { default: true, level: 0 });
+    // BUG-399: Foundry v13 `Document#update` MERGES the `ownership` sub-object, so writing only
+    // `{default:0}` would leave pre-existing per-user grants intact — a "reset" that fails to revoke
+    // an elevated per-user permission. Build a replacement that ALSO deletes every existing per-user
+    // key via v13's `-=<key>` deletion syntax (foundry_docs/abstract/classes/Document.md — update diff).
+    const update: Record<string, number | null> = { default: 0 };
+    for (const key of Object.keys((doc.ownership as Record<string, number> | undefined) ?? {})) {
+      if (key !== 'default') update[`-=${key}`] = null;
+    }
+    const updateResult = await doc.update({ ownership: update });
+    // BUG-070 + BUG-399 prevention: verify the reset persisted AND left the map default-only.
+    verifyOwnershipWrite(updateResult, doc, { default: true, level: 0, exclusive: true });
 
     notify.updated(OWNERSHIP_NOTIFY_KIND[input.documentType], (doc.name as string | null) ?? `${input.documentType} ${doc.id}`, {
       summary: 'ownership reset',
@@ -454,7 +474,7 @@ export async function resetDocumentOwnership(input: ResetDocumentOwnershipInputT
       data: {
         documentType: input.documentType,
         resolvedId: doc.id as string,
-        ownership: { ...(doc.ownership ?? cleared) },
+        ownership: { ...(doc.ownership ?? { default: 0 }) },
       },
     };
   });
