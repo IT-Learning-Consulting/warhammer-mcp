@@ -137,6 +137,7 @@ const QUERY_KEY_ALLOWLIST = new Set([
   'listActorItems',          // → list-actor-items
   'applyTemplate',           // → apply-template
   'applyTemplateToToken',    // → apply-template-to-token
+  'applyTokenCasualties',    // → apply-token-casualties
 ]);
 
 // ── Parsers ───────────────────────────────────────────────────────────────────
@@ -322,6 +323,7 @@ function main() {
     'list-actor-items',        // listActorItems
     'apply-template',          // applyTemplate
     'apply-template-to-token', // applyTemplateToToken
+    'apply-token-casualties',  // applyTokenCasualties
     'filepicker',              // uploadFile/listFiles/filepickerNotifyWarn → filepicker
 
     // ── Server-side composite tools (no own CONFIG.queries entry — compose existing primitives). ──

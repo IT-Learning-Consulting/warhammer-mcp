@@ -1,5 +1,5 @@
 {
-  "count": 94,
+  "count": 95,
   "capturedVia": "standalone-backend :31414 list_tools",
   "names": [
     "actor-config",
@@ -12,6 +12,7 @@
     "apply-npc-career-advance",
     "apply-template",
     "apply-template-to-token",
+    "apply-token-casualties",
     "cards",
     "chat-message",
     "combatant",

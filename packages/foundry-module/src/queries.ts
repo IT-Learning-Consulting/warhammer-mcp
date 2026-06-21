@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { MODULE_ID } from './constants.js';
 import { FoundryDataAccess } from './data-access.js';
 // Phase 4 (R3.3): QueryHandlers owns the extracted creature-index + compendium-search services.
-import { PersistentCreatureIndex, CompendiumSearchService, RollRequestService, RollButtonService, PlayerLookupService, CombatService, ConditionsService, ScenePlacementService, TemplateApplyService, ActorService, ItemService, EffectsService } from './services/index.js';
+import { PersistentCreatureIndex, CompendiumSearchService, RollRequestService, RollButtonService, PlayerLookupService, CombatService, ConditionsService, ScenePlacementService, TemplateApplyService, ActorService, ItemService, EffectsService, TokenCasualtiesService } from './services/index.js';
 import { wrappedWrite } from './transaction-manager.js';
 import { assertAllowedActorFields } from './services/shared/actor-field-allowlist.js';
 import { notify } from './notify.js';
@@ -170,6 +170,8 @@ import {
   // scene domain — Phase 4: 5 legacy schemas folded into SceneToolInput umbrella.
   // Only ApplyTemplateToTokenInput stays (separate prototype-token-routing tool).
   ApplyTemplateToTokenInput,
+  // Phase 5 wfrp_battle_simulator — batch per-token ActorDelta casualty writer.
+  ApplyTokenCasualtiesInput,
   // meta (rolltable, ping, world, player rolls)
   PingInput,
   GetWorldInfoInput,
@@ -270,6 +272,8 @@ export class QueryHandlers {
   public actorService: ActorService;
   public itemService: ItemService;
   public effectsService: EffectsService;
+  // Phase 5 wfrp_battle_simulator: batch per-token ActorDelta casualty writer (single seam: validateState).
+  public tokenCasualties: TokenCasualtiesService;
 
   constructor() {
     this.creatureIndex = new PersistentCreatureIndex();
@@ -290,6 +294,7 @@ export class QueryHandlers {
     this.combat = new CombatService(validateState);
     this.conditions = new ConditionsService(validateState);
     this.templateApply = new TemplateApplyService(validateState);
+    this.tokenCasualties = new TokenCasualtiesService(validateState);
     // Phase 8 (R7.3): promoted actor/item/effect services. Callbacks reference this.dataAccess lazily
     // (invoked only at runtime, after construction completes) and reuse the surviving DA facade method
     // (getCompendiumDocumentFull stays public on FoundryDataAccess; auditLog relocated to this.auditLog
@@ -418,6 +423,7 @@ export class QueryHandlers {
       'removeCombatants': this.handleRemoveCombatants.bind(this),
       'endCombat': this.handleEndCombat.bind(this),
       'applyDamage': this.handleApplyDamage.bind(this),
+      'applyTokenCasualties': this.handleApplyTokenCasualties.bind(this),
       'applyCondition': this.handleApplyCondition.bind(this),
       'removeCondition': this.handleRemoveCondition.bind(this),
       'listConditions': this.handleListConditions.bind(this),
@@ -1136,6 +1142,15 @@ export class QueryHandlers {
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       const parsed = ApplyTemplateToTokenInput.strict().parse(data ?? {});
       return await wrappedWrite('applyTemplateToToken', async () => ({ success: true, data: await this.templateApply.applyTemplateToToken(parsed) }));
+    });
+  }
+
+  private async handleApplyTokenCasualties(data: unknown): Promise<any> {
+    return wrapQuery('Failed to apply token casualties', async () => {
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
+      const parsed = ApplyTokenCasualtiesInput.strict().parse(data ?? {});
+      return await wrappedWrite('applyTokenCasualties', async () => ({ success: true, data: await this.tokenCasualties.applyTokenCasualties(parsed) }));
     });
   }
 

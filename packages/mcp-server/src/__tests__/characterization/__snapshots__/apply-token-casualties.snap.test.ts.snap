@@ -1,0 +1,128 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ApplyTokenCasualtiesTool — characterization > dryRun preview — no operation receipt 1`] = `
+{
+  "content": [
+    {
+      "text": "{"sceneId":"scene-abc","dryRun":true,"tokenCount":1,"appliedCount":1,"failedCount":0,"results":[{"tokenId":"tok-1","applied":true,"actorName":"Orc","woundsBefore":11,"woundsAfter":0,"conditionsApplied":["dead"],"critEmbedded":"(dry-run)"}]}",
+      "type": "text",
+    },
+  ],
+  "structuredContent": {
+    "appliedCount": 1,
+    "dryRun": true,
+    "failedCount": 0,
+    "results": [
+      {
+        "actorName": "Orc",
+        "applied": true,
+        "conditionsApplied": [
+          "dead",
+        ],
+        "critEmbedded": "(dry-run)",
+        "tokenId": "tok-1",
+        "woundsAfter": 0,
+        "woundsBefore": 11,
+      },
+    ],
+    "sceneId": "scene-abc",
+    "tokenCount": 1,
+  },
+}
+`;
+
+exports[`ApplyTokenCasualtiesTool — characterization > partial failure — rejected actorLink token surfaced per-item 1`] = `
+{
+  "content": [
+    {
+      "text": "{"sceneId":"scene-abc","dryRun":false,"tokenCount":2,"appliedCount":1,"failedCount":1,"results":[{"tokenId":"tok-1","applied":true,"actorName":"Orc","woundsBefore":11,"woundsAfter":0,"conditionsApplied":["dead"],"critEmbedded":null,"siblingVerified":true},{"tokenId":"tok-linked","applied":false,"error":"Token is linked (actorLink=true); a delta write has no effect (HC2)."}],"operationId":"op-456","createdDocumentIds":[],"updatedDocumentIds":["tok-1"],"deletedDocumentIds":[],"warnings":[]}",
+      "type": "text",
+    },
+  ],
+  "structuredContent": {
+    "appliedCount": 1,
+    "createdDocumentIds": [],
+    "deletedDocumentIds": [],
+    "dryRun": false,
+    "failedCount": 1,
+    "operationId": "op-456",
+    "results": [
+      {
+        "actorName": "Orc",
+        "applied": true,
+        "conditionsApplied": [
+          "dead",
+        ],
+        "critEmbedded": null,
+        "siblingVerified": true,
+        "tokenId": "tok-1",
+        "woundsAfter": 0,
+        "woundsBefore": 11,
+      },
+      {
+        "applied": false,
+        "error": "Token is linked (actorLink=true); a delta write has no effect (HC2).",
+        "tokenId": "tok-linked",
+      },
+    ],
+    "sceneId": "scene-abc",
+    "tokenCount": 2,
+    "updatedDocumentIds": [
+      "tok-1",
+    ],
+    "warnings": [],
+  },
+}
+`;
+
+exports[`ApplyTokenCasualtiesTool — characterization > real apply — wraps validated output in content + structuredContent 1`] = `
+{
+  "content": [
+    {
+      "text": "{"sceneId":"scene-abc","dryRun":false,"tokenCount":2,"appliedCount":2,"failedCount":0,"results":[{"tokenId":"tok-1","applied":true,"actorName":"Orc","woundsBefore":11,"woundsAfter":0,"conditionsApplied":["dead"],"critEmbedded":"crit-xyz","siblingVerified":true},{"tokenId":"tok-2","applied":true,"actorName":"Orc","woundsBefore":11,"woundsAfter":4,"conditionsApplied":[],"critEmbedded":null,"siblingVerified":true}],"operationId":"op-123","createdDocumentIds":["crit-xyz"],"updatedDocumentIds":["tok-1","tok-2"],"deletedDocumentIds":[],"warnings":[]}",
+      "type": "text",
+    },
+  ],
+  "structuredContent": {
+    "appliedCount": 2,
+    "createdDocumentIds": [
+      "crit-xyz",
+    ],
+    "deletedDocumentIds": [],
+    "dryRun": false,
+    "failedCount": 0,
+    "operationId": "op-123",
+    "results": [
+      {
+        "actorName": "Orc",
+        "applied": true,
+        "conditionsApplied": [
+          "dead",
+        ],
+        "critEmbedded": "crit-xyz",
+        "siblingVerified": true,
+        "tokenId": "tok-1",
+        "woundsAfter": 0,
+        "woundsBefore": 11,
+      },
+      {
+        "actorName": "Orc",
+        "applied": true,
+        "conditionsApplied": [],
+        "critEmbedded": null,
+        "siblingVerified": true,
+        "tokenId": "tok-2",
+        "woundsAfter": 4,
+        "woundsBefore": 11,
+      },
+    ],
+    "sceneId": "scene-abc",
+    "tokenCount": 2,
+    "updatedDocumentIds": [
+      "tok-1",
+      "tok-2",
+    ],
+    "warnings": [],
+  },
+}
+`;

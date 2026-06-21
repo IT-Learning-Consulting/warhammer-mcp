@@ -17,6 +17,7 @@ import { OwnershipTool } from '../ownership.js';
 import { RollTableTool } from '../rolltable.js';
 import { ManageCombatTools } from '../manage-combat.js';
 import { ApplyDamageTool } from '../apply-damage.js';
+import { ApplyTokenCasualtiesTool } from '../apply-token-casualties.js';
 import { ManageConditionsTools } from '../manage-conditions.js';
 import { ListActiveEffectsTool } from '../list-active-effects.js';
 import { UpdateActorTool } from '../update-actor.js';
@@ -100,6 +101,7 @@ export function buildTools(deps: BaseToolOptions): BaseTool[] {
     new RollTableTool(deps),
     new ManageCombatTools(deps),
     new ApplyDamageTool(deps),
+    new ApplyTokenCasualtiesTool(deps),
     new ManageConditionsTools(deps),
     new ListActiveEffectsTool(deps),
     new UpdateActorTool(deps),

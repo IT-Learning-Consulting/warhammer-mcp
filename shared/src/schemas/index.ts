@@ -83,3 +83,5 @@ export * from './keybinding.js';
 // Phase 1 module_integration_v1 — module-probe umbrella (is-active / list-active).
 // Generic types only; module-specific schemas live in package-local tools/modules/<id>/schemas.ts.
 export * from './module-probe.js';
+// Phase 5 wfrp_battle_simulator — apply-token-casualties (batch per-token ActorDelta casualty writer).
+export * from './apply-token-casualties.js';

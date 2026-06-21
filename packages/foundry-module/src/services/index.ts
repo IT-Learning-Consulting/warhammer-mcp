@@ -23,3 +23,5 @@ export { TemplateApplyService } from './template-apply.js';
 export { EffectsService } from './effects.js';
 export { ItemService } from './item.js';
 export { ActorService } from './actor.js';
+// Phase 5 wfrp_battle_simulator: batch per-token ActorDelta casualty writer (HC2 token-delta writes).
+export { TokenCasualtiesService } from './token-casualties.js';
