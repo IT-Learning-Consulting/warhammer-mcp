@@ -14,6 +14,8 @@ import { FoundryClient } from '../foundry-client.js';
 import { Logger } from '../logger.js';
 import { BaseTool, BaseToolOptions } from '../base-tool.js';
 
+// Mirrors live CONFIG.WFRP4E.conditions (verified 2026-06-22, BUG-404). No `dead` condition exists
+// in wfrp4e; the phantom `dead`/`stuffed`/`grappled` were dropped and the real `grappling` added.
 const CONDITION_KEYS = [
   'ablaze',
   'bleeding',
@@ -27,9 +29,7 @@ const CONDITION_KEYS = [
   'stunned',
   'surprised',
   'unconscious',
-  'dead',
-  'stuffed',
-  'grappled',
+  'grappling',
   'engaged',
   'defeated',
 ];
@@ -124,7 +124,7 @@ export class ManageConditionsTools extends BaseTool {
           idempotentHint: true,
           openWorldHint: true,
         },
-        description: 'List the condition-flagged active effects currently on an actor. Read-only.\n\nArgs:\n  - actorId (string): Target actor ID (16-char Foundry document ID, NOT a full Foundry UUID-style string).\n\nReturns:\n  - On success: array of active effects whose statuses include a WFRP4e condition key (ablaze, bleeding, blinded, broken, deafened, entangled, fatigued, poisoned, prone, stunned, surprised, unconscious, dead, stuffed, grappled, engaged, defeated). Returns array directly (not wrapped in an envelope); empty array means "no conditions on this actor" — caller should verify the actorId exists by separate lookup if ambiguity matters.\n  - On error: throws with an actionable message.\n\nUse when: checking which conditions are on a character before a remove-condition call, or summarizing a character\'s status. Don\'t use when: listing all active effects including scripts — use list-active-effects instead.',
+        description: 'List the condition-flagged active effects currently on an actor. Read-only.\n\nArgs:\n  - actorId (string): Target actor ID (16-char Foundry document ID, NOT a full Foundry UUID-style string).\n\nReturns:\n  - On success: array of active effects whose statuses include a WFRP4e condition key (ablaze, bleeding, blinded, broken, deafened, entangled, fatigued, poisoned, prone, stunned, surprised, unconscious, grappling, engaged, defeated). Returns array directly (not wrapped in an envelope); empty array means "no conditions on this actor" — caller should verify the actorId exists by separate lookup if ambiguity matters.\n  - On error: throws with an actionable message.\n\nUse when: checking which conditions are on a character before a remove-condition call, or summarizing a character\'s status. Don\'t use when: listing all active effects including scripts — use list-active-effects instead.',
         inputSchema: {
           type: 'object',
           properties: {

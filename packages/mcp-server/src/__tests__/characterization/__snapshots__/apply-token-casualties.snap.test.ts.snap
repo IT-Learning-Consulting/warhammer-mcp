@@ -4,7 +4,7 @@ exports[`ApplyTokenCasualtiesTool — characterization > dryRun preview — no o
 {
   "content": [
     {
-      "text": "{"sceneId":"scene-abc","dryRun":true,"tokenCount":1,"appliedCount":1,"failedCount":0,"results":[{"tokenId":"tok-1","applied":true,"actorName":"Orc","woundsBefore":11,"woundsAfter":0,"conditionsApplied":["dead"],"critEmbedded":"(dry-run)"}]}",
+      "text": "{"sceneId":"scene-abc","dryRun":true,"tokenCount":1,"appliedCount":1,"failedCount":0,"results":[{"tokenId":"tok-1","applied":true,"actorName":"Orc","woundsBefore":11,"woundsAfter":0,"conditionsApplied":["unconscious"],"critEmbedded":"(dry-run)"}]}",
       "type": "text",
     },
   ],
@@ -17,7 +17,7 @@ exports[`ApplyTokenCasualtiesTool — characterization > dryRun preview — no o
         "actorName": "Orc",
         "applied": true,
         "conditionsApplied": [
-          "dead",
+          "unconscious",
         ],
         "critEmbedded": "(dry-run)",
         "tokenId": "tok-1",
@@ -31,11 +31,57 @@ exports[`ApplyTokenCasualtiesTool — characterization > dryRun preview — no o
 }
 `;
 
+exports[`ApplyTokenCasualtiesTool — characterization > idempotent retry (BUG-409) — batchId re-send skips the already-applied token 1`] = `
+{
+  "content": [
+    {
+      "text": "{"sceneId":"scene-abc","dryRun":false,"tokenCount":2,"appliedCount":2,"failedCount":0,"alreadyAppliedCount":1,"results":[{"tokenId":"tok-1","applied":true,"alreadyApplied":true,"actorName":"Orc"},{"tokenId":"tok-2","applied":true,"actorName":"Orc","woundsBefore":11,"woundsAfter":0,"conditionsApplied":["unconscious"],"critEmbedded":null,"siblingVerified":true}],"operationId":"op-789","createdDocumentIds":[],"updatedDocumentIds":["tok-2"],"deletedDocumentIds":[],"warnings":[]}",
+      "type": "text",
+    },
+  ],
+  "structuredContent": {
+    "alreadyAppliedCount": 1,
+    "appliedCount": 2,
+    "createdDocumentIds": [],
+    "deletedDocumentIds": [],
+    "dryRun": false,
+    "failedCount": 0,
+    "operationId": "op-789",
+    "results": [
+      {
+        "actorName": "Orc",
+        "alreadyApplied": true,
+        "applied": true,
+        "tokenId": "tok-1",
+      },
+      {
+        "actorName": "Orc",
+        "applied": true,
+        "conditionsApplied": [
+          "unconscious",
+        ],
+        "critEmbedded": null,
+        "siblingVerified": true,
+        "tokenId": "tok-2",
+        "woundsAfter": 0,
+        "woundsBefore": 11,
+      },
+    ],
+    "sceneId": "scene-abc",
+    "tokenCount": 2,
+    "updatedDocumentIds": [
+      "tok-2",
+    ],
+    "warnings": [],
+  },
+}
+`;
+
 exports[`ApplyTokenCasualtiesTool — characterization > partial failure — rejected actorLink token surfaced per-item 1`] = `
 {
   "content": [
     {
-      "text": "{"sceneId":"scene-abc","dryRun":false,"tokenCount":2,"appliedCount":1,"failedCount":1,"results":[{"tokenId":"tok-1","applied":true,"actorName":"Orc","woundsBefore":11,"woundsAfter":0,"conditionsApplied":["dead"],"critEmbedded":null,"siblingVerified":true},{"tokenId":"tok-linked","applied":false,"error":"Token is linked (actorLink=true); a delta write has no effect (HC2)."}],"operationId":"op-456","createdDocumentIds":[],"updatedDocumentIds":["tok-1"],"deletedDocumentIds":[],"warnings":[]}",
+      "text": "{"sceneId":"scene-abc","dryRun":false,"tokenCount":2,"appliedCount":1,"failedCount":1,"results":[{"tokenId":"tok-1","applied":true,"actorName":"Orc","woundsBefore":11,"woundsAfter":0,"conditionsApplied":["unconscious"],"critEmbedded":null,"siblingVerified":true},{"tokenId":"tok-linked","applied":false,"error":"Token is linked (actorLink=true); a delta write has no effect (HC2)."}],"operationId":"op-456","createdDocumentIds":[],"updatedDocumentIds":["tok-1"],"deletedDocumentIds":[],"warnings":[]}",
       "type": "text",
     },
   ],
@@ -51,7 +97,7 @@ exports[`ApplyTokenCasualtiesTool — characterization > partial failure — rej
         "actorName": "Orc",
         "applied": true,
         "conditionsApplied": [
-          "dead",
+          "unconscious",
         ],
         "critEmbedded": null,
         "siblingVerified": true,
@@ -79,7 +125,7 @@ exports[`ApplyTokenCasualtiesTool — characterization > real apply — wraps va
 {
   "content": [
     {
-      "text": "{"sceneId":"scene-abc","dryRun":false,"tokenCount":2,"appliedCount":2,"failedCount":0,"results":[{"tokenId":"tok-1","applied":true,"actorName":"Orc","woundsBefore":11,"woundsAfter":0,"conditionsApplied":["dead"],"critEmbedded":"crit-xyz","siblingVerified":true},{"tokenId":"tok-2","applied":true,"actorName":"Orc","woundsBefore":11,"woundsAfter":4,"conditionsApplied":[],"critEmbedded":null,"siblingVerified":true}],"operationId":"op-123","createdDocumentIds":["crit-xyz"],"updatedDocumentIds":["tok-1","tok-2"],"deletedDocumentIds":[],"warnings":[]}",
+      "text": "{"sceneId":"scene-abc","dryRun":false,"tokenCount":2,"appliedCount":2,"failedCount":0,"results":[{"tokenId":"tok-1","applied":true,"actorName":"Orc","woundsBefore":11,"woundsAfter":0,"conditionsApplied":["unconscious"],"critEmbedded":"crit-xyz","siblingVerified":true},{"tokenId":"tok-2","applied":true,"actorName":"Orc","woundsBefore":11,"woundsAfter":4,"conditionsApplied":[],"critEmbedded":null,"siblingVerified":true}],"operationId":"op-123","createdDocumentIds":["crit-xyz"],"updatedDocumentIds":["tok-1","tok-2"],"deletedDocumentIds":[],"warnings":[]}",
       "type": "text",
     },
   ],
@@ -97,7 +143,7 @@ exports[`ApplyTokenCasualtiesTool — characterization > real apply — wraps va
         "actorName": "Orc",
         "applied": true,
         "conditionsApplied": [
-          "dead",
+          "unconscious",
         ],
         "critEmbedded": "crit-xyz",
         "siblingVerified": true,

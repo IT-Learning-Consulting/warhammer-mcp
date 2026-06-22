@@ -192,6 +192,14 @@ export type RegionMutationOutputType = z.infer<typeof RegionMutationOutput>;
 export const MattMutationOutput = z.object({}).passthrough();
 export type MattMutationOutputType = z.infer<typeof MattMutationOutput>;
 
+// --- modules/imperial-arcana/imperial-arcana.ts — permissive passthrough (Phase 7).
+// One umbrella, 4 actions whose per-action shapes differ (draw vs record vs search vs
+// recall); a tight union buys near-zero contract value for high .parse()-throw risk —
+// same call made for region/MATT (user Q&A 2026-06-17). structuredContent is attached
+// on every action at runtime; this schema only needs to not reject it. ---
+export const ImperialArcanaOutput = z.object({}).passthrough();
+export type ImperialArcanaOutputType = z.infer<typeof ImperialArcanaOutput>;
+
 // --- JSON-schema consts for the 10 new DTOs ---
 export const APPLY_DAMAGE_OUTPUT_JSON_SCHEMA = zodToJsonSchema(ApplyDamageOutput, { target: 'jsonSchema7' });
 export const APPLY_TEMPLATE_TO_TOKEN_OUTPUT_JSON_SCHEMA = zodToJsonSchema(ApplyTemplateToTokenOutput, { target: 'jsonSchema7' });
@@ -203,3 +211,4 @@ export const UPDATE_ACTIVE_EFFECT_OUTPUT_JSON_SCHEMA = zodToJsonSchema(UpdateAct
 export const DELETE_ACTIVE_EFFECT_OUTPUT_JSON_SCHEMA = zodToJsonSchema(DeleteActiveEffectOutput, { target: 'jsonSchema7' });
 export const REGION_MUTATION_OUTPUT_JSON_SCHEMA = zodToJsonSchema(RegionMutationOutput, { target: 'jsonSchema7' });
 export const MATT_MUTATION_OUTPUT_JSON_SCHEMA = zodToJsonSchema(MattMutationOutput, { target: 'jsonSchema7' });
+export const IMPERIAL_ARCANA_OUTPUT_JSON_SCHEMA = zodToJsonSchema(ImperialArcanaOutput, { target: 'jsonSchema7' });

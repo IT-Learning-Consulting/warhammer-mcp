@@ -1,6 +1,6 @@
 {
   "name": "@foundry-mcp/server",
-  "version": "0.8.0",
+  "version": "1.0.0",
   "description": "MCP server for Foundry VTT integration with Claude Desktop",
   "type": "module",
   "main": "dist/index.js",
@@ -27,7 +27,7 @@
     "lint:fix": "eslint src --fix"
   },
   "dependencies": {
-    "@foundry-mcp/shared": "^0.8.0",
+    "@foundry-mcp/shared": "^1.0.0",
     "@modelcontextprotocol/sdk": "^1.7.0",
     "axios": "^1.6.0",
     "dotenv": "^16.3.0",

@@ -4,8 +4,11 @@
 import { z } from 'zod';
 import { ActorId } from './branded-ids.js';
 
-// Static list mirroring CONFIG.WFRP4E.conditions. Handler-side also validates
-// against live CONFIG.WFRP4E.conditions keys to catch system drift.
+// Static list mirroring live CONFIG.WFRP4E.conditions (verified 2026-06-22, BUG-404). Handler-side
+// also validates against live CONFIG.WFRP4E.conditions keys to catch system drift. NOTE: there is NO
+// `dead` condition in wfrp4e (an out-of-action creature is `unconscious` + 0 wounds; death is
+// critical-driven). The phantom keys `dead`/`stuffed`/`grappled` were removed and the real
+// `grappling` added so this enum matches the handler's own valid-key set (BUG-404).
 export const ConditionKey = z.enum([
   'ablaze',
   'bleeding',
@@ -19,9 +22,7 @@ export const ConditionKey = z.enum([
   'stunned',
   'surprised',
   'unconscious',
-  'dead',
-  'stuffed',
-  'grappled',
+  'grappling',
   'engaged',
   'defeated',
 ]);

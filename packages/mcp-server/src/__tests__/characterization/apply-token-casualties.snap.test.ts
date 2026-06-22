@@ -15,7 +15,7 @@ const realApplyReturn = {
   appliedCount: 2,
   failedCount: 0,
   results: [
-    { tokenId: 'tok-1', applied: true, actorName: 'Orc', woundsBefore: 11, woundsAfter: 0, conditionsApplied: ['dead'], critEmbedded: 'crit-xyz', siblingVerified: true },
+    { tokenId: 'tok-1', applied: true, actorName: 'Orc', woundsBefore: 11, woundsAfter: 0, conditionsApplied: ['unconscious'], critEmbedded: 'crit-xyz', siblingVerified: true },
     { tokenId: 'tok-2', applied: true, actorName: 'Orc', woundsBefore: 11, woundsAfter: 4, conditionsApplied: [], critEmbedded: null, siblingVerified: true },
   ],
   operationId: 'op-123',
@@ -32,8 +32,27 @@ const dryRunReturn = {
   appliedCount: 1,
   failedCount: 0,
   results: [
-    { tokenId: 'tok-1', applied: true, actorName: 'Orc', woundsBefore: 11, woundsAfter: 0, conditionsApplied: ['dead'], critEmbedded: '(dry-run)' },
+    { tokenId: 'tok-1', applied: true, actorName: 'Orc', woundsBefore: 11, woundsAfter: 0, conditionsApplied: ['unconscious'], critEmbedded: '(dry-run)' },
   ],
+};
+
+// BUG-409 idempotent retry: a re-send with the same batchId — token already applied → skipped.
+const idempotentRetryReturn = {
+  sceneId: 'scene-abc',
+  dryRun: false,
+  tokenCount: 2,
+  appliedCount: 2,
+  failedCount: 0,
+  alreadyAppliedCount: 1,
+  results: [
+    { tokenId: 'tok-1', applied: true, alreadyApplied: true, actorName: 'Orc' },
+    { tokenId: 'tok-2', applied: true, actorName: 'Orc', woundsBefore: 11, woundsAfter: 0, conditionsApplied: ['unconscious'], critEmbedded: null, siblingVerified: true },
+  ],
+  operationId: 'op-789',
+  createdDocumentIds: [],
+  updatedDocumentIds: ['tok-2'],
+  deletedDocumentIds: [],
+  warnings: [],
 };
 
 const partialFailureReturn = {
@@ -43,7 +62,7 @@ const partialFailureReturn = {
   appliedCount: 1,
   failedCount: 1,
   results: [
-    { tokenId: 'tok-1', applied: true, actorName: 'Orc', woundsBefore: 11, woundsAfter: 0, conditionsApplied: ['dead'], critEmbedded: null, siblingVerified: true },
+    { tokenId: 'tok-1', applied: true, actorName: 'Orc', woundsBefore: 11, woundsAfter: 0, conditionsApplied: ['unconscious'], critEmbedded: null, siblingVerified: true },
     { tokenId: 'tok-linked', applied: false, error: 'Token is linked (actorLink=true); a delta write has no effect (HC2).' },
   ],
   operationId: 'op-456',
@@ -59,7 +78,7 @@ describe('ApplyTokenCasualtiesTool — characterization', () => {
       sceneId: 'scene-abc',
       confirmedApply: true,
       casualties: [
-        { tokenId: 'tok-1', wounds: 0, conditions: ['dead'], criticalUuid: 'Compendium.artantares-advanced-criticals.items.Item.abc' },
+        { tokenId: 'tok-1', wounds: 0, conditions: ['unconscious'], criticalUuid: 'Compendium.artantares-advanced-criticals.items.Item.abc' },
         { tokenId: 'tok-2', wounds: 4 },
       ],
     });
@@ -71,7 +90,20 @@ describe('ApplyTokenCasualtiesTool — characterization', () => {
       sceneId: 'scene-abc',
       confirmedApply: true,
       dryRun: true,
-      casualties: [{ tokenId: 'tok-1', wounds: 0, conditions: ['dead'] }],
+      casualties: [{ tokenId: 'tok-1', wounds: 0, conditions: ['unconscious'] }],
+    });
+    expect(r).toMatchSnapshot();
+  });
+
+  it('idempotent retry (BUG-409) — batchId re-send skips the already-applied token', async () => {
+    const r = await tool(idempotentRetryReturn).handle({
+      sceneId: 'scene-abc',
+      confirmedApply: true,
+      batchId: 'orcs-r2-2026-06-22T00-00-00Z',
+      casualties: [
+        { tokenId: 'tok-1', wounds: 0, conditions: ['unconscious'] },
+        { tokenId: 'tok-2', wounds: 0, conditions: ['unconscious'] },
+      ],
     });
     expect(r).toMatchSnapshot();
   });
@@ -81,7 +113,7 @@ describe('ApplyTokenCasualtiesTool — characterization', () => {
       sceneId: 'scene-abc',
       confirmedApply: true,
       casualties: [
-        { tokenId: 'tok-1', wounds: 0, conditions: ['dead'] },
+        { tokenId: 'tok-1', wounds: 0, conditions: ['unconscious'] },
         { tokenId: 'tok-linked', wounds: 0 },
       ],
     });

@@ -1,6 +1,6 @@
 // Phase 11 (R11.3): centralized error-token registry.
 //
-// 82 tokens: 78 `*_NOT_PERSISTED` post-verify tokens (DP-16) + 4 cross-package
+// 83 tokens: 79 `*_NOT_PERSISTED` post-verify tokens (DP-16) + 4 cross-package
 // module-guard tokens. Previously scattered as bare string literals across ~90
 // files in both packages.
 //
@@ -70,6 +70,7 @@ export const ErrorTokens = {
   GMTOOLKIT_SCENE_LIGHT_NOT_PERSISTED: 'GMTOOLKIT_SCENE_LIGHT_NOT_PERSISTED',
   GMTOOLKIT_STATUS_NOT_PERSISTED: 'GMTOOLKIT_STATUS_NOT_PERSISTED',
   GMTOOLKIT_XP_NOT_PERSISTED: 'GMTOOLKIT_XP_NOT_PERSISTED',
+  IMPERIAL_ARCANA_RECORD_NOT_PERSISTED: 'IMPERIAL_ARCANA_RECORD_NOT_PERSISTED',
   JOURNAL_WRITE_NOT_PERSISTED: 'JOURNAL_WRITE_NOT_PERSISTED',
   KEYBINDING_NOT_PERSISTED: 'KEYBINDING_NOT_PERSISTED',
   MACRO_IMPORT_NOT_PERSISTED: 'MACRO_IMPORT_NOT_PERSISTED',

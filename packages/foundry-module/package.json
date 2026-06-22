@@ -1,6 +1,6 @@
 {
   "name": "@foundry-mcp/module",
-  "version": "0.8.0",
+  "version": "1.0.0",
   "description": "Warhammer Fantasy Roleplay 4e MCP bridge module for Foundry VTT",
   "type": "module",
   "scripts": {
@@ -18,7 +18,7 @@
     "socket.io-client": "^4.7.0"
   },
   "devDependencies": {
-    "@foundry-mcp/shared": "^0.8.0",
+    "@foundry-mcp/shared": "^1.0.0",
     "@league-of-foundry-developers/foundry-vtt-types": "^9.280.0",
     "@types/node": "^20.0.0",
     "@vitest/coverage-v8": "^3.2.4",

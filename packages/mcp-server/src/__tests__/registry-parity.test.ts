@@ -36,10 +36,10 @@ function snapshotNames(): string[] {
 }
 
 describe('declarative tool registry parity (R8.1/R8.2)', () => {
-  it('getRegistration() union has exactly 95 names with no duplicates', () => {
+  it('getRegistration() union has exactly 96 names with no duplicates', () => {
     const names = instances().flatMap((t) => t.getRegistration().map((r) => r.name));
-    expect(names.length).toBe(95);
-    expect(new Set(names).size).toBe(95); // no duplicate registrations (Risk 8.A)
+    expect(names.length).toBe(96);
+    expect(new Set(names).size).toBe(96); // no duplicate registrations (Risk 8.A)
   });
 
   it('every registration carries a callable handler', () => {

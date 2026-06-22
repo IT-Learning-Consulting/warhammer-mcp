@@ -1,5 +1,41 @@
 # Changelog
 
+## v1.0.0 (2026-06-22)
+
+The 1.0 milestone. Everything since `v0.8.1` — the full third-party **module-integration tier**, the **code-quality hardening** PRD (Phases 0–14), two new tools, and the BUG-259→BUG-399 fix sprints — consolidated into a stable release. The runtime advertises `1.0.0` already (`SERVER_VERSION` default); this bump aligns the package metadata, module manifest, and docs.
+
+> **Compatibility / restart policy**
+> - **Foundry VTT v13** — pinned. v12 and v14 are not supported.
+> - **Module manifest** version label refreshes on next Setup-screen open; no in-game reload required.
+> - **No breaking changes** to existing tool surfaces from v0.8.x — only additions (two new tools), internal refactors, and bug fixes. Existing macros, skills, and client configs keep working.
+> - **MCP server** still reads its advertised version from `SERVER_VERSION` (default `1.0.0`); restart the server only to pick up new code from `dist/`, not for this metadata bump.
+
+### 🧩 Module Integration v1 — conditional `module-*` tool layer
+
+- **30+ third-party WFRP4e modules** wired behind a `module-probe` pre-flight + `MODULE_NOT_ACTIVE` conditional contract, so the surface degrades gracefully when a module is absent: Item Piles, Monk's Active Tile (MATT), scene-atmosphere (fxmaster/tokenmagic/scenery/transitions), Sequencer, GM Toolkit, Forien's Armoury, Mastercrafted, Gatherer, Timekeeping, Patrol, Party Resources, Levels, Tagger, Tokenbar, Chat Commander, Access Control (LocknKey/LockView), Community Lighting, custom-css, auto-animations, and more.
+- **Custom-CSS + advanced-drawings** integration; MATT automation authoring/inspection/fire surface.
+
+### 🆕 New tools
+
+- **`imperial-arcana`** — 4-action umbrella for the `wfrp-imperial-arcana` module: a 36-card WFRP4e divination deck (spread draw with Promise/Peril, Ninefold + Conjunction detection) and Reading Records. Read-only, additive, CONDITIONAL (`MODULE_NOT_ACTIVE` when the module is off).
+- **`apply-token-casualties`** — battle-sim Phase 5: writes per-token wounds / conditions / criticals onto exact unlinked tokens by ID (the out-of-game `/wfrp-battle-simulator` apply path).
+
+### 🧱 Code-Quality Hardening (Phases 0–14)
+
+- **Behavior-freeze gate machinery** (Phase 0) + **branded ID infrastructure** (Phase 1).
+- **Service extraction** — actor/item/effect/template-apply/scene-placement/combat/conditions pulled out of the monolithic `data-access.ts`; `updateActor` split.
+- **Declarative tool registry** (Phase 8) — `backend.ts` hardcoded `register()` literals collapsed to a single loop over `buildTools()`; `registry-parity.test.ts` proves the surface byte-for-byte (now 96 registered names).
+- **Hot-path DTO/view type layer** (Phase 9); **async + lifecycle hardening** (Phase 10).
+- **Contract hardening** (Phases 11–12) — `outputSchema` + `structuredContent` on every tool, typed error-tokens, readonly-annotation checks, mutation-safety + `verifyPersistence` post-write guards, eval false-green hardening.
+- **Build gates** — `check:registry`, `check:tool-contract-parity`, `check:envelope-consumer`, `check:source-pattern`, `check:factory-coverage`, `check:output-schema-conformance`, `check:readonly-annotations`, `check:dist-freshness` now run on every `npm run build`.
+
+### 🐛 Bug fixes (selection)
+
+- **BUG-399** — ownership reset + scene thumbnail regen.
+- **BUG-396 / BUG-397** — `structuredContent` emission sweep + nullable-read guard.
+- **BUG-390 / BUG-391** — gmnotes path unification + `structuredContent` on text-only tools.
+- **BUG-264→BUG-388** — multi-batch static-review fix sprints (socket reconnect state machine, index race, MATT semantics, roll-request, tagger scene-pinning, schema-parity).
+
 ## v0.8.0 (2026-05-19)
 
 Sixteen months of work folded into a single version bump. The previous numbering (0.2.x) stopped reflecting actual scope around late 2025; this release re-baselines to 0.8.0 to acknowledge the substrate, CRUD-expansion, and tooling work that landed since.

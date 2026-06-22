@@ -662,5 +662,5 @@ netstat -ano | findstr 31415
 
 ---
 
-**Last Updated**: May 19, 2026  
-**Version**: 0.8.0
+**Last Updated**: June 22, 2026  
+**Version**: 1.0.0

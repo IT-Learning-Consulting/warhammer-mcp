@@ -1,6 +1,6 @@
 {
   "name": "foundry-mcp-integration",
-  "version": "0.8.0",
+  "version": "1.0.0",
   "description": "Warhammer MCP — WFRP4e-specialized MCP server + Foundry VTT v13 module bridging Foundry game data to Claude Desktop, Claude Code, Codex, Gemini-CLI, and VS Code Copilot.",
   "private": true,
   "workspaces": [

@@ -85,6 +85,7 @@ import { ModuleAccessControlTool } from '../modules/access-control/access-contro
 import { ModuleCssTool } from '../modules/custom-css/css.js';
 import { ModuleLightingTool } from '../modules/community-lighting/lighting.js';
 import { ModuleItempilesTool } from '../modules/item-piles/item-piles.js';
+import { ModuleImperialArcanaTool } from '../modules/imperial-arcana/imperial-arcana.js';
 
 export function buildTools(deps: BaseToolOptions): BaseTool[] {
   return [
@@ -169,5 +170,6 @@ export function buildTools(deps: BaseToolOptions): BaseTool[] {
     new ModuleCssTool(deps),
     new ModuleLightingTool(deps),
     new ModuleItempilesTool(deps),
+    new ModuleImperialArcanaTool(deps),
   ];
 }

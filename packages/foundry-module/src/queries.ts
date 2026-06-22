@@ -110,6 +110,8 @@ import { dispatchModuleSceneAtmosphere as dispatchModuleSceneAtmosphereHandler }
 import { dispatchModuleAccessControl as dispatchModuleAccessControlHandler } from './handlers/modules/access-control/access-control.js';
 // Phase 13A module_integration_v1 — module-css umbrella.
 import { dispatchModuleCss as dispatchModuleCssHandler } from './handlers/modules/custom-css/css.js';
+// wfrp_imperial_arcana Phase 7 — imperial-arcana umbrella.
+import { dispatchImperialArcana as dispatchImperialArcanaHandler } from './handlers/modules/imperial-arcana/imperial-arcana.js';
 // Phase 15 module_integration_v1 — module-lighting umbrella (CommunityLighting, conditional).
 import { dispatchModuleLighting as dispatchModuleLightingHandler } from './handlers/modules/community-lighting/lighting.js';
 // Phase 9 module_integration_v1 — WFRP mechanic delegates: module-robak + module-tokenbar (conditional).
@@ -461,6 +463,7 @@ export class QueryHandlers {
       'module-scene-atmosphere': this.handleModuleSceneAtmosphere.bind(this),
       'module-access-control': this.handleModuleAccessControl.bind(this),
       'module-css': this.handleModuleCss.bind(this),
+      'imperial-arcana': this.handleImperialArcana.bind(this),
       'module-lighting': this.handleModuleLighting.bind(this),
       'module-robak': this.handleModuleRobak.bind(this),
       'module-tokenbar': this.handleModuleTokenbar.bind(this),
@@ -827,6 +830,14 @@ export class QueryHandlers {
   private async handleModuleCss(data: unknown): Promise<any> {
     return wrapQuery('Failed to dispatch module-css action', async () => {
       return await dispatchModuleCssHandler(data);
+    });
+  }
+
+  // wfrp_imperial_arcana Phase 7 — imperial-arcana dispatcher.
+  // requireModuleActive('wfrp-imperial-arcana') guard runs inside dispatchImperialArcana.
+  private async handleImperialArcana(data: unknown): Promise<any> {
+    return wrapQuery('Failed to dispatch imperial-arcana action', async () => {
+      return await dispatchImperialArcanaHandler(data);
     });
   }
 

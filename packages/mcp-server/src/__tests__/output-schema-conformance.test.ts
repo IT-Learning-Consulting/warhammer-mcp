@@ -32,6 +32,7 @@ import { ManageCombatTools } from '../tools/manage-combat.js';
 import { ManageConditionsTools } from '../tools/manage-conditions.js';
 import { RegionTool } from '../tools/region.js';
 import { ModuleMattTool } from '../tools/modules/monks-active-tiles/matt.js';
+import { ModuleImperialArcanaTool } from '../tools/modules/imperial-arcana/imperial-arcana.js';
 
 const ajv = new Ajv({ strict: false, allowUnionTypes: true, allErrors: true });
 
@@ -171,6 +172,15 @@ const CASES: ConformanceCase[] = [
     toolName: 'module-matt',
     makeTool: () => new ModuleMattTool(makeToolDeps({ uuid: 'Scene.s1.Tile.t1', tileId: 't1', variables: { phase: 1 } })),
     args: { action: 'set-variables', tileUuid: 'Scene.s1.Tile.t1', variables: { phase: 1 } },
+  },
+  {
+    toolName: 'imperial-arcana',
+    // record-reading is the write action; structuredContent = the CCR-10 record data (passthrough outputSchema).
+    makeTool: () => new ModuleImperialArcanaTool(makeToolDeps({
+      journalId: 'ImperialRecord00', name: 'Reading: The Three Omens — 2026-06-21',
+      flags: { schemaVersion: 1, numerals: [4, 32, 33], spread: 'A', dominantOmen: 32, ninefold: false, conjunctions: ['4|32'], linkedUuids: [] },
+    })),
+    args: { action: 'record-reading', spread: 'A', numerals: [4, 32, 33], dominantOmen: 32 },
   },
 ];
 

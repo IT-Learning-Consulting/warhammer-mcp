@@ -2,7 +2,7 @@
   "id": "warhammer-mcp",
   "title": "Warhammer MCP",
   "description": "Connect Foundry VTT to AI models through MCP protocol. WFRP 4e specialized bridge enabling AI-powered character management, career advancement, corruption tracking, NPC generation, and intelligent compendium search. Supports Claude with comprehensive GM-only security.",
-  "version": "0.8.0",
+  "version": "1.0.0",
   "compatibility": {
     "minimum": "13",
     "verified": "13",

@@ -1,5 +1,5 @@
 {
-  "count": 95,
+  "count": 96,
   "capturedVia": "standalone-backend :31414 list_tools",
   "names": [
     "actor-config",
@@ -40,6 +40,7 @@
     "get-compendium-item",
     "get-wfrp-config",
     "get-world-info",
+    "imperial-arcana",
     "item-directory",
     "journal",
     "keybinding",

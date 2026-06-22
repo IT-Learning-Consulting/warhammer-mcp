@@ -13,6 +13,12 @@
 import { notify } from '../notify.js';
 import { verifyDocWrite } from '../utils/verifyWrite.js';
 import { buildOperationReceipt } from './shared/operation-receipt.js';
+import { MODULE_ID } from '../constants.js';
+
+// BUG-409 idempotency: per-token applied-batch markers live at
+// flags.warhammer-mcp.casualtyBatches (an array on the token's SYNTHETIC actor / ActorDelta).
+// Capped to the most-recent N so a long-lived token does not accumulate unbounded batch ids.
+const MAX_TRACKED_BATCHES = 25;
 
 interface CasualtyInput {
   tokenId: string;
@@ -30,6 +36,7 @@ interface CasualtyResult {
   conditionsApplied?: string[];
   critEmbedded?: string | null;
   siblingVerified?: boolean;
+  alreadyApplied?: boolean; // BUG-409 — skipped as already-applied for the given batchId
   error?: string;
 }
 
@@ -41,42 +48,48 @@ export class TokenCasualtiesService {
     confirmedApply: true;
     casualties: CasualtyInput[];
     dryRun?: boolean | undefined;
+    batchId?: string | undefined;
   }): Promise<any> {
     this.validateState();
     const scene: any = (globalThis as any).game?.scenes?.get(data.sceneId);
     if (!scene) throw new Error(`Scene not found with ID: ${data.sceneId}`);
 
     const dryRun = data.dryRun === true;
+    const batchId = data.batchId;
+    const warnings: string[] = [];
     const results: CasualtyResult[] = [];
     const createdItemIds: string[] = [];
     const updatedDocIds: string[] = [];
 
     for (const c of data.casualties) {
-      const r = await this.applyOne(scene, c, dryRun);
+      const r = await this.applyOne(scene, c, dryRun, batchId, warnings);
       results.push(r);
-      if (r.applied && !dryRun) {
+      // A real content write happened only when applied AND not an idempotent skip (BUG-409).
+      if (r.applied && !r.alreadyApplied && !dryRun) {
         updatedDocIds.push(c.tokenId);
         if (r.critEmbedded) createdItemIds.push(r.critEmbedded);
       }
     }
 
     const appliedCount = results.filter((r) => r.applied).length;
+    const alreadyAppliedCount = results.filter((r) => r.alreadyApplied).length;
     const base = {
       sceneId: data.sceneId,
       dryRun,
       tokenCount: results.length,
       appliedCount,
       failedCount: results.length - appliedCount,
+      alreadyAppliedCount,
       results,
     };
     // dryRun is a pure preview — no writes, so no operation receipt (quality-contract §3).
     if (dryRun) return base;
-    return { ...base, ...buildOperationReceipt({ created: createdItemIds, updated: updatedDocIds }) };
+    return { ...base, ...buildOperationReceipt({ created: createdItemIds, updated: updatedDocIds, warnings }) };
   }
 
   /** Resolve + validate one token, then (unless dryRun) write its casualty. Never throws — a per-token
    *  failure is captured in the result so a batch surfaces which targets did not apply (§2). */
-  private async applyOne(scene: any, c: CasualtyInput, dryRun: boolean): Promise<CasualtyResult> {
+  private async applyOne(scene: any, c: CasualtyInput, dryRun: boolean, batchId?: string, warnings?: string[]): Promise<CasualtyResult> {
     const tokenDoc: any = scene.tokens?.get(c.tokenId);
     if (!tokenDoc) return { tokenId: c.tokenId, applied: false, error: `Token not found on scene "${scene.name}"` };
     if (tokenDoc.actorLink === true) {
@@ -84,6 +97,13 @@ export class TokenCasualtiesService {
     }
     const actor: any = tokenDoc.actor;
     if (!actor) return { tokenId: c.tokenId, applied: false, error: 'Token has no synthetic actor' };
+
+    // BUG-409 idempotency: if this token was already written for this batchId, SKIP it — a blind
+    // retry after a socket timeout re-sends the whole batch without double-applying (crit embeds /
+    // numbered conditions are not idempotent). Checked in dryRun too so the preview is faithful.
+    if (batchId && this.tokenHasBatch(actor, batchId)) {
+      return { tokenId: c.tokenId, applied: true, alreadyApplied: true, actorName: actor.name };
+    }
 
     // Pre-validate ALL inputs BEFORE any mutation so a per-token write is atomic on input errors:
     // an invalid condition key or unresolvable crit UUID must NOT leave a partial wounds write behind
@@ -101,10 +121,48 @@ export class TokenCasualtiesService {
     const worldActor: any = (globalThis as any).game?.actors?.get(tokenDoc.actorId);
     const worldBaseline: number | undefined = worldActor?.system?.status?.wounds?.value;
 
+    let result: CasualtyResult;
     try {
-      return await this.writeOne(scene, tokenDoc, actor, c, woundsBefore, worldActor, worldBaseline);
+      result = await this.writeOne(scene, tokenDoc, actor, c, woundsBefore, worldActor, worldBaseline);
     } catch (e) {
       return { tokenId: c.tokenId, applied: false, actorName: actor.name, error: e instanceof Error ? e.message : String(e) };
+    }
+    // BUG-409: only AFTER the content writes succeed, stamp the idempotency marker. markBatchApplied
+    // NEVER throws — a marker-persist failure degrades to the legacy non-idempotent behavior and is
+    // surfaced as a warning, so it can never flip a successful content write to applied:false (which
+    // would itself provoke the double-applying retry this fix exists to prevent).
+    if (batchId) {
+      const marked = await this.markBatchApplied(actor, batchId);
+      if (!marked) {
+        warnings?.push(
+          `Idempotency marker for token ${c.tokenId} (batch ${batchId}) did not persist — a retry may re-apply this token; read back before retrying.`,
+        );
+      }
+    }
+    return result;
+  }
+
+  /** BUG-409: has this token's synthetic actor already been written for `batchId`? */
+  private tokenHasBatch(actor: any, batchId: string): boolean {
+    const arr = actor?.flags?.[MODULE_ID]?.casualtyBatches;
+    return Array.isArray(arr) && arr.includes(batchId);
+  }
+
+  /** BUG-409: stamp `batchId` onto the token's SYNTHETIC actor (HC2 — never the world actor), capped
+   *  to the most-recent N ids, then re-read to confirm it persisted. NEVER throws — returns whether
+   *  the marker is now durably present so the caller can warn (but keep the content write) on failure. */
+  private async markBatchApplied(actor: any, batchId: string): Promise<boolean> {
+    try {
+      const existing = actor?.flags?.[MODULE_ID]?.casualtyBatches;
+      const arr: string[] = Array.isArray(existing) ? existing.slice() : [];
+      if (!arr.includes(batchId)) arr.push(batchId);
+      const capped = arr.slice(-MAX_TRACKED_BATCHES);
+      await actor.update({ [`flags.${MODULE_ID}.casualtyBatches`]: capped }, { skipExperienceChecks: true });
+      const fresh: any = await (globalThis as any).fromUuid(actor.uuid);
+      const freshArr = fresh?.flags?.[MODULE_ID]?.casualtyBatches;
+      return Array.isArray(freshArr) && freshArr.includes(batchId);
+    } catch {
+      return false;
     }
   }
 

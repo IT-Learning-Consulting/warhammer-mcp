@@ -1,7 +1,7 @@
 # Development Instructions & Context
 
-**Last Updated**: May 19, 2026  
-**Current Version**: 0.8.0  
+**Last Updated**: June 22, 2026  
+**Current Version**: 1.0.0  
 **Project**: Warhammer Fantasy Roleplay MCP Bridge for Foundry VTT
 
 ---

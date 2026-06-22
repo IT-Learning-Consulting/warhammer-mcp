@@ -1,7 +1,8 @@
 // apply-token-casualties.ts — WFRP Battle Simulator Phase 5 (R13 / R5.1 / R5.1a).
 //
 // Batch per-token ActorDelta casualty writer. For each token: set wounds, apply conditions
-// (dead/unconscious/broken/…), embed an ArtAntares critical-wound Item by compendium UUID.
+// (unconscious/broken/prone/… — no "dead" condition exists in wfrp4e), embed an ArtAntares
+// critical-wound Item by compendium UUID.
 // Writes ALWAYS target the token's SYNTHETIC actor (tokenDoc.actor / ActorDelta), never the
 // world actor — encounter forces are unlinked siblings of one world actor (HC2 / BUG-133).
 //
@@ -23,7 +24,7 @@ const TokenCasualty = z
     // Absolute remaining Wounds to set on system.status.wounds.value (the handler clamps to
     // [0, wounds.max]). Omit to leave wounds untouched (e.g. a broken-but-unhurt fleer).
     wounds: z.number().int().min(0).optional(),
-    // WFRP4e condition keys to apply via actor.addCondition (dead / unconscious / broken / prone …).
+    // WFRP4e condition keys to apply via actor.addCondition (unconscious / broken / prone …).
     conditions: z.array(ConditionKey).optional(),
     // ArtAntares crit Item compendium UUID to embed (Compendium.<pack>.Item.<id>). The handler
     // embeds it on the token's synthetic actor + bumps system.status.criticalWounds.value.
@@ -35,6 +36,13 @@ const TokenCasualty = z
     { message: 'each casualty must set at least one of: wounds, conditions, criticalUuid' },
   );
 
+// BUG-409 idempotency: a caller-supplied batch key. When present, the handler records a per-token
+// applied-marker (flags.warhammer-mcp.casualtyBatches on the token's synthetic actor) and SKIPS any
+// token already marked for this batchId — so a blind retry after a socket timeout re-sends the whole
+// batch safely (already-landed crit embeds / numbered conditions are not re-applied). 1-128 chars;
+// generate a stable id per casualty batch (e.g. `<slug>-r<round>-<isoStamp>`) and reuse it on retry.
+const BatchId = z.string().min(1).max(128);
+
 export const ApplyTokenCasualtiesInput = z
   .object({
     sceneId: SceneId,
@@ -45,6 +53,9 @@ export const ApplyTokenCasualtiesInput = z
     // quality-contract §3 — when true, resolve + validate every token (existence, actorLink,
     // clamp) and return the planned writes with ZERO mutations.
     dryRun: z.boolean().optional(),
+    // BUG-409 — optional idempotency key. Reuse the SAME value on a retry so already-applied tokens
+    // are skipped instead of double-written. Omit for the legacy (non-idempotent) one-shot behavior.
+    batchId: BatchId.optional(),
   })
   .strict();
 export type ApplyTokenCasualtiesInputType = z.infer<typeof ApplyTokenCasualtiesInput>;
@@ -61,6 +72,9 @@ const TokenCasualtyResult = z
     conditionsApplied: z.array(z.string()).optional(),
     critEmbedded: z.string().nullable().optional(), // embedded crit item id, or null
     siblingVerified: z.boolean().optional(), // HC2 — a same-world-actor sibling was unchanged
+    // BUG-409 — true when this token was SKIPPED because it was already applied for the given batchId
+    // (idempotent retry). `applied` is also true (the token is in the desired state); no write occurred.
+    alreadyApplied: z.boolean().optional(),
     error: z.string().optional(), // populated when applied=false
   })
   .passthrough();
@@ -72,6 +86,9 @@ export const ApplyTokenCasualtiesOutput = z
     tokenCount: z.number(),
     appliedCount: z.number(),
     failedCount: z.number(),
+    // BUG-409 — subset of appliedCount that were SKIPPED as already-applied for this batchId
+    // (idempotent retry). 0 when no batchId is supplied or nothing was previously applied.
+    alreadyAppliedCount: z.number().optional(),
     results: z.array(TokenCasualtyResult),
     // operation-receipt fields (present on a real apply; the builder always emits them).
     operationId: z.string().optional(),

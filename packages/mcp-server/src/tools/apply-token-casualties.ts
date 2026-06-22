@@ -39,11 +39,17 @@ export class ApplyTokenCasualtiesTool extends BaseTool {
         description:
           'Batch-write WFRP battle-simulator casualties to specific scene tokens by token ID. ' +
           'For each token: set wounds (system.status.wounds.value, clamped to [0,max]), apply ' +
-          'conditions (dead/unconscious/broken/…), and embed an ArtAntares critical-wound Item by ' +
+          'conditions (unconscious/broken/prone/…), and embed an ArtAntares critical-wound Item by ' +
           'compendium UUID. Writes ALWAYS hit the token\'s synthetic actor (ActorDelta), never the ' +
           'shared world actor — siblings are left untouched (HC2). actorLink=true tokens are rejected. ' +
           'Requires confirmedApply:true (HC4 gate). Pass dryRun:true to preview the planned writes with ' +
-          'zero mutations. Returns per-token results with before/after wounds and sibling-isolation verification.',
+          'zero mutations. Returns per-token results with before/after wounds and sibling-isolation verification. ' +
+          'RETRY SAFETY (BUG-409): the batch is NOT transactional — if a call ERRORS or times out, some ' +
+          'token writes may already have landed. PASS A STABLE batchId to make retries idempotent: each ' +
+          'token records that batchId on its synthetic actor, and a re-send with the SAME batchId skips ' +
+          'already-applied tokens (results[].alreadyApplied=true) so crit embeds / numbered conditions are ' +
+          'never double-counted — just resend the identical batch on timeout. Without a batchId the call is ' +
+          'one-shot (legacy): read back the target tokens before any manual retry.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -65,7 +71,7 @@ export class ApplyTokenCasualtiesTool extends BaseTool {
                   conditions: {
                     type: 'array',
                     items: { type: 'string' },
-                    description: 'WFRP4e condition keys to apply (dead/unconscious/broken/prone/…).',
+                    description: 'WFRP4e condition keys to apply (unconscious/broken/prone/…). NOTE: there is no "dead" condition — a slain creature is unconscious + 0 wounds.',
                   },
                   criticalUuid: { type: 'string', description: 'ArtAntares crit Item compendium UUID to embed.' },
                 },
@@ -73,6 +79,15 @@ export class ApplyTokenCasualtiesTool extends BaseTool {
               },
             },
             dryRun: { type: 'boolean', description: 'Preview the planned writes with zero mutations.' },
+            batchId: {
+              type: 'string',
+              minLength: 1,
+              maxLength: 128,
+              description:
+                'Optional idempotency key (BUG-409). Reuse the SAME value when retrying after a timeout so ' +
+                'already-applied tokens are skipped (results[].alreadyApplied=true) instead of double-written. ' +
+                'Generate a stable id per casualty batch, e.g. "<slug>-r<round>-<isoStamp>". Omit for one-shot legacy behavior.',
+            },
           },
           required: ['sceneId', 'confirmedApply', 'casualties'],
         },
