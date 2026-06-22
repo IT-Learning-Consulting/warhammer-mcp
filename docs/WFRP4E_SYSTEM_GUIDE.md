@@ -62,7 +62,7 @@ Where the daemon obscures, I shall clarify. Where it tempts, I shall translate. 
 - [D — Troubleshooting](#d--troubleshooting)
 - [E — Technical Architecture](#e--technical-architecture)
 - [F — Repository Structure](#f--repository-structure)
-- [G — Tool Surface (v0.8.0)](#g--tool-surface-v080)
+- [G — Tool Surface (v1.0.0)](#g--tool-surface-v100)
 - [H — The WFRP 4e Data Model](#h--the-wfrp-4e-data-model)
 - [I — Resources & Credits](#i--resources--credits)
 
@@ -823,15 +823,17 @@ warhammer-mcp/                   # workspace root (npm workspaces)
 
 ---
 
-## G — Tool Surface (v0.8.0)
+## G — Tool Surface (v1.0.0)
 
-The Phase 2 / 4 / 5 / mcp-crud-expansion consolidations collapsed many one-off tools into **action-discriminated umbrella tools**. The authoritative count is the file count in `packages/mcp-server/src/tools/` (~48 files); the actual MCP action count is significantly larger because each umbrella exposes 3–13 actions.
+The Phase 2 / 4 / 5 / mcp-crud-expansion consolidations collapsed many one-off tools into **action-discriminated umbrella tools**. As of v1.0.0 the registry advertises **96 tools** — **75 core** WFRP4e/Foundry tools plus **21 conditional `module-*`** integrations that register only when the matching third-party module is active. The MCP *action* count is far larger still, since each umbrella exposes 3–15 actions. (The authoritative name list is `__tools-list-snapshot__.json` at the repo root, pinned by `registry-parity.test.ts`.)
 
-**WFRP-flavoured umbrellas + atoms.** `manage-character` · `manage-inventory` · `manage-combat` · `manage-conditions` · `apply-template` · `apply-template-to-token` · `apply-npc-career-advance` · `apply-damage` · `modify-item-qualities` · `create-custom-item` · `trade-item` · `get-wfrp-config`.
+**WFRP-flavoured umbrellas + atoms.** `manage-character` · `manage-inventory` · `manage-combat` · `manage-conditions` · `apply-template` · `apply-template-to-token` · `apply-npc-career-advance` · `apply-damage` · `apply-token-casualties` · `modify-item-qualities` · `create-custom-item` · `trade-item` · `imperial-arcana` (36-card divination deck) · `get-wfrp-config`.
 
-**Dual-system core.** `character` (get / list) · `manage-character` · `dice-roll` (`request-player-rolls`) · `actor-creation` · `duplicate-actor` · `update-actor` · `compendium-umbrella` · `update-item` · `delete-item` · `list-actor-items` · `add-item-from-compendium` · Active Effects (`add` / `update` / `delete` / `list` / `get-by-name`).
+**Dual-system core.** `get-character` (get / list) · `manage-character` · `dice-roll` (`request-player-rolls`) · actor creation (`create-actor` / `create-actor-from-compendium`) · `duplicate-actor` · `update-actor` · `delete-actor` · `compendium` · `update-item` · `delete-item` · `list-actor-items` · `add-item-from-compendium` · Active Effects (`add` / `update` / `delete` / `list` / `get-by-name`).
 
-**World / scene / content CRUD umbrellas.** `scene` · `token` · `tile` · `light` · `template` · `region` · `note` · `sound` · `journal` (13 actions) · `rolltable` (~12 actions) · `playlist` (~10 actions) · `macro` · `ownership` (polymorphic) · `filepicker` · `cross-doc-fk` · `world` · `world-delete` · `user`.
+**World / scene / content CRUD umbrellas.** `scene` · `token` · `tile` · `light` · `template` · `region` · `note` · `sound` · `drawing` · `cards` · `journal` (15 actions) · `rolltable` (13 actions) · `playlist` (14 actions) · `macro` · `folder` · `ownership` (polymorphic) · `filepicker` · `cross-doc-fk` · `document-io` · `setting` · `user` · `keybinding`.
+
+**Module integration (conditional).** 21 `module-*` tools sit behind a `module-probe` pre-flight and return `MODULE_NOT_ACTIVE` when their backing module is absent: `module-itempiles` · `module-matt` · `module-scene-atmosphere` · `module-sequencer` · `module-gmtoolkit` · `module-armoury` · `module-mastercrafted` · `module-gatherer` · `module-timekeeping` · `module-patrol` · `module-party-resources` · `module-levels` · `module-tagger` · `module-tokenbar` · `module-chat-commander` · `module-access-control` · `module-lighting` · `module-css` · `module-autoanimations` · `module-robak` · `module-probe`.
 
 **Operational.** `notify` · `diagnostic` (11 sub-actions across 4 workflows).
 
@@ -898,6 +900,6 @@ The tool surface respects this distinction — `manage-character` writes status 
 
 ---
 
-*This tome reflects Warhammer MCP v0.8.0 (May 19, 2026). It is a companion to the Claude Code skills suite in `.claude/skills/` — the skills compose the MCP primitives described here into named GM workflows. When working in Claude Code, prefer the skills; when working at the raw protocol level (Claude Desktop, Codex, Gemini-CLI, VS Code Copilot), this tome is your tool catalogue.*
+*This tome reflects Warhammer MCP v1.0.0 (June 22, 2026). It is a companion to the Claude Code skills suite in `.claude/skills/` — the skills compose the MCP primitives described here into named GM workflows. When working in Claude Code, prefer the skills; when working at the raw protocol level (Claude Desktop, Codex, Gemini-CLI, VS Code Copilot), this tome is your tool catalogue.*
 
 *The daemon's signature, where it appears at the foot of his verses (— ?), is the most that has ever been recovered. His true name is not known. It is not advisable to seek it.*

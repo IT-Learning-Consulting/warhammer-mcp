@@ -95,7 +95,7 @@ Once connected, try calling the world probe tool:
 
 ## Tool surface (post-consolidation)
 
-The API surface is intentionally consolidated: **36 tools** implemented as action-based “umbrella” tools (e.g. `manage-character`, `manage-journal`, `manage-rolltable`, etc.).
+The API surface is intentionally consolidated: **96 tools** implemented as action-based “umbrella” tools (e.g. `manage-character`, `journal`, `rolltable`, `scene`, etc.) — **75 core** WFRP4e/Foundry tools plus **21 conditional `module-*`** integrations that register only when the matching third-party module is active.
 
 Authoritative list and architecture notes live in:
 
