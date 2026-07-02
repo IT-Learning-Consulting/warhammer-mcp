@@ -63,6 +63,7 @@ interface RollTableResultPayload {
   id: string;
   type: string;
   text: string;
+  content: string;
   documentUuid: string;
   name: string;
   img: string;
@@ -185,14 +186,20 @@ function serialiseResult(r: any): RollTableResultPayload {
   // Expose the persisted `name` as both `text` (MCP-side ergonomic field)
   // and `name` (Foundry-side canonical) for backward-compatible response shape.
   const displayText = r.name ?? r.text ?? '';
+  const description = r.description ?? '';
   return {
     id: r.id as string,
     type: r.type ?? 'text',
     text: displayText,
+    // `content` = the row's displayable text with a description fallback. WFRP4e published
+    // tables store the row body in `description` (HTML) with `text`/`name` empty, so a consumer
+    // reading only `text` gets "". `content` (= text || description) gives the right body in one
+    // field. Additive; `text` is unchanged for back-compat.
+    content: displayText || description,
     documentUuid: r.documentUuid ?? '',
     name: r.name ?? '',
     img: r.img ?? '',
-    description: r.description ?? '',
+    description,
     range: r.range ?? [],
     weight: r.weight ?? 1,
     drawn: r.drawn ?? false,
@@ -409,6 +416,11 @@ export async function rollOnTable(data: unknown): Promise<Envelope<any>> {
         formula: table.formula,
         roll: draw.roll?.total || 0,
         text: serialisedResult.text,
+        // Additive (Phase-8 follow-up): WFRP4e tables store the row body in `description`, leaving
+        // `text` empty. `description` is the raw body; `content` (= text || description) is the
+        // single field a narration consumer should read. `text` kept as-is for back-compat.
+        description: serialisedResult.description,
+        content: serialisedResult.content,
         drawn: serialisedResult.drawn,
       },
     };

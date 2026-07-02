@@ -31,10 +31,28 @@ const CHAR_STUB = {
 const twoQueryTool = () =>
   new ManageCharacterTool(makeToolDeps((_key: string) => CHAR_STUB));
 
+/** Post-write stub: includes ws.initial and fortune.value to satisfy Phase 1 verify block. */
+const CHAR_STUB_POST_WRITE = {
+  ...CHAR_STUB,
+  system: {
+    ...CHAR_STUB.system,
+    characteristics: { ws: { initial: 40 } },
+    status: { fortune: { value: 3 } },
+  },
+};
+
 describe('ManageCharacterTool — characterization', () => {
   it('update-stats — formatted confirmation string (character type)', async () => {
-    // update-stats: getCharacterInfo → updateActor (no new-field verify for ws/fortune)
-    const r = await twoQueryTool().handle({
+    // update-stats: getCharacterInfo → updateActor → getCharacterInfo (verify re-fetch, Phase 1 DP-16)
+    // Mock: updateActor returns {}; both getCharacterInfo calls return a stub that has the written values.
+    let callCount = 0;
+    const mockFn = (key: string) => {
+      if (key === 'warhammer-mcp.updateActor') return {};
+      callCount++;
+      // First call = pre-write lookup; subsequent = post-write verify.
+      return callCount === 1 ? CHAR_STUB : CHAR_STUB_POST_WRITE;
+    };
+    const r = await new ManageCharacterTool(makeToolDeps(mockFn)).handle({
       action: 'update-stats',
       characterName: 'Aldric',
       updates: { weaponSkill: 40, fortune: 3 },

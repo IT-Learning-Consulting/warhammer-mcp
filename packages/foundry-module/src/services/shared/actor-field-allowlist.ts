@@ -16,7 +16,11 @@
 //     ADDS npc-only details (status.value composite, size, god, subspecies); `creature` drops social standing.
 //   - gmnotes path is type-split (BUG-321): character writes `system.gmnotes.value`; npc/creature write
 //     `system.details.gmnotes.value`.
-//   - Unknown/unexpected actor types (e.g. vehicle) fall back to the UNION of all three — still blocks truly
+//   - `vehicle` (wfrp_layer_expansion Phase 7) has its OWN narrow set: wounds.value + the cargo/crew sheet
+//     fields (status.carries.max, details.move.value, details.man). It does NOT include derived encumbrance
+//     (*.current/.max are recomputed from contents) nor passengers/roles (array-update syntax DEPENDENCY_GATED
+//     pending a post-restart live probe — see the Phase-7 plan task 7.3).
+//   - Unknown/unexpected actor types (e.g. loot, base) fall back to the UNION of all three — still blocks truly
 //     never-observed fields without breaking an unanticipated type.
 //
 // Sourced from a corpus-wide grep (skills + manage-character + build-* + template-apply); see the Phase-12
@@ -82,6 +86,10 @@ export const ACTOR_ALLOWED_FIELDS_CHARACTER = new Set<string>([
   // Social standing (character: computeCareer re-derives → wfrp-status writes with verifyPersistence:false).
   'system.details.status.tier',
   'system.details.status.standing',
+  // Status modifier — the persistent decay lever for Keeping Up Appearances (wfrp-status lifestyle-check,
+  // wfrp_layer_expansion Phase 4). On characters, tier/standing revert via computeCareer; modifier persists
+  // and the engine auto-cascades the derived tier-drop (reference_wfrp_status_modifier_cascade).
+  'system.details.status.modifier',
   // gmnotes — character writes system.gmnotes.value (BUG-321), but get-character
   // READS character gmnotes from system.details.gmnotes.value (character.ts:410), so
   // allow BOTH (the plan's R12.3 union "eval canary", acceptance criterion 5).
@@ -108,6 +116,8 @@ export const ACTOR_ALLOWED_FIELDS_NPC = new Set<string>([
   'system.details.status.tier',
   'system.details.status.standing',
   'system.details.status.value',
+  // Status modifier — wfrp-status lifestyle-check decay lever (Phase 4); recommended for NPCs for parity with characters.
+  'system.details.status.modifier',
   // NPC-only details (manage-character npc/creature branch).
   'system.details.species.subspecies',
   'system.details.biography.value',
@@ -139,8 +149,25 @@ export const ACTOR_ALLOWED_FIELDS_CREATURE = new Set<string>([
   'system.details.biography.value',
 ]);
 
+// Vehicle (VehicleModel) — wfrp_layer_expansion Phase 7. A NARROW set, NOT the union: only the
+// crew/cargo sheet fields /wfrp-travel writes via update-actor.
+//   - status.wounds.value      → vehicle hull damage (wound/heal sub-actions).
+//   - status.carries.max       → cargo capacity override (carries.current is DERIVED — never written).
+//   - details.move.value       → vehicle Movement (the engine recomputes encumbrance-gated speed).
+//   - details.man              → crew/manning requirement.
+// Deliberately EXCLUDED: encumbrance.{current,max} (derived from contents — cargo loading is an item-move,
+// not an allow-listed write), and system.passengers / system.roles (the array-update dot-path form is
+// DEPENDENCY_GATED pending a post-restart live probe — Phase-7 plan task 7.3; do NOT guess the syntax).
+export const ACTOR_ALLOWED_FIELDS_VEHICLE = new Set<string>([
+  ...TOP_LEVEL,
+  'system.status.wounds.value',
+  'system.status.carries.max',
+  'system.details.move.value',
+  'system.details.man',
+]);
+
 // Union fallback for unrecognized actor types — blocks never-observed fields without breaking an unanticipated
-// type (e.g. vehicle).
+// type (e.g. loot, base).
 const ACTOR_ALLOWED_FIELDS_ANY = new Set<string>([
   ...ACTOR_ALLOWED_FIELDS_CHARACTER,
   ...ACTOR_ALLOWED_FIELDS_NPC,
@@ -152,6 +179,7 @@ export function selectActorAllowlist(actorType: string | undefined): Set<string>
     case 'character': return ACTOR_ALLOWED_FIELDS_CHARACTER;
     case 'npc':       return ACTOR_ALLOWED_FIELDS_NPC;
     case 'creature':  return ACTOR_ALLOWED_FIELDS_CREATURE;
+    case 'vehicle':   return ACTOR_ALLOWED_FIELDS_VEHICLE;
     default:          return ACTOR_ALLOWED_FIELDS_ANY;
   }
 }

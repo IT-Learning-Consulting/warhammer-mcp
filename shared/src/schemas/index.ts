@@ -58,6 +58,10 @@ export * from './cross-doc-fk.js';
 export * from './event-envelope.js';
 // Phase wfrp-disease — Disease umbrella (8 actions).
 export * from './disease.js';
+// wfrp_layer_expansion_v1 Phase 6 (P-10) — availability-test primitive (single action, never rolls).
+export * from './availability-test.js';
+// wfrp_layer_expansion_v1 Phase 7 (P-11) — travel-distance primitive (single action, compute-only, never rolls/writes).
+export * from './travel-distance.js';
 // Phase 4 mcp_completion_v1 — Folder umbrella (6 actions; delete has confirm gate + deleteContents cascade).
 export * from './folder.js';
 // Phase 4 mcp_completion_v1 — Setting umbrella (4 actions; set has force gate + blocklist + onChange-advisory).
@@ -85,3 +89,6 @@ export * from './keybinding.js';
 export * from './module-probe.js';
 // Phase 5 wfrp_battle_simulator — apply-token-casualties (batch per-token ActorDelta casualty writer).
 export * from './apply-token-casualties.js';
+// Phase 13 wfrp_layer_expansion_v1 (R16) — sheet-flow primitives: apply-fear/apply-terror,
+// check-reload, add-money, direct-pay.
+export * from './sheet-flow.js';

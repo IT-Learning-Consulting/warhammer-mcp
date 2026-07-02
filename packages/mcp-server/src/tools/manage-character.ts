@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ErrorTokens } from '@foundry-mcp/shared';
+import { ErrorTokens, ActorId } from '@foundry-mcp/shared';
 import { FoundryClient } from "../foundry-client.js";
 import { Logger } from "../logger.js";
 import { BaseTool, BaseToolOptions } from "../base-tool.js";
@@ -120,22 +120,101 @@ const UpdateNotesSchema = z.object({
     append: z.boolean().default(false)
 });
 
-// Add XP log schema
+// Add XP log schema — accepts actorId (branded, primary identity) + characterName
+// (optional name fallback), matching the get-career-info / roll-income actions. At
+// least one is required — enforced in the handler (a .refine() here would produce a
+// ZodEffects wrapper that z.discriminatedUnion rejects).
 const AddXPLogSchema = z.object({
     action: z.literal("add-xp-log"),
-    characterName: z.string(),
+    actorId: ActorId.optional(),
+    characterName: z.string().optional(),
     amount: z.number(),
     reason: z.string(),
     type: z.enum(["earned", "spent"]).default("earned"),
     updateTotal: z.boolean().default(false)
 });
 
+// Get career-info schema (P-08) — read-only structured projection of the actor's
+// current career. wfrp_layer_expansion_v1 Phase 4 (R7 / P-08).
+// Accepts actorId (branded, precise) as the primary identity + characterName as an
+// optional name fallback (matches the other 5 manage-character actions). At least one
+// is required — enforced at runtime in the handler (a .refine() here would produce a
+// ZodEffects wrapper that z.discriminatedUnion rejects).
+// `.strict()` rejects unknown keys (CCR-W6). Read-only: no write / notify / verify.
+const GetCareerInfoSchema = z.object({
+    action: z.literal("get-career-info"),
+    actorId: ActorId.optional(),
+    characterName: z.string().optional(),
+}).strict();
+
+// Roll-income schema (P-07) — payout-compute + coin-write for the in-play Earning
+// Dramatic Test. wfrp_layer_expansion_v1 Phase 4 (R7 / P-07).
+// HC2: this handler MUST NOT roll dice. The +20 Earning Dramatic Test is sheet-owned;
+// the skill/sheet rolls it and passes the dice total here as `rolledTotal` plus the
+// pass/fail `outcome`. The handler computes the Core-RAW payout and writes coin.
+// `rolledTotal` is optional/ignored for Gold tier (flat `standing` GC, no dice).
+const RollIncomeSchema = z.object({
+    action: z.literal("roll-income"),
+    actorId: ActorId.optional(),
+    characterName: z.string().optional(),
+    rolledTotal: z.number().int().min(0).optional(),
+    outcome: z.enum(["success", "fail", "astounding-fail"]),
+    // GM overrides for the career tier/standing when the actor's current-career
+    // projection is absent or the GM wants to force a specific basis.
+    tierOverride: z.enum(["b", "s", "g"]).optional(),
+    standingOverride: z.number().int().min(0).optional(),
+}).strict();
+
+// Phase 13 (wfrp_layer_expansion_v1 R16) — sheet-flow actions. All 4 follow the
+// roll-income shape: actorId (branded, primary) + characterName (fallback) + .strict().
+// HC2: apply-fear/apply-terror do NOT roll dice — they create the Fear extendedTest
+// item (design B) and leave the Cool test to the sheet. apply-terror reuses the same
+// `applyFear` foundry-module query key (Terror always inflicts Fear) and layers
+// Cool-test -> Broken guidance onto the returned string.
+const ApplyFearSchema = z.object({
+    action: z.literal("apply-fear"),
+    actorId: ActorId.optional(),
+    characterName: z.string().optional(),
+    rating: z.number().int().min(1),
+    sourceName: z.string().min(1),
+}).strict();
+
+const ApplyTerrorSchema = z.object({
+    action: z.literal("apply-terror"),
+    actorId: ActorId.optional(),
+    characterName: z.string().optional(),
+    rating: z.number().int().min(1),
+    sourceName: z.string().min(1),
+}).strict();
+
+// add-money: single-denomination MarketWFRP4e.addMoneyTo format ("5g"/"1.5g"/"12b").
+const AddMoneySchema = z.object({
+    action: z.literal("add-money"),
+    actorId: ActorId.optional(),
+    characterName: z.string().optional(),
+    amountString: z.string().min(1),
+}).strict();
+
+// direct-pay: multi-denomination MarketWFRP4e.directPayCommand format ("8gc6bp").
+const DirectPaySchema = z.object({
+    action: z.literal("direct-pay"),
+    actorId: ActorId.optional(),
+    characterName: z.string().optional(),
+    amountString: z.string().min(1),
+}).strict();
+
 export const ManageCharacterSchema = z.discriminatedUnion("action", [
     UpdateStatsSchema,
     UpdateSkillTalentSchema,
     AddSkillTalentSchema,
     UpdateNotesSchema,
-    AddXPLogSchema
+    AddXPLogSchema,
+    GetCareerInfoSchema,
+    RollIncomeSchema,
+    ApplyFearSchema,
+    ApplyTerrorSchema,
+    AddMoneySchema,
+    DirectPaySchema
 ]);
 
 type ManageCharacterArgs = z.infer<typeof ManageCharacterSchema>;
@@ -175,6 +254,12 @@ export class ManageCharacterTool extends BaseTool {
 - **add-skill-talent**: Add skill or talent from compendium
 - **update-notes**: Update GM notes or biography
 - **add-xp-log**: Add experience log entry; pass updateTotal:true to atomically increment experience.total alongside the log entry
+- **get-career-info**: Read-only structured projection of the actor's current career (name, careergroup, level, class, status tier/standing, skills, talents, trappings, incomeSkill) + all career names
+- **roll-income**: Compute + write the Earning Dramatic Test payout. Pass the already-rolled dice total (rolledTotal) and the pass/fail outcome — this action does NOT roll dice (the +20 Earning Dramatic Test is sheet-owned per HC2). Writes coin to the tier's money item.
+- **apply-fear**: Create a Fear extendedTest item (SL.target=rating, source name preserved) so the sheet can resolve the Cool test. Does NOT roll dice and does NOT open a dialog (HC2 — reimplements the housekeeping instead of calling the dialog-side-effecting wfrp4e method).
+- **apply-terror**: Same Fear-item creation as apply-fear, plus Cool-test-to-Broken guidance in the returned text. Does NOT roll dice, does NOT apply Broken directly — resolve the Cool test on the sheet, then apply Broken via update-actor/apply-condition once the GM reports the result.
+- **add-money**: Credit a single denomination to the actor's coin item. Format "5g"/"1.5g"/"12b" (amount + b|s|g). Rejects a zero/invalid amount before writing (avoids zeroing all coins).
+- **direct-pay**: Deduct a multi-denomination amount from the actor's coin items. Format "8gc6bp" (order-free). Rejects the payment before writing if funds are insufficient.
 
 **Update Stats** (Direct value setting):
 Use for quick stat changes, character creation, testing, or corrections where you just need to SET a value.
@@ -192,16 +277,23 @@ Use for quick stat changes, character creation, testing, or corrections where yo
 - Add talent: action="add-skill-talent", characterName="Hans", itemName="Strike Mighty Blow", itemType="talent"
 - Update notes: action="update-notes", characterName="Hans", noteType="gmnotes", content="Suspicious behavior"
 - Add XP: action="add-xp-log", characterName="Hans", amount=50, reason="Defeated ogre", type="earned"
-- Add XP with total increment: action="add-xp-log", characterName="Hans", amount=20, reason="Random species bonus", type="earned", updateTotal=true`,
+- Add XP with total increment: action="add-xp-log", characterName="Hans", amount=20, reason="Random species bonus", type="earned", updateTotal=true
+- Get career info: action="get-career-info", actorId="abc123..." (or characterName="Hans")
+- Roll income (Silver-2 PC, test passed, rolled 14 on 2d10): action="roll-income", actorId="abc123...", rolledTotal=14, outcome="success" → writes 14×2 Silver Shillings
+- Apply fear: action="apply-fear", actorId="abc123...", rating=2, sourceName="Chaos Warrior"
+- Apply terror: action="apply-terror", actorId="abc123...", rating=1, sourceName="Greater Daemon"
+- Add money: action="add-money", actorId="abc123...", amountString="5g"
+- Direct pay: action="direct-pay", actorId="abc123...", amountString="2gc4ss"`,
             inputSchema: {
                 type: "object",
                 properties: {
                     action: {
                         type: "string",
-                        enum: ["update-stats", "update-skill-talent", "add-skill-talent", "update-notes", "add-xp-log"],
+                        enum: ["update-stats", "update-skill-talent", "add-skill-talent", "update-notes", "add-xp-log", "get-career-info", "roll-income", "apply-fear", "apply-terror", "add-money", "direct-pay"],
                         description: "Action to perform"
                     },
-                    characterName: { type: "string", description: "Character name" },
+                    characterName: { type: "string", description: "Character name (or use actorId for get-career-info / roll-income)" },
+                    actorId: { type: "string", description: "Actor document id — primary identity for get-career-info and roll-income (characterName is an optional fallback)" },
                     actorType: {
                         type: "string",
                         enum: ["character", "npc", "creature"],
@@ -296,9 +388,42 @@ Use for quick stat changes, character creation, testing, or corrections where yo
                         type: "boolean",
                         description: "When true, atomically increment experience.total alongside the log entry (for add-xp-log). Default false preserves existing log-only behavior.",
                         default: false
+                    },
+                    // roll-income fields
+                    rolledTotal: {
+                        type: "number",
+                        description: "The already-rolled Earning Dramatic Test dice total (for roll-income). The handler does NOT roll — pass the sheet-rolled total. Ignored for Gold tier (flat standing GC)."
+                    },
+                    outcome: {
+                        type: "string",
+                        enum: ["success", "fail", "astounding-fail"],
+                        description: "Earning Dramatic Test outcome (for roll-income): success=full payout, fail=half (round down), astounding-fail=0 / no write"
+                    },
+                    tierOverride: {
+                        type: "string",
+                        enum: ["b", "s", "g"],
+                        description: "Override the career tier key for the payout basis (for roll-income), when the actor's current-career projection is absent or the GM forces a tier"
+                    },
+                    standingOverride: {
+                        type: "number",
+                        description: "Override the standing for the payout basis (for roll-income)"
+                    },
+                    // apply-fear / apply-terror fields
+                    rating: {
+                        type: "number",
+                        description: "Fear/Terror rating (for apply-fear, apply-terror) — sets the Fear item's SL.target"
+                    },
+                    sourceName: {
+                        type: "string",
+                        description: "Name of the fear/terror source (for apply-fear, apply-terror), e.g. \"Chaos Warrior\""
+                    },
+                    // add-money / direct-pay fields
+                    amountString: {
+                        type: "string",
+                        description: "Money amount. add-money: single-denomination \"5g\"/\"1.5g\"/\"12b\". direct-pay: multi-denomination \"8gc6bp\"."
                     }
                 },
-                required: ["action", "characterName"]
+                required: ["action"]
             }
         }];
     }
@@ -317,6 +442,18 @@ Use for quick stat changes, character creation, testing, or corrections where yo
                 return this.handleUpdateNotes(parsed);
             case "add-xp-log":
                 return this.handleAddXPLog(parsed);
+            case "get-career-info":
+                return this.handleGetCareerInfo(parsed);
+            case "roll-income":
+                return this.handleRollIncome(parsed);
+            case "apply-fear":
+                return this.handleApplyFear(parsed);
+            case "apply-terror":
+                return this.handleApplyTerror(parsed);
+            case "add-money":
+                return this.handleAddMoney(parsed);
+            case "direct-pay":
+                return this.handleDirectPay(parsed);
         }
     }
 
@@ -434,9 +571,28 @@ Use for quick stat changes, character creation, testing, or corrections where yo
         });
 
         if (actorType === 'character') {
-            // DP-16 post-write verification (CCR-5 / Q1 lock — applied to the 10 new fields only;
-            // backfilling the 12 legacy fields is v2 hygiene).
+            // DP-16 post-write verification (CCR-5 / Q1 lock).
+            // Phase 1 (wfrp_layer_expansion_v1): expanded to cover 10 characteristics + 5 status numeric
+            // fields (previously unverified) + the original 10 PC-creation text fields = 25 total.
             const newFieldVerifyMap: Record<string, string> = {
+                // 10 characteristics (numeric)
+                weaponSkill: 'system.characteristics.ws.initial',
+                ballisticSkill: 'system.characteristics.bs.initial',
+                strength: 'system.characteristics.s.initial',
+                toughness: 'system.characteristics.t.initial',
+                initiative: 'system.characteristics.i.initial',
+                agility: 'system.characteristics.ag.initial',
+                dexterity: 'system.characteristics.dex.initial',
+                intelligence: 'system.characteristics.int.initial',
+                willpower: 'system.characteristics.wp.initial',
+                fellowship: 'system.characteristics.fel.initial',
+                // 5 status pools (numeric)
+                fortune: 'system.status.fortune.value',
+                fate: 'system.status.fate.value',
+                resilience: 'system.status.resilience.value',
+                resolve: 'system.status.resolve.value',
+                currentWounds: 'system.status.wounds.value',
+                // 10 PC-creation text fields (original set)
                 motivation: 'system.details.motivation.value',
                 move: 'system.details.move.value',
                 class: 'system.details.class.value',
@@ -475,6 +631,53 @@ Use for quick stat changes, character creation, testing, or corrections where yo
             }
         }
 
+        if (actorType === 'npc' || actorType === 'creature') {
+            // DP-16 post-write verification for NPC/creature branch (Phase 1 wfrp_layer_expansion_v1).
+            // Verifies numeric fields only (characteristics + status); text/detail fields skipped per Q&A 4.
+            const npcVerifyMap: Record<string, string> = {
+                weaponSkill: 'system.characteristics.ws.initial',
+                ballisticSkill: 'system.characteristics.bs.initial',
+                strength: 'system.characteristics.s.initial',
+                toughness: 'system.characteristics.t.initial',
+                initiative: 'system.characteristics.i.initial',
+                agility: 'system.characteristics.ag.initial',
+                dexterity: 'system.characteristics.dex.initial',
+                intelligence: 'system.characteristics.int.initial',
+                willpower: 'system.characteristics.wp.initial',
+                fellowship: 'system.characteristics.fel.initial',
+                currentWounds: 'system.status.wounds.value',
+                advantage: 'system.status.advantage.value',
+                criticalWounds: 'system.status.criticalWounds.value',
+                sin: 'system.status.sin.value',
+                corruption: 'system.status.corruption.value',
+                statusTier: 'system.details.status.tier',
+                statusStanding: 'system.details.status.standing',
+            };
+            const npcFieldsInPayload = Object.entries(args.updates).filter(
+                ([k, v]) => v !== undefined && npcVerifyMap[k] !== undefined,
+            );
+            if (npcFieldsInPayload.length > 0) {
+                const verifyActor = await this.query<CharacterInfoResult>('getCharacterInfo', {
+                    characterName: args.characterName,
+                });
+                for (const [apiKey, requestedValue] of npcFieldsInPayload) {
+                    const path = npcVerifyMap[apiKey]!.split('.');
+                    let cursor: any = verifyActor;
+                    for (const segment of path) {
+                        cursor = cursor?.[segment];
+                        if (cursor === undefined) break;
+                    }
+                    const actual = cursor;
+                    const equivalent = String(actual) === String(requestedValue);
+                    if (!equivalent) {
+                        throw new Error(
+                            `${ErrorTokens.UPDATE_STATS_NOT_PERSISTED}: ${apiKey} expected ${JSON.stringify(requestedValue)}, got ${JSON.stringify(actual)}`,
+                        );
+                    }
+                }
+            }
+        }
+
         let result = `✅ Updated stats for **${character.name}** (actorType: ${actorType})\n`;
         const updates = Object.entries(args.updates).filter(([_, v]) => v !== undefined);
 
@@ -484,6 +687,12 @@ Use for quick stat changes, character creation, testing, or corrections where yo
                 result += `- ${key}: ${value}\n`;
             });
         }
+
+        await this.query<unknown>('notify', {
+            severity: 'updated',
+            message: `${character.name}`,
+            summary: `stats updated via warhammer-mcp.manage-character`,
+        });
 
         return result;
     }
@@ -522,6 +731,11 @@ Use for quick stat changes, character creation, testing, or corrections where yo
             actorId: character.id,
             itemId: item.id,
             updateData
+        });
+        await this.query<unknown>('notify', {
+            severity: 'updated',
+            message: `${character.name}: ${item.name}`,
+            summary: `skill/talent updated via warhammer-mcp.manage-character`,
         });
 
         let result = `✅ Updated **${item.name}** for ${character.name}\n`;
@@ -610,6 +824,12 @@ Use for quick stat changes, character creation, testing, or corrections where yo
             }
         }
 
+        await this.query<unknown>('notify', {
+            severity: 'created',
+            message: `${character.name}: ${compendiumItem.name}`,
+            summary: `skill/talent added via warhammer-mcp.manage-character`,
+        });
+
         return `✅ Added **${compendiumItem.name}** (${args.itemType}) to ${character.name}` +
             (args.advances ? ` with ${args.advances} advances` : '');
     }
@@ -648,25 +868,35 @@ Use for quick stat changes, character creation, testing, or corrections where yo
             actorId: character.id,
             updateData
         });
+        await this.query<unknown>('notify', {
+            severity: 'updated',
+            message: `${character.name}: ${args.noteType}`,
+            summary: `notes updated via warhammer-mcp.manage-character`,
+        });
 
         const action = args.append ? "Appended to" : "Updated";
         return `✅ ${action} ${args.noteType} for **${character.name}**`;
     }
 
     private async handleAddXPLog(args: z.infer<typeof AddXPLogSchema>): Promise<string> {
+        const identifier = args.actorId ?? args.characterName;
+        if (!identifier) {
+            return `❌ actorId or characterName is required for add-xp-log`;
+        }
         this.logger.info("Adding XP log entry", {
-            characterName: args.characterName,
+            identifier,
             amount: args.amount,
             updateTotal: args.updateTotal,
         });
 
-        // Get character
+        // Get character (by actorId primary, characterName fallback)
         const character = await this.query<CharacterInfoResult>("getCharacterInfo", {
-            characterName: args.characterName
+            characterId: args.actorId,
+            characterName: args.characterName,
         });
 
         if (!character || !character.id) {
-            return `❌ Character "${args.characterName}" not found`;
+            return `❌ Character "${identifier}" not found`;
         }
 
         // Get existing log
@@ -698,12 +928,17 @@ Use for quick stat changes, character creation, testing, or corrections where yo
             actorId: character.id,
             updateData,
         });
+        await this.query<unknown>('notify', {
+            severity: 'updated',
+            message: `${character.name}: XP log`,
+            summary: `xp log updated via warhammer-mcp.manage-character`,
+        });
 
         // DP-16 post-write verification (CCR-5 / Q1 lock) — only when updateTotal:true.
         // Log-only path remains unverified to preserve legacy behavior (Rule 11).
         if (args.updateTotal && expectedTotal !== undefined) {
             const verifyActor = await this.query<CharacterInfoResult>("getCharacterInfo", {
-                characterName: args.characterName,
+                characterId: character.id,
             });
             const actualTotal = verifyActor?.system?.details?.experience?.total;
             if (actualTotal !== expectedTotal) {
@@ -718,5 +953,283 @@ Use for quick stat changes, character creation, testing, or corrections where yo
             ? ` (total → ${expectedTotal})`
             : '';
         return `✅ Added XP log for **${character.name}**: ${sign}${args.amount} XP - ${args.reason}${totalSuffix}`;
+    }
+
+    // ── P-08: get-career-info (read-only) ───────────────────────────────────────
+    // wfrp_layer_expansion_v1 Phase 4 (R7 / P-08). Structured projection of the actor's
+    // CURRENT career, filtered mcp-server-side from getCharacterInfo's deep items[]
+    // projection (QA-1 resolved DEEP: data-access.ts getCharacterInfo maps every item
+    // with `system: sanitizeData(item.system)`, so a career Item carries its full
+    // system.current/status/skills/incomeSkill — no foundry-module change needed).
+    // No write / notify / verify (read-only). Returns career:null (not a throw) when the
+    // actor has no current career.
+    private async handleGetCareerInfo(args: z.infer<typeof GetCareerInfoSchema>): Promise<string> {
+        const identifier = args.actorId ?? args.characterName;
+        if (!identifier) {
+            return `❌ actorId or characterName is required for get-career-info`;
+        }
+        this.logger.info("Getting career info", { identifier });
+
+        let character: CharacterInfoResult;
+        try {
+            character = await this.query<CharacterInfoResult>("getCharacterInfo", {
+                characterId: args.actorId,
+                characterName: args.characterName,
+            });
+        } catch (err: any) {
+            return `❌ Actor "${identifier}" not found: ${err?.message ?? err}`;
+        }
+        if (!character || !character.id) {
+            return `❌ Actor "${identifier}" not found`;
+        }
+
+        const careerItems = (character.items ?? []).filter((i: any) => i.type === "career");
+        const allCareerNames = careerItems.map((i: any) => i.name);
+        const current = careerItems.find((i: any) => i.system?.current?.value === true);
+
+        if (!current) {
+            // Not an error — the actor simply has no career flagged current.
+            const result = {
+                actorId: character.id,
+                actorName: character.name,
+                career: null,
+                allCareerNames,
+            };
+            return JSON.stringify(result, null, 2);
+        }
+
+        const sys = current.system ?? {};
+        const projection = {
+            actorId: character.id,
+            actorName: character.name,
+            career: {
+                id: current.id,
+                name: current.name,
+                careergroup: sys.careergroup?.value ?? null,
+                class: sys.class?.value ?? null,
+                level: sys.level?.value ?? null,
+                complete: sys.complete?.value ?? false,
+                statusTier: sys.status?.tier ?? null,
+                statusStanding: sys.status?.standing ?? null,
+                characteristics: sys.characteristics ?? [],
+                skills: sys.skills ?? [],
+                talents: sys.talents ?? [],
+                trappings: sys.trappings ?? [],
+                incomeSkill: sys.incomeSkill ?? [],
+            },
+            allCareerNames,
+        };
+        return JSON.stringify(projection, null, 2);
+    }
+
+    // ── P-07: roll-income (payout-compute + coin-write) ─────────────────────────
+    // wfrp_layer_expansion_v1 Phase 4 (R7 / P-07). The in-play Earning Dramatic Test
+    // payout engine. HC2: this handler does NOT roll dice — the +20 Earning Dramatic
+    // Test is sheet-owned; the skill/sheet rolls it and passes `rolledTotal` + `outcome`.
+    // It MUST NOT call MarketWFRP4e.rollIncome() (that method rolls — wfrp4e.js:1124) or
+    // `new Roll(...)`. It reads the current career tier/standing, computes the Core-RAW
+    // payout, and writes coin via the existing transaction-wrapped `updateItem` query.
+    //
+    // Payout (Core p.48/64): success = full = rolledTotal × standing of the tier coin
+    // (Gold = standing flat, no dice); fail = half (round down); astounding-fail = 0
+    // (no write — do NOT zero existing money).
+    private async handleRollIncome(args: z.infer<typeof RollIncomeSchema>): Promise<string> {
+        const identifier = args.actorId ?? args.characterName;
+        if (!identifier) {
+            return `❌ actorId or characterName is required for roll-income`;
+        }
+        this.logger.info("Rolling income (payout-compute + write)", { identifier, outcome: args.outcome });
+
+        let character: CharacterInfoResult;
+        try {
+            character = await this.query<CharacterInfoResult>("getCharacterInfo", {
+                characterId: args.actorId,
+                characterName: args.characterName,
+            });
+        } catch (err: any) {
+            return `❌ Actor "${identifier}" not found: ${err?.message ?? err}`;
+        }
+        if (!character || !character.id) {
+            return `❌ Actor "${identifier}" not found`;
+        }
+
+        // Resolve tier + standing — GM overrides win, else read the current career item.
+        let tier: string | null = args.tierOverride ?? null;
+        let standing: number | null = args.standingOverride ?? null;
+        if (tier === null || standing === null) {
+            const careerItems = (character.items ?? []).filter((i: any) => i.type === "career");
+            const current = careerItems.find((i: any) => i.system?.current?.value === true);
+            if (!current) {
+                return `❌ ${character.name} has no current career; pass tierOverride + standingOverride to roll income`;
+            }
+            if (tier === null) tier = current.system?.status?.tier ?? null;
+            if (standing === null) standing = Number(current.system?.status?.standing ?? 0);
+        }
+        // Normalize tier to a key (b|s|g). Career items store the single-letter key.
+        const tierKey = (tier ?? '').toString().toLowerCase().charAt(0);
+        const TIER_TO_MONEY: Record<string, string> = {
+            b: "Brass Penny",
+            s: "Silver Shilling",
+            g: "Gold Crown",
+        };
+        const moneyName = TIER_TO_MONEY[tierKey];
+        if (!moneyName) {
+            return `❌ Unknown status tier "${tier}" — expected one of b (Brass), s (Silver), g (Gold)`;
+        }
+        if (standing === null || !Number.isFinite(standing) || standing < 0) {
+            return `❌ Invalid standing "${standing}" for roll-income`;
+        }
+
+        // Compute the payout (NO dice — rolledTotal is supplied by the sheet/skill).
+        // Gold: flat `standing` GC (no roll). Brass/Silver: rolledTotal × standing on success.
+        let earnedAmount: number;
+        if (args.outcome === "astounding-fail") {
+            earnedAmount = 0;
+        } else if (tierKey === "g") {
+            // Gold is flat: standing GC; fail = half of standing (round down).
+            earnedAmount = args.outcome === "fail" ? Math.floor(standing / 2) : standing;
+        } else {
+            const total = args.rolledTotal ?? 0;
+            const full = total * standing;
+            earnedAmount = args.outcome === "fail" ? Math.floor(full / 2) : full;
+        }
+
+        // Astounding-fail (or a computed 0): no write — do NOT zero existing money.
+        if (earnedAmount <= 0) {
+            return `💰 ${character.name}: Earning Dramatic Test ${args.outcome} → 0 ${moneyName} earned (no coin written)`;
+        }
+
+        // Find the tier's money item on the actor.
+        const moneyItem = (character.items ?? []).find(
+            (i: any) => i.type === "money" && i.name?.toLowerCase() === moneyName.toLowerCase(),
+        );
+        if (!moneyItem) {
+            return `❌ ${character.name} has no "${moneyName}" money item to credit; add one before rolling income`;
+        }
+        const currentQty = Number(moneyItem.system?.quantity?.value ?? 0);
+        const newQty = currentQty + earnedAmount;
+
+        // Write coin via the existing transaction-wrapped + notify-wired updateItem path
+        // (thin-primitive compliant — no new foundry-module query key).
+        await this.query<WriteResult>("updateItem", {
+            actorId: character.id,
+            itemId: moneyItem.id,
+            updateData: { "system.quantity.value": newQty },
+        });
+
+        // DP-16 post-write verification — re-read the money item quantity.
+        const verifyActor = await this.query<CharacterInfoResult>("getCharacterInfo", {
+            characterId: character.id,
+        });
+        const verifyItem = (verifyActor.items ?? []).find((i: any) => i.id === moneyItem.id);
+        const actualQty = Number(verifyItem?.system?.quantity?.value ?? NaN);
+        if (actualQty !== newQty) {
+            throw new Error(
+                `${ErrorTokens.ROLL_INCOME_NOT_PERSISTED}: ${moneyName} quantity expected ${newQty}, got ${actualQty}`,
+            );
+        }
+
+        // notify Pattern B — post-write GM feedback through the notify.* channel.
+        await this.query<unknown>('notify', {
+            severity: 'updated',
+            message: `${character.name}: +${earnedAmount} ${moneyName}`,
+            summary: `income (${args.outcome}) written via warhammer-mcp.manage-character`,
+        });
+
+        return `💰 ${character.name}: Earning Dramatic Test ${args.outcome} → +${earnedAmount} ${moneyName} ` +
+            `(${currentQty} → ${newQty})`;
+    }
+
+    // ── Phase 13 (wfrp_layer_expansion_v1 R16): sheet-flow actions ──────────────
+    // HC2: none of the 4 handlers below roll dice. apply-fear/apply-terror create the
+    // Fear extendedTest item (design B — foundry-module skips setupExtendedTest, the
+    // dialog/deadlock side effect); add-money/direct-pay wrap MarketWFRP4e with
+    // load-bearing input validation ahead of the write (foundry-module owns the guards;
+    // this layer just resolves identity + relays the typed result). notify already fires
+    // foundry-module-side inside the dedicated query-key handler — no redundant
+    // mcp-server-side notify call here (unlike update-actor/update-item, which are raw
+    // primitives with no self-notify).
+    private async resolveCharacterOrError(
+        args: { actorId?: string | undefined; characterName?: string | undefined },
+        actionLabel: string,
+    ): Promise<CharacterInfoResult | string> {
+        const identifier = args.actorId ?? args.characterName;
+        if (!identifier) {
+            return `❌ actorId or characterName is required for ${actionLabel}`;
+        }
+        let character: CharacterInfoResult;
+        try {
+            character = await this.query<CharacterInfoResult>("getCharacterInfo", {
+                characterId: args.actorId,
+                characterName: args.characterName,
+            });
+        } catch (err: any) {
+            return `❌ Actor "${identifier}" not found: ${err?.message ?? err}`;
+        }
+        if (!character || !character.id) {
+            return `❌ Actor "${identifier}" not found`;
+        }
+        return character;
+    }
+
+    private async handleApplyFear(args: z.infer<typeof ApplyFearSchema>): Promise<string> {
+        this.logger.info("Applying fear", { identifier: args.actorId ?? args.characterName, rating: args.rating, sourceName: args.sourceName });
+        const character = await this.resolveCharacterOrError(args, "apply-fear");
+        if (typeof character === "string") return character;
+
+        const result = await this.query<{ fearItemId: string; itemName: string }>("applyFear", {
+            actorId: character.id,
+            rating: args.rating,
+            sourceName: args.sourceName,
+        });
+
+        return `😨 **${character.name}** is now Fearful of **${args.sourceName}** (rating ${args.rating}).\n` +
+            `Created **${result.itemName}** (Cool test, SL target ${args.rating}) — resolve the Cool test on the sheet.`;
+    }
+
+    private async handleApplyTerror(args: z.infer<typeof ApplyTerrorSchema>): Promise<string> {
+        this.logger.info("Applying terror", { identifier: args.actorId ?? args.characterName, rating: args.rating, sourceName: args.sourceName });
+        const character = await this.resolveCharacterOrError(args, "apply-terror");
+        if (typeof character === "string") return character;
+
+        // Terror always inflicts Fear (wfrp4e.js:13351-13359) — reuse the same
+        // foundry-module query key; the Cool-test->Broken cascade is delegated to the
+        // sheet + a confirm-gated apply-condition follow-up in the skill layer (HC2).
+        const result = await this.query<{ fearItemId: string; itemName: string }>("applyFear", {
+            actorId: character.id,
+            rating: args.rating,
+            sourceName: args.sourceName,
+        });
+
+        return `😱 **${character.name}** suffers Terror ${args.rating} from **${args.sourceName}**.\n` +
+            `Created **${result.itemName}** (Cool test, SL target ${args.rating}) — resolve the Cool test on the sheet.\n` +
+            `On a **failed** Cool test, apply **Broken(${args.rating} + |SL|)** — confirm with the GM-reported SL, then apply the condition.`;
+    }
+
+    private async handleAddMoney(args: z.infer<typeof AddMoneySchema>): Promise<string> {
+        this.logger.info("Adding money", { identifier: args.actorId ?? args.characterName, amountString: args.amountString });
+        const character = await this.resolveCharacterOrError(args, "add-money");
+        if (typeof character === "string") return character;
+
+        const result = await this.query<{ coins: Array<{ name: string; quantity: number }> }>("addMoney", {
+            actorId: character.id,
+            amountString: args.amountString,
+        });
+
+        const coinSummary = result.coins.map((c) => `${c.name}: ${c.quantity}`).join(", ");
+        return `💰 Added **${args.amountString}** to ${character.name} (${coinSummary})`;
+    }
+
+    private async handleDirectPay(args: z.infer<typeof DirectPaySchema>): Promise<string> {
+        this.logger.info("Direct pay", { identifier: args.actorId ?? args.characterName, amountString: args.amountString });
+        const character = await this.resolveCharacterOrError(args, "direct-pay");
+        if (typeof character === "string") return character;
+
+        const result = await this.query<{ deductedBP: number; remainingBP: number }>("directPay", {
+            actorId: character.id,
+            amountString: args.amountString,
+        });
+
+        return `💸 ${character.name} paid **${args.amountString}** (${result.deductedBP} BP deducted, ${result.remainingBP} BP remaining)`;
     }
 }

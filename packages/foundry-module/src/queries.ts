@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { MODULE_ID } from './constants.js';
 import { FoundryDataAccess } from './data-access.js';
 // Phase 4 (R3.3): QueryHandlers owns the extracted creature-index + compendium-search services.
-import { PersistentCreatureIndex, CompendiumSearchService, RollRequestService, RollButtonService, PlayerLookupService, CombatService, ConditionsService, ScenePlacementService, TemplateApplyService, ActorService, ItemService, EffectsService, TokenCasualtiesService } from './services/index.js';
+import { PersistentCreatureIndex, CompendiumSearchService, RollRequestService, RollButtonService, PlayerLookupService, CombatService, ConditionsService, ScenePlacementService, TemplateApplyService, ActorService, ItemService, EffectsService, TokenCasualtiesService, PsychologyService, InventoryService, MarketService } from './services/index.js';
 import { wrappedWrite } from './transaction-manager.js';
 import { assertAllowedActorFields } from './services/shared/actor-field-allowlist.js';
 import { notify } from './notify.js';
@@ -78,6 +78,9 @@ import { dispatchCompendium as dispatchCompendiumHandler } from './handlers/comp
 import { dispatchCrossDocFk as dispatchCrossDocFkHandler } from './handlers/cross-doc-fk.js';
 // Phase wfrp-disease — Disease umbrella (8 actions).
 import { dispatchDisease as dispatchDiseaseHandler } from './handlers/disease.js';
+import { dispatchAvailabilityTest as dispatchAvailabilityTestHandler } from './handlers/availability-test.js';
+// wfrp_layer_expansion_v1 Phase 7 (P-11) — travel-distance compute-only lookup (never rolls/writes).
+import { dispatchTravelDistance as dispatchTravelDistanceHandler } from './handlers/travel-distance.js';
 // Phase 4 mcp_completion_v1 — Folder umbrella (6 actions; custom delete + list-contents).
 import { dispatchFolder as dispatchFolderHandler } from './handlers/folder.js';
 // Phase 4 mcp_completion_v1 — Setting umbrella (4 actions; hand-rolled; force gate + blocklist).
@@ -127,6 +130,36 @@ import { dispatchModuleGmtoolkit as dispatchModuleGmtoolkitHandler } from './han
 import { dispatchModuleChatCommander as dispatchModuleChatCommanderHandler } from './handlers/modules/_chatcommands/chat-commander.js';
 // Phase 14 module_integration_v1 — thin-session modules (conditional).
 import { dispatchModuleTimekeeping as dispatchModuleTimekeepingHandler } from './handlers/modules/simple-timekeeping/timekeeping.js';
+// Phase 1 module_integration_v2 — module-conversation-hud (ConversationHUD, conditional).
+import { dispatchModuleConversationHud as dispatchModuleConversationHudHandler } from './handlers/modules/conversation-hud/conversation-hud.js';
+// Phase 2 module_integration_v2 — module-simple-quest (Simple Quest, conditional).
+import { dispatchModuleSimpleQuest as dispatchModuleSimpleQuestHandler } from './handlers/modules/simple-quest/simple-quest.js';
+// Phase 3 module_integration_v2 — module-token-attacher (Token Attacher, conditional).
+import { dispatchModuleTokenAttacher as dispatchModuleTokenAttacherHandler } from './handlers/modules/token-attacher/token-attacher.js';
+// Phase 3 module_integration_v2 — module-token-presentation (boss-splash + token-notes, conditional).
+import { dispatchModuleTokenPresentation as dispatchModuleTokenPresentationHandler } from './handlers/modules/token-presentation/token-presentation.js';
+// Phase 4 module_integration_v2 — module-perceptive (Perceptive stealth/spotting/door, conditional).
+import { dispatchModulePerceptive as dispatchModulePerceptiveHandler } from './handlers/modules/perceptive/perceptive.js';
+// Phase 5 module_integration_v2 — module-augur-nexus (scene-tree nav + connections graph, conditional).
+import { dispatchModuleAugurNexus as dispatchModuleAugurNexusHandler } from './handlers/modules/augur-nexus/augur-nexus.js';
+// Phase 6 module_integration_v2 — module-wfrp-economy (banks/loans/stocks/property, conditional).
+import { dispatchModuleWfrpEconomy as dispatchModuleWfrpEconomyHandler } from './handlers/modules/wfrp-economy/wfrp-economy.js';
+// Phase 8 module_integration_v2 — module-mortal-needs (survival needs tracker, conditional).
+import { dispatchModuleMortalNeeds as dispatchModuleMortalNeedsHandler } from './handlers/modules/mortal-needs/mortal-needs.js';
+// Phase 9 module_integration_v2 — module-polyglot (language obfuscation, conditional).
+import { dispatchModulePolyglot as dispatchModulePolyglotHandler } from './handlers/modules/polyglot/polyglot.js';
+// Phase 10 module_integration_v2 — module-narrator (Narrator Tools read-aloud/narration, conditional).
+import { dispatchModuleNarrator as dispatchModuleNarratorHandler } from './handlers/modules/narrator/narrator.js';
+// Phase 11 module_integration_v2 — module-macro-trigger (hook→macro bindings, conditional).
+import { dispatchModuleMacroTrigger as dispatchModuleMacroTriggerHandler } from './handlers/modules/macro-trigger/macro-trigger.js';
+// Phase 12 module_integration_v2 — module-backpack (per-actor item storage, conditional).
+import { dispatchModuleBackpack as dispatchModuleBackpackHandler } from './handlers/modules/backpack/backpack.js';
+// Phase 13B module_integration_v2 — module-puzzle-locks (14 document puzzle-lock types, conditional).
+import { dispatchModulePuzzleLocks as dispatchModulePuzzleLocksHandler } from './handlers/modules/puzzle-locks/puzzle-locks.js';
+// Phase 13C module_integration_v2 — module-syrinscape (soundscape mood/element playback, conditional).
+import { dispatchModuleSyrinscape as dispatchModuleSyrinscapeHandler } from './handlers/modules/syrinscape/syrinscape.js';
+// Phase 13A module_integration_v2 — module-portal (headless prototype-preserving token spawn, conditional).
+import { dispatchModulePortal as dispatchModulePortalHandler } from './handlers/modules/portal/portal.js';
 import { dispatchModulePatrol as dispatchModulePatrolHandler } from './handlers/modules/patrol/patrol.js';
 import { dispatchModuleGatherer as dispatchModuleGathererHandler } from './handlers/modules/gatherer/gatherer.js';
 import { dispatchModuleMastercrafted as dispatchModuleMastercraftedHandler } from './handlers/modules/mastercrafted/mastercrafted.js';
@@ -198,6 +231,11 @@ import {
   RemoveConditionInput,
   ListConditionsInput,
   ListActiveEffectsInput,
+  // Phase 13 wfrp_layer_expansion_v1 (R16) — sheet-flow primitives.
+  ApplyFearInput,
+  CheckReloadInput,
+  AddMoneyInput,
+  DirectPayInput,
   // Phase 5 follow-up B — active-effect CRUD
   AddActiveEffectInput,
   UpdateActiveEffectInput,
@@ -276,6 +314,10 @@ export class QueryHandlers {
   public effectsService: EffectsService;
   // Phase 5 wfrp_battle_simulator: batch per-token ActorDelta casualty writer (single seam: validateState).
   public tokenCasualties: TokenCasualtiesService;
+  // Phase 13 wfrp_layer_expansion_v1 (R16): sheet-flow method-wrap services (single seam: validateState).
+  public psychology: PsychologyService;
+  public inventory: InventoryService;
+  public market: MarketService;
 
   constructor() {
     this.creatureIndex = new PersistentCreatureIndex();
@@ -297,6 +339,9 @@ export class QueryHandlers {
     this.conditions = new ConditionsService(validateState);
     this.templateApply = new TemplateApplyService(validateState);
     this.tokenCasualties = new TokenCasualtiesService(validateState);
+    this.psychology = new PsychologyService(validateState);
+    this.inventory = new InventoryService(validateState);
+    this.market = new MarketService(validateState);
     // Phase 8 (R7.3): promoted actor/item/effect services. Callbacks reference this.dataAccess lazily
     // (invoked only at runtime, after construction completes) and reuse the surviving DA facade method
     // (getCompendiumDocumentFull stays public on FoundryDataAccess; auditLog relocated to this.auditLog
@@ -446,6 +491,8 @@ export class QueryHandlers {
       'filepickerCreateDirectory': (data: unknown) => createDirectoryHandler(data),
       'notify': this.handleNotify.bind(this),
       'disease': this.handleDisease.bind(this),
+      'availability-test': this.handleAvailabilityTest.bind(this),
+      'travel-distance': this.handleTravelDistance.bind(this),
       'folder': this.handleFolder.bind(this),
       'setting': this.handleSetting.bind(this),
       'chat-message': this.handleChatMessage.bind(this),
@@ -476,6 +523,25 @@ export class QueryHandlers {
       'module-gatherer': this.handleModuleGatherer.bind(this),
       'module-mastercrafted': this.handleModuleMastercrafted.bind(this),
       'module-itempiles': this.handleModuleItempiles.bind(this),
+      'module-conversation-hud': this.handleModuleConversationHud.bind(this),
+      'module-simple-quest': this.handleModuleSimpleQuest.bind(this),
+      'module-token-attacher': this.handleModuleTokenAttacher.bind(this),
+      'module-token-presentation': this.handleModuleTokenPresentation.bind(this),
+      'module-perceptive': this.handleModulePerceptive.bind(this),
+      'module-augur-nexus': this.handleModuleAugurNexus.bind(this),
+      'module-wfrp-economy': this.handleModuleWfrpEconomy.bind(this),
+      'module-mortal-needs': this.handleModuleMortalNeeds.bind(this),
+      'module-polyglot': this.handleModulePolyglot.bind(this),
+      'module-narrator': this.handleModuleNarrator.bind(this),
+      'module-macro-trigger': this.handleModuleMacroTrigger.bind(this),
+      'module-backpack': this.handleModuleBackpack.bind(this),
+      'module-puzzle-locks': this.handleModulePuzzleLocks.bind(this),
+      'module-syrinscape': this.handleModuleSyrinscape.bind(this),
+      'module-portal': this.handleModulePortal.bind(this),
+      'applyFear': this.handleApplyFear.bind(this),
+      'checkReload': this.handleCheckReload.bind(this),
+      'addMoney': this.handleAddMoney.bind(this),
+      'directPay': this.handleDirectPay.bind(this),
     };
     for (const [key, handler] of Object.entries(handlerTable)) {
       CONFIG.queries[`${modulePrefix}.${key}`] = handler;
@@ -767,6 +833,127 @@ export class QueryHandlers {
     });
   }
 
+  // Phase 1 module_integration_v2 — module-conversation-hud dispatcher.
+  // requireModuleActive('conversation-hud') guard runs inside dispatchModuleConversationHud.
+  private async handleModuleConversationHud(data: unknown): Promise<any> {
+    return wrapQuery('Failed to dispatch module-conversation-hud action', async () => {
+      return await dispatchModuleConversationHudHandler(data);
+    });
+  }
+
+  // Phase 2 module_integration_v2 — module-simple-quest dispatcher.
+  // requireModuleActive('simple-quest') guard runs inside dispatchModuleSimpleQuest.
+  private async handleModuleSimpleQuest(data: unknown): Promise<any> {
+    return wrapQuery('Failed to dispatch module-simple-quest action', async () => {
+      return await dispatchModuleSimpleQuestHandler(data);
+    });
+  }
+
+  // Phase 3 module_integration_v2 — module-token-attacher dispatcher.
+  // requireModuleActive('token-attacher', ['lib-wrapper']) guard runs inside dispatchModuleTokenAttacher.
+  private async handleModuleTokenAttacher(data: unknown): Promise<any> {
+    return wrapQuery('Failed to dispatch module-token-attacher action', async () => {
+      return await dispatchModuleTokenAttacherHandler(data);
+    });
+  }
+
+  // Phase 3 module_integration_v2 — module-token-presentation dispatcher.
+  // Per-action requireModuleActive guard (CCR-12) runs inside dispatchModuleTokenPresentation.
+  private async handleModuleTokenPresentation(data: unknown): Promise<any> {
+    return wrapQuery('Failed to dispatch module-token-presentation action', async () => {
+      return await dispatchModuleTokenPresentationHandler(data);
+    });
+  }
+
+  // Phase 4 module_integration_v2 — module-perceptive dispatcher.
+  // requireModuleActive('perceptive') guard runs inside dispatchModulePerceptive (except the
+  // wfrp-stealth-delegate fail-open path, CCR-9).
+  private async handleModulePerceptive(data: unknown): Promise<any> {
+    return wrapQuery('Failed to dispatch module-perceptive action', async () => {
+      return await dispatchModulePerceptiveHandler(data);
+    });
+  }
+
+  // Phase 5 module_integration_v2 — module-augur-nexus dispatcher.
+  // requireModuleActive('augur-nexus') guard runs inside dispatchModuleAugurNexus.
+  private async handleModuleAugurNexus(data: unknown): Promise<any> {
+    return wrapQuery('Failed to dispatch module-augur-nexus action', async () => {
+      return await dispatchModuleAugurNexusHandler(data);
+    });
+  }
+
+  // Phase 6 module_integration_v2 — module-wfrp-economy dispatcher.
+  // requireModuleActive('wfrp4e-economy') guard runs inside dispatchModuleWfrpEconomy.
+  private async handleModuleWfrpEconomy(data: unknown): Promise<any> {
+    return wrapQuery('Failed to dispatch module-wfrp-economy action', async () => {
+      return await dispatchModuleWfrpEconomyHandler(data);
+    });
+  }
+
+  // Phase 8 module_integration_v2 — module-mortal-needs dispatcher.
+  // requireModuleActive('mortal-needs') guard runs inside dispatchModuleMortalNeeds.
+  private async handleModuleMortalNeeds(data: unknown): Promise<any> {
+    return wrapQuery('Failed to dispatch module-mortal-needs action', async () => {
+      return await dispatchModuleMortalNeedsHandler(data);
+    });
+  }
+
+  // Phase 9 module_integration_v2 — module-polyglot dispatcher.
+  // requireModuleActive('polyglot') guard runs inside dispatchModulePolyglot.
+  private async handleModulePolyglot(data: unknown): Promise<any> {
+    return wrapQuery('Failed to dispatch module-polyglot action', async () => {
+      return await dispatchModulePolyglotHandler(data);
+    });
+  }
+
+  // Phase 10 module_integration_v2 — module-narrator dispatcher.
+  // requireModuleActive('narrator-tools') guard runs inside dispatchModuleNarrator.
+  private async handleModuleNarrator(data: unknown): Promise<any> {
+    return wrapQuery('Failed to dispatch module-narrator action', async () => {
+      return await dispatchModuleNarratorHandler(data);
+    });
+  }
+
+  // Phase 11 module_integration_v2 — module-macro-trigger dispatcher.
+  // requireModuleActive('macro-trigger') guard runs inside dispatchModuleMacroTrigger.
+  private async handleModuleMacroTrigger(data: unknown): Promise<any> {
+    return wrapQuery('Failed to dispatch module-macro-trigger action', async () => {
+      return await dispatchModuleMacroTriggerHandler(data);
+    });
+  }
+
+  // Phase 12 module_integration_v2 — module-backpack dispatcher.
+  // requireModuleActive('backpack') guard runs inside dispatchModuleBackpack.
+  private async handleModuleBackpack(data: unknown): Promise<any> {
+    return wrapQuery('Failed to dispatch module-backpack action', async () => {
+      return await dispatchModuleBackpackHandler(data);
+    });
+  }
+
+  // Phase 13B module_integration_v2 — module-puzzle-locks dispatcher.
+  // requireModuleActive('puzzle-locks') guard runs inside dispatchModulePuzzleLocks.
+  private async handleModulePuzzleLocks(data: unknown): Promise<any> {
+    return wrapQuery('Failed to dispatch module-puzzle-locks action', async () => {
+      return await dispatchModulePuzzleLocksHandler(data);
+    });
+  }
+
+  // Phase 13C module_integration_v2 — module-syrinscape dispatcher.
+  // requireModuleActive('syrinscape-control') guard runs inside dispatchModuleSyrinscape.
+  private async handleModuleSyrinscape(data: unknown): Promise<any> {
+    return wrapQuery('Failed to dispatch module-syrinscape action', async () => {
+      return await dispatchModuleSyrinscapeHandler(data);
+    });
+  }
+
+  // Phase 13A module_integration_v2 — module-portal dispatcher.
+  // requireModuleActive('portal-lib') guard runs inside dispatchModulePortal.
+  private async handleModulePortal(data: unknown): Promise<any> {
+    return wrapQuery('Failed to dispatch module-portal action', async () => {
+      return await dispatchModulePortalHandler(data);
+    });
+  }
+
   // Phase 11 module_integration_v1 — module-party-resources dispatcher.
   // requireModuleActive('fvtt-party-resources') guard runs inside dispatchModulePartyResources.
   private async handleModulePartyResources(data: unknown): Promise<any> {
@@ -981,6 +1168,20 @@ export class QueryHandlers {
     return wrapQuery('Failed to dispatch disease action', async () => {
       this.dataAccess.validateFoundryState();
       return await dispatchDiseaseHandler(data);
+    });
+  }
+
+  async handleAvailabilityTest(data: unknown): Promise<any> {
+    return wrapQuery('Failed to dispatch availability-test', async () => {
+      this.dataAccess.validateFoundryState();
+      return await dispatchAvailabilityTestHandler(data);
+    });
+  }
+
+  async handleTravelDistance(data: unknown): Promise<any> {
+    return wrapQuery('Failed to dispatch travel-distance', async () => {
+      this.dataAccess.validateFoundryState();
+      return await dispatchTravelDistanceHandler(data);
     });
   }
 
@@ -1450,12 +1651,69 @@ export class QueryHandlers {
     });
   }
 
+  // Phase 13 wfrp_layer_expansion_v1 (R16) — sheet-flow method-wraps. Design B (fear/terror):
+  // create the Fear extendedTest item directly, skip setupExtendedTest (deadlock/dialog guard,
+  // see services/psychology.ts header). apply-terror (mcp-server) reuses this same query key.
+  private async handleApplyFear(data: unknown): Promise<any> {
+    return wrapQuery('Failed to apply fear', async () => {
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
+      this.dataAccess.validateFoundryState();
+      const parsed = ApplyFearInput.strict().parse(data ?? {});
+      return await wrappedWrite('applyFear', async () => ({
+        success: true,
+        data: await this.psychology.applyFear(parsed),
+      }));
+    });
+  }
+
+  private async handleCheckReload(data: unknown): Promise<any> {
+    return wrapQuery('Failed to check reload', async () => {
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
+      this.dataAccess.validateFoundryState();
+      const parsed = CheckReloadInput.strict().parse(data ?? {});
+      return await wrappedWrite('checkReload', async () => ({
+        success: true,
+        data: await this.inventory.checkReload(parsed),
+      }));
+    });
+  }
+
+  private async handleAddMoney(data: unknown): Promise<any> {
+    return wrapQuery('Failed to add money', async () => {
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
+      this.dataAccess.validateFoundryState();
+      const parsed = AddMoneyInput.strict().parse(data ?? {});
+      return await wrappedWrite('addMoney', async () => ({
+        success: true,
+        data: await this.market.addMoney(parsed),
+      }));
+    });
+  }
+
+  private async handleDirectPay(data: unknown): Promise<any> {
+    return wrapQuery('Failed to direct pay', async () => {
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
+      this.dataAccess.validateFoundryState();
+      const parsed = DirectPayInput.strict().parse(data ?? {});
+      return await wrappedWrite('directPay', async () => ({
+        success: true,
+        data: await this.market.directPay(parsed),
+      }));
+    });
+  }
+
   private async handleListConditions(data: unknown): Promise<any> {
     return wrapQuery('Failed to list conditions', async () => {
       const gmCheck = this.validateGMAccess();
       if (!gmCheck.allowed) return { error: 'Access denied', success: false };
       this.dataAccess.validateFoundryState();
-      const parsed = ListConditionsInput.strict().parse(data ?? {});
+      // P-09: ListConditionsInput is now a ZodEffects (carries .strict() + a mutex
+      // .refine()), so call .parse directly — .strict() is already baked in.
+      const parsed = ListConditionsInput.parse(data ?? {});
       return { success: true, data: await this.conditions.listConditions(parsed) };
     });
   }

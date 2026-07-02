@@ -17,7 +17,7 @@ const CHARACTER_FIXTURE = {
       t: { value: 30 },
     },
     status: {
-      encumbrance: { value: 4 },
+      encumbrance: { value: 4, max: 7 }, // max = SB3 + TB4 as Foundry computes it
       money: { gc: 2, ss: 5, bp: 12 },
     },
   },
@@ -59,7 +59,7 @@ describe('ManageInventoryTool — characterization', () => {
       system: {
         ...CHARACTER_FIXTURE.system,
         characteristics: { s: { value: 20 }, t: { value: 20 } },
-        status: { ...CHARACTER_FIXTURE.system.status, encumbrance: { value: 10 } },
+        status: { ...CHARACTER_FIXTURE.system.status, encumbrance: { value: 10, max: 4 } }, // max = SB2 + TB2 as Foundry computes it
       },
     };
     const r = await tool(overEncumbered).handle({

@@ -87,10 +87,9 @@ export class ConditionsService {
     };
   }
 
-  async listConditions(data: { actorId: string }): Promise<any[]> {
-    this.validateState();
-    const actor: any = (game as any).actors?.get(data.actorId);
-    if (!actor) throw new Error(`Actor not found with ID: ${data.actorId}`);
+  // P-09: shared per-actor condition projection (used by both the single-actor path and
+  // the combatId batch). Pure read of actor.effects — no behavioral change vs the prior inline map.
+  private projectActorConditions(actor: any): any[] {
     return (actor.effects ?? [])
       .filter((e: any) => e.isCondition)
       .map((e: any) => ({
@@ -99,5 +98,35 @@ export class ConditionsService {
           e.conditionValue ?? e.flags?.wfrp4e?.value ?? 1,
         effectId: e.id,
       }));
+  }
+
+  // P-09 (wfrp_layer_expansion Phase 5): single-actor OR combat-batch. Exactly one of
+  // actorId / combatId is supplied (mutex enforced upstream by the shared Zod refine).
+  // - actorId  → returns the condition array directly (byte-for-byte unchanged).
+  // - combatId → resolves the Combat doc, iterates combat.combatants, and returns a
+  //   per-actor roster map { [actorId]: { actorName, conditions[] } }. Combatants whose
+  //   actor cannot be resolved are skipped (e.g. a dangling token reference).
+  async listConditions(data: { actorId?: string | undefined; combatId?: string | undefined }): Promise<any> {
+    this.validateState();
+
+    if (data.combatId !== undefined) {
+      const combat: any = (game as any).combats?.get(data.combatId);
+      if (!combat) throw new Error(`COMBAT_NOT_FOUND: no combat with id "${data.combatId}"`);
+      const roster: Record<string, { actorName: string; conditions: any[] }> = {};
+      for (const combatant of combat.combatants ?? []) {
+        const actor: any = combatant?.actor;
+        const actorId: string | undefined = actor?.id ?? combatant?.actorId;
+        if (!actor || !actorId) continue; // skip dangling/tokenless combatants
+        roster[actorId] = {
+          actorName: actor.name,
+          conditions: this.projectActorConditions(actor),
+        };
+      }
+      return roster;
+    }
+
+    const actor: any = (game as any).actors?.get(data.actorId);
+    if (!actor) throw new Error(`Actor not found with ID: ${data.actorId}`);
+    return this.projectActorConditions(actor);
   }
 }

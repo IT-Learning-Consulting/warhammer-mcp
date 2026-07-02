@@ -320,6 +320,16 @@ export class FoundryDataAccess {
         type: i.type,
         advances: i.system?.advances?.value ?? null,
         specification: i.system?.specification?.value ?? null,
+        // BUG-415: surface the physical-item fields read-reporting skills need that the
+        // formatted projection previously dropped — quantity (ammo/trapping counts),
+        // ammunitionType (/wfrp-combat ammo status grouping), encumbrance (heaviest-items).
+        quantity: i.system?.quantity?.value ?? null,
+        ammunitionType: i.system?.ammunitionType?.value ?? null,
+        encumbrance: i.system?.encumbrance?.value ?? null,
+        // P-13 (wfrp_layer_expansion Phase 12): full system passthrough closes BUG-415 for ALL
+        // custom/trait item types at once (rollable.*, description, chanty/technique/cant leaves)
+        // instead of re-creating per-type leaf-picks. Mirrors getCharacterInfo (data-access.ts:134).
+        system: sanitizeData(i.system),
       }));
 
       const items = data.typeFilter
@@ -655,6 +665,46 @@ export class FoundryDataAccess {
       'weaponGroups',
       'ammunitionGroups',
       'armorTypes',
+      // Phase 1 (wfrp_layer_expansion_v1) — +30 verified keys (23 → 53 total).
+      // All confirmed against wfrp4e_system/config/WFRP4E.md (2026-06-22).
+      // Species family (×10)
+      'species',
+      'subspecies',
+      'speciesSkills',
+      'speciesTalents',
+      'speciesCharacteristics',
+      'speciesHeight',
+      'speciesMovement',
+      'speciesFate',
+      'speciesRes',
+      'speciesRandomTalents',
+      // Availability / trade (×4)
+      'availability',
+      'availabilityTable',
+      'trappingCategories',
+      'trade',
+      // Combat / weapon (×6)
+      'armorQualities',
+      'armorFlaws',
+      'rangeBands',
+      'rangeModifiers',
+      'reachNum',
+      'groupAdvantageActions',
+      // Magic (×4)
+      'magicLores',
+      'magicWind',
+      'overCastTablesPerWind',
+      'prayerTypes',
+      // Creature sizes (×1)
+      'actorSizes',
+      // Items / trappings (×3)
+      'itemQualities',
+      'itemFlaws',
+      'trappingTypes',
+      // Difficulty (×1)
+      'difficultyLabels',
+      // Vehicle (×1)
+      'vehicleTypes',
     ]);
     const config: any = (game as any).wfrp4e?.config ?? (globalThis as any).WFRP4E ?? {};
     const values: Record<string, unknown> = {};

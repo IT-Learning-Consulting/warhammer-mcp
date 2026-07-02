@@ -43,11 +43,20 @@ export const RemoveConditionInput = z
   })
   .strict();
 
+// P-09 (wfrp_layer_expansion Phase 5): batch variant. Either actorId (single-actor,
+// unchanged) OR combatId (resolve the Combat doc, iterate combatants, return a per-actor
+// roster map). Exactly one of the two must be supplied (mutex) — the refinement rejects
+// both-or-neither. Single-actor callers are byte-for-byte unchanged (actorId still branded).
 export const ListConditionsInput = z
   .object({
-    actorId: ActorId,
+    actorId: ActorId.optional(),
+    combatId: z.string().optional(),
   })
-  .strict();
+  .strict()
+  .refine(
+    (d) => (d.actorId === undefined) !== (d.combatId === undefined),
+    { message: 'Provide exactly one of actorId or combatId (not both, not neither).' },
+  );
 
 // TOOL-IDEA-002 (2026-05-14): `includeItemAEs` opts in to surfacing AEs attached to
 // the actor's embedded items (e.g. weapon-AEs on Camila's Dagger). Default false to

@@ -148,7 +148,7 @@ export class CharacterTools extends BaseTool {
     // table (TOOL-IDEA-006). It's a combat-resolution field (which RollTable to roll on for crit
     // location), so it belongs with the other combat vitals.
     const identityKeys = ['species', 'career', 'class', 'careerLevel', 'status', 'gender', 'age', 'height', 'weight', 'hair', 'eyes', 'starSign', 'movement', 'distinguishingMarks'];
-    const vitalsKeys = ['wounds', 'fortune', 'fate', 'resilience', 'resolve', 'corruption', 'toughness', 'money', 'criticalWounds', 'hitLocationTable'];
+    const vitalsKeys = ['wounds', 'fortune', 'fate', 'resilience', 'resolve', 'corruption', 'toughness', 'encumbrance', 'money', 'criticalWounds', 'hitLocationTable'];
     const biographyKeys = ['biography', 'gmNotes', 'experience', 'experienceLog'];
 
     const pick = (src: CharacterBasicInfoView, keys: string[]): CharacterBasicInfoView => {
@@ -233,7 +233,7 @@ export class CharacterTools extends BaseTool {
   }
 
   private formatCharacterResponse(characterData: FoundryRawActor): CharacterResponseView {
-    const response = {
+    const response: CharacterResponseView = {
       id: characterData.id,
       name: characterData.name,
       type: characterData.type,
@@ -244,6 +244,17 @@ export class CharacterTools extends BaseTool {
       effects: this.formatEffects(characterData.effects || []),
       hasImage: !!characterData.img,
     };
+
+    // BUG-415: the projection above models character / npc / creature only. For other actor
+    // types (vehicle, wfrp4e-archives3.enterprise, …) basicInfo/stats come back empty, hiding the
+    // custom system surface skills must read (enterprise income.list / events.list, vehicle
+    // carries / encumbrance / passengers). Surface the raw (already-sanitized) system for those
+    // types so /wfrp-trade enterprise + /wfrp-travel vehicle can read it. Standard types are
+    // unaffected (they keep the lean projection).
+    const STANDARD_ACTOR_TYPES = ['character', 'npc', 'creature'];
+    if (!STANDARD_ACTOR_TYPES.includes(characterData.type)) {
+      response.system = characterData.system ?? {};
+    }
 
     return response;
   }
@@ -322,6 +333,18 @@ export class CharacterTools extends BaseTool {
         bonus: toughnessBonus,
         armorPoints: armorPoints,
         total: toughnessBonus + armorPoints
+      };
+    }
+
+    // Encumbrance (BUG-415): engine-DERIVED load — current vs max threshold (SB+TB) + the
+    // current/max ratio. Read-only; surfaced for /wfrp-travel encumbrance status banding
+    // (≤1 Normal · ≤2 Encumbered · ≤3 Heavily · >3 Incapacitated). `.current` can arrive as a
+    // numeric string ("0.00"), so coerce. The skill never writes these.
+    if (system.status?.encumbrance) {
+      basicInfo.encumbrance = {
+        current: Number(system.status.encumbrance.current) || 0,
+        max: Number(system.status.encumbrance.max) || 0,
+        state: Number(system.status.encumbrance.state) || 0,
       };
     }
 

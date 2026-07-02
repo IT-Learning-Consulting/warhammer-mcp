@@ -481,4 +481,7 @@ export interface CharacterResponseView {
   items: CharacterItemView[];
   effects: CharacterEffectView[];
   hasImage: boolean;
+  // BUG-415: raw system passthrough, populated only for non-character/npc/creature actor types
+  // (vehicle, enterprise, …) whose custom fields the lean projection above does not model.
+  system?: Record<string, any>;
 }

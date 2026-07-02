@@ -43,6 +43,26 @@ const ManageInventorySchema = z.discriminatedUnion("action", [
     z.object({
         action: z.literal("check-encumbrance"),
         characterName: z.string()
+    }),
+    // P-04 (wfrp_layer_expansion Phase 5): wire a ranged weapon to a specific ammunition
+    // item. Validates the ammo's `ammunitionType` matches the weapon's `ammunitionGroup`
+    // BEFORE writing `weapon.system.currentAmmo.value` (the ammo item's id). Pass
+    // ammoName: null to CLEAR the wiring. Name-based to match the umbrella's convention
+    // (ADR-P5-01); ids are resolved internally via getCharacterInfo.
+    z.object({
+        action: z.literal("wire-ammo"),
+        characterName: z.string(),
+        weaponName: z.string(),
+        ammoName: z.string().nullable()
+    }),
+    // Phase 13 (wfrp_layer_expansion_v1 R16): wraps actor.checkReloadExtendedTest — safe,
+    // no dialog/roll (HC2). Name-keyed per the umbrella's convention (no actorId, no
+    // .strict(), matches wire-ammo). The mcp-server handler resolves characterName +
+    // weaponName to ids via getCharacterInfo before calling the foundry-module query key.
+    z.object({
+        action: z.literal("check-reload"),
+        characterName: z.string(),
+        weaponName: z.string()
     })
 ]);
 
@@ -78,7 +98,7 @@ export class ManageInventoryTool extends BaseTool {
             description: `Manage inventory for WFRP 4e characters including items, encumbrance, and ammunition.
 
 WFRP Encumbrance System:
-- Maximum Encumbrance = Strength + Toughness Bonus
+- Maximum Encumbrance = system-computed (Strength Bonus + Toughness Bonus, plus any Active-Effect modifiers and size multipliers, e.g. Ogre ×2)
 - Encumbrance Levels:
   * Normal: Below max encumbrance (no penalties)
   * Encumbered: At max encumbrance (-10 to Agility)
@@ -95,25 +115,35 @@ Ammunition Tracking:
 - Ammunition consumed during ranged attacks
 - Running low warnings when ammunition < 5
 
+Ammunition Wiring (wire-ammo):
+- Wire a ranged weapon to a specific ammunition item (sets weapon.system.currentAmmo.value)
+- Validates the ammo's Ammunition Type matches the weapon's Ammunition Group BEFORE writing
+- Throws WIRE_AMMO_TYPE_MISMATCH on a mismatch (no write); pass ammoName=null to clear the wiring
+
 Actions:
 - **get-status**: Get detailed inventory overview with encumbrance and ammunition
 - **add-item**: Add item to inventory with weight tracking
 - **remove-item**: Remove item and update encumbrance
 - **track-ammunition**: Add/subtract ammunition (use negative for shots fired)
 - **check-encumbrance**: Calculate carrying capacity and penalties
+- **wire-ammo**: Wire a weapon to compatible ammunition (validates type, then sets currentAmmo)
+- **check-reload**: Check/advance a loading weapon's reload status (wraps actor.checkReloadExtendedTest — no dialog, no roll per HC2). Creates a reload-tracking item when unloaded; completes/removes it when the reload finishes.
 
 Examples:
 - Get inventory: action="get-status", characterName="Hans"
 - Add item: action="add-item", characterName="Hans", itemName="Longsword", itemType="weapon", encumbrance=1
 - Remove item: action="remove-item", characterName="Hans", itemName="Longsword"
 - Track ammo: action="track-ammunition", characterName="Hans", ammunitionType="Arrows", amount=-1
-- Check weight: action="check-encumbrance", characterName="Hans"`,
+- Check weight: action="check-encumbrance", characterName="Hans"
+- Wire ammo: action="wire-ammo", characterName="Hans", weaponName="Bow", ammoName="Arrows"
+- Clear wiring: action="wire-ammo", characterName="Hans", weaponName="Bow", ammoName=null
+- Check reload: action="check-reload", characterName="Hans", weaponName="Crossbow"`,
             inputSchema: {
                 type: "object",
                 properties: {
                     action: {
                         type: "string",
-                        enum: ["get-status", "add-item", "remove-item", "track-ammunition", "check-encumbrance"],
+                        enum: ["get-status", "add-item", "remove-item", "track-ammunition", "check-encumbrance", "wire-ammo", "check-reload"],
                         description: "Action to perform"
                     },
                     characterName: { type: "string", description: "Name of the character" },
@@ -126,7 +156,9 @@ Examples:
                     encumbrance: { type: "number", description: "Weight/encumbrance value (for add-item)" },
                     quantity: { type: "number", description: "Quantity (for add-item, remove-item)" },
                     ammunitionType: { type: "string", description: "Type of ammunition like 'Arrows', 'Bolts' (for track-ammunition)" },
-                    amount: { type: "number", description: "Amount to add/subtract (for track-ammunition)" }
+                    amount: { type: "number", description: "Amount to add/subtract (for track-ammunition)" },
+                    weaponName: { type: "string", description: "Name of the ranged weapon to wire (for wire-ammo) or check reload status on (for check-reload)" },
+                    ammoName: { type: ["string", "null"], description: "Name of the ammunition item to wire, or null to clear (for wire-ammo)" }
                 },
                 required: ["action", "characterName"]
             }
@@ -147,6 +179,10 @@ Examples:
                 return this.handleTrackAmmunition(parsed);
             case "check-encumbrance":
                 return this.handleCheckEncumbrance(parsed);
+            case "wire-ammo":
+                return this.handleWireAmmo(parsed);
+            case "check-reload":
+                return this.handleCheckReload(parsed);
         }
     }
 
@@ -159,9 +195,10 @@ Examples:
         );
 
         // Get encumbrance values
+        // Phase 1 (wfrp_layer_expansion_v1): read system-computed .max (handles AE bonusMod + Ogre ×2 multiplier)
+        const maxEncumbrance = character.system?.status?.encumbrance?.max || 0;
         const strengthBonus = Math.floor((character.system?.characteristics?.s?.value || 0) / 10);
         const toughnessBonus = Math.floor((character.system?.characteristics?.t?.value || 0) / 10);
-        const maxEncumbrance = strengthBonus + toughnessBonus;
         const currentEncumbrance = character.system?.status?.encumbrance?.value || 0;
 
         // BUG-318: guard against division by zero when maxEncumbrance is 0
@@ -312,6 +349,11 @@ Examples:
                 "deleteItem",
                 { actorId: character.id, itemId: item.id }
             );
+            await this.query<unknown>('notify', {
+                severity: 'deleted',
+                message: `${args.characterName}: ${args.itemName}`,
+                summary: `item removed via warhammer-mcp.manage-inventory`,
+            });
             return `✅ Removed ${currentQty}x **${args.itemName}** from ${args.characterName}'s inventory`;
         }
 
@@ -323,6 +365,11 @@ Examples:
                 updateData: { "system.quantity.value": currentQty - quantity }
             }
         );
+        await this.query<unknown>('notify', {
+            severity: 'deleted',
+            message: `${args.characterName}: ${args.itemName}`,
+            summary: `item removed via warhammer-mcp.manage-inventory`,
+        });
         return `✅ Removed ${quantity}x **${args.itemName}** from ${args.characterName}'s inventory (${currentQty - quantity} remaining)`;
     }
 
@@ -353,10 +400,160 @@ Examples:
                 updateData: { "system.quantity.value": newQty }
             }
         );
+        await this.query<unknown>('notify', {
+            severity: 'updated',
+            message: `${args.characterName}: ${args.ammunitionType}`,
+            summary: `ammunition tracked via warhammer-mcp.manage-inventory`,
+        });
 
         const action = args.amount > 0 ? "Added" : "Used";
         const absAmount = Math.abs(args.amount);
         return `🎯 ${action} ${absAmount} **${args.ammunitionType}** for ${args.characterName} (${newQty} remaining)`;
+    }
+
+    /**
+     * P-04 (wfrp_layer_expansion Phase 5): wire a ranged weapon to a specific
+     * ammunition item. Validates the ammo's `system.ammunitionType.value` matches the
+     * weapon's `system.ammunitionGroup.value` BEFORE writing the weapon's
+     * `system.currentAmmo.value` (the ammo item's id). Pass ammoName=null to clear.
+     *
+     * Quality contract: throws typed WIRE_AMMO_* errors on a type mismatch or a
+     * silent-drop post-write-verify failure (DP-16); fires notify Pattern B after a
+     * confirmed write. Name-based + getCharacterInfo-resolved per the umbrella convention
+     * (ADR-P5-01) — no foundry-module handler, no new query key.
+     */
+    private async handleWireAmmo(args: { characterName: string; weaponName: string; ammoName: string | null }): Promise<string> {
+        this.logger.info("Wiring ammunition to weapon", args);
+
+        const character = await this.query<CharacterInfoResult>(
+            "getCharacterInfo",
+            { characterName: args.characterName }
+        );
+
+        const weapon = (character.items ?? []).find(
+            (i) => i.type === "weapon" && i.name === args.weaponName
+        );
+        if (!weapon) {
+            throw new Error(`WIRE_AMMO_WEAPON_NOT_FOUND: weapon "${args.weaponName}" not found on ${args.characterName}.`);
+        }
+
+        // Clear path: ammoName === null wipes the wiring (currentAmmo.value = "").
+        if (args.ammoName === null) {
+            await this.query<WriteResult>(
+                "updateItem",
+                {
+                    actorId: character.id,
+                    itemId: weapon.id,
+                    updateData: { "system.currentAmmo.value": "" }
+                }
+            );
+            // DP-16 post-write verify (silent-drop trap).
+            const afterClear = await this.query<CharacterInfoResult>(
+                "getCharacterInfo",
+                { characterName: args.characterName }
+            );
+            const clearedWeapon = (afterClear.items ?? []).find((i) => i.id === weapon.id);
+            const clearedVal = clearedWeapon?.system?.currentAmmo?.value ?? "";
+            if (clearedVal !== "") {
+                throw new Error(`WIRE_AMMO_NOT_PERSISTED: currentAmmo.value is "${clearedVal}", expected "" (cleared) on ${args.weaponName}.`);
+            }
+            await this.query<unknown>('notify', {
+                severity: 'updated',
+                message: `${args.characterName}: ${args.weaponName} ammo cleared`,
+                summary: `ammo wiring cleared via warhammer-mcp.manage-inventory`,
+            });
+            return `🎯 Cleared ammunition wiring on **${args.weaponName}** for ${args.characterName}.`;
+        }
+
+        const ammo = (character.items ?? []).find(
+            (i) => i.type === "ammunition" && i.name === args.ammoName
+        );
+        if (!ammo) {
+            throw new Error(`WIRE_AMMO_AMMO_NOT_FOUND: ammunition "${args.ammoName}" not found on ${args.characterName}.`);
+        }
+
+        // Type-match validation: the ammo's ammunitionType must equal the weapon's
+        // ammunitionGroup. Reject BEFORE any write (no silent corruption — memo 06 B-01).
+        const weaponGroup = String(weapon.system?.ammunitionGroup?.value ?? "").trim();
+        const ammoType = String(ammo.system?.ammunitionType?.value ?? "").trim();
+        if (!weaponGroup) {
+            throw new Error(`WIRE_AMMO_TYPE_MISMATCH: "${args.weaponName}" has no ammunitionGroup (not a ranged weapon, or group unset).`);
+        }
+        if (weaponGroup !== ammoType) {
+            throw new Error(
+                `WIRE_AMMO_TYPE_MISMATCH: "${args.ammoName}" (type "${ammoType}") does not match "${args.weaponName}" (group "${weaponGroup}"). No write performed.`
+            );
+        }
+
+        await this.query<WriteResult>(
+            "updateItem",
+            {
+                actorId: character.id,
+                itemId: weapon.id,
+                updateData: { "system.currentAmmo.value": ammo.id }
+            }
+        );
+
+        // DP-16 post-write verify — re-read and assert currentAmmo.value === ammo.id
+        // (Document.update returns undefined for both no-op AND silent drop; BUG-070).
+        const after = await this.query<CharacterInfoResult>(
+            "getCharacterInfo",
+            { characterName: args.characterName }
+        );
+        const verifiedWeapon = (after.items ?? []).find((i) => i.id === weapon.id);
+        const ammoCurrent = verifiedWeapon?.system?.currentAmmo?.value ?? "";
+        if (ammoCurrent !== ammo.id) {
+            throw new Error(
+                `WIRE_AMMO_NOT_PERSISTED: currentAmmo.value is "${ammoCurrent}", expected "${ammo.id}" on ${args.weaponName}.`
+            );
+        }
+
+        await this.query<unknown>('notify', {
+            severity: 'updated',
+            message: `${args.characterName}: ${args.weaponName} ← ${args.ammoName}`,
+            summary: `ammo wired via warhammer-mcp.manage-inventory`,
+        });
+
+        return `🎯 Wired **${args.ammoName}** to **${args.weaponName}** for ${args.characterName} (currentAmmo set).`;
+    }
+
+    /**
+     * P-13 (wfrp_layer_expansion_v1 Phase 13, R16): wraps actor.checkReloadExtendedTest
+     * (safe, no dialog/roll — HC2). Name-keyed per the umbrella convention; resolves
+     * characterName + weaponName to ids via getCharacterInfo before calling the
+     * dedicated `checkReload` foundry-module query key. notify already fires
+     * foundry-module-side inside that handler — no redundant notify call here.
+     */
+    private async handleCheckReload(args: { characterName: string; weaponName: string }): Promise<string> {
+        this.logger.info("Checking reload", args);
+
+        const character = await this.query<CharacterInfoResult>(
+            "getCharacterInfo",
+            { characterName: args.characterName }
+        );
+        if (!character || !character.id) {
+            return `❌ Character "${args.characterName}" not found`;
+        }
+
+        const weapon = (character.items ?? []).find(
+            (i) => i.type === "weapon" && i.name === args.weaponName
+        );
+        if (!weapon) {
+            throw new Error(`CHECK_RELOAD_WEAPON_NOT_FOUND: weapon "${args.weaponName}" not found on ${args.characterName}.`);
+        }
+
+        const result = await this.query<{ branch: "started" | "completed" | "no-op"; reloading: boolean; weaponName: string }>(
+            "checkReload",
+            { actorId: character.id, weaponId: weapon.id }
+        );
+
+        if (result.branch === "started") {
+            return `🔄 **${args.weaponName}** reload started for ${args.characterName} (reload test in progress).`;
+        }
+        if (result.branch === "completed") {
+            return `✅ **${args.weaponName}** reload complete for ${args.characterName} — weapon loaded.`;
+        }
+        return `ℹ️ **${args.weaponName}** is not a reload-tracked weapon for ${args.characterName}; no change.`;
     }
 
     private async handleCheckEncumbrance(args: { characterName: string }): Promise<string> {
@@ -367,9 +564,10 @@ Examples:
             { characterName: args.characterName }
         );
 
+        // Phase 1 (wfrp_layer_expansion_v1): read system-computed .max (handles AE bonusMod + Ogre ×2 multiplier)
+        const maxEncumbrance = character.system?.status?.encumbrance?.max || 0;
         const strengthBonus = Math.floor((character.system?.characteristics?.s?.value || 0) / 10);
         const toughnessBonus = Math.floor((character.system?.characteristics?.t?.value || 0) / 10);
-        const maxEncumbrance = strengthBonus + toughnessBonus;
         const currentEncumbrance = character.system?.status?.encumbrance?.value || 0;
 
         let report = `⚖️ **${character.name}** - Encumbrance Check\n\n`;

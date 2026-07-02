@@ -53,6 +53,19 @@ const CHAT_ALLOWLIST = new Set<string>([
   // (whispered to owners/players). notify.emitChat whispers GM-only with speaker:{}, so
   // routing these through it would change audience/visibility or drop the speaker alias.
   'main.ts',
+  // Module Integration v2 Phase 2 — module-simple-quest share-quest. The Simple Quest "share" is a
+  // PUBLIC quest-link chat button that must carry the `flags.simple-quest.simpleQuestMessage` flag and
+  // the module's custom speaker alias ("Simple Quest") so the module's createChatMessage hook renders
+  // the quest notification. notify.emitChat whispers GM-only with speaker:{}, which would drop both the
+  // flag and the alias and hide the button from players. This is the HC-v2-6 dialog-bypass for share
+  // (the module path is Dialog.confirm); the handler ALSO emits notify.created('simple-quest', …).
+  'simple-quest.ts',
+  // wfrp_layer_expansion_v1 Phase 6 (P-10) — availability-test posts a GM-facing market-result
+  // card carrying the formatted availability table + a "Market Availability" speaker alias. notify
+  // .emitChat whispers GM-only with speaker:{}, which would drop the alias and the structured card,
+  // so the result message is posted via ChatMessage.create directly (paired with notify.created
+  // ('chatMessage', …)). Same content-vs-audit split as roll-request / simple-quest.
+  'availability-test.ts',
 ]);
 
 describe('migration guard — ui.notifications', () => {

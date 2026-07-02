@@ -53,6 +53,7 @@ interface DrawManyFromTableResponse {
     id: string;
     type: string;
     text: string;
+    content: string;
     documentUuid: string;
     name: string;
     img: string;
@@ -271,7 +272,7 @@ export class RollTableTool extends BaseTool {
 - **create**: Create a table with entries (legacy text-only) or results (text/document/compendium).
 - **list**: List all roll tables in world.
 - **get**: Get full details + result list for a table.
-- **roll**: Roll once on a table and get a result.
+- **roll**: Roll once on a table and get a result. Response carries text + description + content (= text-or-description) + drawn. READ the 'content' field for the row body — many WFRP4e tables leave 'text' empty and store the row HTML in 'description', so 'content' gives the right body in one field without a follow-up get.
 - **delete**: Permanently delete entire table. ⚠️ Irreversible. Requires confirm: true.
 - **update**: Edit top-level table fields (name, formula, img, description, replacement, displayRoll, folder, sort).
 - **add-results**: Append one or more new results (text/document/compendium types) to an existing table.
@@ -279,7 +280,7 @@ export class RollTableTool extends BaseTool {
 - **delete-results**: Permanently remove specific results by ID. ⚠️ Irreversible.
 - **normalize**: Recalculate all result range values from weights. ⚠️ Overwrites manually-set ranges (Risk 2.B).
 - **reset**: Clear all drawn flags so all results are available again (for non-replacement tables).
-- **draw-many**: Draw multiple results in one call (1–50). Returns partial + exhausted flag if pool runs dry.
+- **draw-many**: Draw multiple results in one call (1–50). Returns partial + exhausted flag if pool runs dry. Each result carries text + description + content (= text-or-description); READ the 'content' field for the row body (WFRP4e tables store it in 'description').
 - **import-from-compendium**: Import a roll table from a compendium pack into the world.
 
 **Formula Examples:** "1d100", "1d20", "2d6"
@@ -612,7 +613,7 @@ export class RollTableTool extends BaseTool {
         if (result.roll) {
             resultText += `**Roll:** ${result.roll}\n`;
         }
-        resultText += `**Result:** ${result.text || result.result || "Unknown"}\n\n`;
+        resultText += `**Result:** ${result.content || result.text || result.result || "Unknown"}\n\n`;
         resultText += `Roll mode: ${args.rollMode}`;
 
         return {

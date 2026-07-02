@@ -25,3 +25,7 @@ export { ItemService } from './item.js';
 export { ActorService } from './actor.js';
 // Phase 5 wfrp_battle_simulator: batch per-token ActorDelta casualty writer (HC2 token-delta writes).
 export { TokenCasualtiesService } from './token-casualties.js';
+// wfrp_layer_expansion_v1 Phase 13 (R16): sheet-flow method-wrap services (fear, reload, coin).
+export { PsychologyService } from './psychology.js';
+export { InventoryService } from './inventory.js';
+export { MarketService } from './market.js';

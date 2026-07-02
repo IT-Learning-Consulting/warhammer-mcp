@@ -4,13 +4,13 @@ exports[`ManageInventoryTool — characterization > check-encumbrance — format
 "⚖️ **Hans Müller** - Encumbrance Check
 
 **Current Encumbrance:** 4 Enc
-**Maximum Encumbrance:** 6 Enc
+**Maximum Encumbrance:** 7 Enc
 **Strength Bonus:** 3
 **Toughness Bonus:** 3
 
 ✅ **NORMAL CARRYING CAPACITY**
 
-Can carry **2** more Enc before penalties apply.
+Can carry **3** more Enc before penalties apply.
 "
 `;
 
@@ -41,9 +41,9 @@ exports[`ManageInventoryTool — characterization > get-status — formatted inv
 "🎒 **Hans Müller** - Inventory Status
 
 ## 📊 Encumbrance
-✅ **Status:** Normal (67%)
-**Carrying:** 4 / 6 Enc
-\`█████████████░░░░░░░\`
+✅ **Status:** Normal (57%)
+**Carrying:** 4 / 7 Enc
+\`███████████░░░░░░░░░\`
 
 ## 📦 Inventory Summary
 - **Weapons:** 1

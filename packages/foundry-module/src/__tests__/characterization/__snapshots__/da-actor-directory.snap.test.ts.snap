@@ -8,22 +8,31 @@ exports[`FoundryDataAccess.listActorItems — characterization > returns all ite
   "items": [
     {
       "advances": 0,
+      "ammunitionType": null,
+      "encumbrance": null,
       "id": "i1",
       "name": "Sword",
+      "quantity": null,
       "specification": "",
       "type": "weapon",
     },
     {
       "advances": 3,
+      "ammunitionType": null,
+      "encumbrance": null,
       "id": "i2",
       "name": "Athletics",
+      "quantity": null,
       "specification": null,
       "type": "skill",
     },
     {
       "advances": 1,
+      "ammunitionType": null,
+      "encumbrance": null,
       "id": "i3",
       "name": "Frenzy",
+      "quantity": null,
       "specification": "",
       "type": "talent",
     },
@@ -40,8 +49,11 @@ exports[`FoundryDataAccess.listActorItems — characterization > returns filtere
   "items": [
     {
       "advances": 0,
+      "ammunitionType": null,
+      "encumbrance": null,
       "id": "i2",
       "name": "Athletics",
+      "quantity": null,
       "specification": "",
       "type": "skill",
     },

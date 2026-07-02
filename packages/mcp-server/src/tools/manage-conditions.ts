@@ -124,13 +124,13 @@ export class ManageConditionsTools extends BaseTool {
           idempotentHint: true,
           openWorldHint: true,
         },
-        description: 'List the condition-flagged active effects currently on an actor. Read-only.\n\nArgs:\n  - actorId (string): Target actor ID (16-char Foundry document ID, NOT a full Foundry UUID-style string).\n\nReturns:\n  - On success: array of active effects whose statuses include a WFRP4e condition key (ablaze, bleeding, blinded, broken, deafened, entangled, fatigued, poisoned, prone, stunned, surprised, unconscious, grappling, engaged, defeated). Returns array directly (not wrapped in an envelope); empty array means "no conditions on this actor" — caller should verify the actorId exists by separate lookup if ambiguity matters.\n  - On error: throws with an actionable message.\n\nUse when: checking which conditions are on a character before a remove-condition call, or summarizing a character\'s status. Don\'t use when: listing all active effects including scripts — use list-active-effects instead.',
+        description: 'List the condition-flagged active effects on an actor (single-actor) OR across every combatant in a combat (batch). Read-only. Provide EXACTLY ONE of actorId / combatId.\n\nArgs:\n  - actorId (string, optional): Target actor ID (16-char Foundry document ID, NOT a full Foundry UUID-style string). Single-actor mode.\n  - combatId (string, optional): Target Combat document ID. Batch mode — resolves the combat, iterates its combatants, and returns a per-actor roster map.\n\nReturns:\n  - Single-actor mode (actorId): array of active effects whose statuses include a WFRP4e condition key (ablaze, bleeding, blinded, broken, deafened, entangled, fatigued, poisoned, prone, stunned, surprised, unconscious, grappling, engaged, defeated). Returns the array directly; empty array means "no conditions on this actor".\n  - Batch mode (combatId): an object keyed by actorId → { actorName, conditions[] } for every combatant in the combat (P-09 end-of-round narration). A combatant with no resolvable actor is skipped.\n  - On error: throws with an actionable message (e.g. COMBAT_NOT_FOUND, or a mutex error when both/neither id is supplied).\n\nUse when: checking conditions on one actor before remove-condition, OR narrating end-of-round conditions across the whole combat (combatId). Don\'t use when: listing all active effects including scripts — use list-active-effects instead.',
         inputSchema: {
           type: 'object',
           properties: {
-            actorId: { type: 'string', description: 'Target actor ID.' },
+            actorId: { type: 'string', description: 'Target actor ID (single-actor mode). Provide exactly one of actorId / combatId.' },
+            combatId: { type: 'string', description: 'Target Combat document ID (batch mode — per-actor roster map). Provide exactly one of actorId / combatId.' },
           },
-          required: ['actorId'],
         },
       },
     ];

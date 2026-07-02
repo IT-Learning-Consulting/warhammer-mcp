@@ -68,4 +68,71 @@ describe('ConditionsService.listConditions — characterization', () => {
     const result = await svc.listConditions({ actorId: 'actor-002' });
     expect(result).toMatchSnapshot();
   });
+
+  // P-09 (wfrp_layer_expansion Phase 5) — combatId batch branch.
+  it('combatId batch: returns a per-actor roster map keyed by actorId', async () => {
+    const rat = {
+      id: 'actor-101',
+      name: 'Giant Rat',
+      effects: [makeConditionEffect('eff-101', 'bleeding', 1)],
+    };
+    const skel = {
+      id: 'actor-102',
+      name: 'Skeleton',
+      effects: [
+        makeConditionEffect('eff-102', 'prone', 1),
+        makeConditionEffect('eff-103', 'stunned', 2),
+      ],
+    };
+    const combat = {
+      id: 'combat-001',
+      combatants: [
+        { actor: rat, actorId: rat.id },
+        { actor: skel, actorId: skel.id },
+        // dangling/tokenless combatant — no resolvable actor → must be skipped
+        { actor: null, actorId: undefined },
+      ],
+    };
+    (globalThis as any).game = {
+      ...(globalThis as any).game,
+      combats: { get: (id: string) => (id === combat.id ? combat : null) },
+    };
+
+    const svc = makeService();
+    const result = await svc.listConditions({ combatId: 'combat-001' });
+    // roster shape: { [actorId]: { actorName, conditions[] } }, dangling combatant skipped
+    expect(Object.keys(result).sort()).toEqual(['actor-101', 'actor-102']);
+    expect(result['actor-101'].actorName).toBe('Giant Rat');
+    expect(result['actor-102'].conditions).toHaveLength(2);
+    expect(result).toMatchSnapshot();
+  });
+
+  // P-09 regression — single-actor path is byte-for-byte unchanged (returns an ARRAY,
+  // not the roster object). Guards against the batch refactor leaking into the legacy shape.
+  it('single-actor regression: actorId still returns a flat conditions array', async () => {
+    const actor = {
+      id: 'actor-201',
+      name: 'Regression Rat',
+      effects: [makeConditionEffect('eff-201', 'poisoned', 1)],
+    };
+    (globalThis as any).game = {
+      ...(globalThis as any).game,
+      actors: { get: (id: string) => (id === actor.id ? actor : null) },
+    };
+
+    const svc = makeService();
+    const result = await svc.listConditions({ actorId: 'actor-201' });
+    expect(Array.isArray(result)).toBe(true);
+    expect(result).toHaveLength(1);
+    expect(result[0].conditionKey).toBe('poisoned');
+  });
+
+  it('combatId batch: throws COMBAT_NOT_FOUND for an unknown combat id', async () => {
+    (globalThis as any).game = {
+      ...(globalThis as any).game,
+      combats: { get: () => null },
+    };
+    const svc = makeService();
+    await expect(svc.listConditions({ combatId: 'nope' })).rejects.toThrow('COMBAT_NOT_FOUND');
+  });
 });

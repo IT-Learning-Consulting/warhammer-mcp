@@ -93,13 +93,45 @@ describe('assertAllowedActorFields — per-actor.type split', () => {
     expect(() => assertAllowedActorFields({ 'system.details.status.standing': 'x' }, 'character')).not.toThrow();
   });
 
+  it('status.modifier (lifestyle-check decay lever, Phase 4) is allowed on character/npc', () => {
+    expect(() => assertAllowedActorFields({ 'system.details.status.modifier': -2 }, 'character')).not.toThrow();
+    expect(() => assertAllowedActorFields({ 'system.details.status.modifier': -2 }, 'npc')).not.toThrow();
+  });
+
   it('an unrecognized actor type falls back to the union (still blocks never-observed fields)', () => {
-    expect(() => assertAllowedActorFields({ 'system.status.wounds.value': 1 }, 'vehicle')).not.toThrow();
-    expect(() => assertAllowedActorFields({ 'system.characteristics.ws.value': 1 }, 'vehicle')).toThrow(/FIELD_NOT_ALLOWED/);
-    expect(selectActorAllowlist('vehicle').size).toBeGreaterThan(selectActorAllowlist('creature').size);
+    // 'loot' / 'base' are genuinely unhandled types — they hit the union fallback. (vehicle is now
+    // its own recognized case; see the vehicle block below.)
+    expect(() => assertAllowedActorFields({ 'system.status.wounds.value': 1 }, 'loot')).not.toThrow();
+    expect(() => assertAllowedActorFields({ 'system.characteristics.ws.value': 1 }, 'loot')).toThrow(/FIELD_NOT_ALLOWED/);
+    expect(selectActorAllowlist('loot').size).toBeGreaterThan(selectActorAllowlist('creature').size);
   });
 
   it('an empty patch is a no-op (no fields to reject)', () => {
     expect(() => assertAllowedActorFields({}, 'character')).not.toThrow();
+  });
+});
+
+describe('assertAllowedActorFields — vehicle case (wfrp_layer_expansion Phase 7)', () => {
+  it('accepts the cargo/crew sheet fields /wfrp-travel writes', () => {
+    expect(() => assertAllowedActorFields({ 'system.status.wounds.value': 8 }, 'vehicle')).not.toThrow();
+    expect(() => assertAllowedActorFields({ 'system.status.carries.max': 200 }, 'vehicle')).not.toThrow();
+    expect(() => assertAllowedActorFields({ 'system.details.move.value': 6 }, 'vehicle')).not.toThrow();
+    expect(() => assertAllowedActorFields({ 'system.details.man': 4 }, 'vehicle')).not.toThrow();
+  });
+
+  it('rejects DERIVED encumbrance (current/max are recomputed from contents, never written)', () => {
+    expect(() => assertAllowedActorFields({ 'system.status.encumbrance.current': 50 }, 'vehicle')).toThrow(/FIELD_NOT_ALLOWED/);
+    expect(() => assertAllowedActorFields({ 'system.status.carries.current': 50 }, 'vehicle')).toThrow(/FIELD_NOT_ALLOWED/);
+  });
+
+  it('rejects passengers/roles (array-update syntax DEPENDENCY_GATED — task 7.3, do not guess the dot-path)', () => {
+    expect(() => assertAllowedActorFields({ 'system.passengers.list': [] }, 'vehicle')).toThrow(/FIELD_NOT_ALLOWED/);
+    expect(() => assertAllowedActorFields({ 'system.roles': [] }, 'vehicle')).toThrow(/FIELD_NOT_ALLOWED/);
+  });
+
+  it('the vehicle set is narrow — it does NOT inherit the character/npc/creature union', () => {
+    // A character-only field a creature would also reject must reject on vehicle too.
+    expect(() => assertAllowedActorFields({ 'system.characteristics.ws.value': 30 }, 'vehicle')).toThrow(/FIELD_NOT_ALLOWED/);
+    expect(selectActorAllowlist('vehicle').size).toBeLessThan(selectActorAllowlist('creature').size);
   });
 });

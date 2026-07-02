@@ -103,7 +103,19 @@ export type NotifyKind =
   | 'gatherer'
   | 'mastercrafted'
   | 'item-piles'
-  | 'levels';
+  | 'levels'
+  | 'conversation-hud'
+  | 'simple-quest'
+  | 'token-attacher'
+  | 'token-presentation'
+  | 'perceptive'
+  | 'augur-nexus'
+  | 'wfrp-economy'
+  | 'mortal-needs'
+  | 'polyglot'
+  | 'narrator'
+  | 'macro-trigger'
+  | 'backpack';
 
 export type NotifySeverity =
   | 'created'

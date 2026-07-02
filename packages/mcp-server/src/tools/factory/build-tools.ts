@@ -58,6 +58,8 @@ import { FilePickerTool } from '../filepicker.js';
 import { DiagnosticTool } from '../diagnostic.js';
 import { NotifyTool } from '../notify.js';
 import { DiseaseTool } from '../disease.js';
+import { AvailabilityTestTool } from '../availability-test.js';
+import { TravelDistanceTool } from '../travel-distance.js';
 import { FolderTool } from '../folder.js';
 import { SettingTool } from '../setting.js';
 import { ChatMessageTool } from '../chat-message.js';
@@ -86,6 +88,21 @@ import { ModuleCssTool } from '../modules/custom-css/css.js';
 import { ModuleLightingTool } from '../modules/community-lighting/lighting.js';
 import { ModuleItempilesTool } from '../modules/item-piles/item-piles.js';
 import { ModuleImperialArcanaTool } from '../modules/imperial-arcana/imperial-arcana.js';
+import { ModuleConversationHudTool } from '../modules/conversation-hud/conversation-hud.js';
+import { ModuleSimpleQuestTool } from '../modules/simple-quest/simple-quest.js';
+import { ModuleTokenAttacherTool } from '../modules/token-attacher/token-attacher.js';
+import { ModuleTokenPresentationTool } from '../modules/token-presentation/token-presentation.js';
+import { ModulePerceptiveTool } from '../modules/perceptive/perceptive.js';
+import { ModuleAugurNexusTool } from '../modules/augur-nexus/augur-nexus.js';
+import { ModuleWfrpEconomyTool } from '../modules/wfrp-economy/wfrp-economy.js';
+import { ModuleMortalNeedsTool } from '../modules/mortal-needs/mortal-needs.js';
+import { ModulePolyglotTool } from '../modules/polyglot/polyglot.js';
+import { ModuleNarratorTool } from '../modules/narrator/narrator.js';
+import { ModuleMacroTriggerTool } from '../modules/macro-trigger/macro-trigger.js';
+import { ModuleBackpackTool } from '../modules/backpack/backpack.js';
+import { ModulePuzzleLocksTool } from '../modules/puzzle-locks/puzzle-locks.js';
+import { ModuleSyrinscapeTool } from '../modules/syrinscape/syrinscape.js';
+import { ModulePortalTool } from '../modules/portal/portal.js';
 
 export function buildTools(deps: BaseToolOptions): BaseTool[] {
   return [
@@ -143,6 +160,8 @@ export function buildTools(deps: BaseToolOptions): BaseTool[] {
     new DiagnosticTool(deps),
     new NotifyTool(deps),
     new DiseaseTool(deps),
+    new AvailabilityTestTool(deps),
+    new TravelDistanceTool(deps),
     new FolderTool(deps),
     new SettingTool(deps),
     new ChatMessageTool(deps),
@@ -171,5 +190,20 @@ export function buildTools(deps: BaseToolOptions): BaseTool[] {
     new ModuleLightingTool(deps),
     new ModuleItempilesTool(deps),
     new ModuleImperialArcanaTool(deps),
+    new ModuleConversationHudTool(deps),
+    new ModuleSimpleQuestTool(deps),
+    new ModuleTokenAttacherTool(deps),
+    new ModuleTokenPresentationTool(deps),
+    new ModulePerceptiveTool(deps),
+    new ModuleAugurNexusTool(deps),
+    new ModuleWfrpEconomyTool(deps),
+    new ModuleMortalNeedsTool(deps),
+    new ModulePolyglotTool(deps),
+    new ModuleNarratorTool(deps),
+    new ModuleMacroTriggerTool(deps),
+    new ModuleBackpackTool(deps),
+    new ModulePuzzleLocksTool(deps),
+    new ModuleSyrinscapeTool(deps),
+    new ModulePortalTool(deps),
   ];
 }
