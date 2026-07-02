@@ -14,6 +14,14 @@ exports[`FoundryDataAccess.listActorItems — characterization > returns all ite
       "name": "Sword",
       "quantity": null,
       "specification": "",
+      "system": {
+        "advances": {
+          "value": 0,
+        },
+        "specification": {
+          "value": "",
+        },
+      },
       "type": "weapon",
     },
     {
@@ -24,6 +32,14 @@ exports[`FoundryDataAccess.listActorItems — characterization > returns all ite
       "name": "Athletics",
       "quantity": null,
       "specification": null,
+      "system": {
+        "advances": {
+          "value": 3,
+        },
+        "specification": {
+          "value": null,
+        },
+      },
       "type": "skill",
     },
     {
@@ -34,6 +50,14 @@ exports[`FoundryDataAccess.listActorItems — characterization > returns all ite
       "name": "Frenzy",
       "quantity": null,
       "specification": "",
+      "system": {
+        "advances": {
+          "value": 1,
+        },
+        "specification": {
+          "value": "",
+        },
+      },
       "type": "talent",
     },
   ],
@@ -55,6 +79,14 @@ exports[`FoundryDataAccess.listActorItems — characterization > returns filtere
       "name": "Athletics",
       "quantity": null,
       "specification": "",
+      "system": {
+        "advances": {
+          "value": 0,
+        },
+        "specification": {
+          "value": "",
+        },
+      },
       "type": "skill",
     },
   ],

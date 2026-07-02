@@ -272,11 +272,21 @@ describe('build-npc assets — config.json', () => {
   const NPC_CONFIG = 'E:/warhammer_system/.claude/skills/wfrp-build-npc/assets';
   const config = JSON.parse(fs.readFileSync(path.join(NPC_CONFIG, 'config.json'), 'utf8'));
 
-  it('has all 8 top-level keys', () => {
+  it('has all 9 top-level keys', () => {
+    // BUG-427: criminal_mode added for /wfrp-build-npc --mode criminal (SKILL.md §criminal mode).
     expect(Object.keys(config).sort()).toEqual([
-      'career_overrides', 'coin_items', 'default_actor_type', 'legality_mode',
+      'career_overrides', 'coin_items', 'criminal_mode', 'default_actor_type', 'legality_mode',
       'money_roll', 'species_overrides', 'talent_policy', 'with_details_default',
     ]);
+  });
+
+  it('criminal_mode.careergroups is a non-empty array of career-group name strings', () => {
+    expect(Array.isArray(config.criminal_mode.careergroups)).toBe(true);
+    expect(config.criminal_mode.careergroups.length).toBeGreaterThan(0);
+    for (const cg of config.criminal_mode.careergroups) {
+      expect(typeof cg).toBe('string');
+      expect(cg.length).toBeGreaterThan(0);
+    }
   });
 
   it('coin_items has all three currencies with valid 16-char IDs', () => {

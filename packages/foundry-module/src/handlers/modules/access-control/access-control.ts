@@ -58,6 +58,12 @@ import {
 
 type Envelope<T> = { success: true; data: T } | { success: false; error: string };
 
+// BUG-424 (MOD-02): tier-standard GM gate — access-control was the only module handler
+// dir without one. Reads stay ungated per tier norm.
+function isGM(): boolean {
+  return Boolean((globalThis as any).game?.user?.isGM);
+}
+
 // ── ACTION_MEMBER_MAP ─────────────────────────────────────────────────────────
 // Maps action → primary member module ID for the guard block.
 // get-bundle-status and get-lock-state are excluded (handled specially above the map).
@@ -93,11 +99,25 @@ export const ACTION_MEMBER_MAP: Record<string, string> = {
   'set-view-with-pan-mode':    'LockView',
 };
 
+// ── WRITE_ACTIONS (BUG-424 / MOD-02) ──────────────────────────────────────────
+// Every action except the 3 reads (get-bundle-status, get-lock-state, get-scene-flags)
+// is a write and requires GM. Derived from ACTION_MEMBER_MAP so a newly-added action
+// defaults to GATED (safe default); exported for the gate regression test.
+const READ_ACTIONS = new Set(['get-bundle-status', 'get-lock-state', 'get-scene-flags']);
+export const WRITE_ACTIONS: Set<string> = new Set(
+  Object.keys(ACTION_MEMBER_MAP).filter((a) => !READ_ACTIONS.has(a)),
+);
+
 // ── Public dispatcher ─────────────────────────────────────────────────────────
 
 export async function dispatchModuleAccessControl(data: unknown): Promise<any> {
   const parsed = ModuleAccessControlInput.parse(data);
   const action = parsed.action;
+
+  // BUG-424 (MOD-02): GM gate on all write actions — one site covers both members.
+  if (WRITE_ACTIONS.has(action) && !isGM()) {
+    return { success: false, error: 'GM_REQUIRED: only the GM can perform access-control write operations' };
+  }
 
   // ── Guard block ─────────────────────────────────────────────────────────────
   if (action === 'get-bundle-status') {

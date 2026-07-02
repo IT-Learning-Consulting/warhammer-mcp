@@ -358,8 +358,14 @@ async function handleSetPileState(input: SetPileStateInput): Promise<Envelope<un
         return { success: false, error: 'NO_ACTIVE_GM: item-piles socket returned false — GM may have disconnected' };
       }
 
+      // BUG-420: echo the per-token SYNTHETIC pile-actor UUIDs (read post-conversion from
+      // the live token objects). turnTokensIntoItemPiles resolves to TOKEN uuids only, and
+      // token.actorId points at the SHARED base actor — neither is a valid split-loot /
+      // get-contents target when N tokens share one base actor.
+      const pileActorUuids = tokens.map((t: any) => t?.document?.actor?.uuid ?? t?.actor?.uuid ?? null);
+
       notify.updated('item-piles', `${input.state} on ${tokens.length} token(s)`, {});
-      return { success: true, data: { state: input.state, tokenCount: tokens.length, result } };
+      return { success: true, data: { state: input.state, tokenCount: tokens.length, pileActorUuids, result } };
     }
 
     // open/close/lock/unlock/rattle — all take actorUuid
@@ -564,11 +570,16 @@ async function handleTransferItems(input: TransferItemsInput): Promise<Envelope<
       return { success: false, error: 'NO_ACTIVE_GM: item-piles socket returned false — GM may have disconnected' };
     }
 
+    // BUG-423 (XPK-01): normalize the raw API resolution into an explicit DTO.
+    // transferItems/transferAllItems/combineItemPiles resolve to a BARE ARRAY of
+    // transferred-item records — never the rich object the formatter previously assumed.
+    const dto = { ok: true, itemsTransferred: Array.isArray(result) ? result : [] };
+
     // DP-16: post-write verify
     const targetItems = API.getActorItems(input.targetUuid);
     const targetCount = Array.isArray(targetItems) ? targetItems.length : 0;
     notify.updated('item-piles', `Transferred items (mode: ${mode}) from ${input.sourceUuid} to ${input.targetUuid}`, {});
-    return { success: true, data: { mode, sourceUuid: input.sourceUuid, targetUuid: input.targetUuid, targetItemCount: targetCount, result } };
+    return { success: true, data: { mode, sourceUuid: input.sourceUuid, targetUuid: input.targetUuid, targetItemCount: targetCount, result: dto } };
   } catch (e) {
     return { success: false, error: `TRANSFER_ITEMS_ERROR: ${e instanceof Error ? e.message : String(e)}` };
   }
@@ -690,11 +701,25 @@ async function handleTransferCurrency(input: TransferCurrencyInput): Promise<Env
       return { success: false, error: 'NO_ACTIVE_GM: item-piles socket returned false — GM may have disconnected' };
     }
 
+    // BUG-423 (XPK-01) + live-smoke correction (2026-07-02): the REAL transferCurrencies/
+    // transferAllCurrencies resolution is { itemDeltas, attributeDeltas } (item-piles dist
+    // _transferCurrencies return site) — NOT the boolean our own test fixture fabricated.
+    // ok = "something actually moved": Item Piles can resolve { itemDeltas: [] } on a SILENT
+    // NO-OP with no error thrown (observed live in WFRP4e — BUG-428), so empty deltas must
+    // read as ok:false and the formatter warns.
+    const rc: any = result ?? {};
+    const dto = {
+      ok: (Array.isArray(rc.itemDeltas) && rc.itemDeltas.length > 0)
+        || Object.keys(rc.attributeDeltas ?? {}).length > 0,
+      itemDeltas: Array.isArray(rc.itemDeltas) ? rc.itemDeltas : [],
+      attributeDeltas: rc.attributeDeltas ?? {},
+    };
+
     // DP-16: post-write verify
     const sourceCurrencies = API.getActorCurrencies(input.sourceUuid);
     const targetCurrencies = API.getActorCurrencies(input.targetUuid);
     notify.updated('item-piles', `Transferred currencies (mode: ${mode}) from ${input.sourceUuid} to ${input.targetUuid}`, {});
-    return { success: true, data: { mode, sourceUuid: input.sourceUuid, targetUuid: input.targetUuid, sourceCurrencies, targetCurrencies, result } };
+    return { success: true, data: { mode, sourceUuid: input.sourceUuid, targetUuid: input.targetUuid, sourceCurrencies, targetCurrencies, result: dto } };
   } catch (e) {
     return { success: false, error: `TRANSFER_CURRENCY_ERROR: ${e instanceof Error ? e.message : String(e)}` };
   }
@@ -973,6 +998,19 @@ async function handleTradeItems(input: TradeItemsInput): Promise<Envelope<unknow
       return { success: false, error: 'NO_ACTIVE_GM: item-piles socket returned false — GM may have disconnected' };
     }
 
+    // BUG-423 (XPK-01) + live-smoke correction (2026-07-02): the REAL tradeItems resolution
+    // is { itemDeltas, attributeDeltas, itemPrices } (item-piles dist _tradeItems return
+    // site). The previously assumed {itemMoved} exists NOWHERE in the module — it was
+    // fixture-fabricated. Same ok semantics as transfer-currency: empty deltas = nothing
+    // moved = ok:false (loud).
+    const rt: any = result ?? {};
+    const dto = {
+      ok: (Array.isArray(rt.itemDeltas) && rt.itemDeltas.length > 0)
+        || Object.keys(rt.attributeDeltas ?? {}).length > 0,
+      itemDeltas: Array.isArray(rt.itemDeltas) ? rt.itemDeltas : [],
+      attributeDeltas: rt.attributeDeltas ?? {},
+    };
+
     // DP-16: post-write verify
     const buyerCurrencies = API.getActorCurrencies(input.buyerUuid);
     const buyerItems = API.getActorItems(input.buyerUuid);
@@ -987,7 +1025,7 @@ async function handleTradeItems(input: TradeItemsInput): Promise<Envelope<unknow
         itemsTraded: input.items.length,
         buyerCurrencies,
         buyerItemCount,
-        result,
+        result: dto,
       },
     };
   } catch (e) {

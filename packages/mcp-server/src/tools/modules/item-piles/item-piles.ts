@@ -64,6 +64,9 @@ function formatSetState(d: ItemPileSetStateResult): string {
   const lines = [`module-itempiles.set-pile-state: state="${d.state}"`];
   if (d.actorUuid) lines.push(`- actorUuid: ${d.actorUuid}`);
   if (d.tokenCount !== undefined) lines.push(`- tokenCount: ${d.tokenCount}`);
+  if (Array.isArray(d.pileActorUuids)) {
+    lines.push(`- pileActorUuids (use as split-loot / get-contents actorUuid targets — NOT token.actorId): ${JSON.stringify(d.pileActorUuids)}`);
+  }
   if (d.flagData !== undefined) lines.push(`- flagData: ${JSON.stringify(d.flagData)}`);
   lines.push(`- result: ${JSON.stringify(d.result)}`);
   return lines.join('\n');
@@ -96,19 +99,17 @@ function formatRemoveItems(d: ItemPileRemoveItemsResult): string {
 }
 
 function formatTransferItems(d: ItemPileTransferItemsResult): string {
+  // BUG-423: read only the handler's normalized DTO fields — the raw API resolution is a
+  // bare array; attributesTransferred/deletedTokens were never returned.
   const r = d.result;
   const itemCount = Array.isArray(r.itemsTransferred) ? r.itemsTransferred.length : 0;
-  const attrCount = Array.isArray(r.attributesTransferred) ? r.attributesTransferred.length : 0;
-  const deletedCount = Array.isArray(r.deletedTokens) ? r.deletedTokens.length : 0;
-  const lines = [
-    `module-itempiles.transfer-items: mode="${d.mode}"`,
+  return [
+    `module-itempiles.transfer-items: mode="${d.mode}" (ok: ${r.ok})`,
     `- source: ${d.sourceUuid}`,
     `- target: ${d.targetUuid}`,
     `- target item count now: ${d.targetItemCount}`,
-    `- items transferred: ${itemCount}, attributes transferred: ${attrCount}`,
-  ];
-  if (deletedCount > 0) lines.push(`- deleted tokens: ${deletedCount}`);
-  return lines.join('\n');
+    `- items transferred: ${itemCount}`,
+  ].join('\n');
 }
 
 function formatAddCurrency(d: ItemPileAddCurrencyResult): string {
@@ -127,15 +128,18 @@ function formatRemoveCurrency(d: ItemPileRemoveCurrencyResult): string {
 }
 
 function formatTransferCurrency(d: ItemPileTransferCurrencyResult): string {
+  // BUG-423 + live-smoke correction: real resolution is { itemDeltas, attributeDeltas }.
+  // ok:false = EMPTY deltas — Item Piles can silently no-op without error (BUG-428).
   const r = d.result;
-  const itemCount = Array.isArray(r.itemsTransferred) ? r.itemsTransferred.length : 0;
-  const attrCount = Array.isArray(r.attributesTransferred) ? r.attributesTransferred.length : 0;
-  return [
-    `module-itempiles.transfer-currency: mode="${d.mode}"`,
+  const lines = [
+    `module-itempiles.transfer-currency: mode="${d.mode}" (ok: ${r.ok}, currency deltas: ${r.itemDeltas.length})`,
     `- source: ${d.sourceUuid} → remaining: ${JSON.stringify(d.sourceCurrencies)}`,
     `- target: ${d.targetUuid} → new balance: ${JSON.stringify(d.targetCurrencies)}`,
-    `- items transferred: ${itemCount}, attributes transferred: ${attrCount}`,
-  ].join('\n');
+  ];
+  if (!r.ok) {
+    lines.push(`- ⚠️ NO CURRENCY ACTUALLY MOVED — Item Piles resolved with empty deltas and no error (silent no-op; see BUG-428). Verify the balances above before narrating success.`);
+  }
+  return lines.join('\n');
 }
 
 function formatSplitLoot(d: ItemPileSplitLootResult): string {
@@ -184,17 +188,20 @@ function formatRefreshMerchant(d: ItemPileRefreshMerchantResult): string {
 }
 
 function formatTrade(d: ItemPileTradeResult): string {
+  // BUG-423 + live-smoke correction: real resolution is { itemDeltas, attributeDeltas,
+  // itemPrices } — {itemMoved} never existed. Empty deltas = nothing moved (warn).
   const r = d.result;
-  const itemDeltaCount = Array.isArray(r.itemDeltas) ? r.itemDeltas.length : 0;
-  const attrDeltaCount = Array.isArray(r.attributeDeltas) ? r.attributeDeltas.length : 0;
-  return [
-    `module-itempiles.trade-items: traded ${d.itemsTraded} item(s)`,
+  const lines = [
+    `module-itempiles.trade-items: traded ${d.itemsTraded} item(s) (ok: ${r.ok}, item deltas: ${r.itemDeltas.length})`,
     `- merchant: ${d.merchantUuid}`,
     `- buyer: ${d.buyerUuid}`,
     `- buyerCurrencies after: ${JSON.stringify(d.buyerCurrencies)}`,
     `- buyer item count: ${d.buyerItemCount}`,
-    `- item deltas: ${itemDeltaCount}, attribute deltas: ${attrDeltaCount}`,
-  ].join('\n');
+  ];
+  if (!r.ok) {
+    lines.push(`- ⚠️ NO ITEMS ACTUALLY MOVED — Item Piles resolved with empty deltas and no error (silent no-op; see BUG-428). Verify the buyer inventory above before narrating success.`);
+  }
+  return lines.join('\n');
 }
 
 function formatPriceModifiers(d: ItemPilePriceModifiersResult): string {

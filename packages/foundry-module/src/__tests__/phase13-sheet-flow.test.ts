@@ -191,6 +191,56 @@ describe('InventoryService.checkReload', () => {
     expect(result.reloading).toBe(false);
   });
 
+  // BUG-418: the branch classification diffs the tracker item's ID, not a boolean —
+  // a repeat call that swaps the tracker (discarding SL progress) must NOT read as no-op.
+  it('reports "restarted" when the reload tracker is replaced (id changes)', async () => {
+    let reloadingFlag: string | undefined = 'reload-item-1';
+    const weapon: any = {
+      id: 'weapon-4',
+      loading: true,
+      getFlag: (_scope: string, _key: string) => reloadingFlag,
+    };
+    const actor: any = {
+      id: 'actor-4',
+      name: 'Ulrika',
+      uuid: 'Actor.actor-4',
+      items: { get: (id: string) => (id === 'weapon-4' ? weapon : undefined) },
+      checkReloadExtendedTest: vi.fn(async () => {
+        reloadingFlag = 'reload-item-2'; // old tracker deleted, fresh one created
+      }),
+    };
+    (globalThis as any).game.actors = new Map([[actor.id, actor]]);
+
+    const svc = new InventoryService(() => {});
+    const result = await svc.checkReload({ actorId: 'actor-4', weaponId: 'weapon-4' });
+
+    expect(result.branch).toBe('restarted');
+    expect(result.reloading).toBe(true);
+  });
+
+  it('reports "no-op" only when the tracker id is unchanged', async () => {
+    const reloadingFlag = 'reload-item-1';
+    const weapon: any = {
+      id: 'weapon-5',
+      loading: true,
+      getFlag: (_scope: string, _key: string) => reloadingFlag,
+    };
+    const actor: any = {
+      id: 'actor-5',
+      name: 'Gunnar',
+      uuid: 'Actor.actor-5',
+      items: { get: (id: string) => (id === 'weapon-5' ? weapon : undefined) },
+      checkReloadExtendedTest: vi.fn(async () => { /* tracker untouched */ }),
+    };
+    (globalThis as any).game.actors = new Map([[actor.id, actor]]);
+
+    const svc = new InventoryService(() => {});
+    const result = await svc.checkReload({ actorId: 'actor-5', weaponId: 'weapon-5' });
+
+    expect(result.branch).toBe('no-op');
+    expect(result.reloading).toBe(true);
+  });
+
   it('throws a clear error when the weapon is not found on the actor', async () => {
     const actor: any = { id: 'actor-3', name: 'Empty', items: { get: () => undefined } };
     (globalThis as any).game.actors = new Map([[actor.id, actor]]);

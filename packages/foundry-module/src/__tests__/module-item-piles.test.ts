@@ -62,8 +62,10 @@ function makeRealItemPilesAPI(overrides: Record<string, any> = {}) {
     // Currency
     addCurrencies: vi.fn().mockResolvedValue(true),
     removeCurrencies: vi.fn().mockResolvedValue(true),
-    transferCurrencies: vi.fn().mockResolvedValue(true),
-    transferAllCurrencies: vi.fn().mockResolvedValue(true),
+    // Live-verified 2026-07-02 (BUG-423 smoke): _transferCurrencies resolves
+    // { itemDeltas, attributeDeltas } — never a boolean.
+    transferCurrencies: vi.fn().mockResolvedValue({ itemDeltas: [{ quantity: 2 }], attributeDeltas: {} }),
+    transferAllCurrencies: vi.fn().mockResolvedValue({ itemDeltas: [{ quantity: 5 }], attributeDeltas: {} }),
     // Split
     splitItemPileContents: vi.fn().mockResolvedValue(true),
     // Vault
@@ -73,7 +75,9 @@ function makeRealItemPilesAPI(overrides: Record<string, any> = {}) {
     // Merchant / trade
     rollItemTable: vi.fn().mockResolvedValue([]),
     refreshMerchantInventory: vi.fn().mockResolvedValue(true),
-    tradeItems: vi.fn().mockResolvedValue({ itemMoved: true }),
+    // Live-verified 2026-07-02 (BUG-423 smoke): _tradeItems resolves
+    // { itemDeltas, attributeDeltas, itemPrices } — {itemMoved} never existed.
+    tradeItems: vi.fn().mockResolvedValue({ itemDeltas: [{ quantity: 1 }], attributeDeltas: {}, itemPrices: [] }),
     getMerchantPriceModifiers: vi.fn().mockReturnValue({}),
     updateMerchantPriceModifiers: vi.fn().mockResolvedValue(true),
     getPricesForItem: vi.fn().mockReturnValue([]),

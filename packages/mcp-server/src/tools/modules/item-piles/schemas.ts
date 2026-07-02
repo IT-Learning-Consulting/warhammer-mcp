@@ -28,6 +28,9 @@ export interface ItemPileSetStateResult {
   state: string;
   actorUuid?: string;
   tokenCount?: number;
+  /** BUG-420: per-token SYNTHETIC pile-actor UUIDs echoed by turnTokens/revertTokens —
+   * the valid split-loot / get-contents targets (token.actorId is the SHARED base actor). */
+  pileActorUuids?: (string | null)[];
   result: unknown;
   flagData?: unknown;
 }
@@ -68,12 +71,15 @@ export interface ItemPileRemoveItemsResult {
   totalItems: number;
 }
 
+// BUG-423 (XPK-01): result mirrors the handler's normalized DTO. The real
+// transferItems/transferAllItems/combineItemPiles API resolution is a bare array —
+// the handler wraps it as { ok, itemsTransferred }; no other field exists.
 export interface ItemPileTransferItemsResult {
   mode: string;
   sourceUuid: string;
   targetUuid: string;
   targetItemCount: number;
-  result: { itemsTransferred: unknown[]; attributesTransferred: unknown[]; deletedTokens?: unknown[] };
+  result: { ok: boolean; itemsTransferred: unknown[] };
 }
 
 export interface ItemPileAddCurrencyResult {
@@ -89,13 +95,18 @@ export interface ItemPileRemoveCurrencyResult {
   currentCurrencies: unknown;
 }
 
+// BUG-423 (XPK-01) + live-smoke correction 2026-07-02: the real transferCurrencies/
+// transferAllCurrencies resolution is { itemDeltas, attributeDeltas } (verified against the
+// live item-piles dist — the boolean shape was fixture-fabricated). ok=false means EMPTY
+// deltas: Item Piles silently no-ops without error in some WFRP4e states (BUG-428) — the
+// formatter must warn, and balances come from the DP-16 re-reads.
 export interface ItemPileTransferCurrencyResult {
   mode: string;
   sourceUuid: string;
   targetUuid: string;
   sourceCurrencies: unknown;
   targetCurrencies: unknown;
-  result: { itemsTransferred: unknown[]; attributesTransferred: unknown[]; deletedTokens?: unknown[] };
+  result: { ok: boolean; itemDeltas: unknown[]; attributeDeltas: Record<string, unknown> };
 }
 
 export interface ItemPileSplitLootResult {
@@ -147,13 +158,17 @@ export interface ItemPileRefreshMerchantResult {
   itemCount: number;
 }
 
+// BUG-423 (XPK-01) + live-smoke correction 2026-07-02: the real tradeItems resolution is
+// { itemDeltas, attributeDeltas, itemPrices } (verified against the live item-piles dist —
+// {itemMoved} exists nowhere in the module; it was fixture-fabricated). Same ok semantics
+// as transfer-currency: empty deltas = nothing moved = ok:false.
 export interface ItemPileTradeResult {
   merchantUuid: string;
   buyerUuid: string;
   itemsTraded: number;
   buyerCurrencies: unknown;
   buyerItemCount: number;
-  result: { itemDeltas: unknown[]; attributeDeltas: unknown[]; itemPrices: unknown[] };
+  result: { ok: boolean; itemDeltas: unknown[]; attributeDeltas: Record<string, unknown> };
 }
 
 export interface ItemPilePriceModifiersResult {

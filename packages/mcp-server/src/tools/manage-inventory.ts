@@ -542,7 +542,7 @@ Examples:
             throw new Error(`CHECK_RELOAD_WEAPON_NOT_FOUND: weapon "${args.weaponName}" not found on ${args.characterName}.`);
         }
 
-        const result = await this.query<{ branch: "started" | "completed" | "no-op"; reloading: boolean; weaponName: string }>(
+        const result = await this.query<{ branch: "started" | "completed" | "restarted" | "no-op"; reloading: boolean; weaponName: string }>(
             "checkReload",
             { actorId: character.id, weaponId: weapon.id }
         );
@@ -552,6 +552,14 @@ Examples:
         }
         if (result.branch === "completed") {
             return `✅ **${args.weaponName}** reload complete for ${args.characterName} — weapon loaded.`;
+        }
+        // BUG-418: the tracker was REPLACED (id changed) — the old reload's accumulated SL
+        // progress is gone. Never report this as "no change".
+        if (result.branch === "restarted") {
+            return `⚠️ **${args.weaponName}** reload RESTARTED for ${args.characterName} — the previous reload tracker (and any accumulated SL progress) was discarded; a fresh reload is now in progress from zero.`;
+        }
+        if (result.reloading) {
+            return `ℹ️ **${args.weaponName}** reload still in progress for ${args.characterName} (tracker unchanged; advance it via the reload extended test on the sheet).`;
         }
         return `ℹ️ **${args.weaponName}** is not a reload-tracked weapon for ${args.characterName}; no change.`;
     }

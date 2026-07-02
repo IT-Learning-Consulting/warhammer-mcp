@@ -30,13 +30,19 @@ export class InventoryService {
     const reloadingIdAfter: string | undefined = afterWeapon?.getFlag?.('wfrp4e', 'reloading');
     const isReloading = !!reloadingIdAfter;
 
-    // Branch classification: 'started' = a fresh reload ExtendedTest item was created
-    // (weapon.loading true, weapon.loaded.amt <= 0); 'completed' = the ExtendedTest item
-    // was deleted + the weapon marked loaded; 'no-op' = the weapon isn't a `loading`
-    // weapon type at all (checkReloadExtendedTest's own early-return guard).
-    let branch: 'started' | 'completed' | 'no-op';
+    // Branch classification (BUG-418: diff the tracker item's ID, not a boolean —
+    // a repeat call on a still-unloaded weapon deletes the old ExtendedTest item and
+    // creates a FRESH one, silently discarding accumulated SL progress; boolean-only
+    // classification mis-reported that as 'no-op'):
+    //   'started'   = no tracker before, tracker after (fresh reload ExtendedTest created)
+    //   'completed' = tracker before, none after (ExtendedTest deleted + weapon loaded)
+    //   'restarted' = tracker before AND after but DIFFERENT id (old tracker + its
+    //                 SL.current progress discarded; a fresh reload started from zero)
+    //   'no-op'     = same tracker id (or none either side) — nothing changed
+    let branch: 'started' | 'completed' | 'restarted' | 'no-op';
     if (!wasReloading && isReloading) branch = 'started';
     else if (wasReloading && !isReloading) branch = 'completed';
+    else if (wasReloading && isReloading && reloadingIdBefore !== reloadingIdAfter) branch = 'restarted';
     else branch = 'no-op';
 
     if (branch === 'no-op' && !weapon.loading) {
@@ -54,6 +60,11 @@ export class InventoryService {
     } else if (branch === 'completed') {
       notify.deleted('item', weapon.name, {
         summary: `reload complete on ${actor.name}`,
+        uuid: actor.uuid,
+      });
+    } else if (branch === 'restarted') {
+      notify.created('item', afterWeapon?.name ?? weapon.name, {
+        summary: `reload RESTARTED on ${actor.name} — the previous reload tracker (and any accumulated SL progress) was discarded; a fresh reload started from zero`,
         uuid: actor.uuid,
       });
     }

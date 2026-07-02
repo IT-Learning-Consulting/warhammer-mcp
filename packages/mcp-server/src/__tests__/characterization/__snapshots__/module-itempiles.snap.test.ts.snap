@@ -36,12 +36,40 @@ exports[`ModuleItempilesTool — characterization > get-contents — pile with i
 - flagData: {"type":"container"}"
 `;
 
+exports[`ModuleItempilesTool — characterization > set-pile-state turnTokens — pileActorUuids echoed (BUG-420) 1`] = `
+"module-itempiles.set-pile-state: state="turnTokens"
+- tokenCount: 2
+- pileActorUuids (use as split-loot / get-contents actorUuid targets — NOT token.actorId): ["Scene.s.Token.t1.Actor.a1","Scene.s.Token.t2.Actor.a1"]
+- result: ["Scene.s.Token.t1","Scene.s.Token.t2"]"
+`;
+
+exports[`ModuleItempilesTool — characterization > trade-items — {itemDeltas, attributeDeltas} resolution (live-verified shape) 1`] = `
+"module-itempiles.trade-items: traded 1 item(s) (ok: true, item deltas: 1)
+- merchant: Actor.merch01
+- buyer: Actor.pc01
+- buyerCurrencies after: {"gc":0,"ss":3,"bp":8}
+- buyer item count: 5"
+`;
+
+exports[`ModuleItempilesTool — characterization > transfer-currency — {itemDeltas, attributeDeltas} resolution (live-verified shape) 1`] = `
+"module-itempiles.transfer-currency: mode="transfer" (ok: true, currency deltas: 1)
+- source: Actor.pc01 → remaining: {"gc":1,"ss":2,"bp":0}
+- target: Actor.pc02 → new balance: {"gc":0,"ss":10,"bp":4}"
+`;
+
+exports[`ModuleItempilesTool — characterization > transfer-currency — SILENT NO-OP (empty deltas) warns loudly (BUG-428) 1`] = `
+"module-itempiles.transfer-currency: mode="transfer" (ok: false, currency deltas: 0)
+- source: Actor.pc01 → remaining: {"gc":1,"ss":5,"bp":0}
+- target: Actor.pc02 → new balance: {}
+- ⚠️ NO CURRENCY ACTUALLY MOVED — Item Piles resolved with empty deltas and no error (silent no-op; see BUG-428). Verify the balances above before narrating success."
+`;
+
 exports[`ModuleItempilesTool — characterization > transfer-items — items transferred 1`] = `
-"module-itempiles.transfer-items: mode="transfer"
+"module-itempiles.transfer-items: mode="transfer" (ok: true)
 - source: Actor.pile01
 - target: Actor.pc01
 - target item count now: 3
-- items transferred: 1, attributes transferred: 0"
+- items transferred: 1"
 `;
 
 exports[`ModuleItempilesTool — characterization > vault-info — grid data 1`] = `

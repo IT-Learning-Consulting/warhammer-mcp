@@ -57,8 +57,11 @@ describe('get-bundle-status', () => {
 // ── 2. Guard routing (returns, never throws) ────────────────────────────────────
 
 describe('member guard routing', () => {
+  // BUG-424: writes are GM-gated BEFORE the member guard — run these as GM so the
+  // member-guard behavior under test is still reachable (gate coverage lives in
+  // access-control-gm-gate.test.ts).
   it('LocknKey action → MODULE_NOT_ACTIVE when LocknKey inactive', async () => {
-    (globalThis as any).game = { modules: makeModulesMap(['LockView']) };
+    (globalThis as any).game = { modules: makeModulesMap(['LockView']), user: { isGM: true } };
     const res: any = await dispatchModuleAccessControl({
       action: 'configure-lock', documentId: 'w1', documentType: 'wall', locked: true,
     });
@@ -68,7 +71,7 @@ describe('member guard routing', () => {
   });
 
   it('LockView action → MODULE_NOT_ACTIVE when LockView inactive', async () => {
-    (globalThis as any).game = { modules: makeModulesMap(['LocknKey']) };
+    (globalThis as any).game = { modules: makeModulesMap(['LocknKey']), user: { isGM: true } };
     const res: any = await dispatchModuleAccessControl({
       action: 'set-pan-lock', locked: true,
     });

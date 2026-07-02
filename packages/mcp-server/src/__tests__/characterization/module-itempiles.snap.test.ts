@@ -88,6 +88,10 @@ describe('ModuleItempilesTool — characterization', () => {
     expect((r as any).content[0].text).toMatchSnapshot();
   });
 
+  // BUG-423 (XPK-01): fixtures below mirror the handler's NORMALIZED DTOs, which wrap the
+  // true Item Piles API resolutions (transferItems → bare array; transferCurrencies →
+  // boolean; tradeItems → {itemMoved}). Sourced from the foundry-module fixtures
+  // (module-item-piles.test.ts makeRealItemPilesAPI) — never from formatter expectations.
   it('transfer-items — items transferred', async () => {
     const r = await tool({
       mode: 'transfer',
@@ -95,11 +99,56 @@ describe('ModuleItempilesTool — characterization', () => {
       targetUuid: 'Actor.pc01',
       targetItemCount: 3,
       result: {
+        ok: true,
         itemsTransferred: [{ id: 'sw1' }],
-        attributesTransferred: [],
-        deletedTokens: [],
       },
     }).execute({ action: 'transfer-items', sourceUuid: 'Actor.pile01', targetUuid: 'Actor.pc01' });
+    expect((r as any).content[0].text).toMatchSnapshot();
+  });
+
+  it('transfer-currency — {itemDeltas, attributeDeltas} resolution (live-verified shape)', async () => {
+    const r = await tool({
+      mode: 'transfer',
+      sourceUuid: 'Actor.pc01',
+      targetUuid: 'Actor.pc02',
+      sourceCurrencies: { gc: 1, ss: 2, bp: 0 },
+      targetCurrencies: { gc: 0, ss: 10, bp: 4 },
+      result: { ok: true, itemDeltas: [{ quantity: 5 }], attributeDeltas: {} },
+    }).execute({ action: 'transfer-currency', sourceUuid: 'Actor.pc01', targetUuid: 'Actor.pc02', currencies: '5ss' });
+    expect((r as any).content[0].text).toMatchSnapshot();
+  });
+
+  it('transfer-currency — SILENT NO-OP (empty deltas) warns loudly (BUG-428)', async () => {
+    const r = await tool({
+      mode: 'transfer',
+      sourceUuid: 'Actor.pc01',
+      targetUuid: 'Actor.pc02',
+      sourceCurrencies: { gc: 1, ss: 5, bp: 0 },
+      targetCurrencies: {},
+      result: { ok: false, itemDeltas: [], attributeDeltas: {} },
+    }).execute({ action: 'transfer-currency', sourceUuid: 'Actor.pc01', targetUuid: 'Actor.pc02', currencies: '2ss' });
+    expect((r as any).content[0].text).toMatchSnapshot();
+  });
+
+  it('trade-items — {itemDeltas, attributeDeltas} resolution (live-verified shape)', async () => {
+    const r = await tool({
+      merchantUuid: 'Actor.merch01',
+      buyerUuid: 'Actor.pc01',
+      itemsTraded: 1,
+      buyerCurrencies: { gc: 0, ss: 3, bp: 8 },
+      buyerItemCount: 5,
+      result: { ok: true, itemDeltas: [{ quantity: 1 }], attributeDeltas: {} },
+    }).execute({ action: 'trade-items', merchantUuid: 'Actor.merch01', buyerUuid: 'Actor.pc01', items: [{ itemId: 'sw1', quantity: 1 }], confirm: true });
+    expect((r as any).content[0].text).toMatchSnapshot();
+  });
+
+  it('set-pile-state turnTokens — pileActorUuids echoed (BUG-420)', async () => {
+    const r = await tool({
+      state: 'turnTokens',
+      tokenCount: 2,
+      pileActorUuids: ['Scene.s.Token.t1.Actor.a1', 'Scene.s.Token.t2.Actor.a1'],
+      result: ['Scene.s.Token.t1', 'Scene.s.Token.t2'],
+    }).execute({ action: 'set-pile-state', state: 'turnTokens', tokenUuids: ['Scene.s.Token.t1', 'Scene.s.Token.t2'] });
     expect((r as any).content[0].text).toMatchSnapshot();
   });
 
