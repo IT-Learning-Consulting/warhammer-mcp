@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_FREE — pure Zod schema / constant data table; no runtime module-API calls, no dialog risk possible.
 // Module Integration v1 Phase 6 — module-scene-atmosphere handler schemas.
 //
 // Discriminated union over the full ~65-action surface of the six atmosphere

@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_FREE — grepped for Dialog/DialogV2/prompt/FilePicker/Hooks.once/window.confirm; no matches in this file. Module-API calls here are settings/document writes only.
 // Module Integration v1 Phase 5A — module-tagger handler.
 //
 // 6-action umbrella: tag / untag / query / set-tags / clear-tags / check-tags

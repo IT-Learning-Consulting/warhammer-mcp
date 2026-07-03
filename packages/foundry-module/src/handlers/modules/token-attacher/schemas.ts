@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_FREE — pure Zod schema / constant data table; no runtime module-API calls, no dialog risk possible.
 // Module Integration v2 Phase 3A — package-local Zod schema for module-token-attacher
 // (Token Attacher v4.6.12, KayelGee).
 //

@@ -38,6 +38,10 @@ interface BulkSetDocumentOwnershipResponse {
     succeeded: number;
     failed: Array<{ target: unknown; error: string }>;
   }>;
+  // RC1.2 (mcp_code_quality_v2 Phase C1) — additive flattening of per_class[].failed[]; per_class
+  // stays the primary detail (ADR-024/025 + evals/ownership.xml assert it literally).
+  failedItems?: Array<{ id: string; reason: string }>;
+  warnings?: string[];
 }
 
 const DocumentTypeEnum = z.enum([
@@ -381,6 +385,11 @@ export class OwnershipTool extends BaseTool {
         for (const f of cls.failed ?? []) {
           body += `  - ❌ ${JSON.stringify(f.target)}: ${f.error}\n`;
         }
+      }
+      // RC1.2 — coarse cross-class signal alongside the per_class detail above (never the ONLY
+      // partial-failure surface, per CCR-V4; per_class remains primary).
+      if (data.warnings?.includes('BATCH_PARTIAL_FAILURE')) {
+        body += `\n⚠️ BATCH_PARTIAL_FAILURE — ${data.failedItems?.length ?? 0} target(s) across all classes did not apply (see per-class detail above).`;
       }
       return { content: [{ type: "text", text: body }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {

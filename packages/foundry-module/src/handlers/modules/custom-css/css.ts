@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_FREE — grepped for Dialog/DialogV2/prompt/FilePicker/Hooks.once/window.confirm; no matches in this file. Module-API calls here are settings/document writes only.
 // Module Integration v1 Phase 13A — module-css handler.
 //
 // 4-action umbrella: get / set / append / reset over the custom-css module's

@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_FREE — the file only LISTENS for the modules own Hooks.callAll("aa.ready", ...) emission (captured once at Foundry init to populate a local reference); this handler never opens a Dialog/DialogV2 and never awaits a Hooks.once-tied Promise.
 // Module Integration v1 Phase 8 — module-autoanimations handler.
 //
 // 7-action umbrella for Automated Animations (AA): per-item flag authoring,

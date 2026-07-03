@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_INVESTIGATED — in-file comment confirms the wfrp4e basic-skills-dialog does NOT pop on the GM client for the create-pile actor path (item-piles.js:84719); no other Dialog/DialogV2 call is reachable from this handlers write paths.
 // Module Integration v1 Phase 3 — module-itempiles handler (Item Piles v3.3.2).
 //
 // 17-action umbrella: pile lifecycle, container state, item/currency ops, merchant,
@@ -48,6 +49,32 @@ function isGM(): boolean {
 
 function getGame(): any {
   return (globalThis as any).game;
+}
+
+// RC1.1b closure-diff idiom (wfrp-economy.ts:128 shape) — before/after accessor compare,
+// Number()/Boolean() coercion wraps hand-rolled per site (module-API accessor state has no
+// live-Document freshDoc for verifyDocWrite; see plan Design Decisions). `token` is the
+// site-specific ITEM_PILES_*_NOT_PERSISTED literal (never a shared generic token).
+function notPersisted(token: string, detail: string): { success: false; error: string } {
+  return { success: false, error: `${token}: ${detail}` };
+}
+
+/**
+ * DP-16 settle-poll (feedback_settle_poll_module_api_verify): Item Piles' private API
+ * resolves before its document writes settle into the client accessors, so an immediate
+ * re-read false-fails the *_NOT_PERSISTED verify (live-confirmed 2026-07-03: add-currency
+ * coins landed, but the same-tick getActorCurrencies re-read still saw pre-write state).
+ * Poll the post-write predicate on a bounded window; only declare non-persistence after
+ * the window expires. A genuine silent no-op (BUG-428 class) still fails loud at timeout.
+ */
+async function settlePoll(persisted: () => boolean, timeoutMs = 2000, stepMs = 200): Promise<boolean> {
+  if (persisted()) return true;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, stepMs));
+    if (persisted()) return true;
+  }
+  return false;
 }
 
 /** Resolve a UUID string to a live Token object (for turnTokens/revertTokens — C6/C7) */
@@ -223,6 +250,9 @@ async function handleCreatePile(input: CreatePileInput): Promise<Envelope<unknow
       try {
         flagData = API.getActorFlagData(actorUuid);
       } catch (_) { /* best-effort */ }
+      if (!flagData || typeof flagData !== 'object') {
+        return notPersisted(ErrorTokens.ITEM_PILES_CREATE_NOT_PERSISTED, `created pile actor ${actorUuid} has no flag data after createItemPile`);
+      }
     }
 
     notify.created('item-piles', `Created ${input.type ?? 'pile'} pile in scene ${input.sceneId}`, {});
@@ -273,8 +303,15 @@ async function handleUpdatePile(input: UpdatePileInput): Promise<Envelope<unknow
       return { success: false, error: 'NO_ACTIVE_GM: item-piles socket returned false — GM may have disconnected' };
     }
 
-    // DP-16: post-write verify
-    const flagData = API.getActorFlagData(input.actorUuid);
+    // DP-16: post-write verify — closure-diff against the requested field set (excluding the
+    // advisory-only _simpleCalendarWarning marker, which is never persisted by design).
+    const flagData: any = API.getActorFlagData(input.actorUuid);
+    const drift = Object.keys(updateData)
+      .filter((k) => k !== '_simpleCalendarWarning')
+      .filter((k) => String(flagData?.[k]) !== String(updateData[k]));
+    if (drift.length > 0) {
+      return notPersisted(ErrorTokens.ITEM_PILES_UPDATE_NOT_PERSISTED, `pile ${input.actorUuid} field(s) did not persist: ${drift.join(', ')}`);
+    }
     notify.updated('item-piles', `Updated pile ${input.actorUuid}`, {});
     return { success: true, data: { actorUuid: input.actorUuid, updated: updateData, flagData } };
   } catch (e) {
@@ -308,6 +345,12 @@ async function handleDeletePile(input: DeletePileInput): Promise<Envelope<unknow
     // M-2: socket returns false when GM disconnects mid-call
     if (deleteResult === false) {
       return { success: false, error: 'NO_ACTIVE_GM: item-piles socket returned false — GM may have disconnected' };
+    }
+    // DP-16: NEW post-write read-back (this site had zero verify at baseline) — confirm the
+    // pile token no longer resolves.
+    const stillResolves = (globalThis as any).fromUuidSync?.(input.tokenUuid);
+    if (stillResolves) {
+      return notPersisted(ErrorTokens.ITEM_PILES_DELETE_NOT_PERSISTED, `pile token ${input.tokenUuid} still resolves after deleteItemPile`);
     }
     notify.deleted('item-piles', `Deleted pile token ${input.tokenUuid}`, {});
     return { success: true, data: { tokenUuid: input.tokenUuid, deleted: true } };
@@ -364,6 +407,19 @@ async function handleSetPileState(input: SetPileStateInput): Promise<Envelope<un
       // get-contents target when N tokens share one base actor.
       const pileActorUuids = tokens.map((t: any) => t?.document?.actor?.uuid ?? t?.actor?.uuid ?? null);
 
+      // DP-16: NEW post-write read-back (this site had zero verify at baseline) — confirm each
+      // token's pile-actor validity actually flipped in the requested direction.
+      for (const pileActorUuid of pileActorUuids) {
+        if (!pileActorUuid) continue;
+        const isValid = API.isValidItemPile(pileActorUuid);
+        if (input.state === 'turnTokens' && !isValid) {
+          return notPersisted(ErrorTokens.ITEM_PILES_TOKEN_CONVERT_NOT_PERSISTED, `token pile-actor ${pileActorUuid} is not a valid item pile after turnTokensIntoItemPiles`);
+        }
+        if (input.state === 'revertTokens' && isValid) {
+          return notPersisted(ErrorTokens.ITEM_PILES_TOKEN_CONVERT_NOT_PERSISTED, `token pile-actor ${pileActorUuid} is still a valid item pile after revertTokensFromItemPiles`);
+        }
+      }
+
       notify.updated('item-piles', `${input.state} on ${tokens.length} token(s)`, {});
       return { success: true, data: { state: input.state, tokenCount: tokens.length, pileActorUuids, result } };
     }
@@ -399,8 +455,20 @@ async function handleSetPileState(input: SetPileStateInput): Promise<Envelope<un
       return { success: false, error: 'NO_ACTIVE_GM: item-piles socket returned false — GM may have disconnected' };
     }
 
-    // DP-16: post-write verify
-    const flagData = API.getActorFlagData(input.actorUuid);
+    // DP-16: post-write verify — closure-diff against the boolean flag the requested state implies.
+    // ('rattle' has no persisted state change — shake-to-check flavor only, nothing to assert.)
+    const flagData: any = API.getActorFlagData(input.actorUuid);
+    if (input.state === 'open' || input.state === 'close') {
+      const expectedClosed = input.state === 'close';
+      if (Boolean(flagData?.closed) !== expectedClosed) {
+        return notPersisted(ErrorTokens.ITEM_PILES_STATE_NOT_PERSISTED, `pile ${input.actorUuid} "closed" expected ${expectedClosed} after state "${input.state}", got ${Boolean(flagData?.closed)}`);
+      }
+    } else if (input.state === 'lock' || input.state === 'unlock') {
+      const expectedLocked = input.state === 'lock';
+      if (Boolean(flagData?.locked) !== expectedLocked) {
+        return notPersisted(ErrorTokens.ITEM_PILES_STATE_NOT_PERSISTED, `pile ${input.actorUuid} "locked" expected ${expectedLocked} after state "${input.state}", got ${Boolean(flagData?.locked)}`);
+      }
+    }
     notify.updated('item-piles', `Set pile state to "${input.state}" on ${input.actorUuid}`, {});
     return { success: true, data: { state: input.state, actorUuid: input.actorUuid, result, flagData } };
   } catch (e) {
@@ -480,6 +548,8 @@ async function handleAddItems(input: AddItemsInput): Promise<Envelope<unknown>> 
   try {
     const API = getItemPilesAPI();
     const items = normalizeItemsArray(input.items);
+    const beforeItems = API.getActorItems(input.actorUuid);
+    const beforeCount = Array.isArray(beforeItems) ? beforeItems.length : 0;
 
     // L-1: mergeSimilarItems/respectItemIds removed — not real addItems options (item-piles.js:98428)
     const options: Record<string, unknown> = {
@@ -492,9 +562,19 @@ async function handleAddItems(input: AddItemsInput): Promise<Envelope<unknown>> 
       return { success: false, error: 'NO_ACTIVE_GM: item-piles socket returned false — GM may have disconnected' };
     }
 
-    // DP-16: post-write verify
-    const currentItems = API.getActorItems(input.actorUuid);
-    const count = Array.isArray(currentItems) ? currentItems.length : 0;
+    // DP-16: post-write verify (settle-polled) — count must not go DOWN and, when
+    // removeExistingActorItems is false (the additive path), must strictly increase.
+    const readCount = () => {
+      const cur = API.getActorItems(input.actorUuid);
+      return Array.isArray(cur) ? cur.length : 0;
+    };
+    if (items.length > 0 && !options.removeExistingActorItems) {
+      const persisted = await settlePoll(() => readCount() > beforeCount);
+      if (!persisted) {
+        return notPersisted(ErrorTokens.ITEM_PILES_ADD_ITEMS_NOT_PERSISTED, `add-items to ${input.actorUuid} did not increase item count (before: ${beforeCount}, after: ${readCount()})`);
+      }
+    }
+    const count = readCount();
     notify.updated('item-piles', `Added ${items.length} item(s) to ${input.actorUuid}`, {});
     return { success: true, data: { actorUuid: input.actorUuid, itemsAdded: items.length, totalItems: count } };
   } catch (e) {
@@ -513,6 +593,8 @@ async function handleRemoveItems(input: RemoveItemsInput): Promise<Envelope<unkn
   try {
     const API = getItemPilesAPI();
     const items = normalizeItemsArray(input.items);
+    const beforeItems = API.getActorItems(input.actorUuid);
+    const beforeCount = Array.isArray(beforeItems) ? beforeItems.length : 0;
 
     const removeResult = await API.removeItems(input.actorUuid, items);
     // M-2: socket returns false when GM disconnects mid-call
@@ -520,9 +602,18 @@ async function handleRemoveItems(input: RemoveItemsInput): Promise<Envelope<unkn
       return { success: false, error: 'NO_ACTIVE_GM: item-piles socket returned false — GM may have disconnected' };
     }
 
-    // DP-16: post-write verify
-    const currentItems = API.getActorItems(input.actorUuid);
-    const count = Array.isArray(currentItems) ? currentItems.length : 0;
+    // DP-16: post-write verify (settle-polled) — count must not stay the same or go up when items were requested.
+    const readCount = () => {
+      const cur = API.getActorItems(input.actorUuid);
+      return Array.isArray(cur) ? cur.length : 0;
+    };
+    if (items.length > 0) {
+      const persisted = await settlePoll(() => readCount() < beforeCount);
+      if (!persisted) {
+        return notPersisted(ErrorTokens.ITEM_PILES_REMOVE_ITEMS_NOT_PERSISTED, `remove-items from ${input.actorUuid} did not decrease item count (before: ${beforeCount}, after: ${readCount()})`);
+      }
+    }
+    const count = readCount();
     notify.updated('item-piles', `Removed ${items.length} item(s) from ${input.actorUuid}`, {});
     return { success: true, data: { actorUuid: input.actorUuid, itemsRemoved: items.length, totalItems: count } };
   } catch (e) {
@@ -551,6 +642,8 @@ async function handleTransferItems(input: TransferItemsInput): Promise<Envelope<
 
   try {
     const API = getItemPilesAPI();
+    const beforeTargetItems = API.getActorItems(input.targetUuid);
+    const beforeTargetCount = Array.isArray(beforeTargetItems) ? beforeTargetItems.length : 0;
     let result: unknown;
 
     if (mode === 'all') {
@@ -575,9 +668,12 @@ async function handleTransferItems(input: TransferItemsInput): Promise<Envelope<
     // transferred-item records — never the rich object the formatter previously assumed.
     const dto = { ok: true, itemsTransferred: Array.isArray(result) ? result : [] };
 
-    // DP-16: post-write verify
+    // DP-16: post-write verify — target item count must not go down after any transfer mode.
     const targetItems = API.getActorItems(input.targetUuid);
     const targetCount = Array.isArray(targetItems) ? targetItems.length : 0;
+    if (dto.itemsTransferred.length > 0 && targetCount < beforeTargetCount) {
+      return notPersisted(ErrorTokens.ITEM_PILES_TRANSFER_ITEMS_NOT_PERSISTED, `transfer-items to ${input.targetUuid} target item count dropped (before: ${beforeTargetCount}, after: ${targetCount})`);
+    }
     notify.updated('item-piles', `Transferred items (mode: ${mode}) from ${input.sourceUuid} to ${input.targetUuid}`, {});
     return { success: true, data: { mode, sourceUuid: input.sourceUuid, targetUuid: input.targetUuid, targetItemCount: targetCount, result: dto } };
   } catch (e) {
@@ -600,13 +696,19 @@ async function handleAddCurrency(input: AddCurrencyInput): Promise<Envelope<unkn
 
   try {
     const API = getItemPilesAPI();
+    const beforeCurrencies = API.getActorCurrencies(input.actorUuid);
     const addCurrResult = await API.addCurrencies(input.actorUuid, input.currencies);
     // M-2: socket returns false when GM disconnects mid-call
     if (addCurrResult === false) {
       return { success: false, error: 'NO_ACTIVE_GM: item-piles socket returned false — GM may have disconnected' };
     }
 
-    // DP-16: post-write verify
+    // DP-16: post-write verify (settle-polled) — closure-diff against the pre-call snapshot.
+    const beforeJson = JSON.stringify(beforeCurrencies);
+    const persisted = await settlePoll(() => JSON.stringify(API.getActorCurrencies(input.actorUuid)) !== beforeJson);
+    if (!persisted) {
+      return notPersisted(ErrorTokens.ITEM_PILES_ADD_CURRENCY_NOT_PERSISTED, `add-currency "${input.currencies}" to ${input.actorUuid} left currencies unchanged`);
+    }
     const currentCurrencies = API.getActorCurrencies(input.actorUuid);
     notify.updated('item-piles', `Added currencies "${input.currencies}" to ${input.actorUuid}`, {});
     return { success: true, data: { actorUuid: input.actorUuid, currenciesAdded: input.currencies, currentCurrencies } };
@@ -651,7 +753,12 @@ async function handleRemoveCurrency(input: RemoveCurrencyInput): Promise<Envelop
       return { success: false, error: 'NO_ACTIVE_GM: item-piles socket returned false — GM may have disconnected' };
     }
 
-    // DP-16: post-write verify
+    // DP-16: post-write verify (settle-polled) — currencies must actually have changed.
+    const beforeJson = JSON.stringify(currentCurrencies);
+    const persisted = await settlePoll(() => JSON.stringify(API.getActorCurrencies(input.actorUuid)) !== beforeJson);
+    if (!persisted) {
+      return notPersisted(ErrorTokens.ITEM_PILES_REMOVE_CURRENCY_NOT_PERSISTED, `remove-currency "${input.currencies}" from ${input.actorUuid} left currencies unchanged`);
+    }
     const afterCurrencies = API.getActorCurrencies(input.actorUuid);
     notify.updated('item-piles', `Removed currencies "${input.currencies}" from ${input.actorUuid}`, {});
     return { success: true, data: { actorUuid: input.actorUuid, currenciesRemoved: input.currencies, previousBalance: currentCurrencies, currentCurrencies: afterCurrencies } };
@@ -683,6 +790,7 @@ async function handleTransferCurrency(input: TransferCurrencyInput): Promise<Env
 
   try {
     const API = getItemPilesAPI();
+    const beforeTargetCurrencies = API.getActorCurrencies(input.targetUuid);
     let result: unknown;
 
     if (mode === 'all') {
@@ -715,7 +823,16 @@ async function handleTransferCurrency(input: TransferCurrencyInput): Promise<Env
       attributeDeltas: rc.attributeDeltas ?? {},
     };
 
-    // DP-16: post-write verify
+    // DP-16: post-write verify (settle-polled) — BUG-428 class: dto.ok can be false on a silent
+    // no-op; when the module itself reported something moved, the target's currencies must
+    // actually differ.
+    if (dto.ok) {
+      const beforeTargetJson = JSON.stringify(beforeTargetCurrencies);
+      const persisted = await settlePoll(() => JSON.stringify(API.getActorCurrencies(input.targetUuid)) !== beforeTargetJson);
+      if (!persisted) {
+        return notPersisted(ErrorTokens.ITEM_PILES_TRANSFER_CURRENCY_NOT_PERSISTED, `transfer-currency (mode: ${mode}) to ${input.targetUuid} reported ok but left target currencies unchanged`);
+      }
+    }
     const sourceCurrencies = API.getActorCurrencies(input.sourceUuid);
     const targetCurrencies = API.getActorCurrencies(input.targetUuid);
     notify.updated('item-piles', `Transferred currencies (mode: ${mode}) from ${input.sourceUuid} to ${input.targetUuid}`, {});
@@ -780,9 +897,16 @@ async function handleSplitLoot(input: SplitLootInput): Promise<Envelope<unknown>
       return { success: false, error: 'NO_ACTIVE_GM: item-piles socket returned false — GM may have disconnected' };
     }
 
-    // DP-16: post-write verify — pile should be empty
-    const remainingItems = API.getActorItems(input.actorUuid);
-    const remaining = Array.isArray(remainingItems) ? remainingItems.length : 0;
+    // DP-16: post-write verify (settle-polled) — pile should be empty
+    const readRemaining = () => {
+      const cur = API.getActorItems(input.actorUuid);
+      return Array.isArray(cur) ? cur.length : 0;
+    };
+    const persisted = await settlePoll(() => readRemaining() === 0);
+    const remaining = readRemaining();
+    if (!persisted && remaining > 0) {
+      return notPersisted(ErrorTokens.ITEM_PILES_SPLIT_LOOT_NOT_PERSISTED, `split-loot on ${input.actorUuid} left ${remaining} item(s) in the pile — expected empty`);
+    }
     notify.updated('item-piles', `Split loot from ${input.actorUuid} among ${input.targets.length} actors`, {});
     return { success: true, data: { actorUuid: input.actorUuid, targets: input.targets, itemsRemaining: remaining } };
   } catch (e) {
@@ -929,9 +1053,14 @@ async function handleRefreshMerchant(input: RefreshMerchantInput): Promise<Envel
       return { success: false, error: 'NO_ACTIVE_GM: item-piles socket returned false — GM may have disconnected' };
     }
 
-    // DP-16: post-write verify
+    // DP-16: post-write verify — refreshMerchantInventory's own restock table is out of our
+    // control (table roll may legitimately restock to 0 items), so gate on structural sanity:
+    // the actor must still resolve as a merchant pile after the call.
     const afterItems = API.getActorItems(input.merchantUuid);
     const count = Array.isArray(afterItems) ? afterItems.length : 0;
+    if (!API.isItemPileMerchant(input.merchantUuid)) {
+      return notPersisted(ErrorTokens.ITEM_PILES_REFRESH_MERCHANT_NOT_PERSISTED, `merchant ${input.merchantUuid} no longer resolves as an item-pile merchant after refreshMerchantInventory`);
+    }
     notify.updated('item-piles', `Refreshed merchant inventory for ${input.merchantUuid}`, {});
     return { success: true, data: { merchantUuid: input.merchantUuid, removeExistingActorItems: removeExisting, itemCount: count } };
   } catch (e) {
@@ -991,6 +1120,8 @@ async function handleTradeItems(input: TradeItemsInput): Promise<Envelope<unknow
       quantity: i.quantity,
       paymentIndex: i.paymentIndex ?? 0,
     }));
+    const beforeBuyerItems = API.getActorItems(input.buyerUuid);
+    const beforeBuyerItemCount = Array.isArray(beforeBuyerItems) ? beforeBuyerItems.length : 0;
 
     const result = await API.tradeItems(input.merchantUuid, input.buyerUuid, items);
     // M-2: socket returns false when GM disconnects mid-call
@@ -1011,10 +1142,20 @@ async function handleTradeItems(input: TradeItemsInput): Promise<Envelope<unknow
       attributeDeltas: rt.attributeDeltas ?? {},
     };
 
-    // DP-16: post-write verify
+    // DP-16: post-write verify (settle-polled) — BUG-428 class: when the module reported items
+    // moved (dto.ok), the buyer's item count must actually have increased.
+    const readBuyerCount = () => {
+      const cur = API.getActorItems(input.buyerUuid);
+      return Array.isArray(cur) ? cur.length : 0;
+    };
+    if (dto.ok) {
+      const persisted = await settlePoll(() => readBuyerCount() > beforeBuyerItemCount);
+      if (!persisted) {
+        return notPersisted(ErrorTokens.ITEM_PILES_TRADE_ITEMS_NOT_PERSISTED, `trade-items to buyer ${input.buyerUuid} reported ok but item count did not increase (before: ${beforeBuyerItemCount}, after: ${readBuyerCount()})`);
+      }
+    }
     const buyerCurrencies = API.getActorCurrencies(input.buyerUuid);
-    const buyerItems = API.getActorItems(input.buyerUuid);
-    const buyerItemCount = Array.isArray(buyerItems) ? buyerItems.length : 0;
+    const buyerItemCount = readBuyerCount();
 
     notify.updated('item-piles', `Traded ${input.items.length} item(s) from ${input.merchantUuid} to ${input.buyerUuid}`, {});
     return {
@@ -1109,7 +1250,13 @@ async function handleUpdatePriceModifiers(input: UpdatePriceModifiersInput): Pro
     // DP-16: post-write verify — read back at the SAME scope we wrote (targetUuid, which is
     // the per-actor target when given, else the merchant's own uuid), so the verify reflects
     // the actual write rather than the unchanged merchant global (BUG-380).
-    const afterModifiers = API.getMerchantPriceModifiers(input.actorUuid, { actor: targetUuid });
+    const afterModifiers: any = API.getMerchantPriceModifiers(input.actorUuid, { actor: targetUuid });
+    const drift = (['buyPriceModifier', 'sellPriceModifier'] as const).filter(
+      (k) => (modifierEntry as any)[k] !== undefined && Number(afterModifiers?.[k]) !== Number((modifierEntry as any)[k]),
+    );
+    if (drift.length > 0) {
+      return notPersisted(ErrorTokens.ITEM_PILES_PRICE_MODIFIERS_NOT_PERSISTED, `price modifiers for ${input.actorUuid} did not persist: ${drift.join(', ')} (expected ${JSON.stringify(modifierEntry)}, got ${JSON.stringify(afterModifiers)})`);
+    }
     notify.updated('item-piles', `Updated price modifiers for ${input.actorUuid}`, {});
     return { success: true, data: { actorUuid: input.actorUuid, subAction: 'update-modifiers', targetActorUuid: input.targetActorUuid ?? null, modifiers: afterModifiers } };
   } catch (e) {

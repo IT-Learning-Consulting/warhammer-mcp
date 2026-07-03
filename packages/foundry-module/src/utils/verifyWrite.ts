@@ -18,6 +18,37 @@
  * @param options        readSource: compare via doc._source path (default true, F08-safe).
  *                       skipPaths: additional dot-paths to skip beyond '.-=' markers.
  */
+/**
+ * Flatten nested plain-object values to dot-path leaves (arrays and non-plain objects
+ * stay terminal). Needed because callers legitimately hold NESTED update objects at
+ * verify time — Foundry's Document.update() expands dot-path keys in the SAME object
+ * reference it was handed, so even an update built flat ({'flags.levels.x': 1}) arrives
+ * here nested ({flags: {levels: {x: 1}}}). Comparing a nested PARTIAL against the
+ * fully-defaulted stored bag false-fires drift (live-caught 2026-07-03: false
+ * TEMPLATE_APPLY_WRITE_NOT_PERSISTED on prototypeToken partials + false
+ * LEVELS_WRITE_NOT_PERSISTED on scene flags). Leaf-path comparison IS this helper's
+ * documented semantics ("compares each requested field"). Local implementation rather
+ * than foundry.utils.flattenObject so unit tests need no extra global. Note: empty-object
+ * values stay terminal (compared as {}), deletion-marker paths (.-=) stay terminal.
+ */
+function flattenLeafPaths(
+  obj: Record<string, unknown>,
+  prefix = '',
+  out: Record<string, unknown> = {},
+): Record<string, unknown> {
+  for (const [k, v] of Object.entries(obj)) {
+    const path = prefix ? `${prefix}.${k}` : k;
+    const isPlainObject = v !== null && typeof v === 'object' && !Array.isArray(v)
+      && (v as object).constructor === Object && Object.keys(v as object).length > 0;
+    if (isPlainObject && !path.includes('.-=')) {
+      flattenLeafPaths(v as Record<string, unknown>, path, out);
+    } else {
+      out[path] = v;
+    }
+  }
+  return out;
+}
+
 export function verifyDocWrite(
   freshDoc: unknown,
   expectedFields: Record<string, unknown>,
@@ -28,7 +59,7 @@ export function verifyDocWrite(
   const skipPaths = options?.skipPaths ?? [];
 
   const drift: string[] = [];
-  for (const [path, expected] of Object.entries(expectedFields)) {
+  for (const [path, expected] of Object.entries(flattenLeafPaths(expectedFields))) {
     // Always skip Foundry's deletion-marker syntax (e.g. "system.foo.-=key": null) —
     // re-read cannot validate "key absent" via value comparison.
     if (path.includes('.-=')) continue;

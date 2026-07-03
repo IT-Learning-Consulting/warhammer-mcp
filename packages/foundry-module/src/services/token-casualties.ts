@@ -11,6 +11,7 @@
 // are not skills). No awaited path opens a Foundry dialog (ADR-10.1).
 
 import { notify } from '../notify.js';
+import { ErrorTokens } from '@foundry-mcp/shared';
 import { verifyDocWrite } from '../utils/verifyWrite.js';
 import { buildOperationReceipt } from './shared/operation-receipt.js';
 import { MODULE_ID } from '../constants.js';
@@ -73,18 +74,28 @@ export class TokenCasualtiesService {
 
     const appliedCount = results.filter((r) => r.applied).length;
     const alreadyAppliedCount = results.filter((r) => r.alreadyApplied).length;
+    const failedCount = results.length - appliedCount;
     const base = {
       sceneId: data.sceneId,
       dryRun,
       tokenCount: results.length,
       appliedCount,
-      failedCount: results.length - appliedCount,
+      failedCount,
       alreadyAppliedCount,
       results,
     };
     // dryRun is a pure preview — no writes, so no operation receipt (quality-contract §3).
     if (dryRun) return base;
-    return { ...base, ...buildOperationReceipt({ created: createdItemIds, updated: updatedDocIds, warnings }) };
+    // RC1.2 — failedItems derived from results[] (additive; results[]/counters stay verbatim —
+    // evals/battle-sim.xml + wfrp-battle-simulator/references/apply-flow.md assert them by name).
+    const failedItems = results
+      .filter((r) => !r.applied)
+      .map((r) => ({ id: r.tokenId, reason: r.error ?? 'unknown failure' }));
+    if (failedCount > 0 && failedCount < results.length) warnings.push(ErrorTokens.BATCH_PARTIAL_FAILURE);
+    return {
+      ...base,
+      ...buildOperationReceipt({ created: createdItemIds, updated: updatedDocIds, warnings, failed: failedItems }),
+    };
   }
 
   /** Resolve + validate one token, then (unless dryRun) write its casualty. Never throws — a per-token
@@ -252,8 +263,13 @@ export class TokenCasualtiesService {
     delete itemData._id;
     const created: any[] = await actor.createEmbeddedDocuments('Item', [itemData], { skipSpecialisationChoice: true });
     const critItem = created?.[0];
+    if (!critItem || !actor.items?.get(critItem.id)) {
+      throw new Error(`APPLY_TOKEN_CASUALTIES_NOT_PERSISTED: critical item absent from ${actor.name}'s items after create`);
+    }
     const current: number = actor.system?.status?.criticalWounds?.value ?? 0;
     await actor.update({ 'system.status.criticalWounds.value': current + 1 }, { skipExperienceChecks: true });
+    const fresh: any = await (globalThis as any).fromUuid(actor.uuid);
+    verifyDocWrite(fresh, { 'system.status.criticalWounds.value': current + 1 }, 'APPLY_TOKEN_CASUALTIES_NOT_PERSISTED');
     return critItem?.id ?? null;
   }
 

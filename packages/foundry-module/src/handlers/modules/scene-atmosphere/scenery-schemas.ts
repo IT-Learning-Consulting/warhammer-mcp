@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_FREE — pure Zod schema / constant data table; no runtime module-API calls, no dialog risk possible.
 // Module Integration v1 Phase 6B — scenery action Zod schemas.
 //
 // Every variant is .strict() — rejects unknown top-level keys.

@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_FREE — module header states explicitly: NO DIALOG/DEADLOCK RISK — the setLocation()+spawn() path bypasses every Dialog/DialogV2/pick() call in the Portal module.
 // Module Integration v2 Phase 13A — module-portal handler (Portal v3.0.4, Posh Rat Games).
 //
 // Always-registered umbrella. requireModuleActive('portal-lib') is the FIRST executable statement — RETURNS

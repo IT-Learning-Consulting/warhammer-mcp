@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_GUARDED — module header + Q&A disposition: lose-momentum and deal-damage (the only two module paths that open a DialogV2) are NOT exposed as actions in this handler; increase/reduce/clear are direct Advantage writes, dialog-free.
 // Module Integration v1 Phase 11 — module-gmtoolkit handler (WFRP4e GM Toolkit v9.1.1).
 //
 // Always-registered umbrella. requireModuleActive('wfrp4e-gm-toolkit') is the FIRST executable

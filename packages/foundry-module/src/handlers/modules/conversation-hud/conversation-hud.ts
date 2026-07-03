@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_GUARDED — module header documents 8 ConversationHUD paths that would open a DialogV2/confirm and DEADLOCK the MCP socket; every handler below is annotated Dialog-free (uses the socket-broadcast / raw-write alternative instead of the dialog-opening module method).
 // Module Integration v2 Phase 1 — module-conversation-hud handler (ConversationHUD v6.0.0).
 //
 // Always-registered umbrella. requireModuleActive('conversation-hud') is the FIRST executable

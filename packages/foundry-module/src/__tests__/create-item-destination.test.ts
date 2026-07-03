@@ -15,18 +15,29 @@ type FolderStub = {
 
 // Local helpers to build stubs fresh per test
 function makeActorStub(id: string, name: string, createdIdSeed = 'new-item') {
+  // RC1.1a: createEmbeddedDocuments now needs a stateful backing store so the post-write
+  // verify's actor.items.get(id) / verifyDocWrite re-read finds the just-created item.
+  const backingItems = new Map<string, any>();
   return {
     id,
     name,
-    items: { get: (_id: string) => null, find: () => null },
+    items: {
+      get: (itemId: string) => backingItems.get(itemId) ?? null,
+      find: () => null,
+    },
     createEmbeddedDocuments: vi.fn(async (_type: string, payloads: any[]) => {
-      return payloads.map((p, i) => ({
-        id: `${createdIdSeed}-${i}`,
-        name: p.name,
-        type: p.type,
-        toObject: () => ({ ...p, _id: `${createdIdSeed}-${i}` }),
-        effects: [],
-      }));
+      return payloads.map((p, i) => {
+        const created = {
+          id: `${createdIdSeed}-${i}`,
+          name: p.name,
+          type: p.type,
+          toObject: () => ({ ...p, _id: `${createdIdSeed}-${i}` }),
+          effects: [],
+          _source: { ...p },
+        };
+        backingItems.set(created.id, created);
+        return created;
+      });
     }),
     deleteEmbeddedDocuments: vi.fn(async () => {}),
   };
@@ -41,6 +52,10 @@ function setupFoundryStubs(opts?: {
   const folders = opts?.folders ?? [];
   const createItemId = opts?.createItemId ?? 'world-item-1';
 
+  // RC1.1a: game.items is now read back by createItem's world-scope post-write verify —
+  // back it with the same array Item.create pushes into (Map.get(id) not .find(pred)).
+  const worldItems = new Map<string, any>();
+
   (globalThis as any).game = {
     ...(globalThis as any).game,
     actors: {
@@ -48,9 +63,10 @@ function setupFoundryStubs(opts?: {
       find: (pred: (a: any) => boolean) => actors.find(pred) ?? null,
     },
     folders: {
+      get: (id: string) => folders.find((f) => f.id === id) ?? null,
       find: (pred: (f: FolderStub) => boolean) => folders.find(pred) ?? null,
     },
-    items: new Map(),
+    items: worldItems,
   };
 
   const createdFolders: FolderStub[] = [];
@@ -67,14 +83,19 @@ function setupFoundryStubs(opts?: {
   };
 
   (globalThis as any).Item = class {
-    static create = vi.fn(async (data: any) => ({
-      id: createItemId,
-      name: data.name,
-      type: data.type,
-      folder: data.folder ?? null,
-      toObject: () => ({ ...data, _id: createItemId }),
-      effects: [],
-    }));
+    static create = vi.fn(async (data: any) => {
+      const created = {
+        id: createItemId,
+        name: data.name,
+        type: data.type,
+        folder: data.folder ?? null,
+        toObject: () => ({ ...data, _id: createItemId }),
+        effects: [],
+        _source: { ...data },
+      };
+      worldItems.set(createItemId, created);
+      return created;
+    });
   };
 
   (globalThis as any).fromUuid = vi.fn(async (uuid: string) => ({

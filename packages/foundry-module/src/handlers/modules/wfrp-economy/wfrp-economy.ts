@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_FREE — module header states no write path touches a Dialog; every write is a raw awaited game.settings.set / game.financial.wallet.* call.
 // Module Integration v2 Phase 6 — module-wfrp-economy handler (Warhammer Economy, wfrp4e-economy v1.0.0).
 //
 // Always-registered umbrella. requireModuleActive('wfrp4e-economy') is the FIRST active-state check —

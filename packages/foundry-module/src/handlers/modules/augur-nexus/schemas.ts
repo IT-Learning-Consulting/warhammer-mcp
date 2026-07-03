@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_FREE — pure Zod schema / constant data table; no runtime module-API calls, no dialog risk possible.
 // Module Integration v2 Phase 5 — package-local Zod schema for module-augur-nexus
 // (Augur: Nexus v1.1.6, The Augur).
 //

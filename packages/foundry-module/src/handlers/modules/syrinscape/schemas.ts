@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_FREE — pure Zod schema / constant data table; no runtime module-API calls, no dialog risk possible.
 // Module Integration v2 Phase 13C — package-local Zod schema for module-syrinscape (Syrinscape Control v1.0.5, Zhell).
 //
 // CCR-5: module-specific schemas stay package-local. Every variant is a plain `.strict()` ZodObject (NO

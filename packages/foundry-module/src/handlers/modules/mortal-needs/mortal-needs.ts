@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_INVESTIGATED — module header confirms the modules only DialogV2 (#showRemovalDialog) lives in the auto-tick recovery path (#handleRecovery), which is never reachable from any handler in this file; ConsequenceEngine.applyConsequence/removeConsequence are the only write paths used, both dialog-free.
 // Module Integration v2 Phase 8 — module-mortal-needs handler (Mortal Needs, Wand & Widgets v2.3.2).
 //
 // Always-registered umbrella. requireModuleActive('mortal-needs') is the FIRST active-state check —

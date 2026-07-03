@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_FREE — grepped for Dialog/DialogV2/prompt/FilePicker/Hooks.once/window.confirm; no matches in this file. Module-API calls here are settings/document writes only.
 // Module Integration v1 Phase 6 — module-scene-atmosphere handler dispatcher.
 //
 // Central dispatcher for the scene-atmosphere bundle umbrella. Routes ~67 actions

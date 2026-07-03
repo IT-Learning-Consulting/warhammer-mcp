@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_FREE — pure Zod schema / constant data table; no runtime module-API calls, no dialog risk possible.
 // Module Integration v2 Phase 4 — package-local Zod schema for module-perceptive
 // (Perceptive v6.0.4, saibot).
 //

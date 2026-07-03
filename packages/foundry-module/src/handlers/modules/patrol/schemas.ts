@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_FREE — pure Zod schema / constant data table; no runtime module-API calls, no dialog risk possible.
 // Module Integration v1 Phase 14 — package-local Zod schema for module-patrol (patrol v3.0.3).
 //
 // CCR-5: module-specific schemas stay package-local. `.strict()` on every variant.

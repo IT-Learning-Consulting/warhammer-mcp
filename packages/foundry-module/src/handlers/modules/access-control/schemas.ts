@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_FREE — pure Zod schema / constant data table; no runtime module-API calls, no dialog risk possible.
 // Module Integration v1 Phase 7 — module-access-control handler schemas.
 //
 // Discriminated union over the access-control bundle: LocknKey (10 actions) +

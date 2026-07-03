@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_GUARDED — documents the same minigame DialogV2 fire-and-forget contract as gatherer.ts (schema-level annotation only; no runtime code).
 // Module Integration v1 Phase 14 — package-local Zod schema for module-gatherer (gatherer v4.2.5).
 //
 // CCR-5: module-specific schemas stay package-local. `.strict()` on every variant.

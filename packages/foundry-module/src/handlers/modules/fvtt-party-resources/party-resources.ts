@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_FREE — grepped for Dialog/DialogV2/prompt/FilePicker/Hooks.once/window.confirm; no matches in this file. Module-API calls here are settings/document writes only.
 // Module Integration v1 Phase 11 — module-party-resources handler (Party Resources v1.9.0a).
 //
 // Always-registered umbrella. requireModuleActive('fvtt-party-resources') is the FIRST executable

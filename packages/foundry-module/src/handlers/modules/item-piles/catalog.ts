@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_FREE — pure Zod schema / constant data table; no runtime module-API calls, no dialog risk possible.
 // Module Integration v1 Phase 3 — Item Piles action catalog.
 //
 // Per-action { dataDefaults, preChecks, danger } map (mirrors MATT action-catalog + mastercrafted pattern).

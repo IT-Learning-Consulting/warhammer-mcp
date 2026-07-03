@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_FREE — pure Zod schema / constant data table; no runtime module-API calls, no dialog risk possible.
 // Module Integration v2 Phase 13A — package-local Zod schema for module-portal (Portal v3.0.4, Posh Rat Games).
 //
 // CCR-5: module-specific schema stays package-local. Single `.strict()` ZodObject (one action -> a plain

@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_FREE — grepped for Dialog/DialogV2/prompt/FilePicker/Hooks.once/window.confirm; no matches in this file. Module-API calls here are settings/document writes only.
 // Module Integration v2 Phase 11 — module-macro-trigger handler (Macro Trigger v1.0.1, lobowarewolf).
 //
 // Always-registered umbrella. requireModuleActive('macro-trigger') is the FIRST active-state check —

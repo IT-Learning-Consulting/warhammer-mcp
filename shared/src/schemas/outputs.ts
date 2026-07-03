@@ -172,6 +172,8 @@ export const AddCombatantsOutput = z.object({
   updatedDocumentIds: z.array(z.string()).optional(),
   deletedDocumentIds: z.array(z.string()).optional(),
   warnings: z.array(z.string()).optional(),
+  // RC1.2 (mcp_code_quality_v2 Phase C1): additive-only batch partial-failure detail.
+  failedItems: z.array(z.object({ id: z.string(), reason: z.string() })).optional(),
 }).passthrough();
 export type AddCombatantsOutputType = z.infer<typeof AddCombatantsOutput>;
 
@@ -321,6 +323,8 @@ export const ApplyTemplateOutput = z.object({
   updatedDocumentIds: z.array(z.string()).optional(),
   deletedDocumentIds: z.array(z.string()).optional(),
   warnings: z.array(z.string()).optional(),
+  // RC1.2 (mcp_code_quality_v2 Phase C1): additive-only batch partial-failure detail.
+  failedItems: z.array(z.object({ id: z.string(), reason: z.string() })).optional(),
 }).passthrough();
 export type ApplyTemplateOutputType = z.infer<typeof ApplyTemplateOutput>;
 
@@ -351,6 +355,8 @@ export const CreateActorFromCompendiumOutput = z.object({
   updatedDocumentIds: z.array(z.string()).optional(),
   deletedDocumentIds: z.array(z.string()).optional(),
   warnings: z.array(z.string()).optional(),
+  // RC1.2 (mcp_code_quality_v2 Phase C1): additive-only batch partial-failure detail.
+  failedItems: z.array(z.object({ id: z.string(), reason: z.string() })).optional(),
 }).passthrough();
 export type CreateActorFromCompendiumOutputType = z.infer<typeof CreateActorFromCompendiumOutput>;
 

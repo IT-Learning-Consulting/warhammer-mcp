@@ -29,18 +29,27 @@ function installItemFoundry() {
 // ══════════════════════════════════════════════════
 describe('FoundryDataAccess.createItem — write-arg characterization', () => {
   function makeActorStub(id: string, name: string) {
+    // RC1.1a: createEmbeddedDocuments needs a stateful backing store so the post-write verify's
+    // actor.items.get(id) re-read finds the just-created item.
+    const backingItems = new Map<string, any>();
     return {
       id,
       name,
+      items: { get: (itemId: string) => backingItems.get(itemId) ?? null },
       createEmbeddedDocuments: vi.fn(async (_type: string, payloads: any[]) =>
-        payloads.map((p, i) => ({
-          id: `created-${i}`,
-          name: p.name,
-          type: p.type,
-          uuid: `Actor.${id}.Item.created-${i}`,
-          toObject: () => ({ ...p, _id: `created-${i}` }),
-          effects: { map: () => [] },
-        })),
+        payloads.map((p, i) => {
+          const created = {
+            id: `created-${i}`,
+            name: p.name,
+            type: p.type,
+            uuid: `Actor.${id}.Item.created-${i}`,
+            toObject: () => ({ ...p, _id: `created-${i}` }),
+            effects: { map: () => [] },
+            _source: { ...p },
+          };
+          backingItems.set(created.id, created);
+          return created;
+        }),
       ),
     };
   }
@@ -70,27 +79,36 @@ describe('FoundryDataAccess.createItem — write-arg characterization', () => {
   });
 
   it('snapshot: world-scope Item.create args with a folder chain', async () => {
+    const worldItems = new Map<string, any>();
+    const worldFolders = new Map<string, any>();
     (globalThis as any).game = {
       ...(globalThis as any).game,
       actors: { get: () => null, find: () => null },
-      folders: { find: () => null },
+      folders: { get: (id: string) => worldFolders.get(id) ?? null, find: () => null },
+      items: worldItems,
     };
     const createdFolders: any[] = [];
     (globalThis as any).Folder = class {
       static create = vi.fn(async (data: any) => {
         const f = { id: `folder-${createdFolders.length + 1}`, name: data.name, type: data.type, folder: data.folder ?? null };
         createdFolders.push(f);
+        worldFolders.set(f.id, f);
         return f;
       });
     };
-    const ItemCreate = vi.fn(async (data: any) => ({
-      id: 'world-item-1',
-      name: data.name,
-      type: data.type,
-      uuid: 'Item.world-item-1',
-      toObject: () => ({ ...data, _id: 'world-item-1' }),
-      effects: { map: () => [] },
-    }));
+    const ItemCreate = vi.fn(async (data: any) => {
+      const created = {
+        id: 'world-item-1',
+        name: data.name,
+        type: data.type,
+        uuid: 'Item.world-item-1',
+        toObject: () => ({ ...data, _id: 'world-item-1' }),
+        effects: { map: () => [] },
+        _source: { ...data },
+      };
+      worldItems.set(created.id, created);
+      return created;
+    });
     (globalThis as any).Item = class { static create = ItemCreate; };
 
     // Phase 8 (R7.3): createItem moved off FoundryDataAccess to the promoted ItemService; pierce it there.
@@ -143,11 +161,17 @@ describe('QueryHandlers.handleAddItemFromCompendium — write-arg characterizati
   });
 
   it('snapshot: createEmbeddedDocuments args + result payload (skipSpecialisationChoice)', async () => {
+    const backingItems = new Map<string, any>();
     const actor = {
       id: 'a1',
       name: 'Hans',
+      items: { get: (itemId: string) => backingItems.get(itemId) ?? null },
       createEmbeddedDocuments: vi.fn(async (_type: string, payloads: any[]) =>
-        payloads.map((p, i) => ({ id: `added-${i}`, name: p.name, type: p.type, uuid: `Actor.a1.Item.added-${i}` })),
+        payloads.map((p, i) => {
+          const created = { id: `added-${i}`, name: p.name, type: p.type, uuid: `Actor.a1.Item.added-${i}` };
+          backingItems.set(created.id, created);
+          return created;
+        }),
       ),
     };
     (globalThis as any).game = {

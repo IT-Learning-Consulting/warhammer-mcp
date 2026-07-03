@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_FREE — pure Zod schema / constant data table; no runtime module-API calls, no dialog risk possible.
 // Module Integration v1 Phase 12 — package-local Zod schema for module-chat-commander
 // (_chatcommands v2.0.5 + chat-commander-wfrp4e v1.0.0).
 //

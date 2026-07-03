@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_FREE — grepped for Dialog/DialogV2/prompt/FilePicker/Hooks.once/window.confirm; no matches in this file. Module-API calls here are settings/document writes only.
 // Module Integration v1 Phase 6B — scene-transitions action handlers.
 //
 // All play/end handlers call game.modules.get('scene-transitions').api.macro(options, showMe)
@@ -34,6 +35,7 @@
 //   - CCR-4 confirm gate on delete-scene-transition
 
 import { notify } from '../../../notify.js';
+import { ErrorTokens } from '@foundry-mcp/shared';
 import type { ModuleSceneAtmosphereInputType } from './schemas.js';
 
 type Envelope<T> = { success: true; data: T } | { success: false; error: string };
@@ -226,6 +228,22 @@ export async function handleSetSceneTransition(input: SetSceneTransitionInput): 
         }
         await game?.settings?.set?.('scene-transitions', 'show-journal-header-transition', input.showJournal);
 
+        // Post-write verify (mirrors the per-scene/world-default siblings above — this site had
+        // none at baseline; RC1.1b consistency fix). Boolean() coercion tolerance (settle-poll
+        // §8 F03 sibling gotcha): game.settings.get() coerces to the registered type.
+        let verifiedShowJournal: unknown = null;
+        try {
+          verifiedShowJournal = game?.settings?.get?.('scene-transitions', 'show-journal-header-transition') ?? null;
+        } catch {
+          verifiedShowJournal = null;
+        }
+        if (Boolean(verifiedShowJournal) !== Boolean(input.showJournal)) {
+          return {
+            success: false,
+            error: `${ErrorTokens.SCENE_ATMOSPHERE_TRANSITION_NOT_PERSISTED}: show-journal-header-transition expected ${input.showJournal}, got ${verifiedShowJournal}`,
+          };
+        }
+
         notify.updated('setting', 'scene-transitions show-journal-header-transition', {
           summary: `set-scene-transition show-journal: showJournal=${input.showJournal}`,
         });
@@ -235,6 +253,7 @@ export async function handleSetSceneTransition(input: SetSceneTransitionInput): 
           data: {
             subAction: 'show-journal',
             showJournal: input.showJournal,
+            verified: Boolean(verifiedShowJournal) === Boolean(input.showJournal),
             note: 'Controls whether the "Play as Transition" button appears in Journal window headers.',
           },
         };

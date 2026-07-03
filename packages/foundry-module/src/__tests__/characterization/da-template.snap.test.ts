@@ -47,41 +47,66 @@ function makeTemplate(opts: {
   };
 }
 
+// RC1.1a: template-apply.ts now re-fetches via fromUuid(actor.uuid) after actor.update() and
+// verifyDocWrite()s against freshActor._source — the actor stub must (a) carry a globally-unique
+// uuid registered in `uuidRegistry` (so fromUuid can resolve it back) and (b) actually mutate its
+// own state + a shadow `_source` object when update() is called, mirroring real Foundry Document
+// semantics (in-place mutation, not just an args-capture stub).
+const uuidRegistry = new Map<string, any>();
+
 function makeActor(opts: { id: string; name: string; type: string; isToken?: boolean }) {
   const updates: Array<{ updateData: Record<string, any>; options: any }> = [];
   const creates: Array<{ items: any[]; options: any }> = [];
-  return {
+  const initialSystem = { characteristics: { ws: { advances: 0 }, bs: { advances: 0 }, s: { advances: 0 }, t: { advances: 0 }, i: { advances: 0 }, ag: { advances: 0 }, dex: { advances: 0 }, int: { advances: 0 }, wp: { advances: 0 }, fel: { advances: 0 } } };
+  const actor: any = {
     id: opts.id,
     name: opts.name,
     type: opts.type,
     isToken: opts.isToken ?? false,
-    system: { characteristics: { ws: { advances: 0 }, bs: { advances: 0 }, s: { advances: 0 }, t: { advances: 0 }, i: { advances: 0 }, ag: { advances: 0 }, dex: { advances: 0 }, int: { advances: 0 }, wp: { advances: 0 }, fel: { advances: 0 } } },
+    uuid: `Actor.${opts.id}${opts.isToken ? '.Delta.' : '.'}${Math.random().toString(36).slice(2, 8)}`,
+    system: JSON.parse(JSON.stringify(initialSystem)),
     items: new Map(),
     effects: new Map(),
-    update: vi.fn(async (updateData: Record<string, any>, options: any) => {
-      updates.push({ updateData, options });
-    }),
-    createEmbeddedDocuments: vi.fn(async (_name: string, items: any[], options: any) => {
-      creates.push({ items, options });
-      return items.map((item, idx) => ({ ...item, id: `new-${idx}` }));
-    }),
-    __updates: updates,
-    __creates: creates,
   };
+  actor._source = { name: actor.name, system: JSON.parse(JSON.stringify(initialSystem)) };
+  actor.update = vi.fn(async (updateData: Record<string, any>, options: any) => {
+    updates.push({ updateData, options });
+    const setProp = (globalThis as any).foundry.utils.setProperty;
+    for (const [path, value] of Object.entries(updateData)) {
+      setProp(actor, path, value);
+      setProp(actor._source, path, value);
+    }
+  });
+  actor.createEmbeddedDocuments = vi.fn(async (_name: string, items: any[], options: any) => {
+    creates.push({ items, options });
+    return items.map((item, idx) => ({ ...item, id: `new-${idx}` }));
+  });
+  actor.__updates = updates;
+  actor.__creates = creates;
+  uuidRegistry.set(actor.uuid, actor);
+  return actor;
 }
 
 function makeScene(opts: { id: string; name?: string; tokens: Array<{ id: string; actorLink: boolean; actor: any; actorId?: string; name?: string }> }) {
   const tokensMap = new Map<string, any>();
   for (const t of opts.tokens) {
     const tokenUpdates: Array<Record<string, any>> = [];
-    tokensMap.set(t.id, {
+    const tokenDoc: any = {
       ...t,
       name: t.name ?? t.actor?.name ?? 'Token',
-      update: vi.fn(async (updateData: Record<string, any>) => {
-        tokenUpdates.push(updateData);
-      }),
       __updates: tokenUpdates,
+    };
+    // RC1.1a: template-apply.ts re-reads via scene.tokens.get(id) + verifyDocWrite's _source
+    // compare after the rename write — mutate name + a shadow _source in place, like real Foundry.
+    tokenDoc._source = { name: tokenDoc.name };
+    tokenDoc.update = vi.fn(async (updateData: Record<string, any>) => {
+      tokenUpdates.push(updateData);
+      if (typeof updateData.name === 'string') {
+        tokenDoc.name = updateData.name;
+        tokenDoc._source.name = updateData.name;
+      }
     });
+    tokensMap.set(t.id, tokenDoc);
   }
   return {
     id: opts.id,
@@ -93,6 +118,10 @@ function makeScene(opts: { id: string; name?: string; tokens: Array<{ id: string
 beforeEach(() => {
   vi.spyOn(console, 'error').mockImplementation(() => {});
   (globalThis as any).ui = { notifications: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } };
+  // RC1.1a: executeTemplatePlan's DP-16 verify re-fetches via fromUuid(actor.uuid) — resolve
+  // against the per-test uuidRegistry each makeActor() call populates.
+  uuidRegistry.clear();
+  (globalThis as any).fromUuid = vi.fn(async (uuid: string) => uuidRegistry.get(uuid) ?? null);
   const existingUtils = (globalThis as any).foundry?.utils ?? {};
   (globalThis as any).foundry = {
     ...(globalThis as any).foundry,

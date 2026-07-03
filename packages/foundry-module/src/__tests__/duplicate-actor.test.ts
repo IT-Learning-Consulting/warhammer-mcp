@@ -88,12 +88,17 @@ describe('dataAccess.duplicateActor — Actor.create wiring', () => {
       name: 'Template NPC',
       toObject: () => ({ ...sourceObj }),
     };
-    (globalThis as any).game.actors = new Map([['source-1', source]]);
+    const actorsMap = new Map([['source-1', source]]);
+    (globalThis as any).game.actors = actorsMap;
     const createCalls: any[] = [];
     (globalThis as any).Actor = {
       create: async (data: any) => {
         createCalls.push(data);
-        return { id: 'clone-42', name: data.name, type: data.type };
+        // RC1.1a: duplicateActor now re-reads game.actors.get(id) post-create — register the
+        // clone into the same backing Map, mirroring real Foundry's Actor.create side effect.
+        const created = { id: 'clone-42', name: data.name, type: data.type };
+        actorsMap.set(created.id, created);
+        return created;
       },
     };
 
@@ -122,9 +127,14 @@ describe('dataAccess.duplicateActor — Actor.create wiring', () => {
       name: 'Keep My Name',
       toObject: () => ({ _id: 'source-2', name: 'Keep My Name', type: 'npc' }),
     };
-    (globalThis as any).game.actors = new Map([['source-2', source]]);
+    const actorsMap = new Map([['source-2', source]]);
+    (globalThis as any).game.actors = actorsMap;
     (globalThis as any).Actor = {
-      create: async (data: any) => ({ id: 'clone-2', name: data.name, type: data.type }),
+      create: async (data: any) => {
+        const created = { id: 'clone-2', name: data.name, type: data.type };
+        actorsMap.set(created.id, created);
+        return created;
+      },
     };
 
     const result = await (qh.actorService as any).duplicateActor({

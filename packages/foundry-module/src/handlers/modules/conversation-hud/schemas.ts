@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_FREE — pure Zod schema / constant data table; no runtime module-API calls, no dialog risk possible.
 // Module Integration v2 Phase 1 — package-local Zod schema for module-conversation-hud
 // (ConversationHUD v6.0.0).
 //

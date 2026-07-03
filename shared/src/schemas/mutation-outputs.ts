@@ -80,6 +80,8 @@ export const ApplyTemplateToTokenOutput = z.object({
   updatedDocumentIds: z.array(z.string()).optional(),
   deletedDocumentIds: z.array(z.string()).optional(),
   warnings: z.array(z.string()).optional(),
+  // RC1.2 (mcp_code_quality_v2 Phase C1): additive-only batch partial-failure detail.
+  failedItems: z.array(z.object({ id: z.string(), reason: z.string() })).optional(),
 }).passthrough();
 export type ApplyTemplateToTokenOutputType = z.infer<typeof ApplyTemplateToTokenOutput>;
 
@@ -128,6 +130,8 @@ export const CreateCustomItemOutput = z.object({
   updatedDocumentIds: z.array(z.string()).optional(),
   deletedDocumentIds: z.array(z.string()).optional(),
   warnings: z.array(z.string()).optional(),
+  // RC1.2 (mcp_code_quality_v2 Phase C1): additive-only batch partial-failure detail.
+  failedItems: z.array(z.object({ id: z.string(), reason: z.string() })).optional(),
 }).passthrough();
 export type CreateCustomItemOutputType = z.infer<typeof CreateCustomItemOutput>;
 

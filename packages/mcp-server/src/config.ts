@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const ConfigSchema = z.object({
-  logLevel: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
+  logLevel: z.enum(['error', 'warn', 'info', 'debug']).default('warn'),
   logFormat: z.enum(['json', 'simple']).default('simple'),
   enableFileLogging: z.boolean().default(false),
   logFilePath: z.string().optional(),

@@ -7,7 +7,9 @@
 // createActorFromSource / getOrCreateFolder (actor-creation domain) stay on FoundryDataAccess (Phase 7).
 
 import { ERROR_MESSAGES, TOKEN_DISPOSITIONS } from '../constants.js';
+import { ErrorTokens } from '@foundry-mcp/shared';
 import { notify } from '../notify.js';
+import { buildOperationReceipt } from './shared/operation-receipt.js';
 import type { SceneInfo, SceneTokenPlacement, TokenPlacementResult } from '../service-interfaces.js';
 
 export class ScenePlacementService {
@@ -100,6 +102,8 @@ export class ScenePlacementService {
     try {
       const tokenData: any[] = [];
       const errors: string[] = [];
+      // RC1.2 — additive-only per-item failure detail, pushed alongside every `errors.push`.
+      const failedItems: Array<{ id: string; reason: string }> = [];
       // BUG-270: compute total token count up-front so grid cols is stable across the batch.
       const totalTokenCount = placement.actorIds.reduce((sum, _, ai) =>
         sum + Math.max(1, placement.quantities?.[ai] ?? 1), 0);
@@ -110,7 +114,9 @@ export class ScenePlacementService {
         try {
           const actor = game.actors.get(actorId);
           if (!actor) {
-            errors.push(`Actor ${actorId} not found`);
+            const reason = `Actor ${actorId} not found`;
+            errors.push(reason);
+            failedItems.push({ id: actorId, reason });
             continue;
           }
 
@@ -138,11 +144,22 @@ export class ScenePlacementService {
             });
           }
         } catch (error) {
-          errors.push(`Failed to prepare token for actor ${actorId}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          const reason = `Failed to prepare token for actor ${actorId}: ${error instanceof Error ? error.message : 'Unknown error'}`;
+          errors.push(reason);
+          failedItems.push({ id: actorId, reason });
         }
       }
 
       const createdTokens = await scene.createEmbeddedDocuments('Token', tokenData);
+      // RC1.1a — assert against `tokenData` (what we actually SENT to create), never against
+      // the caller's raw actorIds/errors[]: `tokenData` already excludes upstream placement
+      // failures (missing actor / per-token prep errors, tracked separately in `errors[]`), so
+      // any shortfall here is a genuine create-time drop, not a double-count of an upstream skip.
+      if (createdTokens.length !== tokenData.length) {
+        throw new Error(
+          `${ErrorTokens.SCENE_PLACEMENT_TOKEN_NOT_PERSISTED}: expected ${tokenData.length} token(s), got ${createdTokens.length}`,
+        );
+      }
 
       if (createdTokens.length > 0) {
         notify.created('token', `${createdTokens.length} token(s)`, {
@@ -154,6 +171,12 @@ export class ScenePlacementService {
       // chaining encounter-builder workflows can read auto-counter-renamed names (e.g.
       // "Skeleton (3)") without a follow-up `get-current-scene` over-fetch. `tokenIds`
       // is preserved for back-compat with existing skill prompts.
+      // RC1.2 — additive receipt: BATCH_PARTIAL_FAILURE only when SOME (not all, not none) of the
+      // requested actors failed placement; `errors` legacy field is untouched above.
+      const requestedCount = placement.actorIds.length;
+      const receiptWarnings = failedItems.length > 0 && failedItems.length < requestedCount
+        ? [ErrorTokens.BATCH_PARTIAL_FAILURE]
+        : [];
       const result: TokenPlacementResult = {
         success: createdTokens.length > 0,
         tokensCreated: createdTokens.length,
@@ -166,6 +189,11 @@ export class ScenePlacementService {
         sceneId: scene.id,
         sceneName: scene.name,
         ...(errors.length > 0 ? { errors } : {}),
+        ...buildOperationReceipt({
+          created: createdTokens.map((token: any) => token.id),
+          warnings: receiptWarnings,
+          failed: failedItems,
+        }),
       };
 
       // BUG-265: audit after the operation; report partial failure when per-token errors occurred.
@@ -383,6 +411,9 @@ export class ScenePlacementService {
       const tokenName = token.name;
 
       await scene.deleteEmbeddedDocuments('Token', [data.tokenId]);
+      if (scene.tokens?.get(data.tokenId)) {
+        throw new Error(`${ErrorTokens.SCENE_PLACEMENT_TOKEN_NOT_PERSISTED}: token ${data.tokenId} still present on scene ${scene.name} after delete`);
+      }
 
       notify.deleted('token', tokenName, { summary: `from scene ${scene.name}` });
 

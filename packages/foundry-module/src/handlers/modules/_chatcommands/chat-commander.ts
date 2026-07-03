@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_INVESTIGATED — Hooks.on(...) appears only inside a template-string macro-source generator (registerCommand builds world-script text to write to a Macro document); no runtime Hooks.on/Dialog call executes in this handler itself.
 // Module Integration v1 Phase 12 — module-chat-commander handler (_chatcommands v2.0.5).
 //
 // Always-registered umbrella. requireModuleActive('_chatcommands') is the FIRST executable

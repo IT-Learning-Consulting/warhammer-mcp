@@ -60,6 +60,9 @@ interface TokenAddResponse {
   added: number;
   tokenIds: TokenId[];
   placement: string;
+  // RC1.2 (mcp_code_quality_v2 Phase C1) — additive batch partial-failure detail.
+  failedItems?: Array<{ id: string; reason: string }>;
+  warnings?: string[];
 }
 
 // ── Utilities ────────────────────────────────────────────────────────────────
@@ -381,11 +384,25 @@ export class TokenTool extends BaseTool {
       const idList = data.tokenIds.length > 0
         ? data.tokenIds.map((id) => `  - \`${id}\``).join('\n')
         : '  _(none)_';
+      // RC1.2 (mcp_code_quality_v2 Phase C1) — surface failedItems[]/BATCH_PARTIAL_FAILURE in the
+      // TEXT rendering, not just structuredContent (PF-013: a real MCP-client grading/consumer
+      // agent only observes content[].text). CCR-V4: never bury a partial failure in freetext only.
+      const failedItemsBlock = data.failedItems && data.failedItems.length > 0
+        ? `\n\n⚠️ **${data.failedItems.length} target(s) did not apply:**\n` +
+          data.failedItems.map((f) => `  - \`${f.id}\`: ${f.reason}`).join('\n')
+        : '';
+      // RC1.2 — coarse signal alongside the failedItems detail above (never the ONLY
+      // partial-failure surface, per CCR-V4; mirrors ownership.ts).
+      const batchBlock = data.warnings?.includes('BATCH_PARTIAL_FAILURE')
+        ? `\n\n⚠️ BATCH_PARTIAL_FAILURE — ${data.failedItems?.length ?? 0} target(s) did not apply (see detail above).`
+        : '';
       const text =
         `🎭 **Tokens Added**\n\n` +
         `**Scene:** \`${data.sceneId}\`\n` +
         `**Placed:** ${data.added} token(s) · **Placement:** ${data.placement}\n\n` +
-        `**Token IDs:**\n${idList}`;
+        `**Token IDs:**\n${idList}` +
+        failedItemsBlock +
+        batchBlock;
       // Phase 12 R12.2: expose the operation receipt (+ add fields) via structuredContent. token.add has no
       // outputSchema/DTO (plan decision), so the raw query result flows through untyped; text is unchanged.
       return { content: [{ type: 'text' as const, text }], structuredContent: data };

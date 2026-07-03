@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_FREE — pure Zod schema / constant data table; no runtime module-API calls, no dialog risk possible.
 // Module Integration v1 Phase 10 — package-local Zod schema for module-armoury (Forien's Armoury).
 //
 // CCR-5: module-specific schemas stay package-local (not in @foundry-mcp/shared). `.strict()` on

@@ -116,10 +116,7 @@ export class WorldTool extends BaseTool {
       };
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
-      return {
-        content: [{ type: 'text' as const, text: `❌ **get-world-info failed**\n\n${message}` }],
-        isError: true,
-      };
+      return this.errorResponse('get-world-info', message);
     }
   }
 }

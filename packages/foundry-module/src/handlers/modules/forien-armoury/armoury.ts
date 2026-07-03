@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_GUARDED — {skipAsk:true} suppresses Forien's spellUuid name-change Dialog.confirm at the one site that would otherwise open it (see in-file comment, research gotcha 5).
 // Module Integration v1 Phase 10 — module-armoury handler (Forien's Armoury v4.0.4).
 //
 // Always-registered umbrella. requireModuleActive('forien-armoury') is the FIRST executable

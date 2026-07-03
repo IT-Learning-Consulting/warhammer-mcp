@@ -20,6 +20,11 @@
 //   - utils/lifecycle.ts                  — owns the on/off pairing; the registry itself.
 //   - data-access.ts (Hooks as any).on('updateActor')        — ephemeral, Hooks.off in finally{}.
 //   - actor-update-observer.ts hooksApi.on('updateActor')    — ephemeral, hooksApi.off in finally{}.
+//   - market.ts (Hooks as any).on('updateItem')               — ephemeral one-shot promise-race
+//     (BUG-430 F-0B-3, Q&A decision 2026-07-03): directPayCommand's internal write is
+//     fire-and-forget, so the site races a Promise against a 2s timeout and tears the
+//     listener down via Hooks.off in finally{} — structurally identical to the two
+//     exemptions above, not a persistent-leak surface.
 //   - window.addEventListener('beforeunload')                — intentionally permanent (it IS teardown).
 //   - window.addEventListener(..., { signal })               — already torn down on abort.
 //   (Hooks.once(, jQuery .click(, and el.addEventListener( are not matched by the patterns.)
@@ -110,6 +115,9 @@ function isExempt(rel, name, slice) {
     return true;
   }
   if (name === 'hooksApi.on(' && rel.endsWith('actor-update-observer.ts') && slice.includes("'updateActor'")) {
+    return true;
+  }
+  if (name === '(Hooks as any).on(' && rel.endsWith('market.ts') && slice.includes("'updateItem'")) {
     return true;
   }
   if (name === 'window.addEventListener(' && (slice.includes("'beforeunload'") || /\{\s*signal/.test(slice))) {

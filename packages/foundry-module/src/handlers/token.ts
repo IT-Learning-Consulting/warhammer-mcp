@@ -110,6 +110,10 @@ export interface TokenAddResponse {
   updatedDocumentIds?: string[];
   deletedDocumentIds?: string[];
   warnings?: string[];
+  // RC1.2 (mcp_code_quality_v2 Phase C1) — forwarded from ScenePlacementService.addActorsToScene's
+  // own receipt (undeclared-file fix; see execution report Friction Notes: without this forward,
+  // scene-placement.ts's failedItems computation never reaches the token.add response).
+  failedItems?: Array<{ id: string; reason: string }>;
 }
 
 export type TokenResponse =
@@ -493,6 +497,11 @@ export async function addTokens(
       }
     }
 
+    // RC1.2 — forward the underlying service's own failedItems/warnings (scene-placement.ts now
+    // computes them per RC1.2 task 4.3); rebuilding the receipt from scratch here previously
+    // discarded them, so a mixed valid+invalid actorId batch silently dropped the failure detail.
+    const upstreamFailedItems = (result?.failedItems as Array<{ id: string; reason: string }> | undefined) ?? [];
+    const upstreamWarnings = (result?.warnings as string[] | undefined) ?? [];
     return {
       success: true as const,
       data: {
@@ -502,8 +511,8 @@ export async function addTokens(
         added: (result?.added as number) ?? tokenIds.length,
         tokenIds,
         placement: (result?.placement as string) ?? input.placement ?? 'random',
-        // Phase 12 R12.2: operation receipt — created = the placed token ids (no errors array; this path throws).
-        ...buildOperationReceipt({ created: tokenIds }),
+        // Phase 12 R12.2: operation receipt — created = the placed token ids.
+        ...buildOperationReceipt({ created: tokenIds, warnings: upstreamWarnings, failed: upstreamFailedItems }),
       } satisfies TokenAddResponse,
     };
   }, input.sceneId ? { sceneId: input.sceneId } : undefined);

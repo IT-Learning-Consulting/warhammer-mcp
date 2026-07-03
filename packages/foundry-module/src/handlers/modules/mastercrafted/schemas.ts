@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_FREE — pure Zod schema / constant data table; no runtime module-API calls, no dialog risk possible.
 // Module Integration v1 Phase 14 — package-local Zod schema for module-mastercrafted
 // (mastercrafted v5.0.8).
 //

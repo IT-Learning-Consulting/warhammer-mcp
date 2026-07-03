@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_FREE — schema-level annotation only; comment references the setViewDialog socket-message shape (see lockview.ts DIALOG_GUARDED header for the real runtime classification of that method) but this file contains only Zod schemas, no runtime calls.
 // Module Integration v1 Phase 7C — LockView (Lock View) action Zod schemas.
 //
 // Every variant is .strict() (CCR-5 package-local). Spread into the discriminated

@@ -10,6 +10,30 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { wrappedWrite, transactionManager } from '../transaction-manager.js';
 import { permissionManager } from '../permissions.js';
+import { ErrorTokens } from '@foundry-mcp/shared';
+
+// RC1.2 (mcp_code_quality_v2 Phase C1) — BATCH_PARTIAL_FAILURE rollback-regex guard.
+// This is the same `/NOT_PERSISTED|VERIFY_FAILED/` sentinel wrappedWrite's catch block (below,
+// :372-384 in transaction-manager.ts) tests against a thrown error message to decide whether to
+// append the ROLLBACK_UNAVAILABLE warning. A partial-batch success is NOT a persistence failure —
+// matching the regex would misleadingly warn about "rollback" for writes that actually landed.
+describe('BATCH_PARTIAL_FAILURE — rollback-regex guard (RC1.2)', () => {
+  it('is never matched by the wrappedWrite rollback-sentinel regex', () => {
+    const rollbackSentinel = /NOT_PERSISTED|VERIFY_FAILED/;
+    expect(rollbackSentinel.test(ErrorTokens.BATCH_PARTIAL_FAILURE)).toBe(false);
+  });
+
+  it('does not match even when embedded in a realistic warning message', () => {
+    const rollbackSentinel = /NOT_PERSISTED|VERIFY_FAILED/;
+    const message = `${ErrorTokens.BATCH_PARTIAL_FAILURE}: 2 of 5 targets failed`;
+    expect(rollbackSentinel.test(message)).toBe(false);
+  });
+
+  it('sanity check: a genuine *_NOT_PERSISTED token DOES match (proves the regex still works)', () => {
+    const rollbackSentinel = /NOT_PERSISTED|VERIFY_FAILED/;
+    expect(rollbackSentinel.test(ErrorTokens.UPDATE_ACTOR_NOT_PERSISTED)).toBe(true);
+  });
+});
 
 describe('Phase 6.3 BUG-081 — transactionManager per-scene tracking', () => {
   beforeEach(() => {

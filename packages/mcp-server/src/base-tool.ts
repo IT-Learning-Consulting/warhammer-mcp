@@ -80,6 +80,7 @@ export abstract class BaseTool {
     action: string,
     message: string,
   ): { content: [{ type: 'text'; text: string }]; isError: true } {
+    this.logger.error(`${action} failed`, { message });
     return {
       content: [{ type: 'text', text: `❌ **${action} failed**\n\n${message}` }],
       isError: true,

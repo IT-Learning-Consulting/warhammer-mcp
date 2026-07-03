@@ -48,6 +48,9 @@ function makeItemStub(id: string, name: string, effects: any[] = []) {
     type: 'weapon',
     effects: {
       contents: effectList,
+      // RC1.1a: addActiveEffect/deleteActiveEffect item-path now re-reads via item.effects.get(id)
+      // to confirm the create/delete actually landed (mirrors the actor-direct branch's check).
+      get: (effId: string) => effectList.find((e) => e.id === effId) ?? null,
       [Symbol.iterator]: function* () { yield* effectList; },
     },
     createEmbeddedDocuments: vi.fn(async (_type: string, payloads: any[]) => {
@@ -65,7 +68,9 @@ function makeItemStub(id: string, name: string, effects: any[] = []) {
       return ids;
     }),
     update: vi.fn(async () => item),
-    delete: vi.fn(async () => true),
+    // RC1.1a: deleteItem world-scope now re-reads game.items.get(id) to confirm the delete
+    // actually landed — mark a __deleted flag the game.items stub below filters on.
+    delete: vi.fn(async () => { item.__deleted = true; return true; }),
   };
   return item;
 }
@@ -99,8 +104,8 @@ function setupStubs(opts: { actors?: any[]; worldItems?: any[] } = {}) {
       find: (pred: (a: any) => boolean) => actors.find(pred) ?? null,
     },
     items: {
-      get: (id: string) => worldItems.find((i) => i.id === id) ?? null,
-      find: (pred: (i: any) => boolean) => worldItems.find(pred) ?? null,
+      get: (id: string) => worldItems.find((i) => i.id === id && !i.__deleted) ?? null,
+      find: (pred: (i: any) => boolean) => worldItems.find((i) => !i.__deleted && pred(i)) ?? null,
     },
   };
   (globalThis as any).ui = { notifications: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } };

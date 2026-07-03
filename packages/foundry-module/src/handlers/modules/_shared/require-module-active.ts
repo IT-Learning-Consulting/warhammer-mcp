@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_FREE — pure Zod schema / constant data table; no runtime module-API calls, no dialog risk possible.
 import { ErrorTokens } from '@foundry-mcp/shared';
 // Module Integration v1 Phase 1 — Shared module-active guard.
 //

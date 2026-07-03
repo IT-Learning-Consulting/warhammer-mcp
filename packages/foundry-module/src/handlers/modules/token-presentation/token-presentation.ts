@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_FREE — grepped for Dialog/DialogV2/prompt/FilePicker/Hooks.once/window.confirm; no matches in this file. Module-API calls here are settings/document writes only.
 // Module Integration v2 Phase 3B — module-token-presentation handler.
 // 2-member bundle: boss-splash v1.2.1 (LostPhoenix) + token-notes v3.0.1 (theripper93).
 //

@@ -28,6 +28,15 @@ interface CompendiumSearchItem {
 // `unknown` (not `any`) forces a future explicit narrow if any handler starts reading the result.
 type WriteResult = unknown;
 
+// Shared 10-characteristic DP-16 verify sub-map (RC1.1c) — spread into both handleUpdateStats branches below.
+const CHARACTERISTIC_VERIFY_MAP: Record<string, string> = {
+    weaponSkill: 'system.characteristics.ws.initial', ballisticSkill: 'system.characteristics.bs.initial',
+    strength: 'system.characteristics.s.initial', toughness: 'system.characteristics.t.initial',
+    initiative: 'system.characteristics.i.initial', agility: 'system.characteristics.ag.initial',
+    dexterity: 'system.characteristics.dex.initial', intelligence: 'system.characteristics.int.initial',
+    willpower: 'system.characteristics.wp.initial', fellowship: 'system.characteristics.fel.initial',
+};
+
 // Update stats schema
 const UpdateStatsSchema = z.object({
     action: z.literal("update-stats"),
@@ -487,13 +496,8 @@ Use for quick stat changes, character creation, testing, or corrections where yo
         }
 
         // Get actor
-        const character = await this.query<CharacterInfoResult>("getCharacterInfo", {
-            characterName: args.characterName
-        });
-
-        if (!character || !character.id) {
-            return `❌ Character "${args.characterName}" not found`;
-        }
+        const character = await this.resolveCharacterOrError({ characterName: args.characterName }, "update-stats");
+        if (typeof character === "string") return character;
 
         const updateData: Record<string, any> = {};
 
@@ -570,29 +574,17 @@ Use for quick stat changes, character creation, testing, or corrections where yo
             updateData
         });
 
-        if (actorType === 'character') {
-            // DP-16 post-write verification (CCR-5 / Q1 lock).
-            // Phase 1 (wfrp_layer_expansion_v1): expanded to cover 10 characteristics + 5 status numeric
-            // fields (previously unverified) + the original 10 PC-creation text fields = 25 total.
-            const newFieldVerifyMap: Record<string, string> = {
-                // 10 characteristics (numeric)
-                weaponSkill: 'system.characteristics.ws.initial',
-                ballisticSkill: 'system.characteristics.bs.initial',
-                strength: 'system.characteristics.s.initial',
-                toughness: 'system.characteristics.t.initial',
-                initiative: 'system.characteristics.i.initial',
-                agility: 'system.characteristics.ag.initial',
-                dexterity: 'system.characteristics.dex.initial',
-                intelligence: 'system.characteristics.int.initial',
-                willpower: 'system.characteristics.wp.initial',
-                fellowship: 'system.characteristics.fel.initial',
-                // 5 status pools (numeric)
+        // DP-16 post-write verification (CCR-5 / Q1 lock). Character verifies 10 characteristics
+        // + 5 status pools + 10 text fields (25 total); npc/creature is deliberately NUMERIC-ONLY
+        // (Q&A 4) — do NOT fold the two branches' field sets together, only the characteristics sub-map.
+        const fieldMap: Record<string, string> = actorType === 'character'
+            ? {
+                ...CHARACTERISTIC_VERIFY_MAP,
                 fortune: 'system.status.fortune.value',
                 fate: 'system.status.fate.value',
                 resilience: 'system.status.resilience.value',
                 resolve: 'system.status.resolve.value',
                 currentWounds: 'system.status.wounds.value',
-                // 10 PC-creation text fields (original set)
                 motivation: 'system.details.motivation.value',
                 move: 'system.details.move.value',
                 class: 'system.details.class.value',
@@ -603,48 +595,9 @@ Use for quick stat changes, character creation, testing, or corrections where yo
                 partyAmbitionName: 'system.details.party-ambitions.name',
                 partyAmbitionShort: 'system.details.party-ambitions.short-term',
                 partyAmbitionLong: 'system.details.party-ambitions.long-term',
-            };
-            const newFieldsInPayload = Object.entries(args.updates).filter(
-                ([k, v]) => v !== undefined && newFieldVerifyMap[k] !== undefined,
-            );
-            if (newFieldsInPayload.length > 0) {
-                const verifyActor = await this.query<CharacterInfoResult>("getCharacterInfo", {
-                    characterName: args.characterName,
-                });
-                for (const [apiKey, requestedValue] of newFieldsInPayload) {
-                    const path = newFieldVerifyMap[apiKey]!.split('.');
-                    let cursor: any = verifyActor;
-                    for (const segment of path) {
-                        cursor = cursor?.[segment];
-                        if (cursor === undefined) break;
-                    }
-                    const actual = cursor;
-                    // String coercion tolerance for `move` (number → string per Foundry StringField)
-                    // and any other string field receiving a numeric input.
-                    const equivalent = String(actual) === String(requestedValue);
-                    if (!equivalent) {
-                        throw new Error(
-                            `${ErrorTokens.UPDATE_STATS_NOT_PERSISTED}: ${apiKey} expected ${JSON.stringify(requestedValue)}, got ${JSON.stringify(actual)}`,
-                        );
-                    }
-                }
             }
-        }
-
-        if (actorType === 'npc' || actorType === 'creature') {
-            // DP-16 post-write verification for NPC/creature branch (Phase 1 wfrp_layer_expansion_v1).
-            // Verifies numeric fields only (characteristics + status); text/detail fields skipped per Q&A 4.
-            const npcVerifyMap: Record<string, string> = {
-                weaponSkill: 'system.characteristics.ws.initial',
-                ballisticSkill: 'system.characteristics.bs.initial',
-                strength: 'system.characteristics.s.initial',
-                toughness: 'system.characteristics.t.initial',
-                initiative: 'system.characteristics.i.initial',
-                agility: 'system.characteristics.ag.initial',
-                dexterity: 'system.characteristics.dex.initial',
-                intelligence: 'system.characteristics.int.initial',
-                willpower: 'system.characteristics.wp.initial',
-                fellowship: 'system.characteristics.fel.initial',
+            : {
+                ...CHARACTERISTIC_VERIFY_MAP,
                 currentWounds: 'system.status.wounds.value',
                 advantage: 'system.status.advantage.value',
                 criticalWounds: 'system.status.criticalWounds.value',
@@ -653,30 +606,7 @@ Use for quick stat changes, character creation, testing, or corrections where yo
                 statusTier: 'system.details.status.tier',
                 statusStanding: 'system.details.status.standing',
             };
-            const npcFieldsInPayload = Object.entries(args.updates).filter(
-                ([k, v]) => v !== undefined && npcVerifyMap[k] !== undefined,
-            );
-            if (npcFieldsInPayload.length > 0) {
-                const verifyActor = await this.query<CharacterInfoResult>('getCharacterInfo', {
-                    characterName: args.characterName,
-                });
-                for (const [apiKey, requestedValue] of npcFieldsInPayload) {
-                    const path = npcVerifyMap[apiKey]!.split('.');
-                    let cursor: any = verifyActor;
-                    for (const segment of path) {
-                        cursor = cursor?.[segment];
-                        if (cursor === undefined) break;
-                    }
-                    const actual = cursor;
-                    const equivalent = String(actual) === String(requestedValue);
-                    if (!equivalent) {
-                        throw new Error(
-                            `${ErrorTokens.UPDATE_STATS_NOT_PERSISTED}: ${apiKey} expected ${JSON.stringify(requestedValue)}, got ${JSON.stringify(actual)}`,
-                        );
-                    }
-                }
-            }
-        }
+        await this.verifyStatsPersisted(args.characterName, args.updates, fieldMap);
 
         let result = `✅ Updated stats for **${character.name}** (actorType: ${actorType})\n`;
         const updates = Object.entries(args.updates).filter(([_, v]) => v !== undefined);
@@ -701,13 +631,8 @@ Use for quick stat changes, character creation, testing, or corrections where yo
         this.logger.info("Updating skill/talent", { characterName: args.characterName, itemName: args.itemName });
 
         // Get character
-        const character = await this.query<CharacterInfoResult>("getCharacterInfo", {
-            characterName: args.characterName
-        });
-
-        if (!character || !character.id) {
-            return `❌ Character "${args.characterName}" not found`;
-        }
+        const character = await this.resolveCharacterOrError({ characterName: args.characterName }, "update-skill-talent");
+        if (typeof character === "string") return character;
 
         // Find the item (skill or talent)
         const item = character.items?.find((i: any) =>
@@ -754,13 +679,8 @@ Use for quick stat changes, character creation, testing, or corrections where yo
         this.logger.info("Adding skill/talent", { characterName: args.characterName, itemName: args.itemName });
 
         // Get character
-        const character = await this.query<CharacterInfoResult>("getCharacterInfo", {
-            characterName: args.characterName
-        });
-
-        if (!character || !character.id) {
-            return `❌ Character "${args.characterName}" not found`;
-        }
+        const character = await this.resolveCharacterOrError({ characterName: args.characterName }, "add-skill-talent");
+        if (typeof character === "string") return character;
 
         // Check if already exists
         const existingItem = character.items?.find((i: any) =>
@@ -838,13 +758,8 @@ Use for quick stat changes, character creation, testing, or corrections where yo
         this.logger.info("Updating character notes", { characterName: args.characterName, noteType: args.noteType });
 
         // Get character
-        const character = await this.query<CharacterInfoResult>("getCharacterInfo", {
-            characterName: args.characterName
-        });
-
-        if (!character || !character.id) {
-            return `❌ Character "${args.characterName}" not found`;
-        }
+        const character = await this.resolveCharacterOrError({ characterName: args.characterName }, "update-notes");
+        if (typeof character === "string") return character;
 
         const updateData: Record<string, any> = {};
 
@@ -879,25 +794,11 @@ Use for quick stat changes, character creation, testing, or corrections where yo
     }
 
     private async handleAddXPLog(args: z.infer<typeof AddXPLogSchema>): Promise<string> {
-        const identifier = args.actorId ?? args.characterName;
-        if (!identifier) {
-            return `❌ actorId or characterName is required for add-xp-log`;
-        }
-        this.logger.info("Adding XP log entry", {
-            identifier,
-            amount: args.amount,
-            updateTotal: args.updateTotal,
-        });
+        this.logger.info("Adding XP log entry", { identifier: args.actorId ?? args.characterName, amount: args.amount, updateTotal: args.updateTotal });
 
         // Get character (by actorId primary, characterName fallback)
-        const character = await this.query<CharacterInfoResult>("getCharacterInfo", {
-            characterId: args.actorId,
-            characterName: args.characterName,
-        });
-
-        if (!character || !character.id) {
-            return `❌ Character "${identifier}" not found`;
-        }
+        const character = await this.resolveCharacterOrError(args, "add-xp-log");
+        if (typeof character === "string") return character;
 
         // Get existing log
         const existingLog = character.system?.details?.experience?.log || [];
@@ -964,24 +865,10 @@ Use for quick stat changes, character creation, testing, or corrections where yo
     // No write / notify / verify (read-only). Returns career:null (not a throw) when the
     // actor has no current career.
     private async handleGetCareerInfo(args: z.infer<typeof GetCareerInfoSchema>): Promise<string> {
-        const identifier = args.actorId ?? args.characterName;
-        if (!identifier) {
-            return `❌ actorId or characterName is required for get-career-info`;
-        }
-        this.logger.info("Getting career info", { identifier });
+        this.logger.info("Getting career info", { identifier: args.actorId ?? args.characterName });
 
-        let character: CharacterInfoResult;
-        try {
-            character = await this.query<CharacterInfoResult>("getCharacterInfo", {
-                characterId: args.actorId,
-                characterName: args.characterName,
-            });
-        } catch (err: any) {
-            return `❌ Actor "${identifier}" not found: ${err?.message ?? err}`;
-        }
-        if (!character || !character.id) {
-            return `❌ Actor "${identifier}" not found`;
-        }
+        const character = await this.resolveCharacterOrError(args, "get-career-info");
+        if (typeof character === "string") return character;
 
         const careerItems = (character.items ?? []).filter((i: any) => i.type === "career");
         const allCareerNames = careerItems.map((i: any) => i.name);
@@ -1034,24 +921,10 @@ Use for quick stat changes, character creation, testing, or corrections where yo
     // (Gold = standing flat, no dice); fail = half (round down); astounding-fail = 0
     // (no write — do NOT zero existing money).
     private async handleRollIncome(args: z.infer<typeof RollIncomeSchema>): Promise<string> {
-        const identifier = args.actorId ?? args.characterName;
-        if (!identifier) {
-            return `❌ actorId or characterName is required for roll-income`;
-        }
-        this.logger.info("Rolling income (payout-compute + write)", { identifier, outcome: args.outcome });
+        this.logger.info("Rolling income (payout-compute + write)", { identifier: args.actorId ?? args.characterName, outcome: args.outcome });
 
-        let character: CharacterInfoResult;
-        try {
-            character = await this.query<CharacterInfoResult>("getCharacterInfo", {
-                characterId: args.actorId,
-                characterName: args.characterName,
-            });
-        } catch (err: any) {
-            return `❌ Actor "${identifier}" not found: ${err?.message ?? err}`;
-        }
-        if (!character || !character.id) {
-            return `❌ Actor "${identifier}" not found`;
-        }
+        const character = await this.resolveCharacterOrError(args, "roll-income");
+        if (typeof character === "string") return character;
 
         // Resolve tier + standing — GM overrides win, else read the current career item.
         let tier: string | null = args.tierOverride ?? null;
@@ -1170,6 +1043,32 @@ Use for quick stat changes, character creation, testing, or corrections where yo
             return `❌ Actor "${identifier}" not found`;
         }
         return character;
+    }
+
+    // DP-16 post-write verification walker (RC1.1c dedup) — shared fetch/walk/compare/throw
+    // body for handleUpdateStats' character + npc/creature branches. Callers pass their own
+    // `fieldMap`; the two maps stay separate (npc/creature is deliberately numeric-only).
+    private async verifyStatsPersisted(characterName: string | undefined, updates: Record<string, unknown>, fieldMap: Record<string, string>): Promise<void> {
+        const fieldsInPayload = Object.entries(updates).filter(([k, v]) => v !== undefined && fieldMap[k] !== undefined);
+        if (fieldsInPayload.length === 0) return;
+        const verifyActor = await this.query<CharacterInfoResult>('getCharacterInfo', { characterName });
+        for (const [apiKey, requestedValue] of fieldsInPayload) {
+            const path = fieldMap[apiKey]!.split('.');
+            let cursor: any = verifyActor;
+            for (const segment of path) {
+                cursor = cursor?.[segment];
+                if (cursor === undefined) break;
+            }
+            const actual = cursor;
+            // String coercion tolerance for `move` (number → string per Foundry StringField)
+            // and any other string field receiving a numeric input.
+            const equivalent = String(actual) === String(requestedValue);
+            if (!equivalent) {
+                throw new Error(
+                    `${ErrorTokens.UPDATE_STATS_NOT_PERSISTED}: ${apiKey} expected ${JSON.stringify(requestedValue)}, got ${JSON.stringify(actual)}`,
+                );
+            }
+        }
     }
 
     private async handleApplyFear(args: z.infer<typeof ApplyFearSchema>): Promise<string> {

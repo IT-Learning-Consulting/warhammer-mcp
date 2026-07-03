@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_FREE — pure Zod schema / constant data table; no runtime module-API calls, no dialog risk possible.
 // Module Integration v2 Phase 6 — package-local Zod schema for module-wfrp-economy
 // (Warhammer Economy, wfrp4e-economy v1.0.0).
 //

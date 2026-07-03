@@ -1,3 +1,9 @@
+// DIALOG-PATH: DIALOG_GUARDED — narrate()'s narration-branch return is a Promise tied to a
+// live-browser-tab-only `narration_closes` Hook (D6 below); the code NEVER awaits that return
+// value (fire-and-forget by design) and instead settle-polls sharedState/game.messages for the
+// write landing. Same deadlock class as an unguarded Dialog (ADR-10.1) — genuinely guarded, not
+// merely undiscovered.
+//
 // Module Integration v2 Phase 10 — module-narrator handler (Narrator Tools v1.0.1, elizeuangelo).
 //
 // Always-registered umbrella. requireModuleActive('narrator-tools') is the FIRST active-state check —

@@ -24,6 +24,7 @@ import { notify } from '../notify.js';
 import { getOrCreateFolder } from './shared/folder-helpers.js';
 import { buildOperationReceipt } from './shared/operation-receipt.js';
 import { waitForActorUpdateCommit } from './shared/actor-update-observer.js';
+import { verifyDocWrite } from '../utils/verifyWrite.js';
 import { formatActorUpdateSummary } from './shared/actor-update-summary.js';
 import type {
   ActorCreationRequest,
@@ -251,6 +252,11 @@ export class ActorService {
           if (!newActor) {
             throw new Error(`Failed to create actor "${customName}"`);
           }
+          // RC1.1a — verify throw stays INSIDE this iteration's try/catch (designed
+          // partial-success semantics for the quantity loop; never abort the whole batch).
+          if (!(game.actors as any).get(newActor.id)) {
+            throw new Error(`${ErrorTokens.ACTOR_CREATE_NOT_PERSISTED}: actor "${customName}" (${newActor.id}) absent from game.actors after create`);
+          }
 
           createdActors.push({
             id: newActor.id,
@@ -350,8 +356,12 @@ export class ActorService {
       if (!createdDocs || createdDocs.length === 0) {
         throw new Error('Failed to create actor document');
       }
+      const createdActor = createdDocs[0];
+      if (!(game.actors as any).get(createdActor.id)) {
+        throw new Error(`${ErrorTokens.ACTOR_CREATE_NOT_PERSISTED}: actor ${createdActor.id} absent from game.actors after create`);
+      }
 
-      return createdDocs[0];
+      return createdActor;
     } catch (error) {
       notify.error('Actor creation failed', error instanceof Error ? error : new Error(String(error)));
       throw error;
@@ -373,6 +383,8 @@ export class ActorService {
       if (!actor) {
         throw new Error('Failed to create actor');
       }
+      const freshCreatedActor: any = (game.actors as any).get(actor.id);
+      verifyDocWrite(freshCreatedActor, { name: actor.name }, ErrorTokens.ACTOR_CREATE_NOT_PERSISTED);
 
       // Show notification to GM
       notify.created('actor', actor.name, { uuid: (actor as any).uuid });
@@ -419,6 +431,9 @@ export class ActorService {
       const actor = await (Actor as any).create(actorData);
       if (!actor) {
         throw new Error('Actor.create returned no actor');
+      }
+      if (!(game.actors as any).get(actor.id)) {
+        throw new Error(`${ErrorTokens.ACTOR_CREATE_NOT_PERSISTED}: actor ${actor.id} absent from game.actors after create`);
       }
 
       notify.created('actor', actor.name, { summary: `duplicated from ${source.name}`, uuid: (actor as any).uuid });

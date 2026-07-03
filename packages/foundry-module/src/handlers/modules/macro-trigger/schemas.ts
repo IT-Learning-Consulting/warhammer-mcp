@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_FREE — pure Zod schema / constant data table; no runtime module-API calls, no dialog risk possible.
 // Module Integration v2 Phase 11 — package-local Zod schema for module-macro-trigger (Macro Trigger v1.0.1).
 //
 // CCR-5: module-specific schemas stay package-local (not in @foundry-mcp/shared). `.strict()` on every

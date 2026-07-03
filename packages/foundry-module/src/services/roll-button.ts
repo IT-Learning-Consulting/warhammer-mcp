@@ -13,8 +13,10 @@
 
 import { MODULE_ID } from '../constants.js';
 import { MODULE_WARHAMMER_MCP } from '../constants/socketEvents.js';
+import { ErrorTokens } from '@foundry-mcp/shared';
 import { notify } from '../notify.js';
 import { getRollButtonMessageId } from '../utils/roll-button-store.js';
+import { verifyDocWrite } from '../utils/verifyWrite.js';
 
 export class RollButtonService {
   constructor(private readonly validateState: () => void) {}
@@ -369,6 +371,12 @@ export class RollButtonService {
           }
         }
       });
+      const freshMessage: any = (game.messages as any)?.get(chatMessage.id);
+      verifyDocWrite(
+        freshMessage,
+        { content: rolledHtml, [`flags.${MODULE_ID}.rollButtons.${buttonId}.rolled`]: true },
+        ErrorTokens.CHATMESSAGE_WRITE_NOT_PERSISTED,
+      );
 
 
     } catch (error) {

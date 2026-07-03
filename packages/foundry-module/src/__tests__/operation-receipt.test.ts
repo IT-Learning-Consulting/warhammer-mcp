@@ -36,4 +36,36 @@ describe('buildOperationReceipt', () => {
     const r = buildOperationReceipt({ created: big, updated: big });
     expect(JSON.stringify(r).length).toBeLessThan(2048);
   });
+
+  // RC1.2 (mcp_code_quality_v2 Phase C1) — failedItems[] additive contract.
+  describe('failedItems (RC1.2)', () => {
+    it('is absent (not []) when no `failed` arg is passed — additive-only, byte-identical for pre-C1 callers', () => {
+      const r = buildOperationReceipt({ created: ['a'] });
+      expect(r.failedItems).toBeUndefined();
+      expect('failedItems' in r).toBe(false);
+    });
+
+    it('is absent when `failed` is passed but every entry is filtered out', () => {
+      const r = buildOperationReceipt({ created: ['a'], failed: [null, undefined, { id: '', reason: 'x' }] });
+      expect(r.failedItems).toBeUndefined();
+    });
+
+    it('carries {id, reason} pairs when failures are present, nulls/undefined filtered', () => {
+      const r = buildOperationReceipt({
+        created: ['a'],
+        failed: [{ id: 'bad-1', reason: 'not found' }, null, { id: 'bad-2', reason: 'validation failed' }],
+      });
+      expect(r.failedItems).toEqual([
+        { id: 'bad-1', reason: 'not found' },
+        { id: 'bad-2', reason: 'validation failed' },
+      ]);
+    });
+
+    it('stays well under the 2KB Risk-12.B threshold with failedItems populated on a realistic batch', () => {
+      const bigCreated = Array.from({ length: 15 }, (_, i) => `id-${i}-0123456789abcdef`);
+      const bigFailed = Array.from({ length: 5 }, (_, i) => ({ id: `bad-${i}-0123456789abcdef`, reason: 'ADD_ITEMS_NOT_PERSISTED: drift' }));
+      const r = buildOperationReceipt({ created: bigCreated, failed: bigFailed });
+      expect(JSON.stringify(r).length).toBeLessThan(2048);
+    });
+  });
 });

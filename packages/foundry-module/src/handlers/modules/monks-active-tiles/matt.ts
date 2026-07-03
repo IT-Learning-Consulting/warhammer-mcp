@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_FREE — grepped for Dialog/DialogV2/prompt/FilePicker/Hooks.once/window.confirm; no matches in this file. Module-API calls here are settings/document writes only.
 // Module Integration v1 Phase 2 — module-matt handler (Monk's Active Tiles).
 //
 // Expands the Phase-1 stub into the full ~17-action umbrella. Conditional on

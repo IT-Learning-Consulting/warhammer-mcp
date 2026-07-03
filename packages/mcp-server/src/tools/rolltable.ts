@@ -625,10 +625,7 @@ export class RollTableTool extends BaseTool {
     private async handleDelete(args: { tableId: RollTableId; confirm?: boolean | undefined }) {
         // BUG-322: CCR-Delete-Safety gate — mirrors macro.ts handleDelete pattern
         if (!args.confirm) {
-            return {
-                content: [{ type: "text" as const, text: `❌ **rolltable.delete failed**\n\nROLLTABLE_DELETE_NOT_CONFIRMED: delete requires confirm: true` }],
-                isError: true,
-            };
+            return this.errorResponse('rolltable.delete', 'ROLLTABLE_DELETE_NOT_CONFIRMED: delete requires confirm: true');
         }
         this.logger.info("Deleting roll table", { tableId: args.tableId });
 

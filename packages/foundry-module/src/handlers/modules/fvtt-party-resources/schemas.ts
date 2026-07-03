@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_FREE — pure Zod schema / constant data table; no runtime module-API calls, no dialog risk possible.
 // Module Integration v1 Phase 11 — package-local Zod schema for module-party-resources
 // (Party Resources / fvtt-party-resources v1.9.0a).
 //

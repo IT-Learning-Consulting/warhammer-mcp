@@ -93,6 +93,10 @@ describe('dispatchModuleMastercrafted', () => {
       name: 'Secret Recipe',
       uuid: 'p1',
       ownership: own,
+      // RC1.1b CORE-05 fix: grant-recipe-discovery now verifyDocWrite()s against page._source —
+      // _source.ownership shares the same backing object as the live `ownership` getter above,
+      // so the update() mutation below satisfies both reads.
+      _source: { ownership: own },
       update: vi.fn(async (data: any) => {
         for (const [k, v] of Object.entries(data)) {
           if (k.startsWith('ownership.')) own[k.slice('ownership.'.length)] = v as number;

@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_FREE — pure Zod schema / constant data table; no runtime module-API calls, no dialog risk possible.
 // Module Integration v2 Phase 13B — package-local Zod schema for module-puzzle-locks (Puzzle Locks v3.1.4, theripper93).
 //
 // CCR-5: module-specific schemas stay package-local. `.strict()` on every top-level action variant per the

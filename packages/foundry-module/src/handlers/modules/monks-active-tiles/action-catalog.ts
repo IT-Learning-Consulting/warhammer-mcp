@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_FREE — pure Zod schema / constant data table; no runtime module-API calls, no dialog risk possible.
 // Module Integration v1 Phase 2 — MATT action catalog (single validation source).
 //
 // Pure, unit-testable. Derived from the source-verified audit

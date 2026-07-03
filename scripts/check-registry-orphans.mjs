@@ -138,6 +138,12 @@ const QUERY_KEY_ALLOWLIST = new Set([
   'applyTemplate',           // → apply-template
   'applyTemplateToToken',    // → apply-template-to-token
   'applyTokenCasualties',    // → apply-token-casualties
+
+  // ── Sheet-flow composite handlers: camelCase → manage-character / manage-inventory umbrellas (BUG-430). ──
+  'applyFear',               // → manage-character
+  'checkReload',             // → manage-inventory
+  'addMoney',                // → manage-inventory
+  'directPay',               // → manage-inventory
 ]);
 
 // ── Parsers ───────────────────────────────────────────────────────────────────

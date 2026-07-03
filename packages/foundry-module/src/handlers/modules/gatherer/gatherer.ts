@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_GUARDED — gather/harvest-token on a minigame-flagged page open a DialogV2 slot-machine; the module header documents this is FIRE-AND-FORGET by design (never awaited) — the handler returns minigame:"opened" instead of hanging on the dialog result.
 // Module Integration v1 Phase 14 — module-gatherer handler (gatherer v4.2.5).
 //
 // Always-registered umbrella. requireModuleActive('gatherer') is the FIRST executable statement —

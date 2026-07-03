@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_FREE — grepped for Dialog/DialogV2/prompt/FilePicker/Hooks.once/window.confirm; no matches in this file. Module-API calls here are settings/document writes only.
 // Imperial Arcana Phase 7 — module-* umbrella handler (foundry-module side).
 //
 // CONDITIONAL on the wfrp-imperial-arcana module (HC6/CCR-9): requireModuleActive is the

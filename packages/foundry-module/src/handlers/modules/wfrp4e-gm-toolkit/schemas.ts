@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_FREE — schema-level annotation only; documents that lose-momentum is intentionally NOT modeled as an action (see wfrp4e-gm-toolkit/gmtoolkit.ts header) and run-group-test always passes bypass:true/skipDialog.
 // Module Integration v1 Phase 11 — package-local Zod schema for module-gmtoolkit
 // (WFRP4e GM Toolkit v9.1.1).
 //

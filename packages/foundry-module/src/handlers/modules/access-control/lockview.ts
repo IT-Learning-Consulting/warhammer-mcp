@@ -1,3 +1,10 @@
+// DIALOG-PATH: DIALOG_GUARDED — handleCloneGmView calls `cloneView.apply()`, which conditionally
+// awaits a real `DialogV2.confirm()` when a pan/zoom lock is active (BUG-433, mcp_code_quality_v2
+// C1); guarded by temporarily forcing `showDialog:false` for the call's duration. Every other
+// handler in this file calls `lockView.socket.*` methods directly (confirmed pure socket
+// emit/settings-write, no dialog — see `setViewDialog` investigation, ADR-10.1) or plain
+// `scene.update`/`setFlag` — genuinely dialog-free.
+//
 // Module Integration v1 Phase 7C — LockView (Lock View) action handlers.
 //
 // Handlers run inside Foundry via CONFIG.queries. LockView's API is the global
@@ -334,7 +341,21 @@ export async function handleCloneGmView(input: CloneGmViewInput): Promise<Envelo
     const lockView = getLockView();
     const usersMap: Record<string, boolean> = {};
     for (const id of input.userIds) usersMap[id] = true;
-    await lockView.apps?.cloneView?.apply?.(input.pan ?? true, input.zoom ?? true, usersMap);
+    // DIALOG_GUARDED (ADR-10.1 — BUG-433, discovered mcp_code_quality_v2 C1 task 5.1):
+    // cloneView.apply() conditionally `await`s a real `DialogV2.confirm()` (LockView
+    // src/apps/cloneView.js:77-103) whenever `cloneView.config.showDialog` is true AND a pan/zoom
+    // lock is currently active — a headless MCP call has no live tab to click it and would hang
+    // forever. Temporarily force `showDialog:false` for the duration of this call (our own
+    // confirm-free MCP call already represents the caller's intent; restored in finally) so the
+    // dialog branch is skipped without touching LockView's persisted per-client config long-term.
+    const cloneView = lockView.apps?.cloneView;
+    const priorShowDialog = cloneView?.config?.showDialog;
+    if (cloneView?.config && priorShowDialog !== undefined) cloneView.config.showDialog = false;
+    try {
+      await cloneView?.apply?.(input.pan ?? true, input.zoom ?? true, usersMap);
+    } finally {
+      if (cloneView?.config && priorShowDialog !== undefined) cloneView.config.showDialog = priorShowDialog;
+    }
     notify.updated('scene', `${input.userIds.length} user(s)`, { summary: `clone-gm-view (pan=${input.pan ?? true}, zoom=${input.zoom ?? true})` });
     return { success: true, data: { userIds: input.userIds, pan: input.pan ?? true, zoom: input.zoom ?? true, cloned: true } };
   } catch (e) { return { success: false, error: `CLONE_GM_VIEW_ERROR: ${e instanceof Error ? e.message : String(e)}` }; }

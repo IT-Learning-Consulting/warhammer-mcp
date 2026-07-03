@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_GUARDED — module header documents a conditional Dialog.confirm in PeekingScript.js:81 (LIVE-SMOKE-ONLY risk) and RemoveLingeringAP player popup; both are suppressed/bypassed in-handler (popup=false parameter; the confirm path is never awaited from this handler).
 // Module Integration v2 Phase 4 — module-perceptive handler (Perceptive v6.0.4, saibot).
 //
 // Always-registered umbrella. requireModuleActive('perceptive') is the FIRST active-state check —

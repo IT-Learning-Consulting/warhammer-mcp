@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_FREE — pure Zod schema / constant data table; no runtime module-API calls, no dialog risk possible.
 // Module Integration v1 Phase 8 — package-local Zod schema for module-autoanimations.
 //
 // CCR-5: module-specific schemas stay package-local (NOT in @foundry-mcp/shared).

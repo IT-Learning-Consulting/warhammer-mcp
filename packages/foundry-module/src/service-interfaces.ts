@@ -147,6 +147,15 @@ export interface TokenPlacementResult {
   sceneId?: string;
   sceneName?: string;
   errors?: string[] | undefined;
+  // RC1.2 (mcp_code_quality_v2 Phase C1) — additive OperationReceipt fields (operationId,
+  // createdDocumentIds, updatedDocumentIds, deletedDocumentIds, warnings) + failedItems.
+  // `errors` above stays verbatim (legacy shape, HC3) — failedItems is additive-only.
+  operationId?: string;
+  createdDocumentIds?: string[];
+  updatedDocumentIds?: string[];
+  deletedDocumentIds?: string[];
+  warnings?: string[];
+  failedItems?: Array<{ id: string; reason: string }>;
 }
 
 // Phase 7 (R7.1): actor-creation + compendium-entry DTOs relocated here from data-access.ts so

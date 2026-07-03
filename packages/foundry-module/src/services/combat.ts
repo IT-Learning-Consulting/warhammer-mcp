@@ -9,8 +9,10 @@
 // FoundryDataAccess; the `combatant` umbrella (handlers/combatant.ts) is already extracted (Phase 3).
 
 import { notify } from '../notify.js';
+import { ErrorTokens } from '@foundry-mcp/shared';
 import { findSceneTokenByActorId } from '../utils/scene-token-lookup.js';
 import { buildOperationReceipt, type OperationReceipt } from './shared/operation-receipt.js';
+import { verifyDocWrite } from '../utils/verifyWrite.js';
 
 export class CombatService {
   constructor(private readonly validateState: () => void) {}
@@ -126,6 +128,11 @@ export class CombatService {
       const sceneId = data.sceneId ?? (game as any).scenes?.active?.id;
       if (!sceneId) throw new Error('No active scene and no sceneId provided');
       combat = await (Combat as any).create({ scene: sceneId, active: true });
+      if (!combat) {
+        throw new Error(`${ErrorTokens.ADD_COMBATANTS_NOT_PERSISTED}: Combat.create returned no document`);
+      }
+      const freshCombat: any = (game as any).combats?.get(combat.id);
+      verifyDocWrite(freshCombat, { active: true }, ErrorTokens.ADD_COMBATANTS_NOT_PERSISTED);
       combatWasCreated = true;
     }
 
@@ -156,6 +163,11 @@ export class CombatService {
     }
 
     const created: any[] = await combat.createEmbeddedDocuments('Combatant', creates);
+    if (created.length !== creates.length) {
+      throw new Error(
+        `${ErrorTokens.ADD_COMBATANTS_NOT_PERSISTED}: expected ${creates.length} combatant(s), got ${created.length}`,
+      );
+    }
     if (created.length > 0) {
       notify.created('combatant', `${created.length} combatant(s)`, {
         summary: `to combat ${combat.id}`,
@@ -190,6 +202,13 @@ export class CombatService {
       ? await combat.deleteEmbeddedDocuments('Combatant', validIds)
       : [];
     const removedIds = deleted.map((c: any) => c.id).filter(Boolean);
+    // RC1.1a — assert against the pre-filtered `validIds` (BUG-215), never the caller's raw
+    // `data.combatantIds`: bogus ids are already excluded, so only a genuine drop should throw.
+    if (removedIds.length !== validIds.length) {
+      throw new Error(
+        `${ErrorTokens.REMOVE_COMBATANTS_NOT_PERSISTED}: expected ${validIds.length} combatant(s) removed, got ${removedIds.length}`,
+      );
+    }
     notify.deleted('combatant', `${removedIds.length} combatant(s)`, {
       summary: `from combat ${combat.id}`,
     });
@@ -202,6 +221,9 @@ export class CombatService {
     if (!combat) throw new Error('No combat found');
     const id: string = combat.id;
     await combat.delete();
+    if ((game as any).combats?.get(id)) {
+      throw new Error(`${ErrorTokens.END_COMBAT_NOT_PERSISTED}: combat ${id} still present in game.combats after delete`);
+    }
     notify.deleted('combat', id, { summary: 'combat ended' });
     return { ended: id };
   }

@@ -275,10 +275,12 @@ describe('FoundryDataAccess.createItem — characterization', () => {
       uuid: 'Actor.actor-snap-001.Item.item-snap-001',
       toObject: () => ({ id: 'item-snap-001', name: 'Hand Weapon', type: 'weapon' }),
       effects: { map: () => [] },
+      _source: { name: 'Hand Weapon', type: 'weapon' },
     };
     const actor: any = {
       id: 'actor-snap-create-001',
       name: 'Recruit Hansel',
+      items: { get: (id: string) => (id === createdItem.id ? createdItem : null) },
       createEmbeddedDocuments: vi.fn(async () => [createdItem]),
     };
     (globalThis as any).game = {
@@ -302,9 +304,14 @@ describe('FoundryDataAccess.createItem — characterization', () => {
       uuid: 'Item.item-snap-002',
       toObject: () => ({ id: 'item-snap-002', name: 'Torch', type: 'trapping' }),
       effects: { map: () => [] },
+      _source: { name: 'Torch', type: 'trapping' },
     };
     (globalThis as any).Item = class {
       static create = vi.fn(async () => createdItem);
+    };
+    (globalThis as any).game = {
+      ...(globalThis as any).game,
+      items: { get: (id: string) => (id === createdItem.id ? createdItem : null) },
     };
 
     // No folder path — folderId should be null, folderPath []
@@ -326,10 +333,12 @@ describe('FoundryDataAccess.createItem — characterization', () => {
       uuid: 'Actor.actor-snap-002.Item.item-snap-003',
       toObject: () => rawObj,
       effects: { map: (fn: any) => [] },
+      _source: { name: 'Pistol', type: 'weapon' },
     };
     const actor: any = {
       id: 'actor-snap-create-002',
       name: 'Pistolier Kurt',
+      items: { get: (id: string) => (id === createdItem.id ? createdItem : null) },
       createEmbeddedDocuments: vi.fn(async () => [createdItem]),
     };
     (globalThis as any).game = {

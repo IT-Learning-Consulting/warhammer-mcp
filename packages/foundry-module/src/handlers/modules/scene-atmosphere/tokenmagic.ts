@@ -1,3 +1,10 @@
+// DIALOG-PATH: DIALOG_GUARDED — 6 of the 7 tokenmagic-preset subActions (add/delete/import-from-
+// path/import-from-url/import-template-settings/list/get) confirmed DIALOG_INVESTIGATED (research
+// agent live-read every sibling preset method; zero Dialog/DialogV2/FilePicker/Hooks.once risk).
+// `reset-library` is the sole exception (BUG-432): `TM.resetPresetLibrary()` internally awaits a
+// native `window.confirm()` — guarded by a temporary monkey-patch for the call's duration. See the
+// per-subaction inline comments below for the full citations.
+//
 // Module Integration v1 Phase 6A-ii — tokenmagic + automatic-wounds action handlers.
 //
 // All handlers call globalThis.TokenMagic.* and globalThis.TokenMagicAutomaticWounds.*
@@ -35,6 +42,7 @@
 //   - CCR-4 confirm gate on tokenmagic-preset import/reset sub-actions
 
 import { notify } from '../../../notify.js';
+import { ErrorTokens } from '@foundry-mcp/shared';
 import type { ModuleSceneAtmosphereInputType } from './schemas.js';
 
 type Envelope<T> = { success: true; data: T } | { success: false; error: string };
@@ -502,6 +510,10 @@ export async function handleTokenmagicPreset(input: TokenmagicPresetInput): Prom
           return { success: false, error: 'TOKENMAGIC_PRESET_ERROR: add requires presetName and params' };
         }
         const result = await TM.addPreset(input.presetName, input.params, input.silent ?? false);
+        // RC1.1b closure-diff — a truthy result should mean the preset is now readable back.
+        if (result !== false && TM.getPreset(input.presetName) === undefined) {
+          return { success: false, error: `${ErrorTokens.TOKENMAGIC_PRESET_NOT_PERSISTED}: preset "${String(input.presetName)}" absent from TM.getPreset() after addPreset` };
+        }
         notify.updated('setting', 'tokenmagic presets', {
           summary: `added preset "${typeof input.presetName === 'string' ? input.presetName : JSON.stringify(input.presetName)}"`,
         });
@@ -521,6 +533,10 @@ export async function handleTokenmagicPreset(input: TokenmagicPresetInput): Prom
           return { success: false, error: 'TOKENMAGIC_PRESET_ERROR: delete requires presetName' };
         }
         const result = await TM.deletePreset(input.presetName, input.silent ?? false);
+        // RC1.1b closure-diff — a truthy result should mean the preset is now gone.
+        if (result !== false && TM.getPreset(input.presetName) !== undefined) {
+          return { success: false, error: `${ErrorTokens.TOKENMAGIC_PRESET_NOT_PERSISTED}: preset "${String(input.presetName)}" still present in TM.getPreset() after deletePreset` };
+        }
         notify.updated('setting', 'tokenmagic presets', {
           summary: `deleted preset "${typeof input.presetName === 'string' ? input.presetName : JSON.stringify(input.presetName)}"`,
         });
@@ -540,7 +556,14 @@ export async function handleTokenmagicPreset(input: TokenmagicPresetInput): Prom
           return { success: false, error: 'TOKENMAGIC_PRESET_ERROR: import-from-path requires path' };
         }
         const opts = input.importOptions ?? {};
+        // DIALOG_INVESTIGATED (ADR-10.1, BUG-432 investigation): importPresetLibraryFromPath is a
+        // plain fetch(path)→json()→settings.set async function (tokenmagic.js:1192) — confirmed
+        // zero Dialog/DialogV2/FilePicker.browse/Hooks.once risk (only resetPresetLibrary's native
+        // confirm() carries that risk among the 7 preset methods). Safe to await directly.
         const result = await TM.importPresetLibraryFromPath(input.path, opts);
+        if (result === false) {
+          return { success: false, error: `${ErrorTokens.TOKENMAGIC_PRESET_NOT_PERSISTED}: importPresetLibraryFromPath("${input.path}") returned false` };
+        }
         notify.updated('setting', 'tokenmagic presets', {
           summary: `imported preset library; path=${input.path}`,
         });
@@ -560,7 +583,13 @@ export async function handleTokenmagicPreset(input: TokenmagicPresetInput): Prom
           return { success: false, error: 'TOKENMAGIC_PRESET_ERROR: import-from-url requires path (as URL string)' };
         }
         const opts = input.importOptions ?? {};
+        // DIALOG_INVESTIGATED (ADR-10.1, BUG-432 investigation): importPresetLibraryFromURL is a
+        // plain $.getJSON(url)→_importPresetContent() async function (tokenmagic.js:1180) —
+        // confirmed zero Dialog/DialogV2/FilePicker.browse/Hooks.once risk. Safe to await directly.
         const result = await TM.importPresetLibraryFromURL(input.path, opts);
+        if (result === false) {
+          return { success: false, error: `${ErrorTokens.TOKENMAGIC_PRESET_NOT_PERSISTED}: importPresetLibraryFromURL("${input.path}") returned false` };
+        }
         notify.updated('setting', 'tokenmagic presets', {
           summary: `imported preset library; url=${input.path}`,
         });
@@ -580,6 +609,9 @@ export async function handleTokenmagicPreset(input: TokenmagicPresetInput): Prom
           return { success: false, error: 'TOKENMAGIC_PRESET_ERROR: import-template-settings requires path' };
         }
         const result = await TM.importTemplateSettingsFromPath(input.path);
+        if (result === false) {
+          return { success: false, error: `${ErrorTokens.TOKENMAGIC_PRESET_NOT_PERSISTED}: importTemplateSettingsFromPath("${input.path}") returned false` };
+        }
         notify.updated('setting', 'tokenmagic autoTemplateSettings', {
           summary: `imported template settings; path=${input.path}`,
         });
@@ -594,7 +626,44 @@ export async function handleTokenmagicPreset(input: TokenmagicPresetInput): Prom
       }
 
       case 'reset-library': {
-        await TM.resetPresetLibrary();
+        // RC1.1b — Q&A decision 3 (2026-07-03): state-change assert, not a shipped-defaults
+        // compare (fragile across TokenMagic versions) or a full field diff (76-preset library
+        // replace has no natural before/after shape). Snapshot pre-call, then require the
+        // post-reset library to be non-empty AND to differ from the pre-call snapshot WHEN the
+        // pre-call library had actually been modified (an already-default library legitimately
+        // resets to an identical snapshot — that's still success, not drift).
+        const before = TM.getPresets('tmfx-main') ?? [];
+        const beforeArr = Array.isArray(before) ? before : [...(before as any)];
+        const beforeSnapshot = JSON.stringify(beforeArr.map((p: any) => p?.name).sort());
+
+        // DIALOG_GUARDED (ADR-10.1 extension — BUG-432, discovered mcp_code_quality_v2 C1):
+        // TM.resetPresetLibrary() internally `await`s a native `window.confirm()` before
+        // proceeding (tokenmagic.js:1167-1170) — a headless MCP call has no live tab to click
+        // it, so an unguarded await here hangs FOREVER (same deadlock class as an unguarded
+        // Foundry Dialog). Our own CCR-4 gate above (input.confirm !== true) already collected
+        // the equivalent confirmation from the caller, so auto-answering the module's redundant
+        // native confirm is a safe, contained branch-around — never a way to skip a REAL
+        // unconfirmed destructive action.
+        const originalConfirm = (globalThis as any).window?.confirm;
+        if (typeof originalConfirm === 'function') (globalThis as any).window.confirm = () => true;
+        try {
+          await TM.resetPresetLibrary();
+        } finally {
+          if (typeof originalConfirm === 'function') (globalThis as any).window.confirm = originalConfirm;
+        }
+
+        const after = TM.getPresets('tmfx-main') ?? [];
+        const afterArr = Array.isArray(after) ? after : [...(after as any)];
+        if (afterArr.length === 0) {
+          return { success: false, error: `${ErrorTokens.TOKENMAGIC_PRESET_NOT_PERSISTED}: preset library is empty after resetPresetLibrary` };
+        }
+        const afterSnapshot = JSON.stringify(afterArr.map((p: any) => p?.name).sort());
+        // Only flag drift when we KNOW the pre-call library was non-default-shaped (76 entries is
+        // the documented default count) — an already-default library resetting to itself is fine.
+        if (beforeArr.length !== 76 && afterSnapshot === beforeSnapshot) {
+          return { success: false, error: `${ErrorTokens.TOKENMAGIC_PRESET_NOT_PERSISTED}: preset library unchanged after resetPresetLibrary despite a non-default pre-call state (${beforeArr.length} presets)` };
+        }
+
         notify.updated('setting', 'tokenmagic presets', {
           summary: 'preset library reset to built-in defaults (76 presets)',
         });

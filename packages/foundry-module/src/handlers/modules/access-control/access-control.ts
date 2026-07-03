@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_FREE — pure dispatch/routing switch over the action handlers in lockview.ts/locknkey.ts (their own headers carry the real DIALOG-PATH classification: lockview.ts is DIALOG_GUARDED, locknkey.ts is DIALOG_FREE).
 // Module Integration v1 Phase 7 — module-access-control handler dispatcher.
 //
 // Central dispatcher for the access-control bundle umbrella (LocknKey + LockView).

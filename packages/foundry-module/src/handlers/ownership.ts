@@ -74,6 +74,11 @@ interface BulkPerClassResult {
 interface BulkResultEnvelope {
   overall_success: boolean;
   per_class: BulkPerClassResult[];
+  // RC1.2 (mcp_code_quality_v2 Phase C1) — additive-only flattening of every per_class[].failed[]
+  // entry. `overall_success` + `per_class` stay verbatim above (ADR-024/025 + evals/ownership.xml
+  // assert them literally) — this is a convenience projection on top, never a replacement.
+  failedItems?: Array<{ id: string; reason: string }>;
+  warnings?: string[];
 }
 
 // CCR-Trust: GM-only access for every ownership handler.
@@ -434,7 +439,31 @@ export async function bulkSetDocumentOwnership(input: BulkSetDocumentOwnershipIn
     }
 
     const overall_success = perClass.every(c => c.failed.length === 0);
-    return { success: true as const, data: { overall_success, per_class: perClass } };
+
+    // RC1.2 — flatten per_class[].failed[] into top-level failedItems (additive; per_class stays
+    // verbatim above). id = the best available target identifier; reason = the per-class error.
+    const failedItems: Array<{ id: string; reason: string }> = [];
+    let totalTargets = 0;
+    for (const c of perClass) {
+      totalTargets += c.succeeded + c.failed.length;
+      for (const f of c.failed) {
+        failedItems.push({ id: f.target.id ?? f.target.uuid ?? f.target.name ?? '(unknown)', reason: f.error });
+      }
+    }
+    // Signal on overall_success === false partials — SOME (not all) targets failed.
+    const warnings = !overall_success && failedItems.length < totalTargets
+      ? [ErrorTokens.BATCH_PARTIAL_FAILURE]
+      : [];
+
+    return {
+      success: true as const,
+      data: {
+        overall_success,
+        per_class: perClass,
+        ...(failedItems.length > 0 ? { failedItems } : {}),
+        ...(warnings.length > 0 ? { warnings } : {}),
+      },
+    };
   });
 }
 

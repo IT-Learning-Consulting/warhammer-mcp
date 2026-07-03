@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_FREE — pure Zod schema / constant data table; no runtime module-API calls, no dialog risk possible.
 // Module Integration v2 Phase 3B — package-local Zod schema for module-token-presentation
 // (2-member bundle: boss-splash v1.2.1 + token-notes v3.0.1).
 //

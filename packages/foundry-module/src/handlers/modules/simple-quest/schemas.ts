@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_FREE — pure Zod schema / constant data table; no runtime module-API calls, no dialog risk possible.
 // Module Integration v2 Phase 2 — package-local Zod schema for module-simple-quest
 // (Simple Quest v3.0.19, theripper93).
 //

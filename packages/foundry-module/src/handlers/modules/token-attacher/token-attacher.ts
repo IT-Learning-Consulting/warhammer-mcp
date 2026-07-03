@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_GUARDED — module header documents the EXCLUDED_UI_ONLY export/import ops (Dialog.prompt, token-attacher.js:2125) are never exposed as MCP actions; every action this handler DOES implement is a direct document/flag write.
 // Module Integration v2 Phase 3A — module-token-attacher handler (Token Attacher v4.6.12, KayelGee).
 //
 // Always-registered umbrella. requireModuleActive('token-attacher', ['lib-wrapper']) is the FIRST

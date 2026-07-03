@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_FREE — pure Zod schema / constant data table; no runtime module-API calls, no dialog risk possible.
 // Module Integration v1 Phase 15 — package-local Zod schema for module-lighting (CommunityLighting).
 //
 // CCR-5: module-specific schemas stay package-local (not in @foundry-mcp/shared).

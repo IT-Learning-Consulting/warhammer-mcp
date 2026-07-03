@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_FREE — pure Zod schema / constant data table; no runtime module-API calls, no dialog risk possible.
 // Module Integration v1 Phase 2 — package-local input schema for monks-active-tiles.
 //
 // CCR-5 convention: module-specific Zod schemas live package-local (not in @foundry-mcp/shared).

@@ -11,7 +11,7 @@ exports[`template-apply engine — applyTemplate (world actor) write capture > c
 {
   "result": {
     "actorId": "act-1",
-    "actorName": "Skeleton",
+    "actorName": "Wight Skeleton",
     "applied": {
       "characteristics": {
         "t": 10,
@@ -87,7 +87,7 @@ exports[`template-apply engine — applyTemplateToToken (synthetic delta) write 
 {
   "result": {
     "actorId": "goblin",
-    "actorName": "Goblin",
+    "actorName": "Skirmisher Goblin",
     "applied": {
       "characteristics": {
         "ws": 5,
@@ -166,7 +166,7 @@ exports[`template-apply engine — planTemplateApply / executeTemplatePlan split
 {
   "result": {
     "actorId": "act-1",
-    "actorName": "Skeleton",
+    "actorName": "Wight Skeleton",
     "applied": {
       "characteristics": {
         "t": 10,

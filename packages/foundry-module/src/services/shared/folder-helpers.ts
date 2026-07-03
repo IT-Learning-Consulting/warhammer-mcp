@@ -58,7 +58,11 @@ export async function getOrCreateFolder(folderName: string, type: 'Actor' | 'Jou
     if (folder) notify.created('folder', folderName);
     return folder?.id || null;
   } catch (error) {
+    // RC1.1a logging upgrade ONLY (documented fail-open contract — do NOT throw here; the
+    // caller falls back to no-folder rather than failing the whole create).
+    const message = error instanceof Error ? error.message : String(error);
     console.warn(`[${MODULE_ID}] Failed to create folder "${folderName}":`, error);
+    notify.warn(`Failed to create folder "${folderName}": ${message} — continuing without a folder`);
     // Return null so items are created without folders rather than failing
     return null;
   }

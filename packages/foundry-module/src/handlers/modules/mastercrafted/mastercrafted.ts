@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_FREE — grepped for Dialog/DialogV2/prompt/FilePicker/Hooks.once/window.confirm; no matches in this file. Module-API calls here are settings/document writes only.
 // Module Integration v1 Phase 14 — module-mastercrafted handler (mastercrafted v5.0.8).
 //
 // Always-registered umbrella. requireModuleActive('mastercrafted') is the FIRST executable statement —
@@ -481,11 +482,9 @@ async function handleGrantDiscovery(input: GrantInput): Promise<Envelope<unknown
   if (!page) return { success: false, error: `MASTERCRAFTED_PAGE_NOT_FOUND: ${input.pageUuid}` };
   const level = input.level ?? 1;
   await page.update({ [`ownership.${input.userId}`]: level });
-  // DP-16 — verify ownership read-back.
-  const persisted = page.ownership?.[input.userId] ?? page._source?.ownership?.[input.userId];
-  if (Number(persisted) !== level) {
-    return { success: false, error: `${ErrorTokens.MASTERCRAFTED_OWNERSHIP_NOT_PERSISTED}: read back ${persisted} after writing ${level}` };
-  }
+  // RC1.1b — CORE-05: route through verifyDocWrite's _source-compare instead of the prior
+  // hand-rolled !== read-back (never hand-roll a new JSON.stringify/!== loop).
+  verifyDocWrite(page, { [`ownership.${input.userId}`]: level }, ErrorTokens.MASTERCRAFTED_OWNERSHIP_NOT_PERSISTED);
   notify.updated('mastercrafted', page.name, { summary: `discovery granted to ${input.userId} (level ${level})` });
   return { success: true, data: { pageUuid: input.pageUuid, name: page.name, userId: input.userId, level } };
 }
@@ -512,9 +511,15 @@ async function handleCreateRecipeBook(input: CreateBookInput): Promise<Envelope<
     },
   });
   if (!book) return { success: false, error: 'MASTERCRAFTED_BOOK_NOT_CREATED' };
-  await book.createEmbeddedDocuments('JournalEntryPage', [
+  const freshBook: any = (globalThis as any).game?.journal?.get(book.id);
+  verifyDocWrite(freshBook, { name: book.name }, ErrorTokens.MASTERCRAFTED_RECIPE_BOOK_NOT_PERSISTED);
+  const createdPages = await book.createEmbeddedDocuments('JournalEntryPage', [
     { name: 'Recipe', type: PAGE_TYPE, flags: { mastercrafted: defaultRecipeFlags(book.id) } },
   ]);
+  if (!createdPages?.length || !book.pages?.get(createdPages[0].id)) {
+    throw new Error(`${ErrorTokens.MASTERCRAFTED_RECIPE_BOOK_NOT_PERSISTED}: default recipe page absent after create`);
+  }
+  verifyDocWrite(book.pages.get(createdPages[0].id), { name: 'Recipe' }, ErrorTokens.MASTERCRAFTED_RECIPE_NOT_PERSISTED);
   notify.created('mastercrafted', book.name, { summary: 'recipe book created' });
   return { success: true, data: { bookUuid: book.uuid, name: book.name, pageCount: book.pages?.size ?? 1 } };
 }
@@ -530,6 +535,10 @@ async function handleCreateRecipe(input: CreateRecipeInput): Promise<Envelope<un
     { name: input.name, type: PAGE_TYPE, flags: { mastercrafted: mc } },
   ]);
   if (!page) return { success: false, error: 'MASTERCRAFTED_RECIPE_NOT_CREATED' };
+  if (!book.pages?.get(page.id)) {
+    throw new Error(`${ErrorTokens.MASTERCRAFTED_RECIPE_NOT_PERSISTED}: recipe page ${page.id} absent from book ${book.name} after create`);
+  }
+  verifyDocWrite(book.pages.get(page.id), { name: input.name }, ErrorTokens.MASTERCRAFTED_RECIPE_NOT_PERSISTED);
   notify.created('mastercrafted', input.name, { summary: 'recipe created' });
   return { success: true, data: { pageUuid: page.uuid, name: page.name, bookUuid: input.bookUuid } };
 }
@@ -546,6 +555,9 @@ async function handleUpdateRecipe(input: UpdateRecipeInput): Promise<Envelope<un
   if (input.name !== undefined) updateData.name = input.name;
   if (Object.keys(mc).length) updateData.flags = { mastercrafted: mc };
   await page.update(updateData);
+  if (updateData.name !== undefined) {
+    verifyDocWrite(page, { name: updateData.name }, ErrorTokens.MASTERCRAFTED_RECIPE_NOT_PERSISTED);
+  }
   notify.updated('mastercrafted', page.name, { summary: `recipe updated (${Object.keys(mc).join(', ') || 'name'})` });
   return { success: true, data: { pageUuid: input.pageUuid, name: page.name, updated: Object.keys(updateData) } };
 }
@@ -562,6 +574,9 @@ async function handleUpdateRecipeBook(input: UpdateBookInput): Promise<Envelope<
   if (input.name !== undefined) updateData.name = input.name;
   if (Object.keys(mc).length) updateData.flags = { mastercrafted: mc };
   await book.update(updateData);
+  if (updateData.name !== undefined) {
+    verifyDocWrite(book, { name: updateData.name }, ErrorTokens.MASTERCRAFTED_RECIPE_BOOK_NOT_PERSISTED);
+  }
   notify.updated('mastercrafted', book.name, { summary: 'recipe book updated' });
   return { success: true, data: { bookUuid: input.bookUuid, name: book.name, updated: Object.keys(updateData) } };
 }
@@ -606,6 +621,7 @@ async function handleAddComponent(input: AddComponentInput): Promise<Envelope<un
   const comp = makeComponent(input.uuid, input.name, input.img ?? '', input.quantity ?? 1, input.slot === 'ingredient' ? input.tags : undefined);
   slot.components = [...(slot.components ?? []), comp];
   await r.page.update({ flags: { mastercrafted: { [r.arrKey]: r.slots } } });
+  verifyDocWrite(r.page, { [`flags.mastercrafted.${r.arrKey}`]: r.slots }, ErrorTokens.MASTERCRAFTED_COMPONENT_NOT_PERSISTED);
   notify.updated('mastercrafted', r.page.name, { summary: `${input.slot} component added: ${input.name}` });
   return { success: true, data: { pageUuid: input.pageUuid, slot: input.slot, slotId: slot.id, componentId: comp.id, name: input.name } };
 }
@@ -620,6 +636,7 @@ async function handleRemoveComponent(input: RemoveComponentInput): Promise<Envel
   // Mirror the module: an emptied slot is removed entirely.
   const newSlots = slot.components.length ? r.slots : r.slots.filter((s: any) => s.id !== input.slotId);
   await r.page.update({ flags: { mastercrafted: { [r.arrKey]: newSlots } } });
+  verifyDocWrite(r.page, { [`flags.mastercrafted.${r.arrKey}`]: newSlots }, ErrorTokens.MASTERCRAFTED_COMPONENT_NOT_PERSISTED);
   notify.updated('mastercrafted', r.page.name, { summary: `${input.slot} component removed` });
   return { success: true, data: { pageUuid: input.pageUuid, slot: input.slot, slotId: input.slotId, componentId: input.componentId, removed: true } };
 }
@@ -633,6 +650,7 @@ async function handleSetComponentQuantity(input: SetComponentQtyInput): Promise<
   if (!comp) return { success: false, error: `MASTERCRAFTED_COMPONENT_NOT_FOUND: ${input.componentId}` };
   comp.quantity = input.quantity;
   await r.page.update({ flags: { mastercrafted: { [r.arrKey]: r.slots } } });
+  verifyDocWrite(r.page, { [`flags.mastercrafted.${r.arrKey}`]: r.slots }, ErrorTokens.MASTERCRAFTED_COMPONENT_NOT_PERSISTED);
   notify.updated('mastercrafted', r.page.name, { summary: `${input.slot} quantity → ${input.quantity}` });
   return { success: true, data: { pageUuid: input.pageUuid, slot: input.slot, componentId: input.componentId, quantity: input.quantity } };
 }
@@ -676,6 +694,9 @@ async function handleCancelPending(input: CancelPendingInput): Promise<Envelope<
     return { success: false, error: `MASTERCRAFTED_CRAFT_NOT_FOUND: no pending craft "${input.craftId}" on ${actor.name}` };
   }
   await actor.unsetFlag(MODULE_ID, input.craftId);
+  if (actor.getFlag?.(MODULE_ID, input.craftId) != null) {
+    throw new Error(`${ErrorTokens.MASTERCRAFTED_PENDING_CRAFT_NOT_PERSISTED}: pending craft "${input.craftId}" still present on ${actor.name} after cancel`);
+  }
   notify.deleted('mastercrafted', actor.name, { summary: `cancelled pending craft ${input.craftId}` });
   return { success: true, data: { actorUuid: input.actorUuid, craftId: input.craftId, cancelled: true } };
 }
@@ -685,7 +706,12 @@ async function handleDeleteRecipe(input: DeleteRecipeInput): Promise<Envelope<un
   const page = await (globalThis as any).fromUuid?.(input.pageUuid);
   if (!page) return { success: false, error: `MASTERCRAFTED_PAGE_NOT_FOUND: ${input.pageUuid}` };
   const name = page.name;
+  const parentBook = page.parent;
+  const pageId = page.id;
   await page.delete();
+  if (parentBook?.pages?.get(pageId)) {
+    throw new Error(`${ErrorTokens.MASTERCRAFTED_RECIPE_NOT_PERSISTED}: recipe page ${pageId} still present after delete`);
+  }
   notify.deleted('mastercrafted', name, { summary: 'recipe deleted' });
   return { success: true, data: { pageUuid: input.pageUuid, name, deleted: true } };
 }
@@ -696,7 +722,11 @@ async function handleDeleteRecipeBook(input: DeleteBookInput): Promise<Envelope<
   if (!book) return { success: false, error: `MASTERCRAFTED_BOOK_NOT_FOUND: ${input.bookUuid}` };
   const name = book.name;
   const recipeCount = book.pages?.size ?? 0;
+  const bookId = book.id;
   await book.delete();
+  if ((globalThis as any).game?.journal?.get(bookId)) {
+    throw new Error(`${ErrorTokens.MASTERCRAFTED_RECIPE_BOOK_NOT_PERSISTED}: recipe book ${bookId} still present after delete`);
+  }
   notify.deleted('mastercrafted', name, { summary: `recipe book deleted (${recipeCount} recipes)` });
   return { success: true, data: { bookUuid: input.bookUuid, name, recipesDeleted: recipeCount, deleted: true } };
 }

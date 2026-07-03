@@ -8,6 +8,8 @@
 
 import { notify } from '../notify.js';
 import { buildOperationReceipt } from './shared/operation-receipt.js';
+import { ErrorTokens } from '@foundry-mcp/shared';
+import { verifyDocWrite } from '../utils/verifyWrite.js';
 
 interface PreResolvedChoices {
   skillGroups?: Record<string, string> | undefined;
@@ -178,6 +180,7 @@ export class TemplateApplyService {
         const numberedName = `${appliedName} (${siblingCount + 1})`;
         if (numberedName !== tokenDoc.name) {
           await tokenDoc.update({ name: numberedName });
+          verifyDocWrite(scene.tokens?.get(tokenDoc.id), { name: numberedName }, ErrorTokens.TEMPLATE_APPLY_WRITE_NOT_PERSISTED);
         }
       }
 
@@ -436,11 +439,9 @@ export class TemplateApplyService {
     const createWrite = plan.writes[1] as Extract<TemplateWrite, { op: 'createEmbeddedDocuments' }>;
 
     await actor.update(updateWrite.updateData, updateWrite.options as any);
-    const created: any[] = (await (actor as any).createEmbeddedDocuments(
-      createWrite.documentType,
-      createWrite.items,
-      createWrite.options,
-    )) ?? [];
+    verifyDocWrite(await (globalThis as any).fromUuid((actor as any).uuid), updateWrite.updateData, ErrorTokens.TEMPLATE_APPLY_WRITE_NOT_PERSISTED);
+    const created: any[] = (await (actor as any).createEmbeddedDocuments(createWrite.documentType, createWrite.items, createWrite.options)) ?? [];
+    if (created.length !== createWrite.items.length) { throw new Error(`${ErrorTokens.TEMPLATE_APPLY_WRITE_NOT_PERSISTED}: expected ${createWrite.items.length} embedded item(s), got ${created.length}`); }
 
     notify.updated('actor', actor.name, { summary: `applied template ${templateName}`, uuid: (actor as any).uuid });
 

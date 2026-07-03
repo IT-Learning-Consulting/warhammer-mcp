@@ -20,6 +20,7 @@ import { notify } from '../notify.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
 import { _resolveItem } from './shared/document-resolver.js';
 import { buildOperationReceipt } from './shared/operation-receipt.js';
+import { verifyDocWrite } from '../utils/verifyWrite.js';
 
 export class ItemService {
   constructor(private readonly validateState: () => void) {}
@@ -146,6 +147,9 @@ export class ItemService {
       if (!created?.id) {
         throw new Error(`Folder.create returned no id for segment "${name}"`);
       }
+      if (!(game.folders as any).get(created.id)) {
+        throw new Error(`${ErrorTokens.FOLDER_WRITE_NOT_PERSISTED}: folder "${name}" (${created.id}) absent from game.folders after create`);
+      }
       notify.created('folder', name);
       parentId = created.id;
     }
@@ -206,7 +210,12 @@ export class ItemService {
         }
 
         const createdItems = await actor.createEmbeddedDocuments('Item', [effectiveItemData]);
+        if (!createdItems?.length) {
+          throw new Error(`${ErrorTokens.CREATE_ITEM_NOT_PERSISTED}: createEmbeddedDocuments returned no items`);
+        }
         const item: any = createdItems[0];
+        const freshDestItem: any = actor.items?.get(item.id);
+        verifyDocWrite(freshDestItem, { name: item.name }, ErrorTokens.CREATE_ITEM_NOT_PERSISTED);
         notify.created('item', item.name, { summary: `on ${actor.name}`, uuid: (item as any).uuid });
 
         const base: any = {
@@ -237,6 +246,8 @@ export class ItemService {
 
       const created: any = await (Item as any).create(createPayload);
       if (!created) throw new Error('Item.create returned null');
+      const freshWorldItem: any = (game.items as any).get(created.id);
+      verifyDocWrite(freshWorldItem, { name: created.name }, ErrorTokens.CREATE_ITEM_NOT_PERSISTED);
 
       notify.created('item', created.name, { summary: 'in world directory', uuid: (created as any).uuid });
 
@@ -325,6 +336,9 @@ export class ItemService {
       // Create on destination
       const destCreated = await toActor.createEmbeddedDocuments('Item', [cloned]);
       const destItem: any = destCreated[0];
+      if (!destItem || !toActor.items?.get(destItem.id)) {
+        throw new Error(`${ErrorTokens.TRADE_ITEM_DEST_CREATE_NOT_PERSISTED}: destination item absent after create on ${toActor.name}`);
+      }
 
       notify.updated('item', itemName, { summary: `traded ${data.quantity} × from ${fromActor.name} → ${toActor.name}` });
 
@@ -348,8 +362,14 @@ export class ItemService {
     delete cloned._id;
 
     await fromActor.deleteEmbeddedDocuments('Item', [data.itemId]);
+    if (fromActor.items?.get(data.itemId)) {
+      throw new Error(`${ErrorTokens.TRADE_ITEM_SOURCE_DELETE_NOT_PERSISTED}: item ${data.itemId} still present on ${fromActor.name} after delete`);
+    }
     const destCreated = await toActor.createEmbeddedDocuments('Item', [cloned]);
     const destItem: any = destCreated[0];
+    if (!destItem || !toActor.items?.get(destItem.id)) {
+      throw new Error(`${ErrorTokens.TRADE_ITEM_DEST_CREATE_NOT_PERSISTED}: destination item absent after create on ${toActor.name}`);
+    }
 
     notify.updated('item', itemName, { summary: `traded from ${fromActor.name} → ${toActor.name}` });
 
@@ -391,9 +411,15 @@ export class ItemService {
 
       if (scope === 'world') {
         await item.delete();
+        if ((game.items as any).get(itemId)) {
+          throw new Error(`${ErrorTokens.DELETE_ITEM_NOT_PERSISTED}: item ${itemId} still present in game.items after delete`);
+        }
         notify.deleted('item', itemName, { summary: 'world directory' });
       } else {
         await owner.deleteEmbeddedDocuments('Item', [itemId]);
+        if (owner.items?.get(itemId)) {
+          throw new Error(`${ErrorTokens.DELETE_ITEM_NOT_PERSISTED}: item ${itemId} still present on ${owner.name} after delete`);
+        }
         notify.deleted('item', itemName, { summary: `from ${owner.name}` });
       }
 
@@ -431,6 +457,9 @@ export class ItemService {
     if (!createdItems || createdItems.length === 0) throw new Error('Failed to create item on actor');
 
     const createdItem = createdItems[0]!;
+    if (!actor.items?.get(createdItem.id)) {
+      throw new Error(`${ErrorTokens.CREATE_ITEM_NOT_PERSISTED}: item ${createdItem.id} absent from ${actor.name}'s items after create`);
+    }
     notify.created('item', createdItem.name ?? 'unknown', { summary: `on ${actor.name} from compendium`, uuid: (createdItem as any).uuid });
 
     return {

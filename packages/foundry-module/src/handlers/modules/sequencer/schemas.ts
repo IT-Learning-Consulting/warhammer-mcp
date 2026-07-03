@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_FREE — pure Zod schema / constant data table; no runtime module-API calls, no dialog risk possible.
 // Module Integration v1 Phase 5B — package-local Zod schema for module-sequencer.
 //
 // CCR-5: module-specific schemas stay package-local.

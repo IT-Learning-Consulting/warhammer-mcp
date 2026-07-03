@@ -16,7 +16,8 @@
 // persistent-leak surface, so wrapping them is busywork that fights the worth-it filter).
 // The scripts/check-signal-hooks.mjs build guardrail mirrors this allowlist:
 //   • 3 Hooks.once(...)        — fire-once, self-removing (main.ts init/ready + mcp-dialog-autoresolve ready).
-//   • 2 ephemeral Hooks .on    — data-access.ts (updateActor) + services/shared/actor-update-observer.ts,
+//   • 3 ephemeral Hooks .on    — data-access.ts (updateActor) + services/shared/actor-update-observer.ts
+//                                (updateActor) + services/market.ts (updateItem, BUG-430 F-0B-3),
 //                                each paired with Hooks.off in a finally{} (no persistent leak).
 //   • window 'beforeunload'    — intentionally permanent: it IS the teardown trigger (it calls cleanup()).
 //   • heartbeat setInterval    — already cleared in stopHeartbeat() (main.ts).

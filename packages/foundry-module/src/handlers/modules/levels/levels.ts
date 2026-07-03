@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_FREE — grepped for Dialog/DialogV2/prompt/FilePicker/Hooks.once/window.confirm; no matches in this file. Module-API calls here are settings/document writes only.
 // Module Integration v1 Phase 4 — module-levels handler.
 //
 // 11-action umbrella for the Levels family (levels + wall-height + levelsvolumetrictemplates +
@@ -23,6 +24,7 @@ import { ErrorTokens } from '@foundry-mcp/shared';
 import { getEmbeddedOrThrow } from '../../../utils/getEmbeddedOrThrow.js';
 import { ModuleLevelsInput, type ModuleLevelsInputType } from './schemas.js';
 import { notify } from '../../../notify.js';
+import { verifyDocWrite, verifyFlagWrite } from '../../../utils/verifyWrite.js';
 
 type Envelope<T> = { success: true; data: T } | { success: false; error: string };
 
@@ -203,6 +205,7 @@ async function handleSetTokenElevation(input: SetTokenInput): Promise<Envelope<u
     const update: Record<string, unknown> = { elevation: input.elevation };
     if (input.tokenHeight !== undefined) update['flags.wall-height.tokenHeight'] = input.tokenHeight;
     await token.update(update);
+    verifyDocWrite(token, update, ErrorTokens.LEVELS_WRITE_NOT_PERSISTED);
     const verify = { elevation: token.elevation ?? null, tokenHeight: readFlag(token, 'wall-height', 'tokenHeight') ?? null };
     notify.updated('levels', `Token elevation → ${input.elevation}`, { uuid: token.uuid });
     return { success: true, data: { tokenId: input.tokenId, ...verify } };
@@ -228,6 +231,7 @@ async function handleSetTileRange(input: SetTileInput): Promise<Envelope<unknown
       return { success: false, error: 'NO_FIELDS: provide elevation and/or at least one tile flag to write' };
     }
     await tile.update(update);
+    verifyDocWrite(tile, update, ErrorTokens.LEVELS_WRITE_NOT_PERSISTED);
     const lv = tile.flags?.levels ?? {};
     notify.updated('levels', `Tile range updated (${input.tileId})`, { uuid: tile.uuid });
     return {
@@ -273,6 +277,7 @@ async function handleSetPlaceableRange(input: SetPlaceableInput): Promise<Envelo
       return { success: false, error: 'NO_FIELDS: provide elevation, rangeTop, and/or advancedLighting' };
     }
     await doc.update(update);
+    verifyDocWrite(doc, update, ErrorTokens.LEVELS_WRITE_NOT_PERSISTED);
     notify.updated('levels', `${map.docType} range updated (${input.placeableId})`, { uuid: doc.uuid });
     return {
       success: true,
@@ -303,6 +308,7 @@ async function handleSetWallHeight(input: SetWallInput): Promise<Envelope<unknow
     if (input.top !== undefined) update['flags.wall-height.top'] = input.top;
     if (input.bottom !== undefined) update['flags.wall-height.bottom'] = input.bottom;
     await wall.update(update);
+    verifyDocWrite(wall, update, ErrorTokens.LEVELS_WRITE_NOT_PERSISTED);
     const wh = wall.flags?.['wall-height'] ?? {};
     notify.updated('levels', `Wall height updated (${input.wallId})`, { uuid: wall.uuid });
     return { success: true, data: { wallId: input.wallId, top: wh.top ?? null, bottom: wh.bottom ?? null } };
@@ -329,6 +335,7 @@ async function handleSetVolumetricTemplate(input: SetVolumetricInput): Promise<E
     if (input.elevation !== undefined) update.elevation = input.elevation;
     if (input.special !== undefined) update['flags.levels.special'] = input.special;
     await tpl.update(update);
+    verifyDocWrite(tpl, update, ErrorTokens.LEVELS_WRITE_NOT_PERSISTED);
     notify.updated('levels', `Volumetric template updated (${input.templateId})`, { uuid: tpl.uuid });
     return {
       success: true,
@@ -355,6 +362,7 @@ async function handleDefineSceneLevels(input: DefineSceneLevelsInput): Promise<E
     const scene = getScene(input.sceneId);
     // sceneLevels shape verified API.js:102-110: Array<[bottom, top, label]>.
     await scene.setFlag('levels', 'sceneLevels', input.levels);
+    verifyFlagWrite(scene, 'levels', 'sceneLevels', input.levels, ErrorTokens.LEVELS_WRITE_NOT_PERSISTED);
     const verify = scene.getFlag('levels', 'sceneLevels');
     notify.updated('levels', `Defined ${input.levels.length} scene level band(s)`, { uuid: scene.uuid });
     return { success: true, data: { sceneId: scene.id, sceneLevels: verify ?? null, count: input.levels.length } };
@@ -380,6 +388,7 @@ async function handleSetSceneFlags(input: SetSceneFlagsInput): Promise<Envelope<
       return { success: false, error: 'NO_FIELDS: provide at least one scene flag to write' };
     }
     await scene.update(update);
+    verifyDocWrite(scene, update, ErrorTokens.LEVELS_WRITE_NOT_PERSISTED);
     notify.updated('levels', `Scene levels flags updated (${scene.name ?? scene.id})`, { uuid: scene.uuid });
     return {
       success: true,
@@ -418,6 +427,7 @@ async function handleSetRegionElevation(input: SetRegionInput): Promise<Envelope
       if (input.bottom !== undefined) elevation.bottom = input.bottom;
       if (input.top !== undefined) elevation.top = input.top;
       await region.update({ elevation });
+      verifyDocWrite(region, { elevation }, ErrorTokens.LEVELS_WRITE_NOT_PERSISTED);
     }
 
     // 2. Optional RegionHandler stair/elevator behavior (verified migration.js:6-11 + regionHandler.js).
@@ -432,6 +442,10 @@ async function handleSetRegionElevation(input: SetRegionInput): Promise<Envelope
         { type: 'executeScript', name, system: { source, events: ['tokenEnter'] } },
       ]);
       const b = Array.isArray(created) ? created[0] : created;
+      if (!b?.id || !region.behaviors?.get(b.id)) {
+        throw new Error(`${ErrorTokens.LEVELS_WRITE_NOT_PERSISTED}: RegionBehavior "${name}" absent from region ${input.regionId} after create`);
+      }
+      verifyDocWrite(region.behaviors.get(b.id), { name }, ErrorTokens.LEVELS_WRITE_NOT_PERSISTED);
       createdBehavior = { id: b?.id ?? '', name, source };
     }
 
@@ -493,6 +507,20 @@ async function handleRescaleGridDistance(input: RescaleInput): Promise<Envelope<
       return { success: false, error: 'LEVELS_API_UNAVAILABLE: CONFIG.Levels.API.rescaleGridDistance is not a function' };
     }
     await api.rescaleGridDistance(input.prevDistance, input.currDistance, scene);
+    // RC1.1b — count-sample verify (not a full field diff): rescaleGridDistance is a
+    // third-party module method with no documented return shape; confirm no document was
+    // silently dropped across the 7 touched collections rather than gating on unknown fields.
+    const affectedAfter: Record<string, number> = {};
+    for (const coll of RESCALE_COLLECTIONS) {
+      const c = (scene as any)[coll];
+      affectedAfter[coll] = c?.size ?? c?.contents?.length ?? 0;
+    }
+    const dropped = RESCALE_COLLECTIONS.filter((coll) => affectedAfter[coll] !== affected[coll]);
+    if (dropped.length > 0) {
+      throw new Error(
+        `${ErrorTokens.LEVELS_WRITE_NOT_PERSISTED}: rescale count mismatch in ${dropped.join(', ')} (before: ${dropped.map((c) => affected[c]).join('/')}, after: ${dropped.map((c) => affectedAfter[c]).join('/')})`,
+      );
+    }
     notify.updated('levels', `Rescaled grid distance ${input.prevDistance} → ${input.currDistance} across ${totalAffected} doc(s)`, { uuid: scene.uuid });
     return {
       success: true,

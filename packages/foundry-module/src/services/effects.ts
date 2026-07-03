@@ -144,6 +144,11 @@ export class EffectsService {
       }
 
       const createdEffect: any = created[0];
+      // RC1.1a re-read: mirror the actor-direct branch's :77 verify (CORE-02) — confirm the
+      // item-embedded AE actually persisted before returning success.
+      if (!item.effects.get(createdEffect.id)) {
+        throw new Error(`${ErrorTokens.ADD_ACTIVE_EFFECT_NOT_PERSISTED}: effect ${createdEffect.id} absent after create`);
+      }
 
       // Canvas-anchored tooltip when effect's owning item belongs to an actor
       // that has a token placed on the current scene.
@@ -464,6 +469,10 @@ export class EffectsService {
       const effectId: string = effect.id;
       const effectName: string = effect.name;
       await item.deleteEmbeddedDocuments('ActiveEffect', [effectId]);
+      // RC1.1a verify gone — mirror the actor-direct branch's :450 absence check.
+      if (item.effects.get(effectId)) {
+        throw new Error(`${ErrorTokens.DELETE_ACTIVE_EFFECT_NOT_PERSISTED}: effect ${effectId} still present after delete`);
+      }
       notify.deleted('active-effect', effectName, { summary: `from ${item.name}` });
       return {
         success: true,

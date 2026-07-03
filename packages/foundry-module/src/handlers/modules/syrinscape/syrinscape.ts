@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_FREE — grepped for Dialog/DialogV2/prompt/FilePicker/Hooks.once/window.confirm; no matches in this file. Module-API calls here are settings/document writes only.
 // Module Integration v2 Phase 13C — module-syrinscape handler (Syrinscape Control v1.0.5, Zhell).
 //
 // Always-registered umbrella. requireModuleActive('syrinscape-control') is the FIRST executable statement —

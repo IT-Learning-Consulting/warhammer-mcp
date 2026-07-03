@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_FREE — grepped for Dialog/DialogV2/prompt/FilePicker/Hooks.once/window.confirm; no matches in this file. Module-API calls here are settings/document writes only.
 // Module Integration v1 Phase 7A/7B — LocknKey (Lock & Key) action handlers.
 //
 // Handlers run inside Foundry via CONFIG.queries (no macro bridge). They call the

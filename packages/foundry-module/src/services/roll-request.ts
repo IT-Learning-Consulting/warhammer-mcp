@@ -7,6 +7,7 @@
 // write routed through utils/roll-button-store (shared with RollButtonService without a cross-service import).
 
 import { MODULE_ID } from '../constants.js';
+import { ErrorTokens } from '@foundry-mcp/shared';
 import { notify } from '../notify.js';
 import { saveRollButtonMessageId } from '../utils/roll-button-store.js';
 
@@ -124,6 +125,12 @@ export class RollRequestService {
       };
 
       const chatMessage = await ChatMessage.create(messageData);
+      if (!chatMessage?.id) {
+        throw new Error(`${ErrorTokens.ROLL_REQUEST_NOT_PERSISTED}: ChatMessage.create returned no id`);
+      }
+      if (!(game.messages as any)?.get(chatMessage.id)) {
+        throw new Error(`${ErrorTokens.ROLL_REQUEST_NOT_PERSISTED}: chat message ${chatMessage.id} absent from game.messages after create`);
+      }
 
       // Store message ID for later updates
       saveRollButtonMessageId(buttonId, chatMessage.id);

@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_GUARDED — the module header (below) documents the confirmed deadlock path (deleteSite -> confirmDestructiveAction DialogV2) and states it is NEVER called; remove-site-record routes through SiteRecordManager instead.
 // Module Integration v2 Phase 5 — module-augur-nexus handler (Augur: Nexus v1.1.6, The Augur).
 //
 // Always-registered umbrella. requireModuleActive('augur-nexus') is the FIRST active-state check —
@@ -598,8 +599,12 @@ async function handleSetPlayerSceneViewOverride(input: SetSceneViewInput): Promi
   // Module setter handles the merge + delete-key-on-inherit + unsetFlag-when-empty (awaited).
   await api.setPlayerSceneViewOverride(scene, input.value);
   const persisted = (scene.getFlag(FLAG_SCOPE, 'playerAccess') as any)?.view ?? 'inherit';
-  const expected = input.value; // 'inherit' read-back surfaces as 'inherit' (key deleted)
-  if ((expected === 'inherit' ? 'inherit' : persisted) !== expected) {
+  const expected = input.value; // 'inherit' read-back surfaces as 'inherit' (key deleted) — the
+  // `?? 'inherit'` default above already captures that, so compare `persisted` directly against
+  // `expected` (RC1.1a — the prior ternary short-circuited to the literal 'inherit' string on
+  // BOTH sides of the comparison whenever expected was 'inherit', provably never firing
+  // regardless of what actually persisted).
+  if (persisted !== expected) {
     return notPersisted(`playerAccess.view expected ${expected}, got ${persisted}`);
   }
   notify.updated('scene', scene.name, { summary: `player view override → ${input.value}` });
@@ -613,7 +618,9 @@ async function handleSetPlayerNexusVisibilityOverride(input: SetNexusVisInput): 
   const api = await importApi();
   await api.setPlayerNexusVisibilityOverride(scene, input.value);
   const persisted = (scene.getFlag(FLAG_SCOPE, 'playerAccess') as any)?.nexus ?? 'inherit';
-  if ((input.value === 'inherit' ? 'inherit' : persisted) !== input.value) {
+  // RC1.1a — same tautology fix as set-player-scene-view-override above: compare `persisted`
+  // (already 'inherit'-defaulted) directly against `input.value`.
+  if (persisted !== input.value) {
     return notPersisted(`playerAccess.nexus expected ${input.value}, got ${persisted}`);
   }
   notify.updated('scene', scene.name, { summary: `player nexus visibility → ${input.value}` });

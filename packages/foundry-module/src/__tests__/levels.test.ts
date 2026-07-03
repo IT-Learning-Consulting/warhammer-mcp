@@ -19,20 +19,28 @@ function makeDoc(initial: Record<string, any> = {}) {
     documentName: initial.documentName ?? 'Token',
     elevation: initial.elevation ?? 0,
     flags: initial.flags ?? {},
+    _source: { elevation: initial.elevation ?? 0, flags: JSON.parse(JSON.stringify(initial.flags ?? {})) },
+    // RC1.1b: levels.ts now verifyDocWrite()s against doc._source after every update() — mirror
+    // every write into a shadow _source object alongside the live doc mutation below.
     update: vi.fn(async (changes: Record<string, any>) => {
       // Apply dot-notation + plain keys to mirror Foundry expandObject semantics.
       for (const [k, v] of Object.entries(changes)) {
-        if (k === 'elevation') { doc.elevation = v; continue; }
+        if (k === 'elevation') { doc.elevation = v; doc._source.elevation = v; continue; }
         if (k.includes('.')) {
           const segs = k.split('.');
           let cur = doc;
+          let srcCur = doc._source;
           for (let i = 0; i < segs.length - 1; i++) {
             cur[segs[i]] = cur[segs[i]] ?? {};
+            srcCur[segs[i]] = srcCur[segs[i]] ?? {};
             cur = cur[segs[i]];
+            srcCur = srcCur[segs[i]];
           }
           cur[segs[segs.length - 1]] = v;
+          srcCur[segs[segs.length - 1]] = v;
         } else {
           doc[k] = v;
+          doc._source[k] = v;
         }
       }
     }),
@@ -41,8 +49,13 @@ function makeDoc(initial: Record<string, any> = {}) {
       doc.flags[scope] = doc.flags[scope] ?? {};
       doc.flags[scope][key] = val;
     }),
+    // RC1.1b: levels.ts's set-region-elevation stair-behavior create now re-reads
+    // region.behaviors.get(id) to confirm the RegionBehavior actually landed.
+    behaviors: new Map<string, any>(),
     createEmbeddedDocuments: vi.fn(async (_type: string, payloads: any[]) => {
-      return payloads.map((p, i) => ({ id: `beh${i}`, ...p }));
+      const created = payloads.map((p, i) => ({ id: `beh${i}`, ...p, _source: { ...p } }));
+      for (const c of created) doc.behaviors.set(c.id, c);
+      return created;
     }),
   };
   return doc;
@@ -197,7 +210,13 @@ describe('module-levels region + rescale', () => {
   it('set-region-elevation writes nested elevation + creates a stair behavior', async () => {
     const region = makeDoc({ documentName: 'Region', elevation: { bottom: null, top: null } });
     region.elevation = { bottom: null, top: null };
-    region.update = vi.fn(async (c: any) => { if (c.elevation) region.elevation = { ...region.elevation, ...c.elevation }; });
+    region._source.elevation = { bottom: null, top: null };
+    region.update = vi.fn(async (c: any) => {
+      if (c.elevation) {
+        region.elevation = { ...region.elevation, ...c.elevation };
+        region._source.elevation = { ...region._source.elevation, ...c.elevation };
+      }
+    });
     const scene = makeScene({ regions: new Map([['r1', region]]) });
     setupGame({ scene });
     const r: any = await dispatchModuleLevels({ action: 'set-region-elevation', sceneId: 's1', regionId: 'r1', bottom: 0, top: 10, stairMode: 'stair' });

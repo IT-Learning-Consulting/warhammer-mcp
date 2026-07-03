@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_GUARDED — module header documents 3 module dialog paths (share-quest/delete-quest/show-quest-to-players) that are explicitly bypassed in favor of raw ChatMessage.create / deleteEmbeddedDocuments / dynamic-import alternatives; move-quest never invokes the modules deleteDialog either.
 // Module Integration v2 Phase 2 — module-simple-quest handler (Simple Quest v3.0.19, theripper93).
 //
 // Always-registered umbrella. requireModuleActive('simple-quest') is the FIRST executable statement —

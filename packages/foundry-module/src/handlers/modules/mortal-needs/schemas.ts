@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_FREE — pure Zod schema / constant data table; no runtime module-API calls, no dialog risk possible.
 // Module Integration v2 Phase 8 — package-local Zod schema for module-mortal-needs
 // (Mortal Needs, Wand & Widgets v2.3.2).
 //

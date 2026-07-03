@@ -96,6 +96,9 @@ export const ApplyTokenCasualtiesOutput = z
     updatedDocumentIds: z.array(z.string()).optional(),
     deletedDocumentIds: z.array(z.string()).optional(),
     warnings: z.array(z.string()).optional(),
+    // RC1.2 (mcp_code_quality_v2 Phase C1): additive-only batch partial-failure detail
+    // (derived from results[] — see services/token-casualties.ts).
+    failedItems: z.array(z.object({ id: z.string(), reason: z.string() })).optional(),
   })
   .passthrough();
 export type ApplyTokenCasualtiesOutputType = z.infer<typeof ApplyTokenCasualtiesOutput>;

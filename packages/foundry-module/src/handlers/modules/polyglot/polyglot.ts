@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_FREE — grepped for Dialog/DialogV2/prompt/FilePicker/Hooks.once/window.confirm; no matches in this file. Module-API calls here are settings/document writes only.
 // Module Integration v2 Phase 9 — module-polyglot handler (Polyglot v2.8.2, language obfuscation).
 //
 // Always-registered umbrella. requireModuleActive('polyglot') is the FIRST active-state check — RETURNS

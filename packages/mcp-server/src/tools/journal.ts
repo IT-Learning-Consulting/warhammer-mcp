@@ -271,7 +271,7 @@ export class JournalTool extends BaseTool {
         structuredContent: data as unknown as Record<string, unknown>,
       };
     } catch (e) {
-      return { content: [{ type: 'text' as const, text: `❌ **journal/show-to-players failed**\n\n${e instanceof Error ? e.message : String(e)}` }], isError: true };
+      return this.errorResponse('journal/show-to-players', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -288,7 +288,7 @@ export class JournalTool extends BaseTool {
         structuredContent: data as unknown as Record<string, unknown>,
       };
     } catch (e) {
-      return { content: [{ type: 'text' as const, text: `❌ **journal/duplicate-entry failed**\n\n${e instanceof Error ? e.message : String(e)}` }], isError: true };
+      return this.errorResponse('journal/duplicate-entry', e instanceof Error ? e.message : String(e));
     }
   }
 

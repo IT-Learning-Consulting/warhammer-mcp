@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_FREE — grepped for Dialog/DialogV2/prompt/FilePicker/Hooks.once/window.confirm; no matches in this file. Module-API calls here are settings/document writes only.
 // Module Integration v1 Phase 6A — fxmaster action handlers.
 //
 // All handlers in this file call globalThis.FXMASTER.api.* directly (handlers run inside
@@ -32,6 +33,7 @@
 //   - capability-manifest.json action names (mcp_action = module-scene-atmosphere.<action>)
 
 import { notify } from '../../../notify.js';
+import { ErrorTokens } from '@foundry-mcp/shared';
 import type { ModuleSceneAtmosphereInputType } from './schemas.js';
 
 type Envelope<T> = { success: true; data: T } | { success: false; error: string };
@@ -514,6 +516,11 @@ export async function handleSetRegionParticles(input: SetRegionParticlesInput): 
     };
 
     const [created] = await region.createEmbeddedDocuments('RegionBehavior', [behaviorData]);
+    // RC1.1b triage (Design Decisions): RegionBehavior is a real structural embedded document,
+    // not a cosmetic transient effect — gated per the fxmaster RegionBehavior verify pass.
+    if (!created?.id || !region.behaviors?.get(created.id)) {
+      return { success: false, error: `${ErrorTokens.FXMASTER_REGION_BEHAVIOR_NOT_PERSISTED}: particleEffectsRegion behavior absent from region ${input.regionId} after create` };
+    }
     const sceneName = getSceneName();
     notify.updated('scene', sceneName, {
       summary: `fxmaster set-region-particles: region=${input.regionId} type=${input.particleType}`,
@@ -554,6 +561,9 @@ export async function handleSetRegionFilters(input: SetRegionFiltersInput): Prom
     };
 
     const [created] = await region.createEmbeddedDocuments('RegionBehavior', [behaviorData]);
+    if (!created?.id || !region.behaviors?.get(created.id)) {
+      return { success: false, error: `${ErrorTokens.FXMASTER_REGION_BEHAVIOR_NOT_PERSISTED}: filterEffectsRegion behavior absent from region ${input.regionId} after create` };
+    }
     const sceneName = getSceneName();
     notify.updated('scene', sceneName, {
       summary: `fxmaster set-region-filters: region=${input.regionId} type=${input.filterType}`,
@@ -605,6 +615,9 @@ export async function handleSuppressSceneParticles(input: SuppressSceneParticles
       type: 'fxmaster.suppressSceneParticles',
       name: 'Suppress Scene Particles',
     }]);
+    if (!created?.id || !region.behaviors?.get(created.id)) {
+      return { success: false, error: `${ErrorTokens.FXMASTER_REGION_BEHAVIOR_NOT_PERSISTED}: suppressSceneParticles behavior absent from region ${input.regionId} after create` };
+    }
     const sceneName = getSceneName();
     notify.updated('scene', sceneName, {
       summary: `fxmaster suppress-scene-particles added: region=${input.regionId}`,
@@ -654,6 +667,9 @@ export async function handleSuppressSceneFilters(input: SuppressSceneFiltersInpu
       type: 'fxmaster.suppressSceneFilters',
       name: 'Suppress Scene Filters',
     }]);
+    if (!created?.id || !region.behaviors?.get(created.id)) {
+      return { success: false, error: `${ErrorTokens.FXMASTER_REGION_BEHAVIOR_NOT_PERSISTED}: suppressSceneFilters behavior absent from region ${input.regionId} after create` };
+    }
     const sceneName = getSceneName();
     notify.updated('scene', sceneName, {
       summary: `fxmaster suppress-scene-filters added: region=${input.regionId}`,

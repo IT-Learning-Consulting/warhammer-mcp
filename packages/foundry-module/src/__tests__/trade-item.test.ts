@@ -41,15 +41,25 @@ function makeActor(
       get: (iid: string) => itemMap.get(iid) ?? null,
       find: (pred: (it: any) => boolean) => Array.from(itemMap.values()).find(pred) ?? null,
     },
+    // RC1.1a: create/delete now need to mutate the SAME backing itemMap that items.get() reads,
+    // so the post-write dest re-read (create) and source absence check (delete) both see reality.
     createEmbeddedDocuments: vi.fn(async (_type: string, payloads: any[]) =>
-      payloads.map((p, i) => ({
-        id: `${id}-new-${i}`,
-        name: p.name,
-        type: p.type,
-        toObject: () => ({ ...p, _id: `${id}-new-${i}` }),
-      }))
+      payloads.map((p, i) => {
+        const newId = `${id}-new-${i}`;
+        const created = {
+          id: newId,
+          name: p.name,
+          type: p.type,
+          toObject: () => ({ ...p, _id: newId }),
+        };
+        itemMap.set(newId, created);
+        return created;
+      })
     ),
-    deleteEmbeddedDocuments: vi.fn(async () => {}),
+    deleteEmbeddedDocuments: vi.fn(async (_type: string, ids: string[]) => {
+      for (const delId of ids) itemMap.delete(delId);
+      return ids.map((delId) => ({ id: delId }));
+    }),
     _itemMap: itemMap,
   };
 }

@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_FREE — pure Zod schema / constant data table; no runtime module-API calls, no dialog risk possible.
 // Imperial Arcana Phase 7 — package-local Zod input schemas (foundry-module side).
 //
 // CCR-5: module-specific schemas stay package-local (not in @foundry-mcp/shared).

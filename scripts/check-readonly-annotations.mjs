@@ -61,6 +61,7 @@ const CURATED = {
   'dice-roll': ['handleDiceRoll'],
   'module-probe': ['handleModuleProbe'],
   'module-lighting': ['handleModuleLighting'],
+  'travel-distance': ['handleTravelDistance'],
 };
 
 const WRITE_PATTERNS = [

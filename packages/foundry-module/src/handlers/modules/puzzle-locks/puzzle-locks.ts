@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_FREE — grepped for Dialog/DialogV2/prompt/FilePicker/Hooks.once/window.confirm; no matches in this file. Module-API calls here are settings/document writes only.
 // Module Integration v2 Phase 13B — module-puzzle-locks handler (Puzzle Locks v3.1.4, theripper93).
 //
 // Always-registered umbrella. requireModuleActive('puzzle-locks') is the FIRST executable statement —

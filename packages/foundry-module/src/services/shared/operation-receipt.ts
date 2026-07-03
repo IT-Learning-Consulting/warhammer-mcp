@@ -15,6 +15,11 @@ export interface OperationReceipt {
   updatedDocumentIds: string[];
   deletedDocumentIds: string[];
   warnings: string[];
+  // RC1.2 (mcp_code_quality_v2 Phase C1) — additive-only per-item failure detail for batch
+  // multi-target writes. Absent (undefined, not []) on every non-batch / all-succeeded call —
+  // callers that don't pass `failed` never see the field, preserving byte-identical output for
+  // every pre-C1 consumer (CCR-V4).
+  failedItems?: Array<{ id: string; reason: string }>;
 }
 
 // All inputs default to []; ids are filtered to non-empty strings (handlers sometimes hold nullable ids, e.g.
@@ -25,14 +30,27 @@ export function buildOperationReceipt(args?: {
   updated?: Array<string | null | undefined>;
   deleted?: Array<string | null | undefined>;
   warnings?: Array<string | null | undefined>;
+  failed?: Array<{ id: string | null | undefined; reason: string } | null | undefined>;
 }): OperationReceipt {
   const cleanIds = (arr?: Array<string | null | undefined>): string[] =>
     (arr ?? []).filter((id): id is string => typeof id === 'string' && id.length > 0);
-  return {
+  const cleanFailed = (
+    arr?: Array<{ id: string | null | undefined; reason: string } | null | undefined>,
+  ): Array<{ id: string; reason: string }> | undefined => {
+    const filtered = (arr ?? []).filter(
+      (f): f is { id: string; reason: string } =>
+        f != null && typeof f.id === 'string' && f.id.length > 0 && typeof f.reason === 'string',
+    );
+    return filtered.length > 0 ? filtered : undefined;
+  };
+  const receipt: OperationReceipt = {
     operationId: foundry.utils.randomID(),
     createdDocumentIds: cleanIds(args?.created),
     updatedDocumentIds: cleanIds(args?.updated),
     deletedDocumentIds: cleanIds(args?.deleted),
     warnings: cleanIds(args?.warnings),
   };
+  const failedItems = cleanFailed(args?.failed);
+  if (failedItems) receipt.failedItems = failedItems;
+  return receipt;
 }

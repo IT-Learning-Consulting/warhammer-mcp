@@ -322,6 +322,7 @@ async function startBackend(): Promise<void> {
 
             } catch (e: any) {
 
+              logger.error('Tool dispatch threw', { name, error: scrubError(e) });
               writeResponse({ id: msg.id, result: { content: [{ type: 'text', text: `Error: ${scrubError(e)}` }], isError: true } });
 
             }
