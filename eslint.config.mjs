@@ -282,6 +282,20 @@ export default tseslint.config(
     },
   },
 
+  // 9e - Phase F (mcp_code_quality_v2, BUG-438): action-catalog.ts is a pure Zod-schema / constant
+  // data table (78-key MATT action catalog + trigger-mode list — see file header "DIALOG-PATH:
+  // DIALOG_FREE ... Pure Zod schema / constant data table"). Its catalog-lookup/validate-sequence
+  // helpers trip the per-function complexity/lines caps purely because the SIZE of the data they
+  // walk is large, not because the control flow is deep or risky. Mirrors the pure-data rationale of
+  // blocks 9/9b/9d (verbatim-move / data-table grandfather) rather than a behavioral refactor.
+  {
+    files: ['**/shared/src/schemas/modules/monks-active-tiles/action-catalog.ts'],
+    rules: {
+      'max-lines-per-function': 'off',
+      complexity: 'off',
+    },
+  },
+
   // 10 - Prettier: disable conflicting formatting rules, then run prettier as a WARN-level rule (preserved).
   eslintConfigPrettier,
   {

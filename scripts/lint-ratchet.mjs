@@ -127,6 +127,17 @@ function makeEslint() {
           'max-lines': ['error', { max: 400, skipComments: true }],
         },
       },
+      // Phase F (mcp_code_quality_v2, BUG-438): action-catalog.ts is a pure Zod-schema / constant
+      // data table (78-key MATT action catalog + trigger-mode list; file header states "Pure Zod
+      // schema / constant data table"). Mirrors the pure-data rationale of the services/ and
+      // scene-atmosphere grandfather blocks above — the caps don't apply to a data-table shape.
+      {
+        files: ['**/shared/src/schemas/modules/monks-active-tiles/action-catalog.ts'],
+        rules: {
+          'max-lines-per-function': 'off',
+          complexity: 'off',
+        },
+      },
       { files: TEST_GLOBS, rules: Object.fromEntries(CAP_RULES.map((r) => [r, 'off'])) },
     ],
   });

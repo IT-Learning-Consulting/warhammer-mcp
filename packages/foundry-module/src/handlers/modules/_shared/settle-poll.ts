@@ -26,6 +26,48 @@ async function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// mcp_code_quality_v2 Phase F (BUG-438) — the two call shapes were extracted out of the single
+// overloaded `settlePoll` body into private helpers, purely to bring cyclomatic complexity under
+// the lint-ratchet cap (13 > 10; the nullish-coalescing defaults each counted as a branch). Every
+// caller (item-piles/flow.ts, item-piles/merchant.ts, narrator.ts; see settle-poll.test.ts) always
+// omits trailing optional args rather than passing `null`, so switching `?? default` to ES default
+// parameters is behavior-identical for every real call site — `settlePoll` itself is unchanged in
+// signature, overloads, and dispatch logic.
+
+/** Generic value-read form (narrator.ts shape): reads a VALUE repeatedly until `isSettled` holds. */
+async function settlePollGeneric<T>(
+  read: () => T,
+  isSettled: (v: T) => boolean,
+  attempts = 6,
+  delayMs = 40,
+): Promise<T> {
+  let value = read();
+  for (let i = 0; i < attempts && !isSettled(value); i++) {
+    await sleep(delayMs);
+    value = read();
+  }
+  return value;
+}
+
+/** Boolean-predicate deadline form (item-piles.ts shape): polls a PREDICATE on a wall-clock deadline. */
+async function settlePollDeadline(
+  persisted: () => boolean,
+  timeoutMs = 2000,
+  stepMs = 200,
+  initialDelayMs = 0,
+): Promise<boolean> {
+  if (initialDelayMs > 0) {
+    await sleep(initialDelayMs);
+  }
+  if (persisted()) return true;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    await sleep(stepMs);
+    if (persisted()) return true;
+  }
+  return false;
+}
+
 export async function settlePoll<T>(
   read: () => T,
   isSettled: (v: T) => boolean,
@@ -45,32 +87,7 @@ export async function settlePoll(
   d?: number,
 ): Promise<any> {
   if (typeof b === 'function') {
-    // Generic value-read form (narrator.ts shape).
-    const read = a as () => any;
-    const isSettled = b;
-    const attempts = c ?? 6;
-    const delayMs = d ?? 40;
-    let value = read();
-    for (let i = 0; i < attempts && !isSettled(value); i++) {
-      await sleep(delayMs);
-      value = read();
-    }
-    return value;
+    return settlePollGeneric(a as () => any, b, c, d);
   }
-
-  // Boolean-predicate deadline form (item-piles.ts shape).
-  const persisted = a as () => boolean;
-  const timeoutMs = b ?? 2000;
-  const stepMs = c ?? 200;
-  const initialDelayMs = d ?? 0;
-  if (initialDelayMs > 0) {
-    await sleep(initialDelayMs);
-  }
-  if (persisted()) return true;
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    await sleep(stepMs);
-    if (persisted()) return true;
-  }
-  return false;
+  return settlePollDeadline(a as () => boolean, b, c, d);
 }

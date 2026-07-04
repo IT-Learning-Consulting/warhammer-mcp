@@ -37,6 +37,45 @@ function walkTs(dir) {
   return out;
 }
 
+// mcp_code_quality_v2 Phase F (BUG-438) — matchBrace was refactored (behavior-identical) into small
+// predicate/skip helpers purely to bring lint-ratchet's cyclomatic-complexity (20>10) and max-depth
+// (4>3) caps into range; the string/comment-aware brace-matching algorithm itself is unchanged.
+
+function isQuoteChar(ch) {
+  return ch === "'" || ch === '"' || ch === '`';
+}
+
+function isLineCommentStart(src, i) {
+  return src[i] === '/' && src[i + 1] === '/';
+}
+
+function isBlockCommentStart(src, i) {
+  return src[i] === '/' && src[i + 1] === '*';
+}
+
+/** Advance past a quoted string literal starting just after its opening `quote` char at `i`. */
+function skipStringLiteral(src, i, quote) {
+  while (i < src.length) {
+    if (src[i] === '\\') { i += 2; continue; }
+    if (src[i] === quote) return i + 1;
+    i++;
+  }
+  return i;
+}
+
+/** Advance past a `// ...` line comment starting at `i`. */
+function skipLineComment(src, i) {
+  while (i < src.length && src[i] !== '\n') i++;
+  return i;
+}
+
+/** Advance past a `/* ... *\/` block comment starting at `i`. */
+function skipBlockComment(src, i) {
+  i += 2;
+  while (i < src.length && !(src[i] === '*' && src[i + 1] === '/')) i++;
+  return i + 2;
+}
+
 /**
  * Find the offset of the matching close-brace for the open-brace at `openIdx`.
  * String- and comment-aware: braces inside '…', "…", `…`, // and /* comments are ignored
@@ -47,25 +86,16 @@ function matchBrace(src, openIdx) {
   let i = openIdx;
   while (i < src.length) {
     const ch = src[i];
-    if (ch === "'" || ch === '"' || ch === '`') {
-      const quote = ch;
-      i++;
-      while (i < src.length) {
-        if (src[i] === '\\') { i += 2; continue; }
-        if (src[i] === quote) break;
-        i++;
-      }
-      i++;
+    if (isQuoteChar(ch)) {
+      i = skipStringLiteral(src, i + 1, ch);
       continue;
     }
-    if (ch === '/' && src[i + 1] === '/') {
-      while (i < src.length && src[i] !== '\n') i++;
+    if (isLineCommentStart(src, i)) {
+      i = skipLineComment(src, i);
       continue;
     }
-    if (ch === '/' && src[i + 1] === '*') {
-      i += 2;
-      while (i < src.length && !(src[i] === '*' && src[i + 1] === '/')) i++;
-      i += 2;
+    if (isBlockCommentStart(src, i)) {
+      i = skipBlockComment(src, i);
       continue;
     }
     if (ch === '{') depth++;
@@ -90,12 +120,31 @@ function lineOf(src, offset) {
 }
 
 /**
+ * DIRECT keys of a property schema object: strip nested braces/brackets first so a TYPE_KEY inside
+ * a nested `properties:`/`items:` sub-schema doesn't falsely satisfy the OUTER property's check.
+ * Extracted out of scanPropertiesBlock (BUG-438) purely to keep that function's complexity in range —
+ * the strip algorithm itself is unchanged.
+ */
+function stripNestedBraces(body) {
+  let flat = '';
+  let depth = 0;
+  for (const ch of body) {
+    if (ch === '{' || ch === '[') { depth++; continue; }
+    if (ch === '}' || ch === ']') { depth--; continue; }
+    if (depth === 0) flat += ch;
+  }
+  return flat;
+}
+
+/**
  * Scan ONE `properties: {` block body (already brace-matched) for property entries.
  * Top-level entries in the block are `propName: { ...schema... },`. For each, check the schema
  * object's DIRECT keys for ≥1 TYPE_KEY. Nested `properties:` blocks inside object-typed props are
  * scanned by the outer matchAll (they are also `properties: {` occurrences in the same file).
+ * `ctx` bundles `{ file, errors }` (BUG-438: kept the call under the 4-param lint-ratchet cap).
  */
-function scanPropertiesBlock(src, blockStart, blockEnd, file, errors) {
+function scanPropertiesBlock(src, blockStart, blockEnd, ctx) {
+  const { file, errors } = ctx;
   let i = blockStart;
   while (i < blockEnd) {
     // find next property key at this nesting level (leading commas + comments tolerated —
@@ -109,14 +158,7 @@ function scanPropertiesBlock(src, blockStart, blockEnd, file, errors) {
     if (close === -1 || close > blockEnd) break;
     const propName = keyMatch[1];
     const body = src.slice(keyIdx + 1, close);
-    // DIRECT keys of this property's schema object: strip nested braces first.
-    let flat = '';
-    let depth = 0;
-    for (const ch of body) {
-      if (ch === '{' || ch === '[') { depth++; continue; }
-      if (ch === '}' || ch === ']') { depth--; continue; }
-      if (depth === 0) flat += ch;
-    }
+    const flat = stripNestedBraces(body);
     const hasTypeKey = TYPE_KEYS.some((k) => new RegExp(`(^|[\\s,])${k}\\s*:`).test(flat));
     // spread-composed props (e.g. `...paginationFields()`) are opaque here; a spread at depth 0
     // means the shape comes from a helper — treat presence of a spread as pass-through only if no
@@ -140,7 +182,7 @@ function scanFile(file, errors) {
     const openIdx = m.index + m[0].length - 1;
     const close = matchBrace(src, openIdx);
     if (close === -1) continue;
-    scanPropertiesBlock(src, openIdx + 1, close, file, errors);
+    scanPropertiesBlock(src, openIdx + 1, close, { file, errors });
   }
 }
 

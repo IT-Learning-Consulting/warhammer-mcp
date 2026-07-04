@@ -606,7 +606,7 @@ Use for quick stat changes, character creation, testing, or corrections where yo
                 statusTier: 'system.details.status.tier',
                 statusStanding: 'system.details.status.standing',
             };
-        await this.verifyStatsPersisted(args.characterName, args.updates, fieldMap);
+        const clampNotes = await this.verifyStatsPersisted(args.characterName, args.updates, fieldMap);
 
         let result = `✅ Updated stats for **${character.name}** (actorType: ${actorType})\n`;
         const updates = Object.entries(args.updates).filter(([_, v]) => v !== undefined);
@@ -616,6 +616,11 @@ Use for quick stat changes, character creation, testing, or corrections where yo
             updates.forEach(([key, value]) => {
                 result += `- ${key}: ${value}\n`;
             });
+        }
+
+        if (clampNotes.length > 0) {
+            result += `\n⚠️ Clamped to derived bounds:\n`;
+            clampNotes.forEach((note) => { result += `- ${note}\n`; });
         }
 
         await this.query<unknown>('notify', {
@@ -1048,10 +1053,13 @@ Use for quick stat changes, character creation, testing, or corrections where yo
     // DP-16 post-write verification walker (RC1.1c dedup) — shared fetch/walk/compare/throw
     // body for handleUpdateStats' character + npc/creature branches. Callers pass their own
     // `fieldMap`; the two maps stay separate (npc/creature is deliberately numeric-only).
-    private async verifyStatsPersisted(characterName: string | undefined, updates: Record<string, unknown>, fieldMap: Record<string, string>): Promise<void> {
+    // Returns clamp-note strings (BUG-434) for the caller to surface in the response text;
+    // empty array when every field persisted at its literal requested value.
+    private async verifyStatsPersisted(characterName: string | undefined, updates: Record<string, unknown>, fieldMap: Record<string, string>): Promise<string[]> {
         const fieldsInPayload = Object.entries(updates).filter(([k, v]) => v !== undefined && fieldMap[k] !== undefined);
-        if (fieldsInPayload.length === 0) return;
+        if (fieldsInPayload.length === 0) return [];
         const verifyActor = await this.query<CharacterInfoResult>('getCharacterInfo', { characterName });
+        const clampNotes: string[] = [];
         for (const [apiKey, requestedValue] of fieldsInPayload) {
             const path = fieldMap[apiKey]!.split('.');
             let cursor: any = verifyActor;
@@ -1063,12 +1071,48 @@ Use for quick stat changes, character creation, testing, or corrections where yo
             // String coercion tolerance for `move` (number → string per Foundry StringField)
             // and any other string field receiving a numeric input.
             const equivalent = String(actual) === String(requestedValue);
-            if (!equivalent) {
-                throw new Error(
-                    `${ErrorTokens.UPDATE_STATS_NOT_PERSISTED}: ${apiKey} expected ${JSON.stringify(requestedValue)}, got ${JSON.stringify(actual)}`,
-                );
+            if (equivalent) continue;
+
+            // BUG-434: bounded `.value` pools (wounds/fortune/fate/resilience/resolve/
+            // advantage/criticalWounds) get clamped server-side to the derived [0, max]
+            // range. A mismatch that equals the SAME sibling `.max` bound is a successful
+            // clamped write, not a persistence failure — check before failing loud.
+            const clampNote = this.clampedStatNote(verifyActor, path, requestedValue, actual);
+            if (clampNote !== null) {
+                clampNotes.push(`${apiKey}: ${clampNote}`);
+                continue;
             }
+
+            throw new Error(
+                `${ErrorTokens.UPDATE_STATS_NOT_PERSISTED}: ${apiKey} expected ${JSON.stringify(requestedValue)}, got ${JSON.stringify(actual)}`,
+            );
         }
+        return clampNotes;
+    }
+
+    // BUG-434 clamp-aware compare helper. Only applies to numeric `.value` leaf paths whose
+    // parent object also carries a numeric `.max` (wfrp4e's bounded-pool shape, e.g.
+    // `system.status.wounds.{value,max}` — see character.ts:273-274, compendium.ts:749). A
+    // non-`.value` path (text fields) or a parent without `.max` returns null unchanged, so
+    // the caller's existing throw behavior is preserved for every non-clamp mismatch.
+    private clampedStatNote(verifyActor: any, path: string[], requestedValue: unknown, actual: unknown): string | null {
+        if (path[path.length - 1] !== 'value') return null;
+        const requestedNum = Number(requestedValue);
+        const actualNum = Number(actual);
+        if (Number.isNaN(requestedNum) || Number.isNaN(actualNum)) return null;
+        let parent: any = verifyActor;
+        for (const segment of path.slice(0, -1)) {
+            parent = parent?.[segment];
+            if (parent === undefined) return null;
+        }
+        const max = typeof parent?.max === 'number' ? parent.max : undefined;
+        if (max === undefined) return null;
+        const min = typeof parent?.min === 'number' ? parent.min : 0;
+        const clampedRequested = Math.min(max, Math.max(min, requestedNum));
+        if (clampedRequested === requestedNum) return null; // nothing was clamped — not this case
+        return actualNum === clampedRequested
+            ? `requested ${requestedNum}, clamped to derived bound ${clampedRequested}`
+            : null;
     }
 
     private async handleApplyFear(args: z.infer<typeof ApplyFearSchema>): Promise<string> {
