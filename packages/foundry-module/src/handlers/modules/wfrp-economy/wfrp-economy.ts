@@ -31,10 +31,10 @@
 
 import { requireModuleActive } from '../_shared/require-module-active.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
-import { WfrpEconomyInput, type WfrpEconomyInputType } from './schemas.js';
+import { WfrpEconomyInput, type WfrpEconomyInputType } from '@foundry-mcp/shared';
 import { notify } from '../../../notify.js';
+import { Envelope, getGame, isGM } from '../_shared/handler-utils.js';
 
-type Envelope<T> = { success: true; data: T } | { success: false; error: string };
 
 const MODULE_ID = 'wfrp4e-economy';
 const SETTING_SCOPE = 'wfrp4e-economy';
@@ -62,14 +62,6 @@ const WRITE_ACTIONS = new Set([
 ]);
 
 // ── Local helpers ──────────────────────────────────────────────────────────────
-
-function getGame(): any {
-  return (globalThis as any).game;
-}
-
-function isGM(): boolean {
-  return Boolean(getGame()?.user?.isGM);
-}
 
 function getSetting(key: string): any {
   return getGame()?.settings?.get?.(SETTING_SCOPE, key);

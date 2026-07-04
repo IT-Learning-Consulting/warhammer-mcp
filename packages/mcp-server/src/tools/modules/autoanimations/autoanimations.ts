@@ -14,6 +14,10 @@
 import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
 import { moduleNotActiveContent } from '../_shared/module-guard.js';
+import { z } from 'zod';
+import { ModuleAutoAnimationsInput } from '@foundry-mcp/shared';
+
+type ModuleAutoAnimationsArgs = z.infer<typeof ModuleAutoAnimationsInput>;
 
 // ── Response shapes (DP-15 — concrete, never <any>) ──────────────────────────
 
@@ -170,7 +174,7 @@ Examples:
     ];
   }
 
-  async execute(args: Record<string, unknown>) {
+  async execute(args: ModuleAutoAnimationsArgs) {
     const action = String(args.action ?? 'unknown');
     this.logger.info('Executing module-autoanimations action', { action });
     try {

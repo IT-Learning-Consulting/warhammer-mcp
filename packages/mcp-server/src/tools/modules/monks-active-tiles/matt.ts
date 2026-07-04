@@ -24,7 +24,10 @@ import {
   MattMutationOutput,
   MATT_MUTATION_OUTPUT_JSON_SCHEMA,
 } from '@foundry-mcp/shared';
-import { type ModuleMattInputType } from './schemas.js';
+import { z } from 'zod';
+import { ModuleMattInput } from '@foundry-mcp/shared';
+
+type ModuleMattArgs = z.infer<typeof ModuleMattInput>;
 
 // Phase 11 (R11.1): mutation actions get structuredContent attached (the 14 write
 // actions); the 5 read actions (get-capabilities/get-trigger-tile/list-trigger-tiles/
@@ -421,8 +424,8 @@ Examples:
     ];
   }
 
-  async execute(rawArgs: Record<string, unknown>) {
-    const args = rawArgs as ModuleMattInputType;
+  async execute(rawArgs: ModuleMattArgs) {
+    const args = rawArgs;
     this.logger.info('Executing module-matt action', { action: args.action });
 
     switch (args.action) {

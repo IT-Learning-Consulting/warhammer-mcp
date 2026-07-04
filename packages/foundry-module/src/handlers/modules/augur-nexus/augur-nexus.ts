@@ -38,10 +38,10 @@
 
 import { requireModuleActive } from '../_shared/require-module-active.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
-import { AugurNexusInput, type AugurNexusInputType } from './schemas.js';
+import { AugurNexusInput, type AugurNexusInputType } from '@foundry-mcp/shared';
 import { notify } from '../../../notify.js';
+import { Envelope, getGame, isGM } from '../_shared/handler-utils.js';
 
-type Envelope<T> = { success: true; data: T } | { success: false; error: string };
 
 const MODULE_ID = 'augur-nexus';
 const FLAG_SCOPE = 'augur-nexus';
@@ -78,14 +78,6 @@ const WRITE_ACTIONS = new Set([
 ]);
 
 // ── Local helpers ──────────────────────────────────────────────────────────────
-
-function getGame(): any {
-  return (globalThis as any).game;
-}
-
-function isGM(): boolean {
-  return Boolean(getGame()?.user?.isGM);
-}
 
 /**
  * Runtime ESM import that EVADES esbuild/tsc static resolution (Function indirection). Used for the

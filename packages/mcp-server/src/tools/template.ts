@@ -52,11 +52,11 @@ interface TemplateDuplicateResponse {
   sourceId: string; // not a branded id (polymorphic / non-document)
 }
 interface TemplateListResponse {
-  templates: TemplateListItem[];
+  templates?: TemplateListItem[];
   total: number;
-  page: number;
-  pageSize: number;
-  countOnly: boolean;
+  page?: number;
+  pageSize?: number;
+  filterApplied?: boolean | string | null;
 }
 
 // ── Utilities ────────────────────────────────────────────────────────────────
@@ -272,7 +272,8 @@ export class TemplateTool extends BaseTool {
     try {
       const data = await this.query<TemplateListResponse>('template', args);
 
-      if (data.countOnly) {
+      // BUG-435: countOnly path — factory returns LEAN {total, filterApplied} with no templates array.
+      if (data.templates === undefined) {
         const text = `📐 **MeasuredTemplate count**\n\n**Total:** ${data.total}`;
         return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
       }
@@ -281,7 +282,7 @@ export class TemplateTool extends BaseTool {
         return { content: [{ type: 'text' as const, text: '📐 **No MeasuredTemplates Found**' }], structuredContent: data as unknown as Record<string, unknown> };
       }
 
-      const pageCount = Math.ceil(data.total / data.pageSize);
+      const pageCount = Math.ceil(data.total / (data.pageSize ?? 20));
       const lines = data.templates.map(formatTemplateListItem);
       const text = `📐 **MeasuredTemplates** (page ${data.page} of ${pageCount}, ${data.total} total)\n\n${lines.join('\n')}`;
       return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };

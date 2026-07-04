@@ -31,10 +31,10 @@
 import { requireModuleActive } from '../_shared/require-module-active.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
 import { verifyFlagWrite } from '../../../utils/verifyWrite.js';
-import { TokenPresentationInput, type TokenPresentationInputType } from './schemas.js';
+import { TokenPresentationInput, type TokenPresentationInputType } from '@foundry-mcp/shared';
 import { notify } from '../../../notify.js';
+import { Envelope, getGame, isGM } from '../_shared/handler-utils.js';
 
-type Envelope<T> = { success: true; data: T } | { success: false; error: string };
 
 const BOSS_SPLASH_ID = 'boss-splash';
 const TOKEN_NOTES_ID = 'token-notes';
@@ -61,14 +61,6 @@ export const ACTION_MEMBER_MAP: Record<string, string> = {
 const TOKEN_NOTES_DEPS = ['lib-wrapper'];
 
 // ── Local helpers ──────────────────────────────────────────────────────────────
-
-function getGame(): any {
-  return (globalThis as any).game;
-}
-
-function isGM(): boolean {
-  return Boolean(getGame()?.user?.isGM);
-}
 
 function bossSplash(): any {
   return getGame()?.bossSplash;
@@ -185,6 +177,14 @@ const BOSS_SPLASH_SETTING_KEYS = [
  * — BOTH land on a macrotask AFTER splashBoss() resolves, so an immediate currentOverlay check races the
  * deferred write (live-audit 2026-06-25; same fire-and-forget class as the token-attacher detach-all
  * settle / F03). `extraDelayMs` lets show wait past the configured animationDelay before the poll.
+ *
+ * STAYS LOCAL (mcp_code_quality_v2 Phase C2, RC2.1, audit-sanctioned option — task 2.2): the shared
+ * `_shared/settle-poll.ts` boolean-predicate overload returns whether the predicate MATCHED
+ * (true on match, false on timeout), but this function's callers need the RAW final `present` state
+ * (assigned directly into the response payload's `overlayActive` field at both call sites, not just
+ * used as a boolean gate) — for the close path (expectPresent=false), a matched predicate would
+ * incorrectly surface as `overlayActive: true` if migrated naively. The return-value semantics
+ * genuinely don't fit the shared contract; kept local rather than forcing a lossy adapter.
  */
 async function waitForOverlayState(expectPresent: boolean, extraDelayMs: number): Promise<boolean> {
   const deadline = Math.max(0, extraDelayMs) + 300;

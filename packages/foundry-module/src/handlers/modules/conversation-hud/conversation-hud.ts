@@ -39,10 +39,10 @@
 import { requireModuleActive } from '../_shared/require-module-active.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
 import { verifyFlagWrite } from '../../../utils/verifyWrite.js';
-import { ConversationHudInput, type ConversationHudInputType } from './schemas.js';
+import { ConversationHudInput, type ConversationHudInputType } from '@foundry-mcp/shared';
 import { notify } from '../../../notify.js';
+import { Envelope, getGame, isGM } from '../_shared/handler-utils.js';
 
-type Envelope<T> = { success: true; data: T } | { success: false; error: string };
 
 const MODULE_ID = 'conversation-hud';
 const SHEET_CONVERSATION = 'conversation-sheet.ConversationSheet';
@@ -57,10 +57,6 @@ const GM_CONTROLLED = 'gm-controlled';
 
 // ── Local helpers ──────────────────────────────────────────────────────────────
 
-function isGM(): boolean {
-  return Boolean((globalThis as any).game?.user?.isGM);
-}
-
 /** Resolve the live `game.ConversationHud` instance (game.X accessor), or throw. */
 function getCHud(): any {
   const chud = (globalThis as any).game?.ConversationHud;
@@ -70,10 +66,6 @@ function getCHud(): any {
     );
   }
   return chud;
-}
-
-function getGame(): any {
-  return (globalThis as any).game;
 }
 
 /** True for a "clear the link" signal. The MCP boundary types journalId as a string, so JSON null

@@ -106,6 +106,11 @@ export type DrawingId = z.infer<typeof DrawingId>;
 export const MeasuredTemplateId = z.string().min(1).brand<'MeasuredTemplateId'>();
 export type MeasuredTemplateId = z.infer<typeof MeasuredTemplateId>;
 
+// mcp_code_quality_v2 Phase C2 (task 3.2) — Wall document id (doors are Walls; needed by the
+// promoted levels + perceptive module schemas' wallId/doorId fields).
+export const WallId = z.string().min(1).brand<'WallId'>();
+export type WallId = z.infer<typeof WallId>;
+
 export const RegionId = z.string().min(1).brand<'RegionId'>();
 export type RegionId = z.infer<typeof RegionId>;
 

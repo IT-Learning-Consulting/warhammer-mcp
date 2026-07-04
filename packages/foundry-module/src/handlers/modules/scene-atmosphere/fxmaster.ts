@@ -34,9 +34,17 @@
 
 import { notify } from '../../../notify.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
-import type { ModuleSceneAtmosphereInputType } from './schemas.js';
+import type { ModuleSceneAtmosphereInputType } from '@foundry-mcp/shared';
+import { Envelope, getGame, getCanvas } from '../_shared/handler-utils.js';
 
-type Envelope<T> = { success: true; data: T } | { success: false; error: string };
+function getCanvasOrThrow(): any {
+  const c = getCanvas();
+  if (!c?.scene) {
+    throw new Error('CANVAS_UNAVAILABLE: canvas.scene not available');
+  }
+  return c;
+}
+
 
 // ── FXMASTER API accessor ─────────────────────────────────────────────────────
 
@@ -46,18 +54,6 @@ function getFXMASTER(): any {
     throw new Error('FXMASTER_API_UNAVAILABLE: window.FXMASTER.api not bound (module may not be fully initialised)');
   }
   return fx;
-}
-
-function getCanvas(): any {
-  const c = (globalThis as any).canvas;
-  if (!c?.scene) {
-    throw new Error('CANVAS_UNAVAILABLE: canvas.scene not available');
-  }
-  return c;
-}
-
-function getGame(): any {
-  return (globalThis as any).game;
 }
 
 function getSceneName(): string {
@@ -264,7 +260,7 @@ export async function handlePlayParticles(input: PlayParticlesInput): Promise<En
     // Post-write verify: re-read effects flag
     let verifiedEffects: unknown = null;
     try {
-      verifiedEffects = getCanvas().scene.getFlag('fxmaster', 'effects');
+      verifiedEffects = getCanvasOrThrow().scene.getFlag('fxmaster', 'effects');
     } catch {
       // canvas may not be current scene; skip verification
     }
@@ -299,7 +295,7 @@ export async function handlePlayFilters(input: PlayFiltersInput): Promise<Envelo
     });
     let verifiedFilters: unknown = null;
     try {
-      verifiedFilters = getCanvas().scene.getFlag('fxmaster', 'filters');
+      verifiedFilters = getCanvasOrThrow().scene.getFlag('fxmaster', 'filters');
     } catch {
       // skip
     }
@@ -394,7 +390,7 @@ export async function handleClearEffects(input: ClearEffectsInput): Promise<Enve
   }
 
   try {
-    const canvas = getCanvas();
+    const canvas = getCanvasOrThrow();
     const scene = canvas.scene;
     const target = input.target ?? 'both';
 
@@ -486,7 +482,7 @@ export async function handleSetEnabled(input: SetEnabledInput): Promise<Envelope
 
 /** Resolve a Region document from the current scene by ID. */
 function getRegion(regionId: string): any {
-  const scene = getCanvas().scene;
+  const scene = getCanvasOrThrow().scene;
   const region = scene.regions?.get(regionId);
   if (!region) {
     throw new Error(`REGION_NOT_FOUND: No Region with id "${regionId}" on the current scene "${scene.name ?? scene.id}"`);

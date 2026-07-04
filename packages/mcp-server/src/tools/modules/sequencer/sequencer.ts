@@ -13,6 +13,10 @@ import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
 import {
   ErrorTokens, SceneId } from '@foundry-mcp/shared';
 import { moduleNotActiveContent } from '../_shared/module-guard.js';
+import { z } from 'zod';
+import { ModuleSequencerInput } from '@foundry-mcp/shared';
+
+type ModuleSequencerArgs = z.infer<typeof ModuleSequencerInput>;
 
 // ── Response shapes (DP-15) ───────────────────────────────────────────────────
 
@@ -211,7 +215,7 @@ Examples:
     ];
   }
 
-  async execute(args: Record<string, unknown>) {
+  async execute(args: ModuleSequencerArgs) {
     const action = String(args.action ?? 'unknown');
     this.logger.info('Executing module-sequencer action', { action });
     try {

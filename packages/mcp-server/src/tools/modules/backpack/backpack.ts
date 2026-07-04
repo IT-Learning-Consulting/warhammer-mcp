@@ -20,6 +20,10 @@ import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
 import { moduleNotActiveContent } from '../_shared/module-guard.js';
 import { BACKPACK_ACTIONS, type BackpackResult } from './schemas.js';
+import { z } from 'zod';
+import { BackpackInput } from '@foundry-mcp/shared';
+
+type BackpackArgs = z.infer<typeof BackpackInput>;
 
 // ── Single discriminated formatter (one text line per action) ──────────────────
 
@@ -118,7 +122,7 @@ Example: { action: "add-item", actorId: "abc123", itemId: "def456" }`,
     ];
   }
 
-  async execute(rawArgs: Record<string, unknown>) {
+  async execute(rawArgs: BackpackArgs) {
     const action = String(rawArgs.action ?? 'unknown');
     this.logger.info('Executing module-backpack action', { action });
     if (!(BACKPACK_ACTIONS as readonly string[]).includes(action)) {

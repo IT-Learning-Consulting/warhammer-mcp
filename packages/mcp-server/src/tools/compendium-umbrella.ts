@@ -22,6 +22,7 @@
 //    rejects collision with COMPENDIUM_DOCUMENT_ALREADY_EXISTS.
 
 import { z } from 'zod';
+import { truncatedJoin } from '../utils/truncate.js';
 import {
   CompendiumToolInput,
   FolderId,
@@ -289,7 +290,7 @@ function formatUpdateDocumentResponse(r: CompendiumUpdateDocumentResponse): stri
 
 function formatReadDocumentResponse(r: CompendiumReadDocumentResponse): string {
   const dataKeys = Object.keys(r.data);
-  const preview = dataKeys.slice(0, 25).join(', ') + (dataKeys.length > 25 ? `, … (+${dataKeys.length - 25} more)` : '');
+  const preview = truncatedJoin(dataKeys, 25, ', ', (n) => `, … (+${n} more)`);
   return [
     `## Compendium Document \`${r.documentId}\``,
     ``,

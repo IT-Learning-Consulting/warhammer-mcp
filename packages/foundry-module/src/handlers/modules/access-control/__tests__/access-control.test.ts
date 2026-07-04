@@ -15,7 +15,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { dispatchModuleAccessControl, ACTION_MEMBER_MAP } from '../access-control.js';
-import { BUNDLE_MEMBERS } from '../schemas.js';
+import { ACCESS_CONTROL_BUNDLE_MEMBERS as BUNDLE_MEMBERS } from '@foundry-mcp/shared';
 
 function makeModulesMap(activeIds: string[]) {
   return {

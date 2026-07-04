@@ -150,12 +150,11 @@ const handlers = createEmbeddedCRUDHandlers<any, any, TileViewModel, TileListIte
     // minus pageCount. tile.list response: {success, tiles, total, page, pageSize}.
     listBare: ({ items, total }) => ({ tiles: items, total, page: 1, pageSize: 50 }),
     listPaginated: ({ items, total, page, pageSize }) => ({ tiles: items, total, page, pageSize }),
-    listCount: ({ total, page, pageSize }) => ({
-      tiles: [],
+    // BUG-435: canonical LEAN countOnly shape {total, filterApplied} — uniform with the factory
+    // default (light/sound/drawing) and scene; no empty tiles[] + pagination echo on a count probe.
+    listCount: ({ total, filterApplied }) => ({
       total,
-      page: page ?? 1,
-      pageSize: pageSize ?? 50,
-      countOnly: true,
+      filterApplied,
     }),
   },
 });

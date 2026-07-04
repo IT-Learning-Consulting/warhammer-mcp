@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { truncateText } from '../utils/truncate.js';
 import {
   GetCharacterOutput,
   GET_CHARACTER_OUTPUT_JSON_SCHEMA,
@@ -308,7 +309,7 @@ export class CharacterTools extends BaseTool {
         name: crit.name,
         location: crit.system?.location?.value || 'unknown',
         severity: crit.system?.wounds?.value || 0,
-        description: this.truncateText(crit.system?.description?.value || '', 200),
+        description: truncateText(crit.system?.description?.value || '', 200),
       })),
     };
 
@@ -538,7 +539,7 @@ export class CharacterTools extends BaseTool {
         name: talent.name,
         advances: talent.system?.advances?.value || 1,
         tests: talent.system?.tests?.value || '',
-        description: this.truncateText(talent.system?.description?.value || '', 200)
+        description: truncateText(talent.system?.description?.value || '', 200)
       }));
     }
 
@@ -549,7 +550,7 @@ export class CharacterTools extends BaseTool {
       stats.traits = traitItems.map((trait: FoundryRawItem) => ({
         name: trait.name,
         specification: trait.system?.specification?.value || '',
-        description: this.truncateText(trait.system?.description?.value || '', 200)
+        description: truncateText(trait.system?.description?.value || '', 200)
       }));
     }
 
@@ -582,7 +583,7 @@ export class CharacterTools extends BaseTool {
       type: item.type,
       quantity: item.system?.quantity?.value || 1,
       equipped: item.system?.equipped?.value || item.system?.worn?.value || false,
-      description: this.truncateText(item.system?.description?.value || '', 200),
+      description: truncateText(item.system?.description?.value || '', 200),
       hasImage: !!item.img,
     }));
   }
@@ -596,7 +597,7 @@ export class CharacterTools extends BaseTool {
       conditions.injuries = injuries.map((injury: FoundryRawItem) => ({
         name: injury.name,
         location: injury.system?.location?.value || '',
-        description: this.truncateText(injury.system?.description?.value || '', 200),
+        description: truncateText(injury.system?.description?.value || '', 200),
       }));
     }
 
@@ -605,7 +606,7 @@ export class CharacterTools extends BaseTool {
       conditions.mutations = mutations.map((mutation: FoundryRawItem) => ({
         name: mutation.name,
         type: mutation.system?.mutationType?.value || '',
-        description: this.truncateText(mutation.system?.description?.value || '', 200),
+        description: truncateText(mutation.system?.description?.value || '', 200),
       }));
     }
 
@@ -617,7 +618,7 @@ export class CharacterTools extends BaseTool {
         incubation: disease.system?.incubation?.value || '',
         duration: disease.system?.duration?.value || '',
         symptoms: disease.system?.symptoms?.value || '',
-        description: this.truncateText(disease.system?.description?.value || '', 200),
+        description: truncateText(disease.system?.description?.value || '', 200),
       }));
     }
 
@@ -625,7 +626,7 @@ export class CharacterTools extends BaseTool {
     if (psychology.length > 0) {
       conditions.psychology = psychology.map((psych: FoundryRawItem) => ({
         name: psych.name,
-        description: this.truncateText(psych.system?.description?.value || '', 200),
+        description: truncateText(psych.system?.description?.value || '', 200),
       }));
     }
 
@@ -671,10 +672,4 @@ export class CharacterTools extends BaseTool {
     });
   }
 
-  private truncateText(text: string, maxLength: number): string {
-    if (!text || text.length <= maxLength) {
-      return text;
-    }
-    return text.substring(0, maxLength - 3) + '...';
-  }
 }

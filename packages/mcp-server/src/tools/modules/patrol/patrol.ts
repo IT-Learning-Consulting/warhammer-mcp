@@ -12,6 +12,10 @@
 import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
 import { moduleNotActiveContent } from '../_shared/module-guard.js';
+import { z } from 'zod';
+import { ModulePatrolInput } from '@foundry-mcp/shared';
+
+type ModulePatrolArgs = z.infer<typeof ModulePatrolInput>;
 import type {
   GetConfigResult,
   EnableTokenResult,
@@ -168,7 +172,7 @@ Example: { action: "enable-token", tokenUuids: ["Scene.x.Token.y"], mode: "wande
     ];
   }
 
-  async execute(rawArgs: Record<string, unknown>) {
+  async execute(rawArgs: ModulePatrolArgs) {
     const action = String(rawArgs.action ?? 'unknown');
     this.logger.info('Executing module-patrol action', { action });
     switch (action) {

@@ -8,6 +8,7 @@
 // they are not handler inputs. Handler-input schemas in this file DO use .strict().
 
 import { z } from 'zod';
+import { FOUNDRY_ID } from './primitives.js';
 import { FolderId, RollTableId, TableResultId } from './branded-ids.js';
 
 // ── Protocol ───────────────────────────────────────────────────────────────
@@ -133,14 +134,14 @@ export const TextResultSchema = z.object({
 export const DocumentResultSchema = z.object({
   type: z.literal('document'),
   documentCollection: z.string().min(1),
-  documentId: z.string().min(1), // polymorphic: not branded (Phase 1 design)
+  documentId: FOUNDRY_ID, // polymorphic: not branded (Phase 1 design; FOUNDRY_ID primitive per C2 task 5.2)
   ...ResultCommonShape,
 }).strict();
 
 export const CompendiumResultSchema = z.object({
   type: z.literal('compendium'),
   documentCollection: z.string().min(1),
-  documentId: z.string().min(1), // polymorphic: not branded (Phase 1 design)
+  documentId: FOUNDRY_ID, // polymorphic: not branded (Phase 1 design; FOUNDRY_ID primitive per C2 task 5.2)
   ...ResultCommonShape,
 }).strict();
 
@@ -211,7 +212,7 @@ export const UpdateTableResultsInput = z.object({
   tableId: RollTableId,
   updates: z.array(
     z.object({
-      _id: z.string().min(1), // polymorphic: not branded (Phase 1 design)
+      _id: FOUNDRY_ID, // polymorphic: not branded (Phase 1 design; FOUNDRY_ID primitive per C2 task 5.2)
       name: z.string().optional(),
       img: z.string().optional(),
       description: z.string().optional(),
@@ -246,7 +247,7 @@ export const DrawManyFromTableInput = z.object({
 
 export const ImportRollTableFromCompendiumInput = z.object({
   pack: z.string().min(1),
-  documentId: z.string().min(1), // polymorphic: not branded (Phase 1 design)
+  documentId: FOUNDRY_ID, // polymorphic: not branded (Phase 1 design; FOUNDRY_ID primitive per C2 task 5.2)
   normalize: z.boolean().default(true),
 }).strict();
 

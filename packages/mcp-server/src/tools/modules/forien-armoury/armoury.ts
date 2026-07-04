@@ -13,6 +13,10 @@
 import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
 import { moduleNotActiveContent } from '../_shared/module-guard.js';
+import { z } from 'zod';
+import { ModuleArmouryInput } from '@foundry-mcp/shared';
+
+type ModuleArmouryArgs = z.infer<typeof ModuleArmouryInput>;
 import type {
   ArmouryMeResult,
   ArmourySpendMeResult,
@@ -158,7 +162,7 @@ Example: { action: "get-me", actorId: "Actor.abc123" }`,
     ];
   }
 
-  async execute(rawArgs: Record<string, unknown>) {
+  async execute(rawArgs: ModuleArmouryArgs) {
     const action = String(rawArgs.action ?? 'unknown');
     this.logger.info('Executing module-armoury action', { action });
     switch (action) {

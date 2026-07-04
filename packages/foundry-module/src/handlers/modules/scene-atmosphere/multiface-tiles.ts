@@ -39,26 +39,26 @@
 //   - CCR-4: no confirm gates (no destructive-without-recovery operations)
 
 import { notify } from '../../../notify.js';
-import type { ModuleSceneAtmosphereInputType } from './schemas.js';
+import type { ModuleSceneAtmosphereInputType } from '@foundry-mcp/shared';
+import { Envelope, getCanvas } from '../_shared/handler-utils.js';
 
-type Envelope<T> = { success: true; data: T } | { success: false; error: string };
-
-// ── Tile resolution ───────────────────────────────────────────────────────────
-
-function getCanvas(): any {
-  const c = (globalThis as any).canvas;
+function getCanvasOrThrow(): any {
+  const c = getCanvas();
   if (!c?.scene) {
     throw new Error('CANVAS_UNAVAILABLE: canvas.scene not available');
   }
   return c;
 }
 
+
+// ── Tile resolution ───────────────────────────────────────────────────────────
+
 /**
  * Resolve a Tile PlaceableObject by document ID from the current canvas scene.
  * Returns the PlaceableObject (not the document) for compatibility with canvas layer ops.
  */
 function resolveTile(tileId: string): any {
-  const c = getCanvas();
+  const c = getCanvasOrThrow();
   const tiles = c.tiles;
   if (!tiles) {
     throw new Error('CANVAS_LAYER_UNAVAILABLE: canvas.tiles layer not available');

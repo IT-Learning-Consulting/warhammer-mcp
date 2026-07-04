@@ -19,3 +19,16 @@ export const CreateCustomItemCommon = z.object({
 });
 
 export type CreateCustomItemCommonInput = z.infer<typeof CreateCustomItemCommon>;
+
+// ── Price factory (mcp_code_quality_v2 Phase C2, task 5.3 — D3) ────────────────────────────────
+// FACTORY FUNCTION, deliberately NOT a shared Zod instance (zodToJsonSchema emits unresolvable
+// `$ref`s for instances referenced from multiple schemas — C2 plan Design Decisions). Each of the
+// 9 priced subtype schemas calls this for a fresh, byte-equivalent fragment (was: 9 byte-identical
+// local `const Price = z.object({...})` redeclarations).
+export function priceFields() {
+  return z.object({
+    gc: z.number().optional(),
+    ss: z.number().optional(),
+    bp: z.number().optional(),
+  });
+}

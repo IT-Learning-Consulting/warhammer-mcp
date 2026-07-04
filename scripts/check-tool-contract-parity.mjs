@@ -460,12 +460,83 @@ function main() {
     }
   }
 
+  // ── Branded-ID regression section (mcp_code_quality_v2 Phase C2, task 6.2, RC2.5-16b) ──────
+  //
+  // REGRESSION pin, not a whole-tree conquest: the C2 task-3.2 sweep branded every doc-id field
+  // in the 10 audited offender files (XPK-03 roster) + exempted the 2 deliberately-polymorphic
+  // entityId files. This section pins those 12 files at zero bare `<xxx>Id/<xxx>Uuid: z.string(`
+  // fields (the decay class: augur-nexus regrew 22→30 across three checkpoints post-audit).
+  // Un-swept module schemas (~26 files) are NOT scanned — extend BRANDED_ID_ROSTER as future
+  // sweeps land, so the gate stays green-on-land (S1 Lesson 3: never wire a gate red-on-history).
+  // Escape hatch: `// BRANDED-ID-EXEMPT:<field> — <reason>` on the offending line (mirrors
+  // PARITY-COVERAGE-EXEMPT). Also scans every non-shim `*schemas*.ts` left under
+  // handlers/modules/ (post-promotion these are pure re-export shims; new local schema content
+  // added there is a regression against the task-3.1 promotion and gets scanned).
+
+  const brandedIdViolations = [];
+  {
+    const MODULES_SCHEMAS_DIR = 'shared/src/schemas/modules';
+    const BRANDED_ID_ROSTER = [
+      'augur-nexus/schemas.ts',
+      'wfrp-economy/schemas.ts',
+      'access-control/locknkey-schemas.ts',
+      'access-control/lockview-schemas.ts',
+      'levels/schemas.ts',
+      'token-attacher/schemas.ts',
+      'mastercrafted/schemas.ts',
+      'token-presentation/schemas.ts',
+      'perceptive/schemas.ts',
+      'patrol/schemas.ts',
+      'mortal-needs/schemas.ts', // entityId BRANDED-ID-EXEMPT (deliberately polymorphic)
+      'polyglot/schemas.ts',     // entityId BRANDED-ID-EXEMPT (deliberately polymorphic)
+    ];
+    // field name ends in Id or Uuid (NOT Ids/Uuids plurals), typed as bare z.string(
+    const BARE_ID_RE = /\b([A-Za-z_$][A-Za-z0-9_$]*(?:Id|Uuid))\s*[:=]\s*z\.string\(/;
+
+    const scanBrandedIdFile = (filePath) => {
+      let text;
+      try {
+        text = readFileSync(filePath, 'utf8');
+      } catch {
+        return;
+      }
+      const lines = text.split(/\r?\n/);
+      lines.forEach((line, i) => {
+        if (/^\s*(\/\/|\*)/.test(line)) return;
+        if (line.includes('BRANDED-ID-EXEMPT')) return;
+        const m = line.match(BARE_ID_RE);
+        if (!m) return;
+        if (/Ids\s*[:=]|Uuids\s*[:=]/.test(line)) return;
+        brandedIdViolations.push({ field: m[1], file: filePath, line: i + 1, source: line.trim() });
+      });
+    };
+
+    for (const rel of BRANDED_ID_ROSTER) {
+      scanBrandedIdFile(join(MODULES_SCHEMAS_DIR, rel));
+    }
+    // non-shim residue under handlers/modules/ (shims contain no z.object/z.string content)
+    const HANDLER_MODULES_DIR = 'packages/foundry-module/src/handlers/modules';
+    if (statSync(HANDLER_MODULES_DIR, { throwIfNoEntry: false })) {
+      const walk = (dir) => {
+        for (const entry of readdirSync(dir)) {
+          const full = join(dir, entry);
+          const st = statSync(full);
+          if (st.isDirectory()) walk(full);
+          else if (/schemas.*\.ts$/.test(entry) || /-schemas\.ts$/.test(entry)) scanBrandedIdFile(full);
+        }
+      };
+      walk(HANDLER_MODULES_DIR);
+    }
+  }
+
   // ── Aggregate exit ─────────────────────────────────────────────────────────
 
   const allClean =
-    violations.length === 0 && numericViolations.length === 0 && coverageViolations.length === 0;
+    violations.length === 0 && numericViolations.length === 0 && coverageViolations.length === 0 &&
+    brandedIdViolations.length === 0;
 
   if (allClean) {
+    console.log('OK — branded-ID regression roster clean (C2 task 6.2 pin).');
     console.log('\nOK — Zod .nullable() ↔ inputSchema type parity clean.');
     console.log('OK — numeric-literal type discipline clean (BUG-095 guard).');
     console.log('OK — top-level coverage clean (BUG-088 guard).');
@@ -506,6 +577,18 @@ function main() {
       console.log(`  Zod: ${v.schemaSource}`);
       console.log(`  Tool: ${v.toolFile} (field missing from inputSchema.properties)`);
       console.log(`  Fix: add property to inputSchema, OR mark exempt with // PARITY-COVERAGE-EXEMPT:${v.field}`);
+    }
+  }
+
+  if (brandedIdViolations.length > 0) {
+    console.log('');
+    console.log(`FAIL: ${brandedIdViolations.length} branded-ID regression violation${brandedIdViolations.length === 1 ? '' : 's'} (C2 task 6.2 pin — augur-nexus 22→30 decay class).`);
+    for (const v of brandedIdViolations) {
+      console.log('');
+      console.log(`  Field: ${v.field}`);
+      console.log(`  Source: ${v.file}:${v.line} — ${v.source}`);
+      console.log(`  Fix: use the branded validator from branded-ids.ts (SceneId/TokenId/ActorId/FoundryUuid/…),`);
+      console.log(`       FOUNDRY_ID for genuinely-polymorphic doc ids, OR annotate // BRANDED-ID-EXEMPT:${v.field} — <reason>`);
     }
   }
 

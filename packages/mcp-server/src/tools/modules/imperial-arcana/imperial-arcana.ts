@@ -13,6 +13,10 @@
 import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
 import { ErrorTokens, IMPERIAL_ARCANA_OUTPUT_JSON_SCHEMA } from '@foundry-mcp/shared';
 import { moduleNotActiveContent } from '../_shared/module-guard.js';
+import { z } from 'zod';
+import { ImperialArcanaInput } from '@foundry-mcp/shared';
+
+type ImperialArcanaArgs = z.infer<typeof ImperialArcanaInput>;
 
 // ── Response shapes (DP-15 — typed, never <any>) ─────────────────────────────────
 
@@ -178,7 +182,7 @@ Examples:
     ];
   }
 
-  async execute(args: Record<string, unknown>) {
+  async execute(args: ImperialArcanaArgs) {
     const action = String(args.action ?? 'unknown');
     this.logger.info('Executing imperial-arcana action', { action });
     try {

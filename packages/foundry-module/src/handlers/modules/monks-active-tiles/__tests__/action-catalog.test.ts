@@ -15,7 +15,7 @@ import {
   isDangerousAction,
   validateSequence,
   makeMattId,
-} from '../action-catalog.js';
+} from '@foundry-mcp/shared';
 import { normalizeActions } from '../matt.js';
 
 describe('MATT action catalog — completeness (parity target, dossier §8)', () => {

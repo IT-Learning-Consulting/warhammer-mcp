@@ -2,6 +2,7 @@
 // CCR-4 per-domain file. Input schemas use .strict() per CCR-5.
 
 import { z } from 'zod';
+import { FOUNDRY_ID, paginationFields } from './primitives.js';
 import { FolderId, PackId } from './branded-ids.js';
 
 export const CompendiumSearchResultSchema = z.object({
@@ -64,7 +65,7 @@ export const GetAvailablePacksInput = z.object({}).strict();
 // only — module returns the same shape regardless).
 export const GetCompendiumDocumentFullInput = z.object({
   packId: PackId,
-  documentId: z.string(), // polymorphic: not branded (Phase 1 design)
+  documentId: FOUNDRY_ID, // polymorphic: not branded (Phase 1 design; FOUNDRY_ID primitive per C2 task 5.2)
   summary_only: z.boolean().optional(),
 }).strict();
 
@@ -117,8 +118,7 @@ export const UpdatePackInput = z.object({
 export const ReadPackInput = z.object({
   action: z.literal('read-pack'),
   packId: PackId,
-  page: z.number().int().min(1).optional(),
-  pageSize: z.number().int().min(1).max(500).optional(),
+  ...paginationFields(500),
 }).strict();
 
 export const AddDocumentToPackInput = z.object({
@@ -138,14 +138,14 @@ export const AddDocumentToPackInput = z.object({
 export const UpdateDocumentInPackInput = z.object({
   action: z.literal('update-document-in-pack'),
   packId: PackId,
-  documentId: z.string(), // polymorphic: not branded (Phase 1 design)
+  documentId: FOUNDRY_ID, // polymorphic: not branded (Phase 1 design; FOUNDRY_ID primitive per C2 task 5.2)
   changes: z.record(z.string(), z.unknown()),
 }).strict();
 
 export const ReadDocumentFromPackInput = z.object({
   action: z.literal('read-document-from-pack'),
   packId: PackId,
-  documentId: z.string(), // polymorphic: not branded (Phase 1 design)
+  documentId: FOUNDRY_ID, // polymorphic: not branded (Phase 1 design; FOUNDRY_ID primitive per C2 task 5.2)
 }).strict();
 
 // ────────────────────────────────────────────────────────────────────────────

@@ -174,8 +174,13 @@ function applyDrawingListFilters(input: any, items: any[]): any[] {
   return filtered;
 }
 
-function isDrawingFilterApplied(input: any): boolean {
-  return input.hidden !== undefined || input.locked !== undefined || input.shapeType !== undefined;
+// BUG-435: return the canonical string|null filter descriptor (not a bare boolean) for a uniform
+// countOnly filterApplied across list handlers (mirrors isSoundFilterApplied).
+function isDrawingFilterApplied(input: any): string | null {
+  if (input.hidden !== undefined) return `hidden=${input.hidden}`;
+  if (input.locked !== undefined) return `locked=${input.locked}`;
+  if (input.shapeType !== undefined) return `shapeType=${input.shapeType}`;
+  return null;
 }
 
 // ── Factory wiring (5 standard actions) ────────────────────────────────────────
@@ -262,7 +267,6 @@ async function duplicateDrawing(
     return {
       success: true as const,
       data: {
-        success: true,
         drawing: serializeDrawingViewModel(scene, persisted),
         sourceId,
       },

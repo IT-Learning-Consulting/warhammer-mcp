@@ -43,23 +43,15 @@
 import { requireModuleActive } from '../_shared/require-module-active.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
 import { verifyFlagWrite } from '../../../utils/verifyWrite.js';
-import { PerceptiveInput, type PerceptiveInputType } from './schemas.js';
+import { PerceptiveInput, type PerceptiveInputType } from '@foundry-mcp/shared';
 import { notify } from '../../../notify.js';
+import { Envelope, getGame, isGM } from '../_shared/handler-utils.js';
 
-type Envelope<T> = { success: true; data: T } | { success: false; error: string };
 
 const MODULE_ID = 'perceptive';
 const FLAG_SCOPE = 'perceptive';
 
 // ── Local helpers ──────────────────────────────────────────────────────────────
-
-function isGM(): boolean {
-  return Boolean((globalThis as any).game?.user?.isGM);
-}
-
-function getGame(): any {
-  return (globalThis as any).game;
-}
 
 /** game.modules.get('perceptive').api — PerceptiveFlags, LightLevel, etc. (APIHandler.js:112-127). */
 function perceptiveApi(): any {

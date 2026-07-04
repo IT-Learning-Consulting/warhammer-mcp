@@ -22,7 +22,7 @@ import {
   dispatchModuleSceneAtmosphere,
   ACTION_MEMBER_MAP,
 } from '../scene-atmosphere.js';
-import { BUNDLE_MEMBERS } from '../schemas.js';
+import { SCENE_ATMOSPHERE_BUNDLE_MEMBERS as BUNDLE_MEMBERS } from '@foundry-mcp/shared';
 
 // ── Mock helpers ──────────────────────────────────────────────────────────────
 

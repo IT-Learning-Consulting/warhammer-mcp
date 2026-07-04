@@ -20,6 +20,10 @@ import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
 import { moduleNotActiveContent } from '../_shared/module-guard.js';
 import { MACRO_TRIGGER_ACTIONS, MACRO_TRIGGER_EVENTS, type MacroTriggerResult } from './schemas.js';
+import { z } from 'zod';
+import { MacroTriggerInput } from '@foundry-mcp/shared';
+
+type MacroTriggerArgs = z.infer<typeof MacroTriggerInput>;
 
 // ── Single discriminated formatter (one text line per action) ──────────────────
 
@@ -96,7 +100,7 @@ Example: { action: "create", name: "Announce new actor", event: "createActor", m
     ];
   }
 
-  async execute(rawArgs: Record<string, unknown>) {
+  async execute(rawArgs: MacroTriggerArgs) {
     const action = String(rawArgs.action ?? 'unknown');
     this.logger.info('Executing module-macro-trigger action', { action });
     if (!(MACRO_TRIGGER_ACTIONS as readonly string[]).includes(action)) {

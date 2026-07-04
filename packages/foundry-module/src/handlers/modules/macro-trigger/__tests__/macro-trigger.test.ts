@@ -30,7 +30,7 @@ vi.mock('../../../../notify.js', () => ({
 }));
 
 import { dispatchModuleMacroTrigger } from '../macro-trigger.js';
-import { MACRO_TRIGGER_EVENTS } from '../schemas.js';
+import { MACRO_TRIGGER_EVENTS } from '@foundry-mcp/shared';
 
 const MODULE_ID = 'macro-trigger';
 

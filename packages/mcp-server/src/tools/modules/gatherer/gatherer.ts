@@ -12,6 +12,10 @@
 import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
 import { moduleNotActiveContent } from '../_shared/module-guard.js';
+import { z } from 'zod';
+import { ModuleGathererInput } from '@foundry-mcp/shared';
+
+type ModuleGathererArgs = z.infer<typeof ModuleGathererInput>;
 import type {
   SpotStatusResult,
   GatherResult,
@@ -155,7 +159,7 @@ Example: { action: "gather", pageUuid: "JournalEntry.x.JournalEntryPage.y", acto
     ];
   }
 
-  async execute(rawArgs: Record<string, unknown>) {
+  async execute(rawArgs: ModuleGathererArgs) {
     const action = String(rawArgs.action ?? 'unknown');
     this.logger.info('Executing module-gatherer action', { action });
     switch (action) {

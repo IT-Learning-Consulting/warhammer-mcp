@@ -14,6 +14,7 @@
 // Risk 5.B NOT triggered — all 7 subtypes have ≤5 simple system fields. Full typed Zod.
 
 import { z } from 'zod';
+import { paginationFields } from './primitives.js';
 import { RegionShapeSchema } from './region-shape.js';
 import { SceneId, RegionId, RegionBehaviorId } from './branded-ids.js';
 
@@ -113,8 +114,7 @@ export const RegionListInput = z
     sceneId: SceneId.optional(),
     filter: z.string().optional(),
     locked: z.boolean().optional(),
-    page: z.number().int().min(1).optional(),
-    pageSize: z.number().int().min(1).max(100).optional(),
+    ...paginationFields(),
     countOnly: z.boolean().optional(),
   })
   .strict();

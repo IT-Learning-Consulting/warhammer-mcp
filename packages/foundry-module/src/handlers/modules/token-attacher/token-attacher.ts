@@ -27,23 +27,16 @@
 
 import { requireModuleActive } from '../_shared/require-module-active.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
-import { TokenAttacherInput, type TokenAttacherInputType } from './schemas.js';
+import { TokenAttacherInput, type TokenAttacherInputType } from '@foundry-mcp/shared';
 import { notify } from '../../../notify.js';
+import { Envelope, isGM, getCanvas } from '../_shared/handler-utils.js';
+import { settlePoll } from '../_shared/settle-poll.js';
 
-type Envelope<T> = { success: true; data: T } | { success: false; error: string };
 
 const MODULE_ID = 'token-attacher';
 const FLAG_SCOPE = 'token-attacher';
 
 // ── Local helpers ──────────────────────────────────────────────────────────────
-
-function isGM(): boolean {
-  return Boolean((globalThis as any).game?.user?.isGM);
-}
-
-function getCanvas(): any {
-  return (globalThis as any).canvas;
-}
 
 function tokenAttacherApi(): any {
   return (globalThis as any).window?.tokenAttacher ?? (globalThis as any).tokenAttacher;
@@ -86,12 +79,12 @@ async function readAttachedSettled(
   predicate: (map: Record<string, string[]>) => boolean,
   attempts = 5,
 ): Promise<Record<string, string[]>> {
-  let map = readAttached(scene, baseTokenId);
-  for (let i = 0; i < attempts && !predicate(map); i++) {
-    await new Promise((r) => setTimeout(r, 20));
-    map = readAttached(scene, baseTokenId);
-  }
-  return map;
+  return settlePoll<Record<string, string[]>>(
+    () => readAttached(scene, baseTokenId),
+    predicate,
+    attempts,
+    20,
+  );
 }
 
 /**

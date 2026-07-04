@@ -57,9 +57,9 @@
 
 import { notify } from '../../../notify.js';
 import { DYNAMIC_SOUNDSCAPES as MODULE_ID } from '../../../constants/moduleIds.js';
-import type { ModuleSceneAtmosphereInputType } from './schemas.js';
+import type { ModuleSceneAtmosphereInputType } from '@foundry-mcp/shared';
+import { Envelope, getGame } from '../_shared/handler-utils.js';
 
-type Envelope<T> = { success: true; data: T } | { success: false; error: string };
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -68,10 +68,6 @@ const SOUNDSCAPES_FOLDER = 'Soundscapes';
 const PLAYLIST_MODE_DISABLED = -1;
 
 // ── API accessors ─────────────────────────────────────────────────────────────
-
-function getGame(): any {
-  return (globalThis as any).game;
-}
 
 // ── Playlist resolution ───────────────────────────────────────────────────────
 

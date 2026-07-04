@@ -20,15 +20,18 @@ import {
 import { wrappedWrite } from '../transaction-manager.js';
 import { notify } from '../notify.js';
 import { MAX_PAGE_SIZE } from '../constants/toolLimits.js';
+import { validateGMAccess as validateGMAccessGate } from '../utils/embeddedCRUDFactory.js';
 
 // ── GM gate helper (inline, mirrors folder.ts + diagnostic.ts pattern) ────────
 
+// CORE-04 (mcp_code_quality_v2 Phase C2) — thin local adapter over the canonical
+// utils/embeddedCRUDFactory.ts validateGMAccess() gate. This file's throw-only call sites
+// stay unchanged; only the underlying isGM check is de-duplicated.
 function validateGMAccess(): void {
-  if (!game.user?.isGM) {
+  if (!validateGMAccessGate().allowed) {
     throw new Error('Access denied: GM-only operation');
   }
 }
-
 // ── Serializer ────────────────────────────────────────────────────────────────
 
 function serializeWorldItem(item: any): Record<string, unknown> {

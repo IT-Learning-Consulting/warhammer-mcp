@@ -12,6 +12,10 @@
 import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
 import { moduleNotActiveContent } from '../_shared/module-guard.js';
+import { z } from 'zod';
+import { ModuleTimekeepingInput } from '@foundry-mcp/shared';
+
+type ModuleTimekeepingArgs = z.infer<typeof ModuleTimekeepingInput>;
 import type {
   TimeResult,
   ListEventsResult,
@@ -181,7 +185,7 @@ Example: { action: "advance", hours: 4 }`,
     ];
   }
 
-  async execute(rawArgs: Record<string, unknown>) {
+  async execute(rawArgs: ModuleTimekeepingArgs) {
     const action = String(rawArgs.action ?? 'unknown');
     this.logger.info('Executing module-timekeeping action', { action });
     switch (action) {

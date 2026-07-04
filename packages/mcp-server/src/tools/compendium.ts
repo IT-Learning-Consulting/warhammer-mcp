@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { truncateText } from '../utils/truncate.js';
 import {
   SearchCompendiumOutput,
   SEARCH_COMPENDIUM_OUTPUT_JSON_SCHEMA,
@@ -639,7 +640,7 @@ export class CompendiumTools extends BaseTool {
       system.details?.description ||
       '';
 
-    return this.truncateText(this.stripHtml(description), 200);
+    return truncateText(this.stripHtml(description), 200);
   }
 
   private extractFullDescription(item: FoundryRawItem): string {
@@ -840,10 +841,4 @@ export class CompendiumTools extends BaseTool {
     return text.replace(/<[^>]*>/g, '').trim();
   }
 
-  private truncateText(text: string, maxLength: number): string {
-    if (!text || text.length <= maxLength) {
-      return text;
-    }
-    return text.substring(0, maxLength - 3) + '...';
-  }
 }

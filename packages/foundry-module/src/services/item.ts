@@ -94,19 +94,11 @@ export class ItemService {
         if (!freshItem) {
           throw new Error(`${ErrorTokens.UPDATE_ITEM_NOT_PERSISTED}: item ${item.id} disappeared after update`);
         }
-        const drift: string[] = [];
-        for (const [path, expected] of Object.entries(flatUpdate)) {
-          if (path.includes('.-=')) continue;
-          const actual = (foundry as any).utils.getProperty(freshItem, path);
-          if (JSON.stringify(actual) !== JSON.stringify(expected)) {
-            drift.push(`${path}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
-          }
-        }
-        if (drift.length > 0) {
-          throw new Error(
-            `${ErrorTokens.UPDATE_ITEM_NOT_PERSISTED}: ${drift.length} field(s) did not persist (DataModelValidationError? auto-derive overwrite?). Drift: ${drift.slice(0, 3).join('; ')}${drift.length > 3 ? `; +${drift.length - 3} more` : ''}`
-          );
-        }
+        // CORE-05 (mcp_code_quality_v2 Phase C2) — consolidated onto verifyDocWrite (was a hand-rolled
+        // JSON.stringify drift loop). readSource:false preserves the original direct-property read
+        // (the hand-rolled loop never read via ._source; switching the default broke test doubles
+        // that model a flat live-document shape without a ._source bag).
+        verifyDocWrite(freshItem, flatUpdate, ErrorTokens.UPDATE_ITEM_NOT_PERSISTED, { readSource: false });
       }
 
       const ownerLabel = scope === 'world' ? '(world)' : owner?.name ?? '(unknown)';

@@ -23,6 +23,7 @@
 // Thin primitive (HC1 / CCR-3): no CONFIG reads, no game-rule logic.
 
 import { z } from 'zod';
+import { paginationFields } from './primitives.js';
 import { CardsId, CardId, FolderId, UserId } from './branded-ids.js';
 
 const STACK_TYPE = z.enum(['deck', 'hand', 'pile']);
@@ -95,8 +96,7 @@ export const CardsListStacksInput = z
   .object({
     action: z.literal('list-stacks'),
     type: STACK_TYPE.optional(),
-    page: z.number().int().min(1).optional(),
-    pageSize: z.number().int().min(1).max(100).optional(),
+    ...paginationFields(),
     countOnly: z.boolean().optional(),
   })
   .strict();
@@ -179,8 +179,7 @@ export const CardsListCardsInput = z
     action: z.literal('list-cards'),
     stackId: CardsId,
     perspectiveUserId: UserId.optional(),
-    page: z.number().int().min(1).optional(),
-    pageSize: z.number().int().min(1).max(100).optional(),
+    ...paginationFields(),
     countOnly: z.boolean().optional(),
   })
   .strict();

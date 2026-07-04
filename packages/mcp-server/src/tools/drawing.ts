@@ -27,28 +27,23 @@ type ArgsFor<A extends DrawingArgs['action']> = Extract<DrawingArgs, { action: A
 // ── Inline response interfaces (mirror foundry-module handler data payloads) ──
 
 interface DrawingCreateResponse {
-  success: true;
   drawing: DrawingViewModel;
   requestedChanges: Record<string, unknown>;
 }
 interface DrawingUpdateResponse {
-  success: true;
   drawing: DrawingViewModel;
   requestedChanges: Record<string, unknown>;
   changedFields: string[];
 }
 interface DrawingDeleteResponse {
-  success: true;
   deletedId: string; // not a branded id (polymorphic / non-document)
   sceneId: SceneId;
   remainingDrawings: number;
 }
 interface DrawingGetResponse {
-  success: true;
   drawing: DrawingViewModel;
 }
 interface DrawingListResponse {
-  success: true;
   drawings?: DrawingListItem[];
   total?: number;
   page?: number;
@@ -57,7 +52,6 @@ interface DrawingListResponse {
   filterApplied?: boolean | string | null;
 }
 interface DrawingDuplicateResponse {
-  success: true;
   drawing: DrawingViewModel;
   sourceId: string; // not a branded id (polymorphic / non-document)
 }

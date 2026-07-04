@@ -179,8 +179,6 @@ import {
   CreateActorInput,
   UpdateActorInput,
   CreateActorFromCompendiumInput,
-  SetActorOwnershipInput,
-  GetActorOwnershipInput,
   // Phase 1 mcp_crud_expansion — polymorphic ownership schemas.
   SetDocumentOwnershipInput,
   GetDocumentOwnershipInput,
@@ -333,7 +331,7 @@ export class QueryHandlers {
     // constructs the actor/item/effect services (promoted to QueryHandlers below), so it is dependency-free.
     this.dataAccess = new FoundryDataAccess();
     this.rollRequest = new RollRequestService(validateState);
-    this.rollButton = new RollButtonService(validateState);
+    this.rollButton = new RollButtonService();
     this.playerLookup = new PlayerLookupService(validateState);
     this.combat = new CombatService(validateState);
     this.conditions = new ConditionsService(validateState);
@@ -401,12 +399,8 @@ export class QueryHandlers {
     return { allowed: true };
   }
 
-  registerHandlers(): void {
-    const modulePrefix = MODULE_ID;
-    // Phase 8 (R8.1/R8.2): table-driven registration — replaces the ~112 manual per-key query
-    // registrations with one Record + loop. Query keys stay byte-stable (HC8: the registered key is
-    // still modulePrefix + '.' + the table key); adding a handler is one table entry.
-    const handlerTable: Record<string, (data: unknown) => Promise<any>> = {
+  buildHandlerTable() {
+    return {
       'getCharacterInfo': this.handleGetCharacterInfo.bind(this),
       'listActors': this.handleListActors.bind(this),
       'searchCompendium': this.handleSearchCompendium.bind(this),
@@ -437,8 +431,6 @@ export class QueryHandlers {
       'document-io': this.handleDocumentIo.bind(this),
       'deleteActor': this.handleDeleteActor.bind(this),
       'request-player-rolls': this.handleRequestPlayerRolls.bind(this),
-      'setActorOwnership': this.handleSetActorOwnership.bind(this),
-      'getActorOwnership': this.handleGetActorOwnership.bind(this),
       'setDocumentOwnership': this.handleSetDocumentOwnership.bind(this),
       'getDocumentOwnership': this.handleGetDocumentOwnership.bind(this),
       'bulkSetDocumentOwnership': this.handleBulkSetDocumentOwnership.bind(this),
@@ -542,7 +534,12 @@ export class QueryHandlers {
       'checkReload': this.handleCheckReload.bind(this),
       'addMoney': this.handleAddMoney.bind(this),
       'directPay': this.handleDirectPay.bind(this),
-    };
+    } satisfies Record<string, (data: unknown) => Promise<any>>;
+  }
+
+  registerHandlers(): void {
+    const modulePrefix = MODULE_ID;
+    const handlerTable = this.buildHandlerTable();
     for (const [key, handler] of Object.entries(handlerTable)) {
       CONFIG.queries[`${modulePrefix}.${key}`] = handler;
     }
@@ -1221,37 +1218,6 @@ export class QueryHandlers {
   // BUG-009 (2026-05-16) — handleGetEnhancedCreatureIndex removed; no MCP-tool
   // consumer. dataAccess.getEnhancedCreatureIndex retained pending review.
 
-  // PRD R1.5 — deprecation wrappers. Old actor-only ownership keys are kept
-  // exported so cached legacy callers fail loudly with a pointer at the new
-  // polymorphic surface. Input is still strict-parsed (BUG-034 / CCR-5).
-  async handleSetActorOwnership(data: unknown): Promise<any> {
-    return wrapQuery('Failed to set actor ownership', async () => {
-      const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
-      this.dataAccess.validateFoundryState();
-      SetActorOwnershipInput.strict().parse(data ?? {});
-      return {
-        success: false,
-        error: 'setActorOwnership is deprecated; use setDocumentOwnership with documentType: "actor" (PRD mcp_crud_expansion Phase 1 R1.5)',
-        deprecated: true,
-      };
-    });
-  }
-
-  async handleGetActorOwnership(data: unknown): Promise<any> {
-    return wrapQuery('Failed to get actor ownership', async () => {
-      const gmCheck = this.validateGMAccess();
-      if (!gmCheck.allowed) return { error: 'Access denied', success: false };
-      this.dataAccess.validateFoundryState();
-      GetActorOwnershipInput.strict().parse(data ?? {});
-      return {
-        success: false,
-        error: 'getActorOwnership is deprecated; use getDocumentOwnership with documentType: "actor" (PRD mcp_crud_expansion Phase 1 R1.5)',
-        deprecated: true,
-      };
-    });
-  }
-
   // Phase 1 mcp_crud_expansion — polymorphic ownership handlers. Each strict-parses
   // its input (CCR-5) and delegates to handlers/ownership.ts where the GM gate +
   // wrappedWrite + Foundry doc updates live.
@@ -1896,3 +1862,5 @@ export class QueryHandlers {
     });
   }
 }
+
+export type HandlerKey = keyof ReturnType<QueryHandlers['buildHandlerTable']>;

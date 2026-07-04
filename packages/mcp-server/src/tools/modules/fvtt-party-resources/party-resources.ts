@@ -12,6 +12,10 @@
 import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
 import { moduleNotActiveContent } from '../_shared/module-guard.js';
+import { z } from 'zod';
+import { ModulePartyResourcesInput } from '@foundry-mcp/shared';
+
+type ModulePartyResourcesArgs = z.infer<typeof ModulePartyResourcesInput>;
 import type {
   PartyListResult,
   PartyGetResult,
@@ -128,7 +132,7 @@ Example: { action: "create", resourceId: "doom_track", name: "Doom", value: 0, m
     ];
   }
 
-  async execute(rawArgs: Record<string, unknown>) {
+  async execute(rawArgs: ModulePartyResourcesArgs) {
     const action = String(rawArgs.action ?? 'unknown');
     this.logger.info('Executing module-party-resources action', { action });
     switch (action) {

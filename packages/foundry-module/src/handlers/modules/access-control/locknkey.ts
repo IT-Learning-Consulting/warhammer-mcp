@@ -25,16 +25,9 @@
 // wfrpRepairGated note where relevant. Key item type defaults to 'cargo' — recommend 'trapping'.
 
 import { notify } from '../../../notify.js';
-import type { ModuleAccessControlInputType } from './schemas.js';
+import type { ModuleAccessControlInputType } from '@foundry-mcp/shared';
+import { Envelope, getGame, getCanvas } from '../_shared/handler-utils.js';
 
-type Envelope<T> = { success: true; data: T } | { success: false; error: string };
-
-function getGame(): any {
-  return (globalThis as any).game;
-}
-function getCanvas(): any {
-  return (globalThis as any).canvas;
-}
 
 /** The LocknKey public API object. Throws a typed error if unavailable. */
 function getLnKApi(): any {

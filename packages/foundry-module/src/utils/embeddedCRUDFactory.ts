@@ -54,6 +54,15 @@ export function deepStripUndefined<T>(value: T): T {
   return value;
 }
 
+// CORE-15 (mcp_code_quality_v2 Phase C2) — shallow top-level-only undefined-key strip. Distinct from
+// deepStripUndefined above (recursive): this one mutates+returns the SAME object reference, matching
+// the F04-prevention idiom at journal.ts/rolltable.ts call sites (payload built inline, stripped
+// before createEmbeddedDocuments/update).
+export function stripUndefined<T extends Record<string, any>>(obj: T): T {
+  Object.keys(obj).forEach((k) => obj[k] === undefined && delete obj[k]);
+  return obj;
+}
+
 export function getSceneOrThrow(sceneId: string): any {
   const scene = (game as any).scenes?.get(sceneId);
   if (!scene) throw new Error(`SCENE_NOT_FOUND: no Scene with id "${sceneId}"`);
@@ -401,7 +410,8 @@ export function createEmbeddedCRUDHandlers<
     const total = filtered.length;
 
     if (input.countOnly) {
-      const filterApplied = isFilterApplied ? isFilterApplied(input) : false;
+      // BUG-435: default to null (not false) so countOnly's filterApplied is uniformly string|null.
+      const filterApplied = isFilterApplied ? isFilterApplied(input) : null;
       return {
         success: true,
         data: buildListCountResponse(total, filterApplied, input.page, input.pageSize),
@@ -464,7 +474,6 @@ export function createEmbeddedCRUDHandlers<
   // ── Response builders (closed-over config) ───────────────────────────────
   function buildCreateResponse(scene: any, persisted: any, requestedChanges: Record<string, unknown>) {
     return {
-      success: true,
       [responseKeys.viewModel]: formatter(scene, persisted),
       requestedChanges,
     };
@@ -477,7 +486,6 @@ export function createEmbeddedCRUDHandlers<
     changedFields: string[],
   ) {
     return {
-      success: true,
       [responseKeys.viewModel]: formatter(scene, persisted),
       requestedChanges,
       changedFields,
@@ -486,10 +494,9 @@ export function createEmbeddedCRUDHandlers<
 
   function buildDeleteResponse(deletedId: string, sceneId: string, remainingCount: number) {
     if (responseBuilders.delete) {
-      return { success: true, ...responseBuilders.delete({ deletedId, sceneId, remainingCount }) };
+      return { ...responseBuilders.delete({ deletedId, sceneId, remainingCount }) };
     }
     return {
-      success: true,
       deletedId,
       sceneId,
       [responseKeys.remainingCount]: remainingCount,
@@ -498,7 +505,6 @@ export function createEmbeddedCRUDHandlers<
 
   function buildGetResponse(scene: any, doc: any) {
     return {
-      success: true,
       [responseKeys.viewModel]: formatter(scene, doc),
     };
   }
@@ -510,10 +516,9 @@ export function createEmbeddedCRUDHandlers<
     pageSize?: number,
   ) {
     if (responseBuilders.listCount) {
-      return { success: true, ...responseBuilders.listCount({ total, filterApplied, page, pageSize }) };
+      return { ...responseBuilders.listCount({ total, filterApplied, page, pageSize }) };
     }
     return {
-      success: true,
       total,
       filterApplied,
     };
@@ -529,7 +534,6 @@ export function createEmbeddedCRUDHandlers<
   ) {
     if (responseBuilders.listPaginated) {
       return {
-        success: true,
         ...responseBuilders.listPaginated({
           items: paged.map((d) => listItemFormatter(scene, d)),
           scene,
@@ -541,7 +545,6 @@ export function createEmbeddedCRUDHandlers<
       };
     }
     return {
-      success: true,
       total,
       page,
       pageSize,
@@ -553,7 +556,6 @@ export function createEmbeddedCRUDHandlers<
   function buildListBareResponse(scene: any, items: any[]) {
     if (responseBuilders.listBare) {
       return {
-        success: true,
         ...responseBuilders.listBare({
           items: items.map((d) => listItemFormatter(scene, d)),
           scene,
@@ -562,7 +564,6 @@ export function createEmbeddedCRUDHandlers<
       };
     }
     return {
-      success: true,
       [responseKeys.listArray]: items.map((d) => listItemFormatter(scene, d)),
     };
   }

@@ -23,11 +23,11 @@
 // register/unregister). Source: phase12_pre_plan.md.
 
 import { requireModuleActive } from '../_shared/require-module-active.js';
-import { ModuleChatCommanderInput, type ModuleChatCommanderInputType } from './schemas.js';
+import { ModuleChatCommanderInput, type ModuleChatCommanderInputType } from '@foundry-mcp/shared';
 import { notify } from '../../../notify.js';
 import { CHAT_COMMANDS as MODULE_ID } from '../../../constants/moduleIds.js';
+import { Envelope, isGM } from '../_shared/handler-utils.js';
 
-type Envelope<T> = { success: true; data: T } | { success: false; error: string };
 const ADV_MACROS = 'advanced-macros';
 // BUG-383 (live-smoke correction): the built-in WFRP4e chat commands (/avail, /char, /cond,
 // /corruption, /credit, /exp, /fear, /name, /pay, /prop, /table, /terror, /trade, /travel) are
@@ -39,10 +39,6 @@ const WFRP_COMMANDS_MODULES = new Set(['wfrp4e', 'chat-commander-wfrp4e']);
 const isWfrpBuiltinModule = (m: unknown): boolean => WFRP_COMMANDS_MODULES.has(String(m));
 
 // ── Local helpers ──────────────────────────────────────────────────────────────
-
-function isGM(): boolean {
-  return Boolean((globalThis as any).game?.user?.isGM);
-}
 
 /** Resolve `game.chatCommands` (ADR-9.1 Class-1 accessor), or throw a typed *_UNAVAILABLE. */
 function getChatCommandsApi(): any {

@@ -20,13 +20,9 @@
 //     + lights.json (Phase 15 execution, research-loop discipline).
 
 import { requireModuleActive } from '../_shared/require-module-active.js';
-import { ModuleLightingInput } from './schemas.js';
+import { ModuleLightingInput } from '@foundry-mcp/shared';
+import { Envelope, isGM } from '../_shared/handler-utils.js';
 
-type Envelope<T> = { success: true; data: T } | { success: false; error: string };
-
-function isGM(): boolean {
-  return Boolean((globalThis as any).game?.user?.isGM);
-}
 
 // Cosmetic <optgroup> delimiter keys CommunityLighting registers per author group — never animation types.
 function isSeparatorKey(key: string): boolean {

@@ -24,11 +24,11 @@
 
 import { requireModuleActive } from '../_shared/require-module-active.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
-import { ModuleTimekeepingInput, type ModuleTimekeepingInputType } from './schemas.js';
+import { ModuleTimekeepingInput, type ModuleTimekeepingInputType } from '@foundry-mcp/shared';
 import { notify } from '../../../notify.js';
 import { SIMPLE_TIMEKEEPING as MODULE_ID } from '../../../constants/moduleIds.js';
+import { Envelope, isGM } from '../_shared/handler-utils.js';
 
-type Envelope<T> = { success: true; data: T } | { success: false; error: string };
 
 const SECONDS_PER_DAY = 86400;
 
@@ -47,10 +47,6 @@ const MOON_PHASES = [
 ];
 
 // ── Local helpers ──────────────────────────────────────────────────────────────
-
-function isGM(): boolean {
-  return Boolean((globalThis as any).game?.user?.isGM);
-}
 
 function gameTime(): any {
   const t = (globalThis as any).game?.time;

@@ -7,6 +7,7 @@
 // GM-only writes per plan §Design Decisions (no author-or-GM exemption surface).
 
 import { z } from 'zod';
+import { paginationFields } from './primitives.js';
 import { SceneId, MeasuredTemplateId } from './branded-ids.js';
 
 const TemplateTypeEnum = z
@@ -86,8 +87,7 @@ export const TemplateListInput = z
     sceneId: SceneId.optional(),
     filter: z.string().optional(),
     hidden: z.boolean().optional(),
-    page: z.number().int().min(1).optional(),
-    pageSize: z.number().int().min(1).max(100).optional(),
+    ...paginationFields(),
     countOnly: z.boolean().optional(),
   })
   .strict();

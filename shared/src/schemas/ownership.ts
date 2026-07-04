@@ -1,7 +1,7 @@
 // Phase 1 — Polymorphic ownership input schemas.
-// PRD: mcp_crud_expansion v1, Phase 1. Replaces the actor-only
-// SetActorOwnershipInput / GetActorOwnershipInput surface (those remain
-// exported from ./actor.ts with @deprecated for the deprecation wrappers).
+// PRD: mcp_crud_expansion v1, Phase 1. Replaces the prior actor-only
+// set/get-ownership schema surface (removed from ./actor.ts, mcp_code_quality_v2
+// Phase C3 19e — its deprecation-wrapper handlers were orphaned dead code).
 //
 // Anchors:
 //   ADR-024 — Folder write-rejected (BaseFolder has no `ownership` field).
@@ -13,6 +13,7 @@
 //   META levels (-10 NOCHANGE, -20 DEFAULT) are UI sentinels — never accepted.
 
 import { z } from 'zod';
+import { FOUNDRY_ID } from './primitives.js';
 import { FoundryUuid, UserId } from './branded-ids.js';
 
 // All 7 doc types Phase 1 accepts on the polymorphic surface. Folder is
@@ -33,7 +34,7 @@ export type DocumentType = z.infer<typeof DocumentTypeEnum>;
 const DocumentTargetShape = {
   documentType: DocumentTypeEnum,
   uuid: FoundryUuid.optional(),
-  id: z.string().optional(), // polymorphic: not branded (Phase 1 design)
+  id: FOUNDRY_ID.optional(), // polymorphic: not branded (Phase 1 design; FOUNDRY_ID primitive per C2 task 5.2)
   name: z.string().optional(),
 };
 

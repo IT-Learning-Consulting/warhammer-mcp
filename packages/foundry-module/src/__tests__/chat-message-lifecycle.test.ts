@@ -54,7 +54,7 @@ describe('chat-message lifecycle — R10.2 leak-fix holds', () => {
   });
 
   it('100 re-renders of one message keep exactly ONE live controller (count-stable-at-1)', () => {
-    const svc = new RollButtonService(() => {});
+    const svc = new RollButtonService();
     const messageId = 'msg-phase10-1';
     const signals: AbortSignal[] = [];
     const buttons: HTMLElement[] = [];
@@ -79,7 +79,7 @@ describe('chat-message lifecycle — R10.2 leak-fix holds', () => {
   });
 
   it('releaseMessageController (deleteChatMessage) aborts the last live controller → zero live', () => {
-    const svc = new RollButtonService(() => {});
+    const svc = new RollButtonService();
     const messageId = 'msg-phase10-2';
     const container = makeButtonContainer();
     const signal = bindMessageController(messageId);

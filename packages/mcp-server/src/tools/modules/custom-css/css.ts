@@ -12,6 +12,10 @@
 import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
 import { moduleNotActiveContent } from '../_shared/module-guard.js';
+import { z } from 'zod';
+import { ModuleCssInput } from '@foundry-mcp/shared';
+
+type ModuleCssArgs = z.infer<typeof ModuleCssInput>;
 
 // ── Response shapes (DP-15 — typed, never <any>) ─────────────────────────────
 
@@ -164,7 +168,7 @@ Examples:
     ];
   }
 
-  async execute(args: Record<string, unknown>) {
+  async execute(args: ModuleCssArgs) {
     const action = String(args.action ?? 'unknown');
     this.logger.info('Executing module-css action', { action });
     try {

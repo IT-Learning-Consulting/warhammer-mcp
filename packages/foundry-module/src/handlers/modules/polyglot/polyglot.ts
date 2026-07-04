@@ -37,10 +37,10 @@
 
 import { requireModuleActive } from '../_shared/require-module-active.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
-import { PolyglotInput, type PolyglotInputType } from './schemas.js';
+import { PolyglotInput, type PolyglotInputType } from '@foundry-mcp/shared';
 import { notify } from '../../../notify.js';
+import { Envelope, getGame, isGM } from '../_shared/handler-utils.js';
 
-type Envelope<T> = { success: true; data: T } | { success: false; error: string };
 
 const MODULE_ID = 'polyglot';
 
@@ -82,12 +82,6 @@ const WRITE_ACTIONS = new Set([
 
 // ── Local helpers ──────────────────────────────────────────────────────────────
 
-function getGame(): any {
-  return (globalThis as any).game;
-}
-function isGM(): boolean {
-  return Boolean(getGame()?.user?.isGM);
-}
 function getActor(entityId: string): any | null {
   return getGame()?.actors?.get?.(entityId) ?? null;
 }

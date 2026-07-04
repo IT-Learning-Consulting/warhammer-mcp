@@ -19,20 +19,16 @@
 
 import { requireModuleActive } from '../_shared/require-module-active.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
-import { ModuleCssInput, type ModuleCssInputType } from './schemas.js';
+import { ModuleCssInput, type ModuleCssInputType } from '@foundry-mcp/shared';
 import { notify } from '../../../notify.js';
 import { CUSTOM_CSS as MODULE_ID } from '../../../constants/moduleIds.js';
 import { MODULE_CUSTOM_CSS } from '../../../constants/socketEvents.js';
+import { Envelope, isGM } from '../_shared/handler-utils.js';
 
-type Envelope<T> = { success: true; data: T } | { success: false; error: string };
 
 const SENTINEL = '/* Custom CSS */';
 
 // ── Local helpers ──────────────────────────────────────────────────────────────
-
-function isGM(): boolean {
-  return Boolean((globalThis as any).game?.user?.isGM);
-}
 
 function getSettings(): any {
   const settings = (globalThis as any).game?.settings;

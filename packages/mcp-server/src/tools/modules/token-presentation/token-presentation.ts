@@ -12,6 +12,10 @@ import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
 import { moduleNotActiveContent } from '../_shared/module-guard.js';
 import { TOKEN_PRESENTATION_ACTIONS } from './schemas.js';
+import { z } from 'zod';
+import { TokenPresentationInput } from '@foundry-mcp/shared';
+
+type TokenPresentationArgs = z.infer<typeof TokenPresentationInput>;
 import type {
   TPBossSplashShowResult,
   TPBossSplashCloseResult,
@@ -111,7 +115,7 @@ Example: { action: "boss-splash.show", actor: "actorId", message: "{{actor.name}
             fill: { type: 'boolean', description: 'boss-splash.show: object-fit:fill on the video element.' },
             // boss-splash.set-config
             key: { type: 'string', description: 'boss-splash.set-config: world setting key.' },
-            value: { description: 'boss-splash.set-config: the setting value (string | number | boolean).' },
+            value: { oneOf: [{ type: 'string' }, { type: 'number' }, { type: 'boolean' }], description: 'boss-splash.set-config: the setting value (string | number | boolean). (CCR-V8: union typed via oneOf)' },
             // token-notes
             scope: { type: 'string', enum: ['token', 'actor'], description: 'token-notes.write-note/read-note: token (scene-local) or actor (world-persistent).' },
             sceneId: { type: 'string', description: 'token-notes (token scope): scene that owns the token. Omit for active scene.' },
@@ -127,7 +131,7 @@ Example: { action: "boss-splash.show", actor: "actorId", message: "{{actor.name}
     ];
   }
 
-  async execute(rawArgs: Record<string, unknown>) {
+  async execute(rawArgs: TokenPresentationArgs) {
     const action = String(rawArgs.action ?? 'unknown');
     this.logger.info('Executing module-token-presentation action', { action });
     switch (action) {

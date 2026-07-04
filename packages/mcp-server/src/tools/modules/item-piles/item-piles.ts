@@ -11,8 +11,13 @@
 //   - Phase 3 module_integration_v1 acceptance criteria #1–12.
 
 import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
+import { truncatedJoin } from '../../../utils/truncate.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
 import { moduleNotActiveContent } from '../_shared/module-guard.js';
+import { z } from 'zod';
+import { ModuleItempilesInput } from '@foundry-mcp/shared';
+
+type ModuleItempilesArgs = z.infer<typeof ModuleItempilesInput>;
 import type {
   ItemPileCreateResult,
   ItemPileUpdateResult,
@@ -80,9 +85,13 @@ function formatGetContents(d: ItemPileGetContentsResult): string {
     `- itemCount: ${d.itemCount}`,
   ];
   if (d.items.length > 0) {
-    const itemLines = d.items.slice(0, 10).map((i) => `  • ${i.name ?? '(unnamed)'} [${i.type ?? '?'}] qty:${i.quantity} uuid:${i.uuid ?? i.id ?? '?'}`);
-    if (d.items.length > 10) itemLines.push(`  … and ${d.items.length - 10} more`);
-    lines.push('- items:\n' + itemLines.join('\n'));
+    const itemLines = truncatedJoin(
+      d.items.map((i) => `  • ${i.name ?? '(unnamed)'} [${i.type ?? '?'}] qty:${i.quantity} uuid:${i.uuid ?? i.id ?? '?'}`),
+      10,
+      '\n',
+      (h) => `\n  … and ${h} more`,
+    );
+    lines.push('- items:\n' + itemLines);
   }
   lines.push(`- currencies: ${JSON.stringify(d.currencies)}`);
   lines.push(`- flagData: ${JSON.stringify(d.flagData)}`);
@@ -172,9 +181,13 @@ function formatRollTable(d: ItemPileRollTableResult): string {
     `- targetItems: ${d.targetItems.length} item(s)`,
   ];
   if (d.targetItems.length > 0) {
-    const itemLines = d.targetItems.slice(0, 10).map((i) => `  • ${i.name} [${i.type}] qty:${i.quantity} id:${i.id}`);
-    if (d.targetItems.length > 10) itemLines.push(`  … and ${d.targetItems.length - 10} more`);
-    lines.push(itemLines.join('\n'));
+    const itemLines = truncatedJoin(
+      d.targetItems.map((i) => `  • ${i.name} [${i.type}] qty:${i.quantity} id:${i.id}`),
+      10,
+      '\n',
+      (h) => `\n  … and ${h} more`,
+    );
+    lines.push(itemLines);
   }
   return lines.join('\n');
 }
@@ -384,7 +397,7 @@ GM required for all write actions.`,
     ];
   }
 
-  async execute(args: Record<string, unknown>) {
+  async execute(args: ModuleItempilesArgs) {
     const action = String(args.action ?? 'unknown');
     this.logger.info('Executing module-itempiles action', { action });
     try {

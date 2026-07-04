@@ -37,19 +37,11 @@
 //   - CCR-4 confirm gate on add/delete/set-backgrounds/reset-scenedata
 
 import { notify } from '../../../notify.js';
-import type { ModuleSceneAtmosphereInputType } from './schemas.js';
+import type { ModuleSceneAtmosphereInputType } from '@foundry-mcp/shared';
+import { Envelope, getGame, getCanvas } from '../_shared/handler-utils.js';
 
-type Envelope<T> = { success: true; data: T } | { success: false; error: string };
 
 // ── API accessors ─────────────────────────────────────────────────────────────
-
-function getGame(): any {
-  return (globalThis as any).game;
-}
-
-function getCanvas(): any {
-  return (globalThis as any).canvas;
-}
 
 // ── Scene resolution ──────────────────────────────────────────────────────────
 

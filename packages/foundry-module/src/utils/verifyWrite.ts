@@ -115,3 +115,31 @@ export function verifyFlagWrite(
     );
   }
 }
+
+/**
+ * mcp_code_quality_v2 Phase C2 (RC2.4) — coercion-tolerant scalar-write verify.
+ *
+ * Generalizes the `String(a) !== String(b)` idiom independently converged on at 3
+ * call sites (narrator's F03 fix, manage-character.ts:1065 Number() wrap,
+ * wfrp-economy.ts:860 Boolean() wrap). Use this for module-API accessor writes where
+ * the round-trip read can arrive already-coerced by the module's own setting/schema
+ * (e.g. `game.settings.set` coercing a string "1.5" input to the registered Number
+ * type), so a strict `!==` against the raw MCP-boundary input would false-fail a
+ * landed write (F03 class — see warhammer-mcp-quality-contract.md §8 sibling gotcha).
+ *
+ * Deliberately NOT layered onto verifyDocWrite/flattenLeafPaths — those stay
+ * unmodified (their JSON.stringify structural-equality semantics are the correct,
+ * stricter tool for raw-Document field verification). This is a separate, narrower
+ * helper for the scalar/module-API-accessor write class.
+ *
+ * @param actual     The re-read value (already coerced by the module's own setter).
+ * @param expected   The expected value, in whatever type the caller/input arrived as.
+ * @param errorToken Error prefix, e.g. 'NARRATOR_VALUE_NOT_PERSISTED'.
+ */
+export function verifyScalarWrite(actual: unknown, expected: unknown, errorToken: string): void {
+  if (String(actual) !== String(expected)) {
+    throw new Error(
+      `${errorToken}: value did not persist. expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`,
+    );
+  }
+}

@@ -22,17 +22,13 @@
 
 import { requireModuleActive } from '../_shared/require-module-active.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
-import { ModuleGathererInput, type ModuleGathererInputType } from './schemas.js';
+import { ModuleGathererInput, type ModuleGathererInputType } from '@foundry-mcp/shared';
 import { notify } from '../../../notify.js';
 import { GATHERER as MODULE_ID } from '../../../constants/moduleIds.js';
+import { Envelope, isGM } from '../_shared/handler-utils.js';
 
-type Envelope<T> = { success: true; data: T } | { success: false; error: string };
 
 const SECONDS_PER_HOUR = 3600;
-
-function isGM(): boolean {
-  return Boolean((globalThis as any).game?.user?.isGM);
-}
 
 /** Resolve gatherer's runtime API (ADR-9.1; UPPERCASE `.API`, post-ready). */
 function getGathererApi(): any {

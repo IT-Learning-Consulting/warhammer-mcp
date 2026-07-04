@@ -12,6 +12,10 @@
 import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
 import { moduleNotActiveContent } from '../_shared/module-guard.js';
+import { z } from 'zod';
+import { ModuleMastercraftedInput } from '@foundry-mcp/shared';
+
+type ModuleMastercraftedArgs = z.infer<typeof ModuleMastercraftedInput>;
 import type {
   ListRecipesResult,
   GetRecipeResult,
@@ -200,7 +204,7 @@ Example: { action: "execute-craft", pageUuid: "JournalEntry.x.JournalEntryPage.y
     ];
   }
 
-  async execute(rawArgs: Record<string, unknown>) {
+  async execute(rawArgs: ModuleMastercraftedArgs) {
     const action = String(rawArgs.action ?? 'unknown');
     this.logger.info('Executing module-mastercrafted action', { action });
     switch (action) {

@@ -13,6 +13,10 @@ import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
 import { moduleNotActiveContent } from '../_shared/module-guard.js';
 import { SIMPLE_QUEST_ACTIONS } from './schemas.js';
+import { z } from 'zod';
+import { SimpleQuestInput } from '@foundry-mcp/shared';
+
+type SimpleQuestArgs = z.infer<typeof SimpleQuestInput>;
 import type {
   SQListQuestsResult,
   SQGetQuestResult,
@@ -206,7 +210,7 @@ Example: { action: "create-quest", name: "The Missing Caravan", content: "<ul><l
     ];
   }
 
-  async execute(rawArgs: Record<string, unknown>) {
+  async execute(rawArgs: SimpleQuestArgs) {
     const action = String(rawArgs.action ?? 'unknown');
     this.logger.info('Executing module-simple-quest action', { action });
     switch (action) {

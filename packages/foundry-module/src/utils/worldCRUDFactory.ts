@@ -501,7 +501,6 @@ export function createWorldDocCRUDHandlers<
     parentId: string,
   ) {
     return {
-      success: true,
       [parentIdField]: parentId,
       [responseKeys.viewModel]: formatter(_parent, persisted),
       requestedChanges,
@@ -516,7 +515,6 @@ export function createWorldDocCRUDHandlers<
     parentId: string,
   ) {
     return {
-      success: true,
       [parentIdField]: parentId,
       [responseKeys.viewModel]: formatter(_parent, persisted),
       requestedChanges,
@@ -526,10 +524,9 @@ export function createWorldDocCRUDHandlers<
 
   function buildDeleteResponse(deletedId: string, parentId: string, remainingCount: number) {
     if (responseBuilders.delete) {
-      return { success: true, ...responseBuilders.delete({ deletedId, parentId, remainingCount }) };
+      return { ...responseBuilders.delete({ deletedId, parentId, remainingCount }) };
     }
     return {
-      success: true,
       deletedId,
       [parentIdField]: parentId,
       [responseKeys.remainingCount]: remainingCount,
@@ -538,7 +535,6 @@ export function createWorldDocCRUDHandlers<
 
   function buildGetResponse(parent: any, doc: any) {
     return {
-      success: true,
       [responseKeys.viewModel]: formatter(parent, doc),
     };
   }
@@ -550,10 +546,9 @@ export function createWorldDocCRUDHandlers<
     pageSize?: number,
   ) {
     if (responseBuilders.listCount) {
-      return { success: true, ...responseBuilders.listCount({ total, filterApplied, page, pageSize }) };
+      return { ...responseBuilders.listCount({ total, filterApplied, page, pageSize }) };
     }
     return {
-      success: true,
       total,
       filterApplied,
     };
@@ -569,7 +564,6 @@ export function createWorldDocCRUDHandlers<
   ) {
     if (responseBuilders.listPaginated) {
       return {
-        success: true,
         ...responseBuilders.listPaginated({
           items: paged.map((d) => listItemFormatter(parent, d)),
           parent,
@@ -581,7 +575,6 @@ export function createWorldDocCRUDHandlers<
       };
     }
     return {
-      success: true,
       total,
       page,
       pageSize,
@@ -593,7 +586,6 @@ export function createWorldDocCRUDHandlers<
   function buildListBareResponse(parent: any, items: any[]) {
     if (responseBuilders.listBare) {
       return {
-        success: true,
         ...responseBuilders.listBare({
           items: items.map((d) => listItemFormatter(parent, d)),
           parent,
@@ -602,7 +594,6 @@ export function createWorldDocCRUDHandlers<
       };
     }
     return {
-      success: true,
       [responseKeys.listArray]: items.map((d) => listItemFormatter(parent, d)),
     };
   }

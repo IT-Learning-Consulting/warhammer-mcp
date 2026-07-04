@@ -57,8 +57,14 @@ interface RegionListResponse {
   total: number;
   page: number;
   pageSize: number;
-  countOnly?: boolean;
+  countOnly?: false;
   filterApplied?: string | null;
+}
+// BUG-435: canonical LEAN countOnly shape (discriminated by countOnly:true).
+interface RegionListCountResponse {
+  total: number;
+  filterApplied: string | null;
+  countOnly: true;
 }
 interface RegionBehaviorCreateResponse {
   regionId: RegionId;
@@ -339,7 +345,7 @@ export class RegionTool extends BaseTool {
 
   private async handleList(args: ArgsFor<'list'>) {
     try {
-      const data = await this.query<RegionListResponse>('region', args);
+      const data = await this.query<RegionListResponse | RegionListCountResponse>('region', args);
 
       if (data.countOnly) {
         const text = `🗺️ **Region count**\n\n**Total:** ${data.total}${data.filterApplied ? `\n**Filter:** \`${data.filterApplied}\`` : ''}`;

@@ -19,6 +19,7 @@
 // (TextureData sub-fields, environment day/night cycle, fog colors).
 
 import { z } from 'zod';
+import { truncatedJoin } from '../utils/truncate.js';
 import {
   SceneToolInput,
   type SceneCreateResponse,
@@ -266,7 +267,7 @@ export class SceneTool extends BaseTool {
             layer: { type: 'string', enum: ['lights', 'sounds', 'tiles', 'templates', 'regions', 'drawings', 'notes'], description: '[clear-layer] Which embedded collection to bulk-delete.' },
             dryRun: { type: 'boolean', description: '[clear-layer] Preview only — returns {count, items} without deleting.' },
             confirm: { type: 'boolean', description: '[clear-layer/reset-fog/lighting-transition] Must be true to execute (destructive/stateful guard).' },
-            target: { description: '[lighting-transition] Darkness target: "day" (→0), "dark" (→1), or a number 0-1.' },
+            target: { oneOf: [{ type: 'string', enum: ['day', 'dark'] }, { type: 'number', minimum: 0, maximum: 1 }], description: '[lighting-transition] Darkness target: "day" (→0), "dark" (→1), or a number 0-1. (CCR-V8: union typed via oneOf)' },
             // Phase 9B import-from-compendium fields.
             packId: { type: 'string', description: '[import-from-compendium] Compendium pack id holding the Scene (e.g. "wfrp4e-core.scenes").' },
             documentId: { type: 'string', description: '[import-from-compendium] Scene document id within the pack.' },
@@ -450,12 +451,13 @@ export class SceneTool extends BaseTool {
     try {
       const data = await this.query<SceneClearLayerResponse>('scene', args);
       if (data.dryRun) {
-        const preview = data.items
-          .slice(0, 25)
-          .map((i) => `- \`${i.id}\` ${i.name || '_(unnamed)_'}`)
-          .join('\n');
-        const more = data.items.length > 25 ? `\n_…and ${data.items.length - 25} more_` : '';
-        const text = `🔎 **Clear-layer preview — ${data.layer}**\n\n**Would delete ${data.count} doc(s)** on scene \`${data.sceneId}\`:\n${preview || '_(layer already empty)_'}${more}\n\n_Re-run with \`dryRun:false\` + \`confirm:true\` to delete._`;
+        const preview = truncatedJoin(
+          data.items.map((i) => `- \`${i.id}\` ${i.name || '_(unnamed)_'}`),
+          25,
+          '\n',
+          (n) => `\n_…and ${n} more_`,
+        );
+        const text = `🔎 **Clear-layer preview — ${data.layer}**\n\n**Would delete ${data.count} doc(s)** on scene \`${data.sceneId}\`:\n${preview || '_(layer already empty)_'}\n\n_Re-run with \`dryRun:false\` + \`confirm:true\` to delete._`;
         return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
       }
       const text = `🧹 **Layer cleared — ${data.layer}**\n\nDeleted **${data.count}** doc(s) on scene \`${data.sceneId}\`.`;

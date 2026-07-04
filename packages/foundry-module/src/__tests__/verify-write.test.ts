@@ -4,7 +4,7 @@
 // .-= marker skip.  Includes the idempotent-no-op pin.
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { verifyDocWrite, verifyFlagWrite } from '../utils/verifyWrite.js';
+import { verifyDocWrite, verifyFlagWrite, verifyScalarWrite } from '../utils/verifyWrite.js';
 
 function installFoundryUtils() {
   (globalThis as any).foundry = {
@@ -137,5 +137,28 @@ describe('verifyFlagWrite (DP-16 / R2.5)', () => {
     expect(() =>
       verifyFlagWrite(doc, 'mastercrafted', 'abc123', { time: 9999, items: [] }, 'MASTERCRAFTED_PENDING_CRAFT_NOT_PERSISTED'),
     ).toThrow(/MASTERCRAFTED_PENDING_CRAFT_NOT_PERSISTED/);
+  });
+});
+
+describe('verifyScalarWrite (mcp_code_quality_v2 Phase C2, RC2.4)', () => {
+  it('happy path: exact match — no throw', () => {
+    expect(() => verifyScalarWrite(5, 5, 'X_NOT_PERSISTED')).not.toThrow();
+  });
+
+  it('coercion tolerance: Number setting registered value vs string boundary input — no throw', () => {
+    // game.settings.set coerces "1.5" (string, MCP-boundary input) to 1.5 (number, registered type)
+    expect(() => verifyScalarWrite(1.5, '1.5', 'SETTING_NOT_PERSISTED')).not.toThrow();
+  });
+
+  it('coercion tolerance: Boolean setting registered value vs string boundary input — no throw', () => {
+    expect(() => verifyScalarWrite(true, 'true', 'SETTING_NOT_PERSISTED')).not.toThrow();
+  });
+
+  it('genuine drift: mismatched values still throw', () => {
+    expect(() => verifyScalarWrite(2, 3, 'X_NOT_PERSISTED')).toThrow(/X_NOT_PERSISTED/);
+  });
+
+  it('genuine drift: coercion does not mask a real value change', () => {
+    expect(() => verifyScalarWrite(false, true, 'SETTING_NOT_PERSISTED')).toThrow(/SETTING_NOT_PERSISTED/);
   });
 });

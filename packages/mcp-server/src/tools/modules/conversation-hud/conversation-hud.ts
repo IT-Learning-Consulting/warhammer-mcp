@@ -17,6 +17,10 @@
 import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
 import { moduleNotActiveContent } from '../_shared/module-guard.js';
+import { z } from 'zod';
+import { ConversationHudInput } from '@foundry-mcp/shared';
+
+type ConversationHudArgs = z.infer<typeof ConversationHudInput>;
 import type {
   ConvCreateResult,
   ConvGetResult,
@@ -189,7 +193,7 @@ Example: { action: "create-conversation", name: "Tavern Encounter", participants
     ];
   }
 
-  async execute(rawArgs: Record<string, unknown>) {
+  async execute(rawArgs: ConversationHudArgs) {
     const action = String(rawArgs.action ?? 'unknown');
     this.logger.info('Executing module-conversation-hud action', { action });
     switch (action) {

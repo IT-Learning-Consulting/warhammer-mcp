@@ -2,14 +2,10 @@
 // Requires the forien-armoury module to be active.
 
 import { z } from 'zod';
-import { CreateCustomItemCommon } from '../common.js';
+import { CreateCustomItemCommon, priceFields } from '../common.js';
 import { FoundryUuid } from '../../branded-ids.js';
 
-const Price = z.object({
-  gc: z.number().optional(),
-  ss: z.number().optional(),
-  bp: z.number().optional(),
-});
+const Price = priceFields();
 
 export const ScrollSchema = CreateCustomItemCommon.extend({
   itemType: z.literal('forien-armoury.scroll'),

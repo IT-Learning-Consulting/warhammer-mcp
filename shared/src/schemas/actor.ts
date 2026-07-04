@@ -2,7 +2,7 @@
 // CCR-4 per-domain file. Input schemas use .strict() per CCR-5.
 
 import { z } from 'zod';
-import { ActorId, FolderId, ItemId, PackId, UserId, FoundryUuid } from './branded-ids.js';
+import { ActorId, FolderId, ItemId, PackId, FoundryUuid } from './branded-ids.js';
 
 export const CharacterItemSchema = z.object({
   id: z.string(),
@@ -79,26 +79,10 @@ export const ValidateWritePermissionsInput = z.object({
   operation: z.enum(['createActor', 'modifyScene']),
 }).strict();
 
-/**
- * @deprecated Phase 1 mcp_crud_expansion (2026-05-14). Use `SetDocumentOwnershipInput`
- * from `./ownership.ts` with `{documentType: 'actor', ...}`. Kept exported solely so
- * the Foundry-side deprecation-wrapper handlers (`handleSetActorOwnership`) can still
- * parse legacy input shapes and return a deprecation error per PRD R1.5.
- */
-export const SetActorOwnershipInput = z.object({
-  actorId: ActorId,
-  userId: UserId,
-  permission: z.union([z.string(), z.number()]),
-}).strict();
-
-/**
- * @deprecated Phase 1 mcp_crud_expansion (2026-05-14). Use `GetDocumentOwnershipInput`
- * from `./ownership.ts` with `{documentType: 'actor', ...}`. Kept exported solely for
- * the deprecation-wrapper handler.
- */
-export const GetActorOwnershipInput = z.object({
-  actorId: ActorId.optional(),
-}).strict();
+// mcp_code_quality_v2 Phase C3 (19e): the actor-only deprecation-wrapper input schemas
+// that lived here (superseded by the polymorphic ownership.ts surface, PRD mcp_crud_expansion
+// Phase 1 R1.5) are removed — their sole consumers (the queries.ts deprecation-wrapper
+// handlers) were deleted as orphaned (zero mcp-server callers).
 
 export const GetFriendlyNPCsInput = z.object({}).strict();
 

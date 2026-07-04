@@ -1,3 +1,4 @@
+import { validateGMAccess as validateGMAccessGate } from '../utils/embeddedCRUDFactory.js';
 // Phase 2 mcp_coverage_expansion — dice-roll handler.
 //
 // GM-side immediate formula evaluation over Foundry v13 `Roll`, distinct from the
@@ -29,12 +30,14 @@ import {
 
 // ── GM gate helper (mirrors item-directory.ts) ──────────────────────────────────
 
+// CORE-04 (mcp_code_quality_v2 Phase C2) — thin local adapter over the canonical
+// utils/embeddedCRUDFactory.ts validateGMAccess() gate. This file's throw-only call sites
+// stay unchanged; only the underlying isGM check is de-duplicated.
 function validateGMAccess(): void {
-  if (!game.user?.isGM) {
+  if (!validateGMAccessGate().allowed) {
     throw new Error('Access denied: GM-only operation');
   }
 }
-
 // ── Envelope type ───────────────────────────────────────────────────────────────
 
 type Envelope<T> = { success: true; data: T };

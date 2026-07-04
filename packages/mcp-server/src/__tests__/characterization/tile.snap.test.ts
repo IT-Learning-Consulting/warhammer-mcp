@@ -92,12 +92,10 @@ describe('TileTool — characterization', () => {
   });
 
   it('list — countOnly path', async () => {
+    // BUG-435: foundry-module countOnly is LEAN — {total, filterApplied}, no tiles array.
     const r = await tool({
-      tiles: [],
       total: 5,
-      page: 1,
-      pageSize: 50,
-      countOnly: true,
+      filterApplied: null,
     }).execute({ action: 'list', sceneId: 'scene-id-001', countOnly: true });
     expect((r as any).content[0].text).toMatchSnapshot();
   });

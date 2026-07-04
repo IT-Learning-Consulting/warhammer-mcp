@@ -13,6 +13,10 @@
 import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
 import { moduleNotActiveContent } from '../_shared/module-guard.js';
+import { z } from 'zod';
+import { ModuleChatCommanderInput } from '@foundry-mcp/shared';
+
+type ModuleChatCommanderArgs = z.infer<typeof ModuleChatCommanderInput>;
 import type {
   ListCommandsResult,
   GetCommandResult,
@@ -145,7 +149,7 @@ Example: { action: "list-commands", filter: { module: "chat-commander-wfrp4e" } 
     ];
   }
 
-  async execute(rawArgs: Record<string, unknown>) {
+  async execute(rawArgs: ModuleChatCommanderArgs) {
     const action = String(rawArgs.action ?? 'unknown');
     this.logger.info('Executing module-chat-commander action', { action });
     switch (action) {

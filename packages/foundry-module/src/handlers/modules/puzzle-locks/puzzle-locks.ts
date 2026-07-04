@@ -29,10 +29,10 @@ import {
   type PuzzleLocksInputType,
   REQUIRED_SOLUTION_FIELD,
   type LockType,
-} from './schemas.js';
+} from '@foundry-mcp/shared';
 import { notify } from '../../../notify.js';
+import { Envelope, isGM } from '../_shared/handler-utils.js';
 
-type Envelope<T> = { success: true; data: T } | { success: false; error: string };
 
 const MODULE_ID = 'puzzle-locks';
 const FLAG_SCOPE = 'puzzle-locks';
@@ -41,12 +41,6 @@ const WRITE_ACTIONS = new Set(['attach-puzzle', 'set-solve-macro', 'remove-puzzl
 
 // ── Local helpers ──────────────────────────────────────────────────────────────
 
-function getGame(): any {
-  return (globalThis as any).game;
-}
-function isGM(): boolean {
-  return Boolean(getGame()?.user?.isGM);
-}
 async function resolveDocument(uuid: string): Promise<any | null> {
   const fromUuid = (globalThis as any).fromUuid;
   if (typeof fromUuid !== 'function') return null;

@@ -118,13 +118,11 @@ const handlers = createEmbeddedCRUDHandlers<any, any, TemplateViewModel, Templat
   // template always paginates (pre-factory list never returned bare-array shape).
   listAlwaysPaginated: true,
   responseBuilders: {
-    // Template's countOnly shape: {success, templates: [], total, page, pageSize, countOnly: true}.
-    listCount: ({ total, page, pageSize }) => ({
-      templates: [],
+    // BUG-435: canonical LEAN countOnly shape {total, filterApplied} — uniform with the factory
+    // default (light/sound/drawing) and scene; no empty templates[] + pagination echo on a count probe.
+    listCount: ({ total, filterApplied }) => ({
       total,
-      page: page ?? 1,
-      pageSize: pageSize ?? 20,
-      countOnly: true,
+      filterApplied,
     }),
     // Template's paginated shape: {success, templates, total, page, pageSize, countOnly: false} — no pageCount.
     listPaginated: ({ items, total, page, pageSize }) => ({

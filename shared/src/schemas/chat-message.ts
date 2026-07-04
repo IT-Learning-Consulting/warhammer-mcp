@@ -14,6 +14,7 @@
 //   - R5.3: rollMode enum uses Foundry canonical keys (publicroll/gmroll/blindroll/selfroll/roll).
 
 import { z } from 'zod';
+import { paginationFieldsDefaulted } from './primitives.js';
 import { UserId, ChatMessageId, ActorId, SceneId, TokenId } from './branded-ids.js';
 
 // ── Shared sub-schemas ────────────────────────────────────────────────────────
@@ -92,8 +93,7 @@ export const ChatMessageGetInput = z.object({
 
 export const ChatMessageListInput = z.object({
   action: z.literal('list'),
-  page: z.number().int().min(1).default(1),
-  pageSize: z.number().int().min(1).max(200).default(20),
+  ...paginationFieldsDefaulted(200, 20),
   sortOrder: z.enum(['asc', 'desc']).default('desc'),
   filters: z.object({
     author: UserId.optional(),

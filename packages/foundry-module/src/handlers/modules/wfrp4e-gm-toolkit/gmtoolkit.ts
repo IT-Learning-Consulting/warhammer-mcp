@@ -29,18 +29,14 @@
 
 import { requireModuleActive } from '../_shared/require-module-active.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
-import { ModuleGmtoolkitInput, type ModuleGmtoolkitInputType } from './schemas.js';
+import { ModuleGmtoolkitInput, type ModuleGmtoolkitInputType } from '@foundry-mcp/shared';
 import { notify } from '../../../notify.js';
 import { verifyDocWrite } from '../../../utils/verifyWrite.js';
 import { WFRP_GM_TOOLKIT as MODULE_ID } from '../../../constants/moduleIds.js';
+import { Envelope, isGM } from '../_shared/handler-utils.js';
 
-type Envelope<T> = { success: true; data: T } | { success: false; error: string };
 
 // ── Local helpers ──────────────────────────────────────────────────────────────
-
-function isGM(): boolean {
-  return Boolean((globalThis as any).game?.user?.isGM);
-}
 
 /** Resolve `game.gmtoolkit` (ADR-9.1 Class-1 accessor), or throw. */
 function getGmtoolkitApi(): any {

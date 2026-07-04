@@ -41,10 +41,10 @@
 
 import { requireModuleActive } from '../_shared/require-module-active.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
-import { BackpackInput, type BackpackInputType } from './schemas.js';
+import { BackpackInput, type BackpackInputType } from '@foundry-mcp/shared';
 import { notify } from '../../../notify.js';
+import { Envelope, getGame, isGM } from '../_shared/handler-utils.js';
 
-type Envelope<T> = { success: true; data: T } | { success: false; error: string };
 
 const MODULE_ID = 'backpack';
 
@@ -72,12 +72,6 @@ const WRITE_ACTIONS = new Set([
 
 // ── Local helpers ──────────────────────────────────────────────────────────────
 
-function getGame(): any {
-  return (globalThis as any).game;
-}
-function isGM(): boolean {
-  return Boolean(getGame()?.user?.isGM);
-}
 function getStorage(): any {
   return getGame()?.backpacks?.storage;
 }

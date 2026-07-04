@@ -5,6 +5,7 @@
 // ViewModel surfaces `isGlobal` boolean derived from AmbientLightDocument.isGlobal getter.
 
 import { z } from 'zod';
+import { paginationFields } from './primitives.js';
 import { LightDataSchema, type LightData } from './light-data.js';
 import { SceneId, AmbientLightId } from './branded-ids.js';
 
@@ -67,8 +68,7 @@ export const LightListInput = z
     filter: z.string().optional(),
     hidden: z.boolean().optional(),
     isGlobal: z.boolean().optional(),
-    page: z.number().int().min(1).optional(),
-    pageSize: z.number().int().min(1).max(100).optional(),
+    ...paginationFields(),
     countOnly: z.boolean().optional(),
   })
   .strict();

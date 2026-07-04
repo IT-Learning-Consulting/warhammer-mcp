@@ -7,6 +7,7 @@
 // served by list-actor-items; compendium reads by search-compendium.
 
 import { z } from 'zod';
+import { paginationFields } from './primitives.js';
 import { FolderId, ItemId, PackId } from './branded-ids.js';
 
 export const ItemDirectoryListInput = z
@@ -14,8 +15,7 @@ export const ItemDirectoryListInput = z
     action: z.literal('list'),
     typeFilter: z.string().optional(),
     folderId: FolderId.optional(),
-    page: z.number().int().min(1).optional(),
-    pageSize: z.number().int().min(1).max(200).optional(),
+    ...paginationFields(200),
   })
   .strict();
 

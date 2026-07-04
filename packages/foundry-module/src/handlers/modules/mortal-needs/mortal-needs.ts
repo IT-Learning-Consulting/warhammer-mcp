@@ -36,10 +36,10 @@
 import { requireModuleActive } from '../_shared/require-module-active.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
 import { verifyFlagWrite } from '../../../utils/verifyWrite.js';
-import { MortalNeedsInput, type MortalNeedsInputType } from './schemas.js';
+import { MortalNeedsInput, type MortalNeedsInputType } from '@foundry-mcp/shared';
 import { notify } from '../../../notify.js';
+import { Envelope, getGame, isGM } from '../_shared/handler-utils.js';
 
-type Envelope<T> = { success: true; data: T } | { success: false; error: string };
 
 const MODULE_ID = 'mortal-needs';
 const NEEDS_FLAG_SCOPE = 'mortal-needs';
@@ -68,12 +68,6 @@ const WRITE_ACTIONS = new Set([
 
 // ── Local helpers ──────────────────────────────────────────────────────────────
 
-function getGame(): any {
-  return (globalThis as any).game;
-}
-function isGM(): boolean {
-  return Boolean(getGame()?.user?.isGM);
-}
 function getApi(): any {
   return getGame()?.modules?.get?.(MODULE_ID)?.api;
 }

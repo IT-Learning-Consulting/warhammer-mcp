@@ -27,6 +27,7 @@
 // CCR-Umbrella-Hygiene: action names are <verb> or <verb>-<noun> kebab-case.
 
 import { z } from 'zod';
+import { FOUNDRY_ID, paginationFields } from './primitives.js';
 import { ApplyTemplateInput } from './actor.js';
 import {
   SceneId,
@@ -299,8 +300,7 @@ export const SceneListInput = z
     action: z.literal('list'),
     filter: z.string().optional(),
     include_active_only: z.boolean().optional(),
-    page: z.number().int().min(1).optional(),
-    pageSize: z.number().int().min(1).max(100).optional(),
+    ...paginationFields(),
     countOnly: z.boolean().optional(),
   })
   .strict();
@@ -368,7 +368,7 @@ export const SceneImportFromCompendiumInput = z
   .object({
     action: z.literal('import-from-compendium'),
     packId: PackId,
-    documentId: z.string().min(1), // polymorphic: not branded (Phase 1 design)
+    documentId: FOUNDRY_ID, // polymorphic: not branded (Phase 1 design; FOUNDRY_ID primitive per C2 task 5.2)
   })
   .strict();
 
@@ -527,20 +527,17 @@ export interface SceneTokenView {
 // ── Action-specific response interfaces ──────────────────────────────────────
 
 export interface SceneCreateResponse {
-  success: true;
   scene: SceneViewModel;
   requestedChanges: Record<string, unknown>;
 }
 
 export interface SceneUpdateResponse {
-  success: true;
   scene: SceneViewModel;
   requestedChanges: Record<string, unknown>;
   changedFields: string[];
 }
 
 export interface SceneDeleteResponse {
-  success: true;
   deletedId: string;
   deletedName: string;
   remainingScenes: number;
@@ -550,27 +547,23 @@ export interface SceneDeleteResponse {
 }
 
 export interface SceneCloneResponse {
-  success: true;
   source: { id: string; name: string };
   clone: SceneViewModel;
 }
 
 export interface SceneActivateResponse {
-  success: true;
   activatedId: string;
   activatedName: string;
   previousActiveId: string | null;
 }
 
 export interface SceneViewResponse {
-  success: true;
   viewedId: string;
   viewedName: string;
   isLocalUser: boolean;
 }
 
 export interface SceneThumbnailResponse {
-  success: true;
   sceneId: string;
   sceneName: string;
   // Foundry's createThumbnail returns a data URL ("data:image/webp;base64,...").
@@ -581,7 +574,6 @@ export interface SceneThumbnailResponse {
 }
 
 export interface SceneGetResponse {
-  success: true;
   scene: SceneViewModel;
   tokens?: SceneTokenView[];
   tokenSummary?: {
@@ -605,12 +597,10 @@ export interface SceneListEntry {
 }
 
 export interface SceneListBareResponse {
-  success: true;
   scenes: SceneListEntry[];
 }
 
 export interface SceneListPaginatedResponse {
-  success: true;
   total: number;
   page: number;
   pageSize: number;
@@ -619,7 +609,6 @@ export interface SceneListPaginatedResponse {
 }
 
 export interface SceneListCountOnlyResponse {
-  success: true;
   total: number;
   filterApplied: string | null;
 }
@@ -634,7 +623,6 @@ export type SceneListResponse =
 // clear-layer: `items` are the docs that were (confirm) or would be (dryRun)
 // deleted. `dryRun` distinguishes; on confirm `count === items.length` deleted.
 export interface SceneClearLayerResponse {
-  success: true;
   sceneId: string;
   layer: string;
   dryRun: boolean;
@@ -643,14 +631,12 @@ export interface SceneClearLayerResponse {
 }
 
 export interface SceneResetFogResponse {
-  success: true;
   sceneId: string;
   // CCR-2a: count of FogExploration docs remaining for the scene after reset (asserted 0).
   fogDocsRemaining: number;
 }
 
 export interface SceneLightingTransitionResponse {
-  success: true;
   sceneId: string;
   target: number;
   // Persisted darkness after animate + scene.update (re-read of environment.darknessLevel).
@@ -658,7 +644,6 @@ export interface SceneLightingTransitionResponse {
 }
 
 export interface ScenePreloadResponse {
-  success: true;
   sceneId: string;
   sceneName: string;
   // CCR-2b transient: the preload Promise resolved; no persisted state to re-read.
@@ -666,7 +651,6 @@ export interface ScenePreloadResponse {
 }
 
 export interface SceneImportFromCompendiumResponse {
-  success: true;
   scene: SceneViewModel;
   sourcePack: string;
 }

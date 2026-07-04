@@ -56,11 +56,11 @@ interface TileZOrderResponse {
   tile: TileViewModel;
 }
 interface TileListResponse {
-  tiles: TileListItem[];
+  tiles?: TileListItem[];
   total: number;
-  page: number;
-  pageSize: number;
-  countOnly?: boolean;
+  page?: number;
+  pageSize?: number;
+  filterApplied?: boolean | string | null;
 }
 
 // ── Utilities ────────────────────────────────────────────────────────────────
@@ -316,7 +316,8 @@ export class TileTool extends BaseTool {
     try {
       const data = await this.query<TileListResponse>('tile', args);
 
-      if (data.countOnly) {
+      // BUG-435: countOnly path — factory returns LEAN {total, filterApplied} with no tiles array.
+      if (data.tiles === undefined) {
         const text = `🟩 **Tile count**\n\n**Total:** ${data.total}`;
         return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
       }
@@ -326,7 +327,7 @@ export class TileTool extends BaseTool {
       }
 
       const lines = data.tiles.map(formatTileListItem);
-      const pageInfo = data.total > data.pageSize
+      const pageInfo = data.pageSize !== undefined && data.total > data.pageSize
         ? ` (page ${data.page}, ${data.total} total)`
         : ` (${data.total})`;
       const text = `🟩 **Tiles**${pageInfo}\n\n${lines.join('\n')}`;

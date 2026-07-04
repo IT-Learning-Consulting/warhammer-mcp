@@ -53,10 +53,11 @@
 
 import { requireModuleActive } from '../_shared/require-module-active.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
-import { NarratorInput, type NarratorInputType } from './schemas.js';
+import { NarratorInput, type NarratorInputType } from '@foundry-mcp/shared';
 import { notify } from '../../../notify.js';
+import { Envelope, getGame, isGM } from '../_shared/handler-utils.js';
+import { settlePoll } from '../_shared/settle-poll.js';
 
-type Envelope<T> = { success: true; data: T } | { success: false; error: string };
 
 const MODULE_ID = 'narrator-tools';
 
@@ -70,12 +71,6 @@ const SETTINGS_MODIFY_ACTIONS = new Set(['scenery', 'configure']);
 
 // ── Local helpers ──────────────────────────────────────────────────────────────
 
-function getGame(): any {
-  return (globalThis as any).game;
-}
-function isGM(): boolean {
-  return Boolean(getGame()?.user?.isGM);
-}
 function hasSettingsModify(): boolean {
   return Boolean(getGame()?.user?.hasPermission?.('SETTINGS_MODIFY'));
 }
@@ -95,29 +90,12 @@ function getSharedState(): any {
   return getGame()?.settings?.get?.(MODULE_ID, 'sharedState');
 }
 
-async function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-/**
- * Bounded-retry poll for a value written by a bare-lexical module call whose internal
- * game.settings.set()/ChatMessage.create() is fire-and-forget (not awaited by narrator.js itself — see
- * module header). An immediate single re-read races the later-tick write; poll a few times before
- * declaring NARRATOR_NOT_PERSISTED. [[feedback_settle_poll_module_api_verify]].
- */
-async function settlePoll<T>(
-  read: () => T,
-  isSettled: (v: T) => boolean,
-  attempts = 6,
-  delayMs = 40,
-): Promise<T> {
-  let value = read();
-  for (let i = 0; i < attempts && !isSettled(value); i++) {
-    await sleep(delayMs);
-    value = read();
-  }
-  return value;
-}
+// Bounded-retry poll for a value written by a bare-lexical module call whose internal
+// game.settings.set()/ChatMessage.create() is fire-and-forget (not awaited by narrator.js itself — see
+// module header). An immediate single re-read races the later-tick write; poll a few times before
+// declaring NARRATOR_NOT_PERSISTED. [[feedback_settle_poll_module_api_verify]]. Consolidated to
+// `_shared/settle-poll.ts` (mcp_code_quality_v2 Phase C2, RC2.1) — this file's shape is the
+// canonical one the shared generic overload was extracted from.
 
 /** Replicates narrator.js's own content transform (createChatMessage: `message.replace(/\\n/g,'<br>')`) so
  * the post-write message search can match on exact content rather than a fuzzy substring. */

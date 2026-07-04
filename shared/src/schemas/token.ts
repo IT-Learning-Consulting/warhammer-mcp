@@ -14,6 +14,7 @@
 // numeric ranges; CONFIG.WFRP4E.* matchers happen at handler layer.
 
 import { z } from 'zod';
+import { paginationFields } from './primitives.js';
 import { LightDataSchema, type LightData } from './light-data.js';
 import { TextureDataSchema, type TextureData } from './texture-data.js';
 import { ActorId, SceneId, TokenId } from './branded-ids.js';
@@ -179,8 +180,7 @@ export const TokenListInput = z
     filter: z.string().optional(),
     hidden: z.boolean().optional(),
     onlyLinked: z.boolean().optional(),
-    page: z.number().int().min(1).optional(),
-    pageSize: z.number().int().min(1).max(100).optional(),
+    ...paginationFields(),
     countOnly: z.boolean().optional(),
   })
   .strict();

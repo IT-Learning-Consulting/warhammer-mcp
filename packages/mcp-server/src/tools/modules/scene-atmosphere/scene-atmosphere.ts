@@ -25,6 +25,10 @@ import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
 import { moduleNotActiveContent } from '../_shared/module-guard.js';
 import { SCENE_ATMOSPHERE_TOOL_DEFINITIONS } from './definitions.js';
+import { z } from 'zod';
+import { ModuleSceneAtmosphereInput } from '@foundry-mcp/shared';
+
+type ModuleSceneAtmosphereArgs = z.infer<typeof ModuleSceneAtmosphereInput>;
 import {
   BundleMemberStatus,
   GetBundleStatusResult,
@@ -215,7 +219,7 @@ export class ModuleSceneAtmosphereTool extends BaseTool {
     return SCENE_ATMOSPHERE_TOOL_DEFINITIONS;
   }
 
-  async execute(args: Record<string, unknown>) {
+  async execute(args: ModuleSceneAtmosphereArgs) {
     const action = String(args.action ?? 'unknown');
     this.logger.info(`Executing ${TOOL_NAME} action`, { action });
     try {

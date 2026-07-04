@@ -31,16 +31,9 @@
 // notify on writes (CCR-3): 'scene' kind. Reads (get-lock-state, get-scene-flags) silent.
 
 import { notify } from '../../../notify.js';
-import type { ModuleAccessControlInputType } from './schemas.js';
+import type { ModuleAccessControlInputType } from '@foundry-mcp/shared';
+import { Envelope, getGame, getCanvas } from '../_shared/handler-utils.js';
 
-type Envelope<T> = { success: true; data: T } | { success: false; error: string };
-
-function getGame(): any {
-  return (globalThis as any).game;
-}
-function getCanvas(): any {
-  return (globalThis as any).canvas;
-}
 
 /** The LockView global API. Throws a typed error if unavailable. */
 function getLockView(): any {

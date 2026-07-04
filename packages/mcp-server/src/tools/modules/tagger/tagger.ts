@@ -14,6 +14,9 @@ import {
   ErrorTokens, SceneId } from '@foundry-mcp/shared';
 import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
 import { moduleNotActiveContent } from '../_shared/module-guard.js';
+import { ModuleTaggerInput } from '@foundry-mcp/shared';
+
+type ModuleTaggerArgs = z.infer<typeof ModuleTaggerInput>;
 
 // ── Response shapes (DP-15 — typed, never <any>) ─────────────────────────────
 
@@ -191,7 +194,7 @@ Examples:
     ];
   }
 
-  async execute(args: Record<string, unknown>) {
+  async execute(args: ModuleTaggerArgs) {
     const action = String(args.action ?? 'unknown');
     this.logger.info('Executing module-tagger action', { action });
     try {

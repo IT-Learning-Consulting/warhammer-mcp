@@ -292,11 +292,11 @@ export class FoundryDataAccess {
   // Phase 7 (R7.1): createActorFromSource (private; only caller was createActorFromCompendium) moved to
   // services/actor.ts with the cluster.
 
-  // Phase 1 mcp_crud_expansion (2026-05-14): the actor-only `setActorOwnership`
-  // and `getActorOwnership` methods that lived here are removed. The polymorphic
-  // replacements live in `handlers/ownership.ts` and are dispatched from
-  // queries.ts. The deprecation wrappers in queries.ts now strict-parse legacy
-  // input and return a deprecation error pointing at the new surface.
+  // Phase 1 mcp_crud_expansion (2026-05-14): the actor-only ownership setter/getter
+  // methods that lived here are removed. The polymorphic replacements live in
+  // `handlers/ownership.ts` and are dispatched from queries.ts. (Their queries.ts
+  // deprecation wrappers were themselves removed as orphaned dead code —
+  // mcp_code_quality_v2 Phase C3 19e.)
 
 
   /**

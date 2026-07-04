@@ -19,6 +19,7 @@
 import { wrappedWrite } from '../transaction-manager.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
 import { notify, type NotifyKind } from '../notify.js';
+import { validateGMAccess } from '../utils/embeddedCRUDFactory.js';
 import type {
   DocumentType,
   SetDocumentOwnershipInputType,
@@ -27,7 +28,6 @@ import type {
   ResetDocumentOwnershipInputType,
 } from '@foundry-mcp/shared';
 
-type AccessGate = { allowed: boolean };
 type EnvelopeOK<T> = { success: true; data: T };
 type EnvelopeErr = { success: false; error: string };
 type Envelope<T> = EnvelopeOK<T> | EnvelopeErr;
@@ -82,11 +82,6 @@ interface BulkResultEnvelope {
 }
 
 // CCR-Trust: GM-only access for every ownership handler.
-function validateGMAccess(): AccessGate {
-  if (!game.user?.isGM) return { allowed: false };
-  return { allowed: true };
-}
-
 function getCollection(documentType: DocumentType): any {
   switch (documentType) {
     case 'actor':     return (game as any).actors;

@@ -15,6 +15,10 @@ import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
 import { moduleNotActiveContent } from '../_shared/module-guard.js';
 import { PORTAL_ACTIONS, type PortalResult } from './schemas.js';
+import { z } from 'zod';
+import { PortalInput } from '@foundry-mcp/shared';
+
+type PortalArgs = z.infer<typeof PortalInput>;
 
 function formatResult(d: PortalResult): string {
   const p = 'module-portal';
@@ -82,7 +86,7 @@ Example: { action: "spawn", sceneId: "abc123", creatures: [{ uuid: "Actor.xyz789
     ];
   }
 
-  async execute(rawArgs: Record<string, unknown>) {
+  async execute(rawArgs: PortalArgs) {
     const action = String(rawArgs.action ?? 'unknown');
     this.logger.info('Executing module-portal action', { action });
     if (!(PORTAL_ACTIONS as readonly string[]).includes(action)) {

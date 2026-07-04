@@ -2,6 +2,7 @@
 // Input schemas use .strict() per CCR-5.
 
 import { z } from 'zod';
+import { FOUNDRY_ID } from './primitives.js';
 import { ActorId } from './branded-ids.js';
 
 // Static list mirroring live CONFIG.WFRP4E.conditions (verified 2026-06-22, BUG-404). Handler-side
@@ -99,7 +100,7 @@ export const ActiveEffectProjection = z.object({
     }),
   ),
   parentType: z.enum(['Actor', 'Item']).optional(),
-  parentId: z.string().optional(), // polymorphic: not branded (Phase 1 design)
+  parentId: FOUNDRY_ID.optional(), // polymorphic: not branded (Phase 1 design; FOUNDRY_ID primitive per C2 task 5.2)
   parentName: z.string().optional(),
 });
 

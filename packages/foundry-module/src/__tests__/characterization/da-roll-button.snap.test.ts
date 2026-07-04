@@ -9,8 +9,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { RollButtonService, RollRequestService } from '../../services/index.js';
 
-// validateState is a no-op for these pure / early-return paths.
-const rollButton: any = new RollButtonService(() => {});
+const rollButton: any = new RollButtonService();
 
 // A minimal fake Roll: buildRollResultPayload reads roll.dice[0].total (the d100) then roll.total.
 function fakeRoll(d100: number, total?: number): any {

@@ -26,19 +26,15 @@
 
 import { requireModuleActive } from '../_shared/require-module-active.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
-import { ModulePartyResourcesInput, type ModulePartyResourcesInputType } from './schemas.js';
+import { ModulePartyResourcesInput, type ModulePartyResourcesInputType } from '@foundry-mcp/shared';
 import { notify } from '../../../notify.js';
 import { PARTY_RESOURCES as MODULE_ID } from '../../../constants/moduleIds.js';
+import { Envelope, isGM } from '../_shared/handler-utils.js';
 
-type Envelope<T> = { success: true; data: T } | { success: false; error: string };
 
 const LIST_KEY = 'resource_list';
 
 // ── Local helpers ──────────────────────────────────────────────────────────────
-
-function isGM(): boolean {
-  return Boolean((globalThis as any).game?.user?.isGM);
-}
 
 /** Resolve `window.pr.api` (ADR-9.1 Class-3 accessor), or throw. */
 function getPartyApi(): any {

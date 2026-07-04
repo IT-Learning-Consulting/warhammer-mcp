@@ -55,8 +55,14 @@ interface NoteListResponse {
   total: number;
   page: number;
   pageSize: number;
-  countOnly?: boolean;
+  countOnly?: false;
   filterApplied?: string | null;
+}
+// BUG-435: canonical LEAN countOnly shape (discriminated by countOnly:true).
+interface NoteListCountResponse {
+  total: number;
+  filterApplied: string | null;
+  countOnly: true;
 }
 
 // ── Utilities ────────────────────────────────────────────────────────────────
@@ -296,7 +302,7 @@ export class NoteTool extends BaseTool {
 
   private async handleList(args: ArgsFor<'list'>) {
     try {
-      const data = await this.query<NoteListResponse>('note', args);
+      const data = await this.query<NoteListResponse | NoteListCountResponse>('note', args);
 
       if (data.countOnly) {
         const text = `📌 **Note count**\n\n**Total:** ${data.total}${data.filterApplied ? `\n**Filter:** "${data.filterApplied}"` : ''}`;

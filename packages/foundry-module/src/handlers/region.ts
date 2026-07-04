@@ -62,62 +62,58 @@ import { getEmbeddedOrThrow } from '../utils/getEmbeddedOrThrow.js';
 import { verifyDocWrite } from '../utils/verifyWrite.js';
 import { notify } from '../notify.js';
 // R2.2 dedup: canonical deepStripUndefined (was a local byte-identical copy).
-import { deepStripUndefined } from '../utils/embeddedCRUDFactory.js';
+import { deepStripUndefined, validateGMAccess, getSceneOrThrow } from '../utils/embeddedCRUDFactory.js';
 
-type AccessGate = { allowed: boolean };
 type EnvelopeOK<T> = { success: true; data: T };
 type EnvelopeErr = { success: false; error: string };
 type Envelope<T> = EnvelopeOK<T> | EnvelopeErr;
 
 export interface RegionCreateResponse {
-  success: true;
   region: RegionViewModel;
   requestedChanges: Record<string, unknown>;
 }
 export interface RegionUpdateResponse {
-  success: true;
   region: RegionViewModel;
   requestedChanges: Record<string, unknown>;
   changedFields: string[];
 }
 export interface RegionDeleteResponse {
-  success: true;
   deletedId: string;
   sceneId: string;
   remainingRegions: number;
 }
 export interface RegionGetResponse {
-  success: true;
   region: RegionViewModel;
 }
 export interface RegionListResponse {
-  success: true;
   regions: RegionListItem[];
   total: number;
   page: number;
   pageSize: number;
-  countOnly?: boolean;
+  countOnly?: false;
   filterApplied?: string | null;
 }
+// BUG-435: canonical LEAN countOnly shape.
+export interface RegionListCountResponse {
+  total: number;
+  filterApplied: string | null;
+  countOnly: true;
+}
 export interface RegionBehaviorCreateResponse {
-  success: true;
   regionId: string;
   behavior: RegionBehaviorSummary;
 }
 export interface RegionBehaviorUpdateResponse {
-  success: true;
   regionId: string;
   behavior: RegionBehaviorSummary;
   changedFields: string[];
 }
 export interface RegionBehaviorDeleteResponse {
-  success: true;
   regionId: string;
   deletedBehaviorId: string;
   remainingBehaviors: number;
 }
 export interface RegionAddShapeResponse {
-  success: true;
   region: RegionViewModel;
   shapeCount: number;
 }
@@ -129,20 +125,10 @@ export type RegionResponse =
   | RegionAddShapeResponse
   | RegionGetResponse
   | RegionListResponse
+  | RegionListCountResponse
   | RegionBehaviorCreateResponse
   | RegionBehaviorUpdateResponse
   | RegionBehaviorDeleteResponse;
-
-function validateGMAccess(): AccessGate {
-  return { allowed: Boolean(game.user?.isGM) };
-}
-
-
-function getSceneOrThrow(sceneId: string): any {
-  const scene = (game as any).scenes?.get(sceneId);
-  if (!scene) throw new Error(`SCENE_NOT_FOUND: no Scene with id "${sceneId}"`);
-  return scene;
-}
 
 function getActiveSceneOrThrow(): any {
   const scene = (game as any).scenes?.active;
@@ -236,7 +222,6 @@ export async function createRegion(data: unknown): Promise<Envelope<RegionCreate
     return {
       success: true as const,
       data: {
-        success: true,
         region: serializeRegionViewModel(scene, persisted, false),
         requestedChanges,
       } satisfies RegionCreateResponse,
@@ -287,7 +272,6 @@ export async function updateRegion(data: unknown): Promise<Envelope<RegionUpdate
     return {
       success: true as const,
       data: {
-        success: true,
         region: serializeRegionViewModel(scene, region, false),
         requestedChanges,
         changedFields,
@@ -328,7 +312,6 @@ export async function deleteRegion(data: unknown): Promise<Envelope<RegionDelete
     return {
       success: true as const,
       data: {
-        success: true,
         deletedId: input.regionId,
         sceneId: input.sceneId,
         remainingRegions: sizeAfter,
@@ -347,7 +330,6 @@ export async function getRegion(data: unknown): Promise<Envelope<RegionGetRespon
     return {
       success: true,
       data: {
-        success: true,
         region: serializeRegionViewModel(scene, region, Boolean(input.includeBehaviors)),
       },
     };
@@ -358,7 +340,7 @@ export async function getRegion(data: unknown): Promise<Envelope<RegionGetRespon
 
 // ── 5. listRegions ───────────────────────────────────────────────────────────
 
-export async function listRegions(data: unknown): Promise<Envelope<RegionListResponse>> {
+export async function listRegions(data: unknown): Promise<Envelope<RegionListResponse | RegionListCountResponse>> {
   const input: RegionListInputType = RegionListInput_strict_parse(data);
   try {
     const scene = input.sceneId ? getSceneOrThrow(input.sceneId) : getActiveSceneOrThrow();
@@ -374,19 +356,27 @@ export async function listRegions(data: unknown): Promise<Envelope<RegionListRes
     }
 
     const total = regions.length;
+
+    // BUG-435: countOnly returns the canonical LEAN {total, filterApplied, countOnly:true} shape.
+    if (input.countOnly) {
+      return {
+        success: true,
+        data: { total, filterApplied, countOnly: true } satisfies RegionListCountResponse,
+      };
+    }
+
     const page = input.page ?? 1;
     const pageSize = input.pageSize ?? 50;
-    const items = input.countOnly ? [] : regions.slice((page - 1) * pageSize, page * pageSize);
+    const items = regions.slice((page - 1) * pageSize, page * pageSize);
 
     return {
       success: true,
       data: {
-        success: true,
         regions: items.map((r) => serializeRegionListItem(scene, r)),
         total,
         page,
         pageSize,
-        countOnly: input.countOnly ?? false,
+        countOnly: false,
         filterApplied,
       } satisfies RegionListResponse,
     };
@@ -432,7 +422,6 @@ export async function createBehavior(
     return {
       success: true as const,
       data: {
-        success: true,
         regionId: region.id as string,
         behavior: serializeBehaviorSummary(persisted),
       } satisfies RegionBehaviorCreateResponse,
@@ -505,7 +494,6 @@ export async function updateBehavior(
     return {
       success: true as const,
       data: {
-        success: true,
         regionId: region.id as string,
         behavior: serializeBehaviorSummary(persisted),
         changedFields,
@@ -556,7 +544,6 @@ export async function deleteBehavior(
     return {
       success: true as const,
       data: {
-        success: true,
         regionId: region.id as string,
         deletedBehaviorId: input.behaviorId,
         remainingBehaviors: sizeAfter,
@@ -599,7 +586,6 @@ export async function addShape(data: unknown): Promise<Envelope<RegionAddShapeRe
     return {
       success: true as const,
       data: {
-        success: true,
         region: serializeRegionViewModel(scene, region, false),
         shapeCount: afterCount,
       } satisfies RegionAddShapeResponse,

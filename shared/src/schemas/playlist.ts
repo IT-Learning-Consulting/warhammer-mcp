@@ -27,6 +27,7 @@
 // path; the /wfrp-playlist skill prefers archive-by-rename before confirm.
 
 import { z } from 'zod';
+import { paginationFields } from './primitives.js';
 import { PlaylistId, PlaylistSoundId, FolderId } from './branded-ids.js';
 
 // ── Constants & small shared shapes ──────────────────────────────────────────
@@ -156,8 +157,7 @@ export const PlaylistListPlaylistsInput = z.object({
   action: z.literal('list-playlists'),
   filter: z.string().optional(),
   folder: FolderId.nullable().optional(),
-  page: z.number().int().min(1).optional(),
-  pageSize: z.number().int().min(1).max(100).optional(),
+  ...paginationFields(),
   countOnly: z.boolean().optional(),
 }).strict();
 

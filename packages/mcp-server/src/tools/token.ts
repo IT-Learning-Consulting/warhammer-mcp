@@ -52,8 +52,14 @@ interface TokenListResponse {
   total: number;
   page: number;
   pageSize: number;
-  countOnly?: boolean;
+  countOnly?: false;
   filterApplied?: string | null;
+}
+// BUG-435: canonical LEAN countOnly shape (discriminated by countOnly:true).
+interface TokenListCountResponse {
+  total: number;
+  filterApplied: string | null;
+  countOnly: true;
 }
 interface TokenAddResponse {
   sceneId: SceneId;
@@ -358,7 +364,7 @@ export class TokenTool extends BaseTool {
 
   private async handleList(args: ArgsFor<'list'>) {
     try {
-      const data = await this.query<TokenListResponse>('token', args);
+      const data = await this.query<TokenListResponse | TokenListCountResponse>('token', args);
 
       if (data.countOnly) {
         const text = `🎭 **Token count**\n\n**Total:** ${data.total}${data.filterApplied ? `\n**Filter:** \`${data.filterApplied}\`` : ''}`;
@@ -419,7 +425,9 @@ export class TokenTool extends BaseTool {
         `**ID:** \`${data.deletedId}\` · **Name:** ${data.deletedName}\n` +
         `**Scene:** \`${data.sceneId}\` · **Remaining tokens:** ${data.remainingTokens}\n\n` +
         `⚠️ Permanent.`;
-      return { content: [{ type: 'text' as const, text }] };
+      // BUG-436: additive structuredContent (byte-identical text) so structured-field assertions on
+      // remainingTokens/deletedId observe the field directly instead of inferring from prose.
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('delete-token', e instanceof Error ? e.message : String(e));
     }

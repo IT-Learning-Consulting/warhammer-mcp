@@ -30,19 +30,13 @@
 
 import { requireModuleActive } from '../_shared/require-module-active.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
-import { SyrinscapeInput, type SyrinscapeInputType, PLAY_ACTIONS } from './schemas.js';
+import { SyrinscapeInput, type SyrinscapeInputType, PLAY_ACTIONS } from '@foundry-mcp/shared';
 import { notify } from '../../../notify.js';
+import { Envelope, getGame, isGM } from '../_shared/handler-utils.js';
 
-type Envelope<T> = { success: true; data: T } | { success: false; error: string };
 
 const MODULE_ID = 'syrinscape-control';
 
-function getGame(): any {
-  return (globalThis as any).game;
-}
-function isGM(): boolean {
-  return Boolean(getGame()?.user?.isGM);
-}
 function getControl(): any {
   return (globalThis as any).syrinscapeControl;
 }

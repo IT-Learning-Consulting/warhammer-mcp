@@ -22,11 +22,11 @@
 import { requireModuleActive } from '../_shared/require-module-active.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
 import { getEmbeddedOrThrow } from '../../../utils/getEmbeddedOrThrow.js';
-import { ModuleLevelsInput, type ModuleLevelsInputType } from './schemas.js';
+import { ModuleLevelsInput, type ModuleLevelsInputType } from '@foundry-mcp/shared';
 import { notify } from '../../../notify.js';
 import { verifyDocWrite, verifyFlagWrite } from '../../../utils/verifyWrite.js';
+import { Envelope, isGM } from '../_shared/handler-utils.js';
 
-type Envelope<T> = { success: true; data: T } | { success: false; error: string };
 
 const FAMILY = ['levels', 'wall-height', 'levelsvolumetrictemplates', 'levels-layer-effects', 'betterroofs'];
 
@@ -34,10 +34,6 @@ const FAMILY = ['levels', 'wall-height', 'levelsvolumetrictemplates', 'levels-la
 const RESCALE_COLLECTIONS = ['tiles', 'tokens', 'lights', 'sounds', 'notes', 'walls', 'templates'];
 
 // ── Local helpers ──────────────────────────────────────────────────────────────
-
-function isGM(): boolean {
-  return Boolean((globalThis as any).game?.user?.isGM);
-}
 
 function moduleActive(id: string): boolean {
   return Boolean((globalThis as any).game?.modules?.get?.(id)?.active);

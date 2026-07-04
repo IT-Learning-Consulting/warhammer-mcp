@@ -62,31 +62,20 @@ import {
 import { wrappedWrite } from '../transaction-manager.js';
 import { notify } from '../notify.js';
 // R2.2 dedup: canonical deepStripUndefined (was a local byte-identical copy).
-import { deepStripUndefined } from '../utils/embeddedCRUDFactory.js';
+import { deepStripUndefined, validateGMAccess, stripUndefined } from '../utils/embeddedCRUDFactory.js';
 
 // ── Local types ──────────────────────────────────────────────────────────────
 
-type AccessGate = { allowed: boolean };
 type EnvelopeOK<T> = { success: true; data: T };
 type EnvelopeErr = { success: false; error: string };
 type Envelope<T> = EnvelopeOK<T> | EnvelopeErr;
 
 // ── Access gate ──────────────────────────────────────────────────────────────
 
-function validateGMAccess(): AccessGate {
-  if (!game.user?.isGM) return { allowed: false };
-  return { allowed: true };
-}
-
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 // F04 mitigation: strip undefined keys so Foundry's `.default()` validators
 // apply cleanly rather than silently dropping the embedded doc.
-function stripUndefined<T extends Record<string, any>>(obj: T): T {
-  Object.keys(obj).forEach((k) => obj[k] === undefined && delete obj[k]);
-  return obj;
-}
-
 // Normalise a PageInputType into the shape Foundry's createEmbeddedDocuments
 // expects. Applies text.format default = 1 (HTML) when format omitted. Maps
 // subtype-specific fields verbatim — Foundry's defineSchema validators apply

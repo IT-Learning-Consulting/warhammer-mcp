@@ -19,7 +19,7 @@
 
 import { z } from 'zod';
 import { MacroId, FolderId, ActorId, TokenId, PackId } from './branded-ids.js';
-import { FOUNDRY_ID } from './primitives.js';
+import { FOUNDRY_ID, paginationFields } from './primitives.js';
 
 // ── Shared primitives ──────────────────────────────────────────────────────
 
@@ -77,8 +77,7 @@ export const ListMacrosInput = z.object({
   filter: z.string().optional(),
   folderId: FolderId.optional(),
   type: MACRO_TYPE.optional(),
-  page: z.number().int().positive().optional(),
-  pageSize: z.number().int().min(1).max(100).optional(),
+  ...paginationFields(),
   countOnly: z.boolean().optional(),
 });
 

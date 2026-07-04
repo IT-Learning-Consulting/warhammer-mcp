@@ -21,19 +21,15 @@
 
 import { requireModuleActive } from '../_shared/require-module-active.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
-import { ModuleArmouryInput, type ModuleArmouryInputType } from './schemas.js';
+import { ModuleArmouryInput, type ModuleArmouryInputType } from '@foundry-mcp/shared';
 import { notify } from '../../../notify.js';
 import { FORIEN_ARMOURY as MODULE_ID } from '../../../constants/moduleIds.js';
+import { Envelope, isGM } from '../_shared/handler-utils.js';
 
-type Envelope<T> = { success: true; data: T } | { success: false; error: string };
 
 const PACK_ID = 'forien-armoury.forien-armoury';
 
 // ── Local helpers ──────────────────────────────────────────────────────────────
-
-function isGM(): boolean {
-  return Boolean((globalThis as any).game?.user?.isGM);
-}
 
 /** Resolve `game.modules.get('forien-armoury').api` (ADR-9.1 Class-1 accessor), or throw. */
 function getArmouryApi(): any {

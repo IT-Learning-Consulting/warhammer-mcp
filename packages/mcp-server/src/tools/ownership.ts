@@ -215,6 +215,12 @@ export class OwnershipTool extends BaseTool {
           userId: { type: "string", description: "Per-user grant target (mutex with `default`)" },
           default: { type: "boolean", description: "When true, target the default-level of the ownership map (mutex with `userId`)" },
           level: {
+            // CCR-V8 (C2 task 6.1): scalar-union typed via oneOf — a description-only param
+            // JSON-stringifies across the MCP boundary (F04 class).
+            oneOf: [
+              { type: "string", enum: ["none", "limited", "observer", "owner", "inherit"] },
+              { type: "integer", enum: [-1, 0, 1, 2, 3] },
+            ],
             description: "[assign/bulk-set] one of 'none'|'limited'|'observer'|'owner'|'inherit' or -1|0|1|2|3",
           },
           targets: {

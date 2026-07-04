@@ -13,6 +13,10 @@
 import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
 import { moduleNotActiveContent } from '../_shared/module-guard.js';
+import { z } from 'zod';
+import { ModuleGmtoolkitInput } from '@foundry-mcp/shared';
+
+type ModuleGmtoolkitArgs = z.infer<typeof ModuleGmtoolkitInput>;
 import type {
   GmtoolkitGroupTestResult,
   GmtoolkitAdvantageResult,
@@ -161,7 +165,7 @@ Example: { action: "update-advantage", mode: "increase", tokenId: "Scene.x.Token
     ];
   }
 
-  async execute(rawArgs: Record<string, unknown>) {
+  async execute(rawArgs: ModuleGmtoolkitArgs) {
     const action = String(rawArgs.action ?? 'unknown');
     this.logger.info('Executing module-gmtoolkit action', { action });
     switch (action) {

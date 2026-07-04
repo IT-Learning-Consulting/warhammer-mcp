@@ -65,7 +65,7 @@ describe('roll-button listener leak — R4.2 regression', () => {
   }
 
   it('100 renders use fresh per-message signals (every prior render aborted) via the sentinel binding path', () => {
-    const svc = new RollButtonService(() => {});
+    const svc = new RollButtonService();
     const messageId = 'msg-leak-1';
     const signals: AbortSignal[] = [];
     const buttons: any[] = [];
@@ -94,7 +94,7 @@ describe('roll-button listener leak — R4.2 regression', () => {
   });
 
   it('releaseMessageController (deleteChatMessage) aborts the message controller', () => {
-    const svc = new RollButtonService(() => {});
+    const svc = new RollButtonService();
     const messageId = 'msg-leak-2';
     const container = makeButtonContainer();
     const signal = bindMessageController(messageId);
@@ -106,7 +106,7 @@ describe('roll-button listener leak — R4.2 regression', () => {
   });
 
   it('the data-attribute sentinel blocks a double-attach within a single render', () => {
-    const svc = new RollButtonService(() => {});
+    const svc = new RollButtonService();
     const container = makeButtonContainer();
     const signal = bindMessageController('msg-leak-3');
 

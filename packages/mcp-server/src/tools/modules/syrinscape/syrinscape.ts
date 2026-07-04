@@ -11,6 +11,10 @@ import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
 import { moduleNotActiveContent } from '../_shared/module-guard.js';
 import { SYRINSCAPE_ACTIONS, type SyrinscapeResult } from './schemas.js';
+import { z } from 'zod';
+import { SyrinscapeInput } from '@foundry-mcp/shared';
+
+type SyrinscapeArgs = z.infer<typeof SyrinscapeInput>;
 
 function formatResult(d: SyrinscapeResult): string {
   const p = 'module-syrinscape';
@@ -88,7 +92,7 @@ Example: { action: "set-mood", id: "m:12345" }`,
     ];
   }
 
-  async execute(rawArgs: Record<string, unknown>) {
+  async execute(rawArgs: SyrinscapeArgs) {
     const action = String(rawArgs.action ?? 'unknown');
     this.logger.info('Executing module-syrinscape action', { action });
     if (!(SYRINSCAPE_ACTIONS as readonly string[]).includes(action)) {

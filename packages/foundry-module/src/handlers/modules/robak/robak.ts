@@ -17,11 +17,11 @@
 //     we extract defensively and echo a trimmed testResult so smoke can confirm the shape.
 
 import { requireModuleActive } from '../_shared/require-module-active.js';
-import { ModuleRobakInput, type ModuleRobakInputType } from './schemas.js';
+import { ModuleRobakInput, type ModuleRobakInputType } from '@foundry-mcp/shared';
 import { notify } from '../../../notify.js';
 import { ROBAK_MACROS_AND_MORE as MODULE_ID } from '../../../constants/moduleIds.js';
+import { Envelope, isGM } from '../_shared/handler-utils.js';
 
-type Envelope<T> = { success: true; data: T } | { success: false; error: string };
 
 // `SocketHandlers` is a wfrp4e *global lexical* binding — a top-level `class` declared in the
 // CLASSIC-script wfrp4e.js (system.json `scripts:[...]`, no esmodules). Such a binding is resolvable
@@ -31,10 +31,6 @@ type Envelope<T> = { success: true; data: T } | { success: false; error: string 
 declare const SocketHandlers: any;
 
 // ── Local helpers ──────────────────────────────────────────────────────────────
-
-function isGM(): boolean {
-  return Boolean((globalThis as any).game?.user?.isGM);
-}
 
 function getSocketHandlers(): any {
   // Bare reference (NOT globalThis.SocketHandlers) — see the `declare const SocketHandlers` note above.

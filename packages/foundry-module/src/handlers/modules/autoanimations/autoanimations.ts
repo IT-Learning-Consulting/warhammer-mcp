@@ -24,10 +24,10 @@ import {
   ModuleAutoAnimationsInput,
   type ModuleAutoAnimationsInputType,
   type AnimationPayloadType,
-} from './schemas.js';
+} from '@foundry-mcp/shared';
 import { notify } from '../../../notify.js';
+import { Envelope, isGM } from '../_shared/handler-utils.js';
 
-type Envelope<T> = { success: true; data: T } | { success: false; error: string };
 
 // ── aa.ready capture (ADR-8.1) ──────────────────────────────────────────────
 //
@@ -47,10 +47,6 @@ try {
 }
 
 // ── Local helpers ───────────────────────────────────────────────────────────
-
-function isGM(): boolean {
-  return Boolean((globalThis as any).game?.user?.isGM);
-}
 
 function getAA(): any {
   const aa = (globalThis as any).AutomatedAnimations;

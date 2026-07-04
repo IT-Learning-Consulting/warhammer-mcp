@@ -17,16 +17,12 @@
 //   - CCR-4: clear-tags with no tags arg requires confirm:true (bulk destructive).
 
 import { requireModuleActive } from '../_shared/require-module-active.js';
-import { ModuleTaggerInput, type ModuleTaggerInputType } from './schemas.js';
+import { ModuleTaggerInput, type ModuleTaggerInputType } from '@foundry-mcp/shared';
 import { notify } from '../../../notify.js';
+import { Envelope, isGM } from '../_shared/handler-utils.js';
 
-type Envelope<T> = { success: true; data: T } | { success: false; error: string };
 
 // ── Local helpers ──────────────────────────────────────────────────────────────
-
-function isGM(): boolean {
-  return Boolean((globalThis as any).game?.user?.isGM);
-}
 
 function getTagger(): any {
   const t = (globalThis as any).Tagger;

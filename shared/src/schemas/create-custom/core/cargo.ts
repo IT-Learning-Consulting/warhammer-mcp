@@ -1,13 +1,9 @@
 // Core subtype: cargo (CargoModel). Maritime/trade content.
 
 import { z } from 'zod';
-import { CreateCustomItemCommon } from '../common.js';
+import { CreateCustomItemCommon, priceFields } from '../common.js';
 
-const Price = z.object({
-  gc: z.number().optional(),
-  ss: z.number().optional(),
-  bp: z.number().optional(),
-});
+const Price = priceFields();
 
 export const CargoSchema = CreateCustomItemCommon.extend({
   itemType: z.literal('cargo'),

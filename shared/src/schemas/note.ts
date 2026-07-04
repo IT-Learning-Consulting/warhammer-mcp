@@ -6,6 +6,7 @@
 // B5 (older Foundry data with entryId pointing at a Page) handled at handler layer, not schema.
 
 import { z } from 'zod';
+import { paginationFields } from './primitives.js';
 import { TextureDataSchema, type TextureData } from './texture-data.js';
 // Phase 6.4 — auto-link branch reuses Phase 3's PageInput discriminated union.
 // B3: do NOT redefine the page shape; lift the canonical one from journal.ts.
@@ -91,8 +92,7 @@ export const NoteListInput = z
     filter: z.string().optional(),
     entryId: JournalEntryId.optional(),
     onlyOrphaned: z.boolean().optional(),
-    page: z.number().int().min(1).optional(),
-    pageSize: z.number().int().min(1).max(100).optional(),
+    ...paginationFields(),
     countOnly: z.boolean().optional(),
   })
   .strict();

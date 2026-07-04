@@ -1,13 +1,9 @@
 // Core subtype: container (ContainerModel).
 
 import { z } from 'zod';
-import { CreateCustomItemCommon } from '../common.js';
+import { CreateCustomItemCommon, priceFields } from '../common.js';
 
-const Price = z.object({
-  gc: z.number().optional(),
-  ss: z.number().optional(),
-  bp: z.number().optional(),
-});
+const Price = priceFields();
 
 export const ContainerSchema = CreateCustomItemCommon.extend({
   itemType: z.literal('container'),

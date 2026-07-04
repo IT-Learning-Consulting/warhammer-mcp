@@ -18,6 +18,7 @@
 import { z } from 'zod';
 import { wrappedWrite } from '../transaction-manager.js';
 import { notify } from '../notify.js';
+import { validateGMAccess, stripUndefined } from '../utils/embeddedCRUDFactory.js';
 import type {
   CreateRollTableInputType,
   AddTableResultsInputType,
@@ -54,7 +55,6 @@ type DeleteRollTableInputType = z.infer<typeof DeleteRollTableInput>;
 
 // ── Local types ──────────────────────────────────────────────────────────────
 
-type AccessGate = { allowed: boolean };
 type EnvelopeOK<T> = { success: true; data: T };
 type EnvelopeErr = { success: false; error: string };
 type Envelope<T> = EnvelopeOK<T> | EnvelopeErr;
@@ -76,11 +76,6 @@ interface RollTableResultPayload {
 // ── Access gate ───────────────────────────────────────────────────────────────
 
 // CCR-Trust: GM-only access for every RollTable handler.
-function validateGMAccess(): AccessGate {
-  if (!game.user?.isGM) return { allowed: false };
-  return { allowed: true };
-}
-
 // ── UUID assembly helper ──────────────────────────────────────────────────────
 //
 // ADR-027: TableResult.documentUuid is a single DocumentUUIDField in v13.
@@ -116,11 +111,6 @@ function resolveDocumentUuid(documentCollection: string, documentId: string): st
 // API-ergonomics shape — the handler collapses them to `type:'document'`
 // for the Foundry payload (the compendium-ness is preserved in the UUID's
 // `Compendium.<pack>.<DocType>.<id>` format vs world `<DocType>.<id>`).
-
-function stripUndefined<T extends Record<string, any>>(obj: T): T {
-  Object.keys(obj).forEach(k => obj[k] === undefined && delete obj[k]);
-  return obj;
-}
 
 async function normaliseResultInput(r: TableResultInputType): Promise<any> {
   // F04 (corrected via F12 validation error): v13's TableResult.range is an

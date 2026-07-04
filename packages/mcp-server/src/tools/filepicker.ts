@@ -13,6 +13,7 @@
 // Description budget ≤2900 chars (F01).
 
 import { z } from 'zod';
+import { truncatedJoin } from '../utils/truncate.js';
 import {
   FilePickerToolInput,
   type FilePickerUploadResponse,
@@ -242,14 +243,10 @@ export class FilePickerTool extends BaseTool {
       });
 
       const dirsBlock = data.dirs.length
-        ? `\n\n**Dirs** (${data.dirs.length}):\n- ${data.dirs.slice(0, 50).join('\n- ')}${
-            data.dirs.length > 50 ? `\n_(+${data.dirs.length - 50} more)_` : ''
-          }`
+        ? `\n\n**Dirs** (${data.dirs.length}):\n- ${truncatedJoin(data.dirs, 50, '\n- ', (n) => `\n_(+${n} more)_`)}`
         : '\n\n_(no dirs)_';
       const filesBlock = data.files.length
-        ? `\n\n**Files** (${data.files.length}):\n- ${data.files.slice(0, 50).join('\n- ')}${
-            data.files.length > 50 ? `\n_(+${data.files.length - 50} more)_` : ''
-          }`
+        ? `\n\n**Files** (${data.files.length}):\n- ${truncatedJoin(data.files, 50, '\n- ', (n) => `\n_(+${n} more)_`)}`
         : '\n\n_(no files)_';
 
       const text = `📁 **Browse: ${data.target}**${dirsBlock}${filesBlock}`;

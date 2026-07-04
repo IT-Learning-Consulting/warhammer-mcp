@@ -13,6 +13,10 @@ import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
 import { moduleNotActiveContent } from '../_shared/module-guard.js';
 import { POLYGLOT_ACTIONS, type PolyglotResult } from './schemas.js';
+import { z } from 'zod';
+import { PolyglotInput } from '@foundry-mcp/shared';
+
+type PolyglotArgs = z.infer<typeof PolyglotInput>;
 
 // ── Single discriminated formatter (one text line per action) ──────────────────
 
@@ -102,7 +106,7 @@ Example: { action: "grant-language", entityId: "abc123", language: "Reikspiel" }
     ];
   }
 
-  async execute(rawArgs: Record<string, unknown>) {
+  async execute(rawArgs: PolyglotArgs) {
     const action = String(rawArgs.action ?? 'unknown');
     this.logger.info('Executing module-polyglot action', { action });
     if (!(POLYGLOT_ACTIONS as readonly string[]).includes(action)) {

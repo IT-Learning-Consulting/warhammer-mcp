@@ -13,6 +13,10 @@ import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
 import {
   ErrorTokens, RegionId } from '@foundry-mcp/shared';
 import { moduleNotActiveContent } from '../_shared/module-guard.js';
+import { z } from 'zod';
+import { ModuleLevelsInput } from '@foundry-mcp/shared';
+
+type ModuleLevelsArgs = z.infer<typeof ModuleLevelsInput>;
 
 // ── Response shapes (DP-15 — typed, never <any>) ─────────────────────────────
 
@@ -197,7 +201,7 @@ Examples:
     ];
   }
 
-  async execute(args: Record<string, unknown>) {
+  async execute(args: ModuleLevelsArgs) {
     const action = String(args.action ?? 'unknown');
     this.logger.info('Executing module-levels action', { action });
     try {

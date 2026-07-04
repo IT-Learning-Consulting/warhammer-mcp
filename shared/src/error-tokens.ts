@@ -1,8 +1,10 @@
 // Phase 11 (R11.3): centralized error-token registry.
 //
-// 84 tokens: 80 `*_NOT_PERSISTED` post-verify tokens (DP-16) + 4 cross-package
+// Two categories: `*_NOT_PERSISTED` post-verify tokens (DP-16) + cross-package
 // module-guard tokens. Previously scattered as bare string literals across ~90
-// files in both packages.
+// files in both packages. (mcp_code_quality_v2 Phase C3 19d: the hardcoded token
+// count above was dropped — it drifted 84→126→162→196 across 3 days of audits;
+// the registry below is the single source of truth for the count.)
 //
 // ─────────────────────────────────────────────────────────────────────────────
 // HARD CONSTRAINT — token string VALUES are byte-identical to the prior literals
@@ -166,7 +168,6 @@ export const ErrorTokens = {
   ADD_COMBATANTS_NOT_PERSISTED: 'ADD_COMBATANTS_NOT_PERSISTED',
   ADD_MONEY_NOT_PERSISTED: 'ADD_MONEY_NOT_PERSISTED',
   APPLY_FEAR_NOT_PERSISTED: 'APPLY_FEAR_NOT_PERSISTED',
-  CHECK_RELOAD_NOT_PERSISTED: 'CHECK_RELOAD_NOT_PERSISTED',
   DIRECT_PAY_NOT_PERSISTED: 'DIRECT_PAY_NOT_PERSISTED',
   UPDATE_ACTIVE_EFFECT_NOT_PERSISTED: 'UPDATE_ACTIVE_EFFECT_NOT_PERSISTED',
   DELETE_ACTIVE_EFFECT_NOT_PERSISTED: 'DELETE_ACTIVE_EFFECT_NOT_PERSISTED',

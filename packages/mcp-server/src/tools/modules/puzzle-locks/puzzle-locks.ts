@@ -15,6 +15,10 @@ import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
 import { moduleNotActiveContent } from '../_shared/module-guard.js';
 import { PUZZLE_LOCKS_ACTIONS, LOCK_TYPES, type PuzzleLocksResult } from './schemas.js';
+import { z } from 'zod';
+import { PuzzleLocksInput } from '@foundry-mcp/shared';
+
+type PuzzleLocksArgs = z.infer<typeof PuzzleLocksInput>;
 
 function formatResult(d: PuzzleLocksResult): string {
   const p = 'module-puzzle-locks';
@@ -104,7 +108,7 @@ Example: { action: "attach-puzzle", documentUuid: "Scene.abc.Drawing.def", lockT
     ];
   }
 
-  async execute(rawArgs: Record<string, unknown>) {
+  async execute(rawArgs: PuzzleLocksArgs) {
     const action = String(rawArgs.action ?? 'unknown');
     this.logger.info('Executing module-puzzle-locks action', { action });
     if (!(PUZZLE_LOCKS_ACTIONS as readonly string[]).includes(action)) {

@@ -27,19 +27,13 @@
 
 import { requireModuleActive } from '../_shared/require-module-active.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
-import { PortalInput, type PortalInputType } from './schemas.js';
+import { PortalInput, type PortalInputType } from '@foundry-mcp/shared';
 import { notify } from '../../../notify.js';
+import { Envelope, isGM, getCanvas } from '../_shared/handler-utils.js';
 
-type Envelope<T> = { success: true; data: T } | { success: false; error: string };
 
 const MODULE_ID = 'portal-lib';
 
-function getCanvas(): any {
-  return (globalThis as any).canvas;
-}
-function isGM(): boolean {
-  return Boolean((globalThis as any).game?.user?.isGM);
-}
 function getPortalCtor(): any {
   return (globalThis as any).Portal;
 }

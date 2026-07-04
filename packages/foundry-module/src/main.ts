@@ -19,6 +19,30 @@ import * as lifecycle from './utils/lifecycle.js';
 // so cleanup() can cancel it — previously unstored, it could fire after the world was torn down.
 let healthCheckTimer: ReturnType<typeof setTimeout> | undefined;
 
+// CORE-13 (mcp_code_quality_v2 Phase C2) — shared disease-contraction apply, previously duplicated
+// byte-identically between the `wfrpContractDisease` socket-message handler (GM-received relay) and
+// `runWfrpTestAction`'s `contractDisease` case's local-apply branch (GM client, or no GM online
+// fallback). Both call sites embed the disease Item then gmroll-whisper a "contracted" note —
+// wfrp4e's _onCreate auto-starts incubation. Returns true if applied (src resolved), false otherwise.
+async function applyDiseaseContraction(
+  actor: any,
+  uuid: string,
+  name: string | undefined,
+  alias: string | undefined,
+  g: any,
+): Promise<boolean> {
+  const src = await g.fromUuid(uuid);
+  if (!actor || !src) return false;
+  await actor.createEmbeddedDocuments('Item', [src.toObject()]);
+  const gmIds = g.game.users?.filter((u: any) => u.isGM).map((u: any) => u.id) ?? [];
+  await g.ChatMessage.create({
+    speaker: { alias: alias || 'Disease' },
+    whisper: gmIds,
+    content: `<div class="grim-gmnote"><b>${actor.name}</b> has <b>contracted ${name || src.name}</b>.</div>`,
+  });
+  return true;
+}
+
 /**
  * Main Foundry MCP Bridge Module Class
  */
@@ -680,12 +704,7 @@ Hooks.once('ready', async () => {
             try {
               const g = globalThis as any;
               const actor = game.actors?.get(data.actorId);
-              const src = await g.fromUuid(data.uuid);
-              if (actor && src) {
-                await (actor as any).createEmbeddedDocuments('Item', [src.toObject()]);
-                const gmIds = game.users?.filter((u: any) => u.isGM).map((u: any) => u.id) ?? [];
-                await g.ChatMessage.create({ speaker: { alias: data.alias || 'Disease' }, whisper: gmIds, content: `<div class="grim-gmnote"><b>${actor.name}</b> has <b>contracted ${data.name || src.name}</b>.</div>` });
-              }
+              await applyDiseaseContraction(actor, data.uuid, data.name, data.alias, g);
             } catch (e) {
               console.error(`[${MODULE_ID}] wfrpContractDisease (GM) failed:`, e);
             }
@@ -838,12 +857,7 @@ async function runWfrpTestAction(a: any, actor: any, scope: any, g: any): Promis
           game.socket?.emit(MODULE_WARHAMMER_MCP, { type: 'wfrpContractDisease', actorId: actor.id, uuid: a.uuid, name: a.name, alias: a.alias });
         } else {
           // GM client (or no GM online — fallback): apply locally. wfrp4e _onCreate auto-starts incubation.
-          const src = await g.fromUuid(a.uuid);
-          if (src) {
-            await actor.createEmbeddedDocuments('Item', [src.toObject()]);
-            const gmIds = game.users?.filter((u: any) => u.isGM).map((u: any) => u.id) ?? [];
-            await g.ChatMessage.create({ speaker: { alias: a.alias || 'Disease' }, whisper: gmIds, content: `<div class="grim-gmnote"><b>${actor.name}</b> has <b>contracted ${a.name || src.name}</b>.</div>` });
-          }
+          await applyDiseaseContraction(actor, a.uuid, a.name, a.alias, g);
         }
         break;
       }

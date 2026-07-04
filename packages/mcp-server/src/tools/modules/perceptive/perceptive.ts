@@ -16,6 +16,10 @@ import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
 import { moduleNotActiveContent } from '../_shared/module-guard.js';
 import { PERCEPTIVE_ACTIONS } from './schemas.js';
+import { z } from 'zod';
+import { PerceptiveInput } from '@foundry-mcp/shared';
+
+type PerceptiveArgs = z.infer<typeof PerceptiveInput>;
 import type {
   PerceptiveStealthResult,
   PerceptiveSpottingResult,
@@ -131,7 +135,7 @@ Example: { action: "set-spottable", tokenName: "Sneaky Thief", canbeSpotted: tru
     ];
   }
 
-  async execute(rawArgs: Record<string, unknown>) {
+  async execute(rawArgs: PerceptiveArgs) {
     const action = String(rawArgs.action ?? 'unknown');
     this.logger.info('Executing module-perceptive action', { action });
     switch (action) {

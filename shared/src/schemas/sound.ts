@@ -5,6 +5,7 @@
 // Spike-Sentinel 6 RESOLVED. darkness.{min, max} are AlphaField range.
 
 import { z } from 'zod';
+import { paginationFields } from './primitives.js';
 import { SceneId, AmbientSoundId } from './branded-ids.js';
 
 const SoundDarknessInput = z
@@ -90,8 +91,7 @@ export const SoundListInput = z
     sceneId: SceneId.optional(),
     filter: z.string().optional(),
     hidden: z.boolean().optional(),
-    page: z.number().int().min(1).optional(),
-    pageSize: z.number().int().min(1).max(100).optional(),
+    ...paginationFields(),
     countOnly: z.boolean().optional(),
   })
   .strict();

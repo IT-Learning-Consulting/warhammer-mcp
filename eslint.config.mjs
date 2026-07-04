@@ -265,6 +265,23 @@ export default tseslint.config(
     },
   },
 
+  // 9d - Phase C3 (mcp_code_quality_v2): item-piles.ts (1249 lines, 17 handlers) + matt.ts
+  // (1138 lines, 19 actions) split into per-seam sibling files as VERBATIM moves (zero behavioral
+  // change, behavior freeze HC3/HC13). Per-function/complexity caps are relaxed here so the moved
+  // handler bodies (several >60 lines) don't ERROR on the new-file caps; a real 400-line file cap
+  // is kept instead (mirrors blocks 9/9b).
+  {
+    files: ['**/handlers/modules/item-piles/**/*.ts', '**/handlers/modules/monks-active-tiles/**/*.ts'],
+    ignores: ['**/__tests__/**'],
+    rules: {
+      'max-lines': ['error', { max: 400, skipComments: true }],
+      'max-lines-per-function': 'off',
+      complexity: 'off',
+      'max-depth': 'off',
+      'max-params': 'off',
+    },
+  },
+
   // 10 - Prettier: disable conflicting formatting rules, then run prettier as a WARN-level rule (preserved).
   eslintConfigPrettier,
   {

@@ -96,8 +96,13 @@ function applyLightListFilters(input: any, items: any[]): any[] {
   return filtered;
 }
 
-function isLightFilterApplied(input: any): boolean {
-  return !!(input.hidden !== undefined || input.isGlobal !== undefined || input.filter);
+// BUG-435: return the canonical string|null filter descriptor (not a bare boolean) so countOnly's
+// filterApplied is uniform across list handlers (mirrors isSoundFilterApplied).
+function isLightFilterApplied(input: any): string | null {
+  if (input.filter !== undefined) return String(input.filter);
+  if (input.hidden !== undefined) return `hidden=${input.hidden}`;
+  if (input.isGlobal !== undefined) return `isGlobal=${input.isGlobal}`;
+  return null;
 }
 
 // ── Factory wiring ───────────────────────────────────────────────────────────

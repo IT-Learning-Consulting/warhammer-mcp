@@ -185,7 +185,9 @@ Use extraFields for any unmodeled field.
       const text =
         `🎭 **Prototype Token** — ${data.actorName} (\`${data.actorId}\`)\n\n` +
         `\`\`\`json\n${JSON.stringify(data.prototypeToken, null, 2)}\n\`\`\``;
-      return { content: [{ type: 'text' as const, text }] };
+      // BUG-436: additive structuredContent (byte-identical text) so structured-field graders/consumers
+      // observe prototypeToken/disposition/etc. directly instead of parsing the embedded-JSON text.
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('get-prototype-token', e instanceof Error ? e.message : String(e));
     }

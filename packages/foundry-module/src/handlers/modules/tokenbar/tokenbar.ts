@@ -17,17 +17,13 @@
 //   - Token-arg shape (IDs vs objects) is smoke-verified — we resolve UUIDs to TokenDocuments.
 
 import { requireModuleActive } from '../_shared/require-module-active.js';
-import { ModuleTokenbarInput, type ModuleTokenbarInputType } from './schemas.js';
+import { ModuleTokenbarInput, type ModuleTokenbarInputType } from '@foundry-mcp/shared';
 import { notify } from '../../../notify.js';
 import { MONKS_TOKENBAR as MODULE_ID } from '../../../constants/moduleIds.js';
+import { Envelope, isGM } from '../_shared/handler-utils.js';
 
-type Envelope<T> = { success: true; data: T } | { success: false; error: string };
 
 // ── Local helpers ──────────────────────────────────────────────────────────────
-
-function isGM(): boolean {
-  return Boolean((globalThis as any).game?.user?.isGM);
-}
 
 function getTokenBarAPI(): any {
   // monks-tokenbar exposes its API class as `game.MonksTokenBar` (monks-tokenbar-api.js:9

@@ -306,8 +306,18 @@ async function walkCatalogForOrphans(opts: WalkOpts): Promise<FkOrphanEntry[]> {
             if (!value || typeof value !== 'string') continue;
 
             if (opts.targetDocType && opts.targetDocId) {
-                if (entry.refDoc !== opts.targetDocType && entry.refDoc !== 'Document') continue;
-                if (value !== opts.targetDocId && !value.endsWith(`.${opts.targetDocId}`)) continue;
+                // BUG-437: a Scene cascade-delete removes the scene AND all its embedded docs
+                // (Regions/Tokens/Notes/…). An inbound UUID ref INTO one of them — e.g. a teleport
+                // RegionBehavior.system.destination = "Scene.<sceneId>.Region.<regionId>" on a SURVIVING
+                // scene — is orphaned by the delete, but its value points at the EMBEDDED id, so the
+                // id-equality / endsWith match below misses it (and its refDoc isn't the Scene either).
+                // Match any ref value under the scene being deleted, regardless of refDoc.
+                const embeddedUnderScene =
+                    opts.targetDocType === 'Scene' && value.startsWith(`Scene.${opts.targetDocId}.`);
+                if (!embeddedUnderScene) {
+                    if (entry.refDoc !== opts.targetDocType && entry.refDoc !== 'Document') continue;
+                    if (value !== opts.targetDocId && !value.endsWith(`.${opts.targetDocId}`)) continue;
+                }
             }
 
             const verdict = opts.skipResolution

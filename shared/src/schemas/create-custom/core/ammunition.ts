@@ -1,18 +1,14 @@
 // Core subtype: ammunition (AmmunitionModel).
 
 import { z } from 'zod';
-import { CreateCustomItemCommon } from '../common.js';
+import { CreateCustomItemCommon, priceFields } from '../common.js';
 
 const QualityOrFlaw = z.object({
   name: z.string(),
   value: z.number().optional(),
 });
 
-const Price = z.object({
-  gc: z.number().optional(),
-  ss: z.number().optional(),
-  bp: z.number().optional(),
-});
+const Price = priceFields();
 
 export const AmmunitionSchema = CreateCustomItemCommon.extend({
   itemType: z.literal('ammunition'),

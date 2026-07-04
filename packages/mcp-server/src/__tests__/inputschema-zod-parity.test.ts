@@ -12,17 +12,19 @@ import { describe, expect, it } from 'vitest';
 import type { z } from 'zod';
 import { DiceRollTools, RequestPlayerRollsArgs } from '../tools/dice-roll.js';
 import { ModuleMattTool } from '../tools/modules/monks-active-tiles/matt.js';
-import { ModuleMattInput } from '../tools/modules/monks-active-tiles/schemas.js';
 import { ModuleSequencerTool } from '../tools/modules/sequencer/sequencer.js';
-import { ModuleSequencerToolInput } from '../tools/modules/sequencer/schemas.js';
 import { ModuleTaggerTool } from '../tools/modules/tagger/tagger.js';
-import { ModuleTaggerToolInput } from '../tools/modules/tagger/schemas.js';
 import { ModuleCssTool } from '../tools/modules/custom-css/css.js';
-import { ModuleCssToolInput } from '../tools/modules/custom-css/schemas.js';
 import { DocumentIoTool } from '../tools/document-io.js';
-import { DocumentIoToolInput } from '@foundry-mcp/shared';
 import { KeybindingTools } from '../tools/keybinding.js';
-import { KeybindingToolInput } from '@foundry-mcp/shared';
+import {
+  ModuleMattInput,
+  ModuleSequencerInput as ModuleSequencerToolInput,
+  ModuleTaggerInput as ModuleTaggerToolInput,
+  ModuleCssInput as ModuleCssToolInput,
+  DocumentIoToolInput,
+  KeybindingToolInput,
+} from '@foundry-mcp/shared';
 
 const stubLogger: any = {
   child: () => stubLogger,

@@ -19,6 +19,10 @@
 import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
 import { moduleNotActiveContent } from '../_shared/module-guard.js';
+import { z } from 'zod';
+import { ModuleAccessControlInput } from '@foundry-mcp/shared';
+
+type ModuleAccessControlArgs = z.infer<typeof ModuleAccessControlInput>;
 
 const TOOL_NAME = 'module-access-control' as const;
 
@@ -175,8 +179,8 @@ GM required for all write actions. Forced-viewport + circumvent + transfer requi
             userIds: { type: 'array', items: { type: 'string' }, description: '[clone-gm-view/set-view-*] Target user IDs.' },
             position: { type: 'object', description: '[force-viewport-*] Viewport position.' },
             width: { type: 'number', description: '[force-viewport-absolute] Viewport width.' },
-            pan: { description: '[clone-gm-view: boolean | set-view-with-pan-mode: mode string].' },
-            zoom: { description: '[clone-gm-view: boolean | set-view-with-pan-mode: mode string].' },
+            pan: { oneOf: [{ type: 'boolean' }, { type: 'string' }], description: '[clone-gm-view: boolean | set-view-with-pan-mode: mode string]. (CCR-V8: union typed via oneOf)' },
+            zoom: { oneOf: [{ type: 'boolean' }, { type: 'string' }], description: '[clone-gm-view: boolean | set-view-with-pan-mode: mode string]. (CCR-V8: union typed via oneOf)' },
             coordinates: { type: 'object', description: '[set-view-with-pan-mode] {x?,y?} for move modes.' },
             gridSpaces: { type: 'object', description: '[set-view-with-pan-mode] {x?,y?} grid offset.' },
             scale: { type: 'number', description: '[set-view-with-pan-mode] Explicit zoom scale.' },
@@ -190,7 +194,7 @@ GM required for all write actions. Forced-viewport + circumvent + transfer requi
     ];
   }
 
-  async execute(args: Record<string, unknown>) {
+  async execute(args: ModuleAccessControlArgs) {
     const action = String(args.action ?? 'unknown');
     this.logger.info(`Executing ${TOOL_NAME} action`, { action });
     try {

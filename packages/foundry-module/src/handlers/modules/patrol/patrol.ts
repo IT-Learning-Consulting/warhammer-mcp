@@ -22,17 +22,13 @@
 
 import { requireModuleActive } from '../_shared/require-module-active.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
-import { ModulePatrolInput, type ModulePatrolInputType } from './schemas.js';
+import { ModulePatrolInput, type ModulePatrolInputType } from '@foundry-mcp/shared';
 import { notify } from '../../../notify.js';
 import { verifyFlagWrite } from '../../../utils/verifyWrite.js';
 import { PATROL as MODULE_ID } from '../../../constants/moduleIds.js';
+import { Envelope, isGM } from '../_shared/handler-utils.js';
 
-type Envelope<T> = { success: true; data: T } | { success: false; error: string };
 const ALL_FLAGS = ['enablePatrol', 'enableSpotting', 'makePatroller', 'multiPath', 'patrolPathName', 'pathNodeIndex', 'pathID'];
-
-function isGM(): boolean {
-  return Boolean((globalThis as any).game?.user?.isGM);
-}
 
 async function resolveToken(uuid: string): Promise<any> {
   const doc = await (globalThis as any).fromUuid?.(uuid);

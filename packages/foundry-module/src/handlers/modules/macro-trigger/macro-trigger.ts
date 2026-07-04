@@ -31,10 +31,10 @@
 
 import { requireModuleActive } from '../_shared/require-module-active.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
-import { MacroTriggerInput, type MacroTriggerInputType } from './schemas.js';
+import { MacroTriggerInput, type MacroTriggerInputType } from '@foundry-mcp/shared';
 import { notify } from '../../../notify.js';
+import { Envelope, getGame, isGM } from '../_shared/handler-utils.js';
 
-type Envelope<T> = { success: true; data: T } | { success: false; error: string };
 
 const MODULE_ID = 'macro-trigger';
 // LIVE-VERIFIED 2026-07-02: the module registers its setting under the key `macroEvents` (lowercase),
@@ -54,13 +54,6 @@ interface MacroTriggerBinding {
 const WRITE_ACTIONS = new Set(['create', 'update', 'delete', 'clear']);
 
 // ── Local helpers ──────────────────────────────────────────────────────────────
-
-function getGame(): any {
-  return (globalThis as any).game;
-}
-function isGM(): boolean {
-  return Boolean(getGame()?.user?.isGM);
-}
 
 function readBindings(): MacroTriggerBinding[] {
   const raw = getGame()?.settings?.get?.(MODULE_ID, SETTING_KEY);

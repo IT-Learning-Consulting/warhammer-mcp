@@ -34,22 +34,14 @@
 import { requireModuleActive } from '../_shared/require-module-active.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
 import { verifyFlagWrite } from '../../../utils/verifyWrite.js';
-import { SimpleQuestInput, type SimpleQuestInputType } from './schemas.js';
+import { SimpleQuestInput, type SimpleQuestInputType } from '@foundry-mcp/shared';
 import { notify } from '../../../notify.js';
+import { Envelope, getGame, isGM } from '../_shared/handler-utils.js';
 
-type Envelope<T> = { success: true; data: T } | { success: false; error: string };
 
 const MODULE_ID = 'simple-quest';
 
 // ── Local helpers ──────────────────────────────────────────────────────────────
-
-function isGM(): boolean {
-  return Boolean((globalThis as any).game?.user?.isGM);
-}
-
-function getGame(): any {
-  return (globalThis as any).game;
-}
 
 function foundryUtils(): any {
   return (globalThis as any).foundry?.utils;

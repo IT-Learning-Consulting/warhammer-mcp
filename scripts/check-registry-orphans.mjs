@@ -24,7 +24,7 @@
 // Exit: 0 = clean (no hard failures), 1 = hard violations found, 2 = bad invocation.
 
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join, resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
@@ -57,10 +57,6 @@ function resolveEvalsDir(args) {
 //
 // Also includes deprecated keys + lambda registrations.
 const QUERY_KEY_ALLOWLIST = new Set([
-  // ── Deprecated actor-only ownership wrappers (superseded by ownership umbrella). ──
-  'setActorOwnership',
-  'getActorOwnership',
-
   // ── FilePicker: 4 lambda registrations → 1 registry.register('filepicker'). ──
   'uploadFile',
   'listFiles',
@@ -202,11 +198,17 @@ function extractSetB() {
  */
 function extractSetA(src) {
   const keys = [];
-  const tableMatch = src.match(/const handlerTable[\s\S]*?=\s*\{\r?\n([\s\S]*?)\r?\n {4}\};/);
+  // mcp_code_quality_v2 Phase C2 (task 1.4): the table moved from a `const handlerTable = {...}`
+  // local inside registerHandlers() to a `buildHandlerTable() { return {...} satisfies ... }`
+  // method (HandlerKey compile-guard). Match EITHER shape.
+  const tableMatch = src.match(
+    /(?:const handlerTable[\s\S]*?=\s*\{\r?\n([\s\S]*?)\r?\n {4}\};|buildHandlerTable\(\)\s*\{\r?\n\s*return \{\r?\n([\s\S]*?)\r?\n {4}\} satisfies)/,
+  );
   if (tableMatch) {
+    const body = tableMatch[1] ?? tableMatch[2];
     const re = /^\s+'([^']+)':\s/gm;
     let m;
-    while ((m = re.exec(tableMatch[1])) !== null) keys.push(m[1]);
+    while ((m = re.exec(body)) !== null) keys.push(m[1]);
   }
   // Fallback: any remaining direct CONFIG.queries['warhammer-mcp.X'] / template assignments.
   const direct = /CONFIG\.queries\[\s*(?:`\$\{modulePrefix\}\.((?!\$\{)[^`]+)`|['"]warhammer-mcp\.([^'"]+)['"])\s*\]\s*=/g;
@@ -218,22 +220,45 @@ function extractSetA(src) {
   return keys;
 }
 
-/** Read eval coverage: Map<filename, questionTextBlob>. */
+/**
+ * Recursively collect every eval XML under `dir` (mirrors parse-corpus.mjs's collectXmlFiles,
+ * mcp_code_quality_v2 Phase C3 task 6.3 — the prior single-level `readdirSync` never saw
+ * `evals/modules/**` or any new `evals/wfrp/**`, making the EVAL_COVERAGE_ADVISORY mostly
+ * false-positive). Same exclusions as parse-corpus.mjs: scripts/, runs/, _disabled/.
+ */
+function collectXmlFilesRecursive(dir) {
+  const results = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const fullPath = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      results.push(...collectXmlFilesRecursive(fullPath));
+    } else if (entry.isFile() && entry.name.endsWith('.xml')) {
+      results.push(fullPath);
+    }
+  }
+  return results;
+}
+
+/** Read eval coverage: Map<domain, questionTextBlob> (domain = path relative to evalsDir, no .xml). */
 function extractEvalCoverage(evalsDir) {
-  let files;
+  let xmlFiles;
   try {
-    files = readdirSync(evalsDir).filter((f) => f.endsWith('.xml'));
+    xmlFiles = collectXmlFilesRecursive(evalsDir).filter((f) => {
+      const rel = relative(evalsDir, f).replace(/\\/g, '/');
+      return !rel.startsWith('scripts/') && !rel.startsWith('runs/') && !rel.startsWith('_disabled/');
+    });
   } catch (e) {
     return null;
   }
   const coverage = new Map();
-  for (const file of files) {
-    const content = readFile(join(evalsDir, file));
+  for (const file of xmlFiles) {
+    const content = readFile(file);
     const questions = [];
     const re = /<question>([\s\S]*?)<\/question>/g;
     let m;
     while ((m = re.exec(content)) !== null) questions.push(m[1].toLowerCase());
-    coverage.set(file.replace('.xml', ''), questions.join(' '));
+    const domain = relative(evalsDir, file).replace(/\\/g, '/').replace(/\.xml$/, '');
+    coverage.set(domain, questions.join(' '));
   }
   return coverage;
 }

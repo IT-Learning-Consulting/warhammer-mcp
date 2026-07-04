@@ -12,6 +12,7 @@
 //   - Design Decision: type excluded from update.changes (conventionally immutable post-create).
 
 import { z } from 'zod';
+import { paginationFields } from './primitives.js';
 import { FolderId } from './branded-ids.js';
 
 export const FOLDER_DOCUMENT_TYPES = [
@@ -73,8 +74,7 @@ export const FolderListInput = z.object({
   typeFilter: z.enum(FOLDER_DOCUMENT_TYPES).optional(),
   nameFilter: z.string().optional(),
   parentId: FolderId.nullable().optional(),
-  page: z.number().int().min(1).optional(),
-  pageSize: z.number().int().min(1).max(100).optional(),
+  ...paginationFields(),
   countOnly: z.boolean().optional(),
 }).strict();
 

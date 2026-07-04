@@ -4,8 +4,11 @@
 // (branch-by-abstraction Migrate; FoundryDataAccess keeps thin facade delegates until the Phase 5 Contract).
 // Owns: attaching click handlers on render, the per-click processing-state guard, the awaitResult payload
 // computation, the ChatMessage rolled-state update (with the non-GM→GM socket relay), and the legacy
-// redirect/no-op methods. The only seam vs the original is the injected validateState callback and the
-// buttonId↔messageId read routed through utils/roll-button-store (shared with RollRequestService).
+// redirect/no-op methods. The buttonId↔messageId read is routed through utils/roll-button-store
+// (shared with RollRequestService). (mcp_code_quality_v2 Phase C3 19f: the injected validateState
+// callback was dropped from the constructor — its only 2 call sites lived in the CORE-17 dead
+// methods removed this phase; the shared `validateState` const in queries.ts is unaffected, it is
+// still passed to the other sibling services.)
 //
 // NOTE (Phase 4.3, R4.2): attachRollButtonHandlers was extracted verbatim in 4.2, then the listener-leak
 // fix landed here — the click handler now binds via native addEventListener with a per-message AbortSignal
@@ -19,8 +22,6 @@ import { getRollButtonMessageId } from '../utils/roll-button-store.js';
 import { verifyDocWrite } from '../utils/verifyWrite.js';
 
 export class RollButtonService {
-  constructor(private readonly validateState: () => void) {}
-
   /**
    * Attach click handlers to roll buttons and handle visibility
    * Called by global renderChatMessageHTML hook in main.ts
@@ -271,21 +272,6 @@ export class RollButtonService {
   }
 
   /**
-   * Get roll button state from persistent storage
-   */
-  getRollState(buttonId: string): { rolled: boolean; rolledBy?: string; rolledByName?: string; timestamp?: number } | null {
-    this.validateState();
-
-    try {
-      const rollStates = game.settings.get(MODULE_ID, 'rollStates') || {};
-      return rollStates[buttonId] || null;
-    } catch (error) {
-      console.error(`[${MODULE_ID}] Error getting roll state:`, error);
-      return null;
-    }
-  }
-
-  /**
    * Update the ChatMessage to replace button with rolled state
    */
   async updateRollButtonMessage(buttonId: string, userId: string, rollLabel: string): Promise<void> {
@@ -383,69 +369,6 @@ export class RollButtonService {
       console.error(`[${MODULE_ID}] Error updating roll button message:`, error);
       console.error(`[${MODULE_ID}] Error stack:`, error instanceof Error ? error.stack : error);
       throw error;
-    }
-  }
-
-  /**
-   * Request GM to save roll state (for non-GM users who can't write to world settings)
-   */
-  requestRollStateSave(buttonId: string, userId: string): void {
-    // LEGACY METHOD - Redirecting to new ChatMessage.update() system
-
-    try {
-      // Use the new ChatMessage.update() approach instead
-      const rollLabel = 'Legacy Roll'; // We don't have the label here, use generic
-      this.updateRollButtonMessage(buttonId, userId, rollLabel)
-        .then(() => {
-        })
-        .catch((error) => {
-          console.error(`[${MODULE_ID}] Legacy requestRollStateSave redirect failed:`, error);
-          // If the new system fails, just log it - don't use the old socket system
-        });
-    } catch (error) {
-      console.error(`[${MODULE_ID}] Error in legacy requestRollStateSave redirect:`, error);
-    }
-  }
-
-  /**
-   * Broadcast roll state change to all connected users for real-time sync
-   */
-  broadcastRollState(_buttonId: string, _rollState: any): void {
-    // LEGACY METHOD - No longer needed with ChatMessage.update() system
-    // ChatMessage.update() automatically broadcasts to all clients, so this method is no longer needed
-  }
-
-  /**
-   * Clean up old roll states (optional maintenance)
-   * Removes roll states older than 30 days to prevent storage bloat
-   */
-  async cleanOldRollStates(): Promise<number> {
-    this.validateState();
-
-    try {
-      const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
-      const rollStates = game.settings.get(MODULE_ID, 'rollStates') || {};
-      let cleanedCount = 0;
-
-      // Remove old roll states
-      for (const [buttonId, rollState] of Object.entries(rollStates)) {
-        if (rollState && typeof rollState === 'object' && 'timestamp' in rollState) {
-          const timestamp = (rollState as any).timestamp;
-          if (typeof timestamp === 'number' && timestamp < thirtyDaysAgo) {
-            delete rollStates[buttonId];
-            cleanedCount++;
-          }
-        }
-      }
-
-      if (cleanedCount > 0) {
-        await game.settings.set(MODULE_ID, 'rollStates', rollStates);
-      }
-
-      return cleanedCount;
-    } catch (error) {
-      console.error(`[${MODULE_ID}] Error cleaning old roll states:`, error);
-      return 0;
     }
   }
 

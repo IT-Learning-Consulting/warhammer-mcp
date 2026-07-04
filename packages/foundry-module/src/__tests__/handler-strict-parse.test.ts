@@ -46,8 +46,8 @@ const methodCases: Array<[string, string]> = [
   // BUG-009 (2026-05-16): handleValidateWritePermissions removed (no MCP-tool consumer).
   ['handleRequestPlayerRolls', 'request-player-rolls'],
   // BUG-009 (2026-05-16): handleGetEnhancedCreatureIndex removed (no MCP-tool consumer).
-  ['handleSetActorOwnership', 'setActorOwnership'],
-  ['handleGetActorOwnership', 'getActorOwnership'],
+  // mcp_code_quality_v2 Phase C3 (19e): the actor-only ownership deprecation-wrapper
+  // handlers removed — zero mcp-server callers; superseded by the generic ownership.ts umbrella.
   // BUG-009 (2026-05-16): handleGetFriendlyNPCs / handleGetConnectedPlayers removed.
   ['handleCreateActor', 'createActor'],
   ['handleUpdateActor', 'updateActor'],

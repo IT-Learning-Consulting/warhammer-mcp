@@ -13,6 +13,10 @@ import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
 import { moduleNotActiveContent } from '../_shared/module-guard.js';
 import { WFRP_ECONOMY_ACTIONS, type WfrpEconomyResult } from './schemas.js';
+import { z } from 'zod';
+import { WfrpEconomyInput } from '@foundry-mcp/shared';
+
+type WfrpEconomyArgs = z.infer<typeof WfrpEconomyInput>;
 
 // ── Single discriminated formatter (one text line per action) ──────────────────
 
@@ -141,7 +145,7 @@ For create-economy, embed a stock to enable the buy/sell round-trip: stocks:[{ n
     ];
   }
 
-  async execute(rawArgs: Record<string, unknown>) {
+  async execute(rawArgs: WfrpEconomyArgs) {
     const action = String(rawArgs.action ?? 'unknown');
     this.logger.info('Executing module-wfrp-economy action', { action });
     if (!(WFRP_ECONOMY_ACTIONS as readonly string[]).includes(action)) {

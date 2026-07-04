@@ -113,6 +113,20 @@ function makeEslint() {
           'max-lines': ['error', { max: 600, skipComments: true }],
         },
       },
+      // Phase C3 (mcp_code_quality_v2): item-piles.ts (1249 lines, 17 handlers) + matt.ts (1138
+      // lines, 19 actions) split into per-seam sibling files as VERBATIM moves (zero behavioral
+      // change, behavior freeze HC3/HC13). Per-function/complexity caps don't apply to a verbatim
+      // extraction — same rationale as services/. Real 400-line file cap kept (mirrors CAP_ERROR).
+      {
+        files: ['**/handlers/modules/item-piles/**/*.ts', '**/handlers/modules/monks-active-tiles/**/*.ts'],
+        rules: {
+          'max-lines-per-function': 'off',
+          complexity: 'off',
+          'max-depth': 'off',
+          'max-params': 'off',
+          'max-lines': ['error', { max: 400, skipComments: true }],
+        },
+      },
       { files: TEST_GLOBS, rules: Object.fromEntries(CAP_RULES.map((r) => [r, 'off'])) },
     ],
   });

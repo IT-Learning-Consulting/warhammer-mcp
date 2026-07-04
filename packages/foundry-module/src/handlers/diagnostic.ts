@@ -52,20 +52,15 @@ import {
 } from '@foundry-mcp/shared';
 import { readRuntimeBuffer } from '../health-check.js';
 import { MODULE_ID } from '../constants.js';
+import { validateGMAccess } from '../utils/embeddedCRUDFactory.js';
 
 // ── Local envelope types (mirror handlers/journal.ts) ───────────────────────
 
-type AccessGate = { allowed: boolean };
 type EnvelopeOK<T> = { success: true; data: T };
 type EnvelopeErr = { success: false; error: string };
 type Envelope<T> = EnvelopeOK<T> | EnvelopeErr;
 
 // ── Gates (CCR-2 / HC2 dual gate) ───────────────────────────────────────────
-
-function validateGMAccess(): AccessGate {
-  if (!game.user?.isGM) return { allowed: false };
-  return { allowed: true };
-}
 
 // Returns whether the GM has opted into the diagnostic surface. Default false
 // (HC2). Read-only — no notify.*; on read failure (e.g. setting not yet

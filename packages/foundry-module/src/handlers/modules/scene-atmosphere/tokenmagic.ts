@@ -43,9 +43,17 @@
 
 import { notify } from '../../../notify.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
-import type { ModuleSceneAtmosphereInputType } from './schemas.js';
+import type { ModuleSceneAtmosphereInputType } from '@foundry-mcp/shared';
+import { Envelope, getGame, getCanvas } from '../_shared/handler-utils.js';
 
-type Envelope<T> = { success: true; data: T } | { success: false; error: string };
+function getCanvasOrThrow(): any {
+  const c = getCanvas();
+  if (!c?.scene) {
+    throw new Error('CANVAS_UNAVAILABLE: canvas.scene not available');
+  }
+  return c;
+}
+
 
 // ── API accessors ─────────────────────────────────────────────────────────────
 
@@ -65,18 +73,6 @@ function getAutomaticWounds(): any {
   return aw;
 }
 
-function getCanvas(): any {
-  const c = (globalThis as any).canvas;
-  if (!c?.scene) {
-    throw new Error('CANVAS_UNAVAILABLE: canvas.scene not available');
-  }
-  return c;
-}
-
-function getGame(): any {
-  return (globalThis as any).game;
-}
-
 // ── Placeable resolution ──────────────────────────────────────────────────────
 
 type PlaceableType = 'Token' | 'Tile' | 'MeasuredTemplate' | 'Drawing' | 'Region';
@@ -88,7 +84,7 @@ type PlaceableType = 'Token' | 'Tile' | 'MeasuredTemplate' | 'Drawing' | 'Region
  * API (createWoundOnToken etc.) specifically needs the Token canvas object.
  */
 function resolvePlaceable(placeableId: string, placeableType: PlaceableType): any {
-  const c = getCanvas();
+  const c = getCanvasOrThrow();
   let collection: any;
   switch (placeableType) {
     case 'Token':            collection = c.tokens; break;

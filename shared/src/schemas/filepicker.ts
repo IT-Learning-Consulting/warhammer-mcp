@@ -94,6 +94,25 @@ export type FilePickerListInputType = z.infer<typeof FilePickerListInput>;
 export type FilePickerConvertInputType = z.infer<typeof FilePickerConvertInput>;
 export type FilePickerCreateDirectoryInputType = z.infer<typeof FilePickerCreateDirectoryInput>;
 
+// ── wire payloads (mcp_code_quality_v2 Phase C2, task 3.3 — XPK-04 bypass closure) ──────────
+// The foundry-module uploadFile/listFiles handlers previously cast `data as <Payload>` with only
+// truthy checks. These are the WIRE shapes the mcp-server tool actually sends over the query
+// boundary (post-conversion, `action` discriminant stripped) — DERIVED from the tool-input
+// schemas above rather than redeclared, so field drift is impossible.
+export const FilePickerUploadWirePayload = FilePickerUploadInput
+  .omit({ action: true, skipConversion: true })
+  .extend({
+    // filename is always present on the wire (mcp-server derives it pre-upload).
+    filename: z.string().min(1),
+    // Conversion warnings surfaced handler-side via notify.warn (design (d)).
+    conversionWarnings: z.array(z.string()).optional(),
+  })
+  .strict();
+export type FilePickerUploadWirePayloadType = z.infer<typeof FilePickerUploadWirePayload>;
+
+export const FilePickerListWirePayload = FilePickerListInput.omit({ action: true }).strict();
+export type FilePickerListWirePayloadType = z.infer<typeof FilePickerListWirePayload>;
+
 export interface FilePickerCreateDirectoryResponse {
   source: string;
   path: string;

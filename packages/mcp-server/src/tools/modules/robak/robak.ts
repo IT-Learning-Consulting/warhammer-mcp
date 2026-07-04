@@ -12,6 +12,10 @@ import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
 import { moduleNotActiveContent } from '../_shared/module-guard.js';
 import type { RobakRollResult } from './schemas.js';
+import { z } from 'zod';
+import { ModuleRobakInput } from '@foundry-mcp/shared';
+
+type ModuleRobakArgs = z.infer<typeof ModuleRobakInput>;
 
 // ── Inline error helper (CCR-G2) ──────────────────────────────────────────────
 
@@ -114,7 +118,7 @@ Example:
     ];
   }
 
-  async execute(args: Record<string, unknown>) {
+  async execute(args: ModuleRobakArgs) {
     const action = String(args.action ?? 'unknown');
     this.logger.info('Executing module-robak action', { action });
     try {

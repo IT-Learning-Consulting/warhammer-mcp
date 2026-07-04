@@ -2,13 +2,9 @@
 // Requires the forien-armoury module to be active in the target world.
 
 import { z } from 'zod';
-import { CreateCustomItemCommon } from '../common.js';
+import { CreateCustomItemCommon, priceFields } from '../common.js';
 
-const Price = z.object({
-  gc: z.number().optional(),
-  ss: z.number().optional(),
-  bp: z.number().optional(),
-});
+const Price = priceFields();
 
 export const GrimoireSchema = CreateCustomItemCommon.extend({
   itemType: z.literal('forien-armoury.grimoire'),

@@ -23,7 +23,8 @@
 //   - phase7_pre_plan.md §Confirmed facts
 
 import { requireModuleActive } from '../_shared/require-module-active.js';
-import { ModuleAccessControlInput, BUNDLE_MEMBERS } from './schemas.js';
+import { ModuleAccessControlInput, ACCESS_CONTROL_BUNDLE_MEMBERS as BUNDLE_MEMBERS } from '@foundry-mcp/shared';
+import { Envelope, isGM } from '../_shared/handler-utils.js';
 import {
   handleGetLockStateLnK,
   handleConfigureLock,
@@ -57,14 +58,9 @@ import {
   handleSetViewWithPanMode,
 } from './lockview.js';
 
-type Envelope<T> = { success: true; data: T } | { success: false; error: string };
 
 // BUG-424 (MOD-02): tier-standard GM gate — access-control was the only module handler
 // dir without one. Reads stay ungated per tier norm.
-function isGM(): boolean {
-  return Boolean((globalThis as any).game?.user?.isGM);
-}
-
 // ── ACTION_MEMBER_MAP ─────────────────────────────────────────────────────────
 // Maps action → primary member module ID for the guard block.
 // get-bundle-status and get-lock-state are excluded (handled specially above the map).

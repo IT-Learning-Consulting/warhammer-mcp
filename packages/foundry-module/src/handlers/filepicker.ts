@@ -14,8 +14,9 @@
 // CCR-Envelope: returns {success, data} or {success, error}.
 
 import { MODULE_ID } from '../constants.js';
-import { ErrorTokens } from '@foundry-mcp/shared';
+import { ErrorTokens, FilePickerUploadWirePayload, FilePickerListWirePayload } from '@foundry-mcp/shared';
 import { notify } from '../notify.js';
+import { validateGMAccess } from '../utils/embeddedCRUDFactory.js';
 
 // ── Local types ─────────────────────────────────────────────────────────────
 // CCR-1 envelope contract: success returns { success: true, data: T }.
@@ -24,32 +25,16 @@ import { notify } from '../notify.js';
 type EnvelopeOK<T extends object> = { success: true; data: T };
 type EnvelopeErr = { success: false; error: string };
 
-interface UploadFilePayload {
-  source: 'data' | 'public' | 's3';
-  target?: string;
-  // file is base64-encoded content (already converted if conversion happened mcp-server-side).
-  file: string;
-  filename: string;
-  // Surfaced when conversion failed mcp-server-side — handler raises notify.warn.
-  conversionWarnings?: string[];
-}
+// Wire payloads are validated via the shared Zod schemas (mcp_code_quality_v2 Phase C2 task 3.3 —
+// XPK-04 closure); the former local UploadFilePayload/ListFilesPayload interfaces + `as` casts are
+// replaced by FilePickerUploadWirePayload/.parse() and FilePickerListWirePayload/.parse().
 
-interface UploadFileResponse {
+export interface UploadFileResponse {
   path: string; // canonical Foundry path returned by /upload
   status?: string;
 }
 
-interface ListFilesPayload {
-  source: 'data' | 'public' | 's3';
-  target: string;
-  options?: {
-    bucket?: string;
-    extensions?: string[];
-    recursive?: boolean;
-  };
-}
-
-interface ListFilesResponse {
+export interface ListFilesResponse {
   target: string;
   dirs: string[];
   files: string[];
@@ -57,12 +42,6 @@ interface ListFilesResponse {
   gridSize: number | null;
   privateDirs: string[];
   extensions: string[];
-}
-
-// ── Access gate ─────────────────────────────────────────────────────────────
-function validateGMAccess(): { allowed: boolean } {
-  if (!(game as any).user?.isGM) return { allowed: false };
-  return { allowed: true };
 }
 
 // ── Target-folder resolution (tier 2 + tier 3 of design (e)) ────────────────
@@ -143,10 +122,9 @@ export async function uploadFile(
     const gmCheck = validateGMAccess();
     if (!gmCheck.allowed) return { success: false, error: 'Access denied (GM-only)' };
 
-    const payload = data as UploadFilePayload;
-    if (!payload?.source || !payload?.file || !payload?.filename) {
-      return { success: false, error: 'uploadFile: missing required fields (source, file, filename)' };
-    }
+    // XPK-04 closure (C2 task 3.3): shared Zod wire-payload parse replaces the `as` cast +
+    // truthy checks — malformed payloads now reject with a typed ZodError, field-by-field.
+    const payload = FilePickerUploadWirePayload.parse(data ?? {});
 
     // Surface mcp-server-side conversion warnings via notify.warn (design (d)).
     if (Array.isArray(payload.conversionWarnings) && payload.conversionWarnings.length > 0) {
@@ -192,10 +170,9 @@ export async function listFiles(
     const gmCheck = validateGMAccess();
     if (!gmCheck.allowed) return { success: false, error: 'Access denied (GM-only)' };
 
-    const payload = data as ListFilesPayload;
-    if (!payload?.source || typeof payload?.target !== 'string') {
-      return { success: false, error: 'listFiles: missing required fields (source, target)' };
-    }
+    // XPK-04 closure (C2 task 3.3): shared Zod wire-payload parse replaces the `as` cast +
+    // truthy checks — malformed payloads now reject with a typed ZodError, field-by-field.
+    const payload = FilePickerListWirePayload.parse(data ?? {});
 
     const FilePicker: any = (foundry as any)?.applications?.apps?.FilePicker?.implementation;
     if (!FilePicker?.browse) {

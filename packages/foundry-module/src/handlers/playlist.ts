@@ -251,7 +251,6 @@ export async function createPlaylist(data: unknown): Promise<Envelope<any>> {
     return {
       success: true as const,
       data: {
-        success: true,
         id: persisted.id,
         name: persisted._source.name,
         soundIds,
@@ -302,7 +301,6 @@ export async function updatePlaylist(data: unknown): Promise<Envelope<any>> {
     return {
       success: true as const,
       data: {
-        success: true,
         playlistId: input.playlistId,
         playlist: serializePlaylistViewModel(persisted),
         requestedChanges,
@@ -364,7 +362,6 @@ export async function deletePlaylist(data: unknown): Promise<Envelope<any>> {
     return {
       success: true as const,
       data: {
-        success: true,
         playlistId: input.playlistId,
         deletedSoundCount,
         ...(affectedDocs !== undefined ? { affectedDocs } : {}),
@@ -383,7 +380,6 @@ export async function getPlaylist(data: unknown): Promise<Envelope<any>> {
   return {
     success: true,
     data: {
-      success: true,
       playlist: serializePlaylistViewModel(playlist),
     },
   };
@@ -416,7 +412,7 @@ export async function listPlaylists(data: unknown): Promise<Envelope<any>> {
           : null;
     return {
       success: true,
-      data: { success: true, total, filterApplied },
+      data: { total, filterApplied },
     };
   }
 
@@ -429,7 +425,6 @@ export async function listPlaylists(data: unknown): Promise<Envelope<any>> {
     return {
       success: true,
       data: {
-        success: true,
         total,
         page,
         pageSize,
@@ -442,7 +437,6 @@ export async function listPlaylists(data: unknown): Promise<Envelope<any>> {
   return {
     success: true,
     data: {
-      success: true,
       playlists: filtered.map(serializePlaylistListItem),
     },
   };
@@ -479,7 +473,6 @@ export async function playPlaylist(data: unknown): Promise<Envelope<any>> {
       return {
         success: true as const,
         data: {
-          success: true,
           playlistId: input.playlistId,
           playing: false,
           mode: persisted._source.mode,
@@ -500,7 +493,6 @@ export async function playPlaylist(data: unknown): Promise<Envelope<any>> {
     return {
       success: true as const,
       data: {
-        success: true,
         playlistId: input.playlistId,
         playing: !!persisted._source.playing,
         mode: persisted._source.mode,
@@ -538,7 +530,6 @@ export async function stopPlaylist(data: unknown): Promise<Envelope<any>> {
     return {
       success: true as const,
       data: {
-        success: true,
         playlistId: input.playlistId,
         playing: !!persisted._source.playing,
       },

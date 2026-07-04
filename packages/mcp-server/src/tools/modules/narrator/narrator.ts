@@ -13,10 +13,13 @@
 // reversible (no destructive/removal op exists on this surface). This intentionally breaks the phase
 // 1-9 "at least one confirm-gated pair" streak — documented, not a missing gate.
 
+import { z } from 'zod';
 import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
-import { ErrorTokens } from '@foundry-mcp/shared';
+import { ErrorTokens, NarratorInput } from '@foundry-mcp/shared';
 import { moduleNotActiveContent } from '../_shared/module-guard.js';
 import { NARRATOR_ACTIONS, NARRATOR_CONFIGURE_KEYS, type NarratorResult } from './schemas.js';
+
+type NarratorArgs = z.infer<typeof NarratorInput>;
 
 // ── Single discriminated formatter (one text line per action) ──────────────────
 
@@ -96,7 +99,12 @@ Example: { action: "narrate", message: "The mist parts over Ubersreik." }`,
             speaker: { type: 'string', description: 'narrate/describe/notify: override the default "Narrator" ChatMessage speaker alias.' },
             state: { type: 'boolean', description: 'scenery: true=on, false=off, omitted=toggle the current state.' },
             key: { type: 'string', enum: [...NARRATOR_CONFIGURE_KEYS], description: 'configure: the typed appearance/permission setting key to write.' },
-            value: { description: 'configure: the new value for `key` (string/number/boolean depending on the key).' },
+            value: {
+              // CCR-V8 (C2 task 6.1): scalar-union typed via oneOf — a description-only param
+              // JSON-stringifies across the MCP boundary (F04 class; same fix as `message` above).
+              oneOf: [{ type: 'string' }, { type: 'number' }, { type: 'boolean' }],
+              description: 'configure: the new value for `key` (string/number/boolean depending on the key).',
+            },
           },
           required: ['action'],
         },
@@ -104,7 +112,7 @@ Example: { action: "narrate", message: "The mist parts over Ubersreik." }`,
     ];
   }
 
-  async execute(rawArgs: Record<string, unknown>) {
+  async execute(rawArgs: NarratorArgs) {
     const action = String(rawArgs.action ?? 'unknown');
     this.logger.info('Executing module-narrator action', { action });
     if (!(NARRATOR_ACTIONS as readonly string[]).includes(action)) {

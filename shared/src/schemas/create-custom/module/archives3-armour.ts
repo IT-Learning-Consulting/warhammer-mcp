@@ -3,18 +3,14 @@
 // come from CONFIG.WFRP4E.armourFits. Requires the wfrp4e-archives3 module.
 
 import { z } from 'zod';
-import { CreateCustomItemCommon } from '../common.js';
+import { CreateCustomItemCommon, priceFields } from '../common.js';
 
 const QualityOrFlaw = z.object({
   name: z.string(),
   value: z.number().optional(),
 });
 
-const Price = z.object({
-  gc: z.number().optional(),
-  ss: z.number().optional(),
-  bp: z.number().optional(),
-});
+const Price = priceFields();
 
 const APBlock = z.object({
   head: z.number().optional(),

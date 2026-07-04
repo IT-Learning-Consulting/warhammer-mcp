@@ -26,7 +26,8 @@
 //   - Phase 5 dispatchers (tagger.ts / sequencer.ts) as structural exemplars.
 
 import { requireModuleActive, requireCompanionActive } from '../_shared/require-module-active.js';
-import { ModuleSceneAtmosphereInput, type ModuleSceneAtmosphereInputType, BUNDLE_MEMBERS } from './schemas.js';
+import { ModuleSceneAtmosphereInput, type ModuleSceneAtmosphereInputType, SCENE_ATMOSPHERE_BUNDLE_MEMBERS as BUNDLE_MEMBERS } from '@foundry-mcp/shared';
+import { Envelope } from '../_shared/handler-utils.js';
 import {
   handlePlayPreset,
   handleStopPreset,
@@ -106,7 +107,6 @@ import {
   handleUpdateBlocks,
 } from './dynamic-soundscapes.js';
 
-type Envelope<T> = { success: true; data: T } | { success: false; error: string };
 
 // ── ACTION_MEMBER_MAP ─────────────────────────────────────────────────────────
 //

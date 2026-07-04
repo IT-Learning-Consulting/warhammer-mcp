@@ -8,6 +8,7 @@
 // texture reuses TextureDataSchema (A2 shared).
 
 import { z } from 'zod';
+import { paginationFields } from './primitives.js';
 import { TextureDataSchema, type TextureData } from './texture-data.js';
 import { SceneId, TileId } from './branded-ids.js';
 
@@ -104,8 +105,7 @@ export const TileListInput = z
     hidden: z.boolean().optional(),
     locked: z.boolean().optional(),
     overheadOnly: z.boolean().optional(),
-    page: z.number().int().min(1).optional(),
-    pageSize: z.number().int().min(1).max(100).optional(),
+    ...paginationFields(),
     countOnly: z.boolean().optional(),
   })
   .strict();

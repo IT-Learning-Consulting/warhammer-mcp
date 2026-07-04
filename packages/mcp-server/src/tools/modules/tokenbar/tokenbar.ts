@@ -12,6 +12,10 @@ import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
 import { moduleNotActiveContent } from '../_shared/module-guard.js';
 import type { TokenbarMovementResult } from './schemas.js';
+import { z } from 'zod';
+import { ModuleTokenbarInput } from '@foundry-mcp/shared';
+
+type ModuleTokenbarArgs = z.infer<typeof ModuleTokenbarInput>;
 
 // ── Inline error helper (CCR-G2) ──────────────────────────────────────────────
 
@@ -96,7 +100,7 @@ Example:
     ];
   }
 
-  async execute(args: Record<string, unknown>) {
+  async execute(args: ModuleTokenbarArgs) {
     const action = String(args.action ?? 'unknown');
     this.logger.info('Executing module-tokenbar action', { action });
     try {

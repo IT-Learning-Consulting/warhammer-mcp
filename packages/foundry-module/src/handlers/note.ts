@@ -41,15 +41,13 @@ import { wrappedWrite } from '../transaction-manager.js';
 import { getEmbeddedOrThrow } from '../utils/getEmbeddedOrThrow.js';
 import { notify } from '../notify.js';
 // R2.2 dedup: canonical deepStripUndefined (was a local byte-identical copy).
-import { deepStripUndefined } from '../utils/embeddedCRUDFactory.js';
+import { deepStripUndefined, validateGMAccess, getSceneOrThrow } from '../utils/embeddedCRUDFactory.js';
 
-type AccessGate = { allowed: boolean };
 type EnvelopeOK<T> = { success: true; data: T };
 type EnvelopeErr = { success: false; error: string };
 type Envelope<T> = EnvelopeOK<T> | EnvelopeErr;
 
 export interface NoteCreateResponse {
-  success: true;
   note: NoteViewModel;
   requestedChanges: Record<string, unknown>;
   // Phase 6.4 — populated when the auto-link branch ({journalContent}) is used.
@@ -57,32 +55,34 @@ export interface NoteCreateResponse {
 }
 
 export interface NoteUpdateResponse {
-  success: true;
   note: NoteViewModel;
   requestedChanges: Record<string, unknown>;
   changedFields: string[];
 }
 
 export interface NoteDeleteResponse {
-  success: true;
   deletedId: string;
   sceneId: string;
   remainingNotes: number;
 }
 
 export interface NoteGetResponse {
-  success: true;
   note: NoteViewModel;
 }
 
 export interface NoteListResponse {
-  success: true;
   notes: NoteListItem[];
   total: number;
   page: number;
   pageSize: number;
-  countOnly?: boolean;
+  countOnly?: false;
   filterApplied?: string | null;
+}
+// BUG-435: canonical LEAN countOnly shape.
+export interface NoteListCountResponse {
+  total: number;
+  filterApplied: string | null;
+  countOnly: true;
 }
 
 export type NoteResponse =
@@ -90,18 +90,8 @@ export type NoteResponse =
   | NoteUpdateResponse
   | NoteDeleteResponse
   | NoteGetResponse
-  | NoteListResponse;
-
-function validateGMAccess(): AccessGate {
-  return { allowed: Boolean(game.user?.isGM) };
-}
-
-
-function getSceneOrThrow(sceneId: string): any {
-  const scene = (game as any).scenes?.get(sceneId);
-  if (!scene) throw new Error(`SCENE_NOT_FOUND: no Scene with id "${sceneId}"`);
-  return scene;
-}
+  | NoteListResponse
+  | NoteListCountResponse;
 
 function getActiveSceneOrThrow(): any {
   const scene = (game as any).scenes?.active;
@@ -289,7 +279,6 @@ export async function createNote(data: unknown): Promise<Envelope<NoteCreateResp
     return {
       success: true as const,
       data: {
-        success: true,
         note: serializeNoteViewModel(scene, persisted),
         requestedChanges,
         ...(autoCreatedEntry ? { journalEntry: autoCreatedEntry } : {}),
@@ -356,7 +345,6 @@ export async function updateNote(data: unknown): Promise<Envelope<NoteUpdateResp
     return {
       success: true as const,
       data: {
-        success: true,
         note: serializeNoteViewModel(scene, fresh),
         requestedChanges,
         changedFields,
@@ -397,7 +385,6 @@ export async function deleteNote(data: unknown): Promise<Envelope<NoteDeleteResp
     return {
       success: true as const,
       data: {
-        success: true,
         deletedId: input.noteId,
         sceneId: input.sceneId,
         remainingNotes: sizeAfter,
@@ -413,7 +400,7 @@ export async function getNote(data: unknown): Promise<Envelope<NoteGetResponse>>
   try {
     const scene = getSceneOrThrow(input.sceneId);
     const note = getEmbeddedOrThrow<any>(scene, 'notes', input.noteId, 'Note');
-    return { success: true, data: { success: true, note: serializeNoteViewModel(scene, note) } };
+    return { success: true, data: { note: serializeNoteViewModel(scene, note) } };
   } catch (e) {
     return { success: false, error: e instanceof Error ? e.message : 'getNote failed' };
   }
@@ -421,7 +408,7 @@ export async function getNote(data: unknown): Promise<Envelope<NoteGetResponse>>
 
 // ── 5. listNotes ─────────────────────────────────────────────────────────────
 
-export async function listNotes(data: unknown): Promise<Envelope<NoteListResponse>> {
+export async function listNotes(data: unknown): Promise<Envelope<NoteListResponse | NoteListCountResponse>> {
   const input: NoteListInputType = NoteListInput_strict_parse(data);
   try {
     const scene = input.sceneId ? getSceneOrThrow(input.sceneId) : getActiveSceneOrThrow();
@@ -445,19 +432,27 @@ export async function listNotes(data: unknown): Promise<Envelope<NoteListRespons
     }
 
     const total = notes.length;
+
+    // BUG-435: countOnly returns the canonical LEAN {total, filterApplied, countOnly:true} shape.
+    if (input.countOnly) {
+      return {
+        success: true,
+        data: { total, filterApplied, countOnly: true } satisfies NoteListCountResponse,
+      };
+    }
+
     const page = input.page ?? 1;
     const pageSize = input.pageSize ?? 50;
-    const items = input.countOnly ? [] : notes.slice((page - 1) * pageSize, page * pageSize);
+    const items = notes.slice((page - 1) * pageSize, page * pageSize);
 
     return {
       success: true,
       data: {
-        success: true,
         notes: items.map((n) => serializeNoteListItem(scene, n)),
         total,
         page,
         pageSize,
-        countOnly: input.countOnly ?? false,
+        countOnly: false,
         filterApplied,
       } satisfies NoteListResponse,
     };

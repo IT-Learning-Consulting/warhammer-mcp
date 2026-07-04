@@ -18,7 +18,8 @@ import { requireModuleActive } from '../_shared/require-module-active.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
 import { verifyFlagWrite } from '../../../utils/verifyWrite.js';
 import { notify } from '../../../notify.js';
-import { ImperialArcanaInput, type ImperialArcanaInputType } from './schemas.js';
+import { ImperialArcanaInput, type ImperialArcanaInputType } from '@foundry-mcp/shared';
+import { Envelope } from '../_shared/handler-utils.js';
 import {
   MODULE_ID,
   DECK_ID,
@@ -34,7 +35,6 @@ import {
   type SpreadDef,
 } from './const.js';
 
-type Envelope<T> = { success: true; data: T } | { success: false; error: string };
 
 // ── Response shapes (typed; surfaced as structuredContent) ──────────────────────
 

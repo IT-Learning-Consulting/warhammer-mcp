@@ -70,11 +70,10 @@ import {
 import { wrappedWrite, transactionManager } from '../transaction-manager.js';
 import { notify } from '../notify.js';
 // R2.2 dedup: canonical deepStripUndefined (was a local byte-identical copy).
-import { deepStripUndefined } from '../utils/embeddedCRUDFactory.js';
+import { deepStripUndefined, validateGMAccess } from '../utils/embeddedCRUDFactory.js';
 
 // ── Local types ──────────────────────────────────────────────────────────────
 
-type AccessGate = { allowed: boolean };
 type EnvelopeOK<T> = { success: true; data: T };
 type EnvelopeErr = { success: false; error: string };
 type Envelope<T> = EnvelopeOK<T> | EnvelopeErr;
@@ -104,17 +103,7 @@ export interface SceneDataAccessFacade {
 
 // ── Access gate ──────────────────────────────────────────────────────────────
 
-function validateGMAccess(): AccessGate {
-  if (!game.user?.isGM) return { allowed: false };
-  return { allowed: true };
-}
-
 // ── Helpers ──────────────────────────────────────────────────────────────────
-
-function stripUndefined<T extends Record<string, any>>(obj: T): T {
-  Object.keys(obj).forEach((k) => obj[k] === undefined && delete obj[k]);
-  return obj;
-}
 
 function getSceneOrThrow(sceneId: string): any {
   const scene = (game as any).scenes?.get(sceneId);
@@ -405,7 +394,6 @@ export async function createScene(data: unknown): Promise<Envelope<SceneCreateRe
     return {
       success: true as const,
       data: {
-        success: true,
         scene: serializeSceneViewModel(persisted),
         requestedChanges,
       } satisfies SceneCreateResponse,
@@ -480,7 +468,6 @@ export async function updateScene(data: unknown): Promise<Envelope<SceneUpdateRe
     return {
       success: true as const,
       data: {
-        success: true,
         scene: serializeSceneViewModel(scene),
         requestedChanges,
         changedFields,
@@ -532,7 +519,6 @@ export async function deleteScene(data: unknown): Promise<Envelope<SceneDeleteRe
     return {
       success: true as const,
       data: {
-        success: true,
         deletedId: input.sceneId,
         deletedName,
         remainingScenes: sizeAfter,
@@ -580,7 +566,6 @@ export async function cloneScene(data: unknown): Promise<Envelope<SceneCloneResp
     return {
       success: true as const,
       data: {
-        success: true,
         source: { id: source.id as string, name: source.name as string },
         clone: serializeSceneViewModel(persisted),
       } satisfies SceneCloneResponse,
@@ -626,7 +611,6 @@ export async function activateScene(data: unknown): Promise<Envelope<SceneActiva
     return {
       success: true as const,
       data: {
-        success: true,
         activatedId: input.sceneId,
         activatedName: scene.name as string,
         previousActiveId: previousActiveId === input.sceneId ? null : previousActiveId,
@@ -650,7 +634,6 @@ export async function viewScene(data: unknown): Promise<Envelope<SceneViewRespon
     return {
       success: true as const,
       data: {
-        success: true,
         viewedId: input.sceneId,
         viewedName: scene.name as string,
         isLocalUser: true,
@@ -702,7 +685,6 @@ export async function thumbnailScene(
     return {
       success: true as const,
       data: {
-        success: true,
         sceneId: input.sceneId,
         sceneName: scene.name as string,
         thumbDataUrl: thumbData.thumb,
@@ -731,7 +713,7 @@ export async function getScene(data: unknown): Promise<Envelope<SceneGetResponse
   const scene = getSceneOrThrow(sceneId);
 
   const view = serializeSceneViewModel(scene);
-  const response: SceneGetResponse = { success: true, scene: view };
+  const response: SceneGetResponse = { scene: view };
 
   if (input.includeTokens) {
     const tokens = (scene.tokens?.contents as any[] | undefined) ?? [];
@@ -791,12 +773,10 @@ export async function listScenesAction(
   let response: SceneListResponse;
   if (Array.isArray(raw)) {
     response = {
-      success: true,
       scenes: raw.map((s) => normalizeListEntry(s)),
     };
   } else if (raw && typeof raw === 'object' && 'page' in raw) {
     response = {
-      success: true,
       total: (raw as any).total,
       page: (raw as any).page,
       pageSize: (raw as any).pageSize,
@@ -805,13 +785,12 @@ export async function listScenesAction(
     };
   } else if (raw && typeof raw === 'object' && 'total' in raw && !('scenes' in raw)) {
     response = {
-      success: true,
       total: (raw as any).total,
       filterApplied: input.filter ?? (input.include_active_only ? 'active_only' : null),
     };
   } else {
     // Defensive fallback — should not hit given the dataAccess contract.
-    response = { success: true, scenes: [] };
+    response = { scenes: [] };
   }
 
   return { success: true, data: response };
@@ -870,7 +849,6 @@ export async function clearLayer(
     return {
       success: true as const,
       data: {
-        success: true,
         sceneId: input.sceneId,
         layer: input.layer,
         dryRun: true,
@@ -901,7 +879,6 @@ export async function clearLayer(
     return {
       success: true as const,
       data: {
-        success: true,
         sceneId: input.sceneId,
         layer: input.layer,
         dryRun: false,
@@ -942,7 +919,6 @@ export async function resetFog(
     return {
       success: true as const,
       data: {
-        success: true,
         sceneId: input.sceneId,
         fogDocsRemaining: remaining,
       } satisfies SceneResetFogResponse,
@@ -991,7 +967,6 @@ export async function lightingTransition(
     return {
       success: true as const,
       data: {
-        success: true,
         sceneId: input.sceneId,
         target,
         darknessLevel: persisted,
@@ -1018,7 +993,6 @@ export async function preloadScene(
   return {
     success: true as const,
     data: {
-      success: true,
       sceneId: input.sceneId,
       sceneName: scene.name as string,
       preloaded: true,
@@ -1058,7 +1032,6 @@ export async function importSceneFromCompendium(
     return {
       success: true as const,
       data: {
-        success: true,
         scene: serializeSceneViewModel(persisted),
         sourcePack: input.packId,
       } satisfies SceneImportFromCompendiumResponse,
@@ -1161,6 +1134,3 @@ function SceneImportFromCompendiumInput_strict_parse(data: unknown): SceneImport
   return SceneImportFromCompendiumInput.strict().parse(data ?? {});
 }
 
-// stripUndefined currently unused-export-safe; retained for symmetry with
-// handlers/journal.ts (Phase 5 embedded CRUD will use it).
-void stripUndefined;

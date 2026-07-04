@@ -199,7 +199,7 @@ export async function createStack(data: unknown): Promise<Envelope<any>> {
 
     return {
       success: true as const,
-      data: { success: true, id: persisted.id, stack: serializeStack(persisted), requestedChanges },
+      data: { id: persisted.id, stack: serializeStack(persisted), requestedChanges },
     };
   });
 }
@@ -210,7 +210,7 @@ export async function getStack(data: unknown): Promise<Envelope<any>> {
 
   const input = CardsGetStackInput.strict().parse(data ?? {});
   const stack = getStackOrThrow(input.stackId);
-  return { success: true, data: { success: true, stack: serializeStack(stack) } };
+  return { success: true, data: { stack: serializeStack(stack) } };
 }
 
 export async function listStacks(data: unknown): Promise<Envelope<any>> {
@@ -228,7 +228,7 @@ export async function listStacks(data: unknown): Promise<Envelope<any>> {
   if (input.countOnly) {
     return {
       success: true,
-      data: { success: true, total, filterApplied: input.type !== undefined ? `type=${input.type}` : null },
+      data: { total, filterApplied: input.type !== undefined ? `type=${input.type}` : null },
     };
   }
   if (input.page !== undefined || input.pageSize !== undefined) {
@@ -239,10 +239,10 @@ export async function listStacks(data: unknown): Promise<Envelope<any>> {
     const paged = filtered.slice(offset, offset + pageSize);
     return {
       success: true,
-      data: { success: true, total, page, pageSize, pageCount, stacks: paged.map(serializeStackListItem) },
+      data: { total, page, pageSize, pageCount, stacks: paged.map(serializeStackListItem) },
     };
   }
-  return { success: true, data: { success: true, stacks: filtered.map(serializeStackListItem) } };
+  return { success: true, data: { stacks: filtered.map(serializeStackListItem) } };
 }
 
 export async function updateStack(data: unknown): Promise<Envelope<any>> {
@@ -269,7 +269,7 @@ export async function updateStack(data: unknown): Promise<Envelope<any>> {
 
     return {
       success: true as const,
-      data: { success: true, stackId: input.stackId, stack: serializeStack(persisted), requestedChanges, changedFields },
+      data: { stackId: input.stackId, stack: serializeStack(persisted), requestedChanges, changedFields },
     };
   });
 }
@@ -287,7 +287,7 @@ export async function deleteStack(data: unknown): Promise<Envelope<any>> {
   if (input.dryRun) {
     return {
       success: true,
-      data: { success: true, dryRun: true, stackId: input.stackId, stackName, embeddedCardCount: cardCount },
+      data: { dryRun: true, stackId: input.stackId, stackName, embeddedCardCount: cardCount },
     };
   }
 
@@ -302,7 +302,7 @@ export async function deleteStack(data: unknown): Promise<Envelope<any>> {
     });
     return {
       success: true as const,
-      data: { success: true, dryRun: false, stackId: input.stackId, deletedCardCount: cardCount },
+      data: { dryRun: false, stackId: input.stackId, deletedCardCount: cardCount },
     };
   });
 }
@@ -338,7 +338,7 @@ export async function duplicateStack(data: unknown): Promise<Envelope<any>> {
 
     return {
       success: true as const,
-      data: { success: true, sourceId: input.stackId, id: persisted.id, stack: serializeStack(persisted) },
+      data: { sourceId: input.stackId, id: persisted.id, stack: serializeStack(persisted) },
     };
   });
 }
@@ -373,7 +373,7 @@ export async function addCard(data: unknown): Promise<Envelope<any>> {
 
     return {
       success: true as const,
-      data: { success: true, stackId: input.stackId, card: serializeCard(persistedStack, persistedCard, false), requestedChanges },
+      data: { stackId: input.stackId, card: serializeCard(persistedStack, persistedCard, false), requestedChanges },
     };
   });
 }
@@ -386,7 +386,7 @@ export async function getCard(data: unknown): Promise<Envelope<any>> {
   const stack = getStackOrThrow(input.stackId);
   const card = getCardOrThrow(stack, input.cardId);
   const redact = shouldRedact(stack, card, input.perspectiveUserId);
-  return { success: true, data: { success: true, card: serializeCard(stack, card, redact), redacted: redact } };
+  return { success: true, data: { card: serializeCard(stack, card, redact), redacted: redact } };
 }
 
 export async function updateCard(data: unknown): Promise<Envelope<any>> {
@@ -415,7 +415,7 @@ export async function updateCard(data: unknown): Promise<Envelope<any>> {
 
     return {
       success: true as const,
-      data: { success: true, stackId: input.stackId, card: serializeCard(persistedStack, persistedCard, false), requestedChanges, changedFields },
+      data: { stackId: input.stackId, card: serializeCard(persistedStack, persistedCard, false), requestedChanges, changedFields },
     };
   });
 }
@@ -439,7 +439,7 @@ export async function deleteCard(data: unknown): Promise<Envelope<any>> {
     notify.deleted('card', `Card "${cardName}"`, { summary: `from stack ${input.stackId}` });
     return {
       success: true as const,
-      data: { success: true, stackId: input.stackId, deletedId: input.cardId, remainingCardCount: (persistedStack?.cards?.size as number) ?? 0 },
+      data: { stackId: input.stackId, deletedId: input.cardId, remainingCardCount: (persistedStack?.cards?.size as number) ?? 0 },
     };
   });
 }
@@ -454,7 +454,7 @@ export async function listCards(data: unknown): Promise<Envelope<any>> {
   const total = all.length;
 
   if (input.countOnly) {
-    return { success: true, data: { success: true, total } };
+    return { success: true, data: { total } };
   }
   let items = all;
   let page: number | undefined;
@@ -468,7 +468,7 @@ export async function listCards(data: unknown): Promise<Envelope<any>> {
     items = all.slice(offset, offset + pageSize);
   }
   const cards: CardListItem[] = items.map((c) => serializeCardListItem(c, shouldRedact(stack, c, input.perspectiveUserId)));
-  const payload: Record<string, unknown> = { success: true, stackId: input.stackId, cards, total };
+  const payload: Record<string, unknown> = { stackId: input.stackId, cards, total };
   if (page !== undefined) {
     payload.page = page;
     payload.pageSize = pageSize;
@@ -499,7 +499,7 @@ export async function flipCard(data: unknown): Promise<Envelope<any>> {
     });
     return {
       success: true as const,
-      data: { success: true, stackId: input.stackId, cardId: input.cardId, face: newFace, card: serializeCard(persistedStack, persistedCard, false) },
+      data: { stackId: input.stackId, cardId: input.cardId, face: newFace, card: serializeCard(persistedStack, persistedCard, false) },
     };
   });
 }
@@ -519,7 +519,7 @@ export async function shuffleStack(data: unknown): Promise<Envelope<any>> {
     notify.updated('cards', `Card stack "${persisted?._source?.name ?? input.stackId}"`, { summary: 'shuffled' });
     return {
       success: true as const,
-      data: { success: true, stackId: input.stackId, cardCount: (persisted?.cards?.size as number) ?? 0 },
+      data: { stackId: input.stackId, cardCount: (persisted?.cards?.size as number) ?? 0 },
     };
   });
 }
@@ -540,7 +540,6 @@ export async function recallStack(data: unknown): Promise<Envelope<any>> {
     return {
       success: true,
       data: {
-        success: true,
         dryRun: true,
         stackId: input.stackId,
         stackType,
@@ -556,7 +555,7 @@ export async function recallStack(data: unknown): Promise<Envelope<any>> {
     notify.updated('cards', `Card stack "${persisted?._source?.name ?? input.stackId}"`, { summary: 'recalled' });
     return {
       success: true as const,
-      data: { success: true, dryRun: false, stackId: input.stackId, stackType, cardCount: (persisted?.cards?.size as number) ?? 0 },
+      data: { dryRun: false, stackId: input.stackId, stackType, cardCount: (persisted?.cards?.size as number) ?? 0 },
     };
   });
 }
@@ -579,7 +578,6 @@ export async function dealCards(data: unknown): Promise<Envelope<any>> {
     return {
       success: true,
       data: {
-        success: true,
         dryRun: true,
         deckId: input.deckId,
         destinationCount: input.handIds.length,
@@ -624,7 +622,6 @@ export async function dealCards(data: unknown): Promise<Envelope<any>> {
     return {
       success: true as const,
       data: {
-        success: true,
         deckId: input.deckId,
         dealt: required,
         deckAvailableAfter: ((persistedDeck?.availableCards as any[]) ?? []).length,
@@ -655,7 +652,6 @@ export async function drawCards(data: unknown): Promise<Envelope<any>> {
     return {
       success: true as const,
       data: {
-        success: true,
         handId: input.handId,
         deckId: input.deckId,
         drawnCount: drawnArr.length,
@@ -689,7 +685,6 @@ export async function passCards(data: unknown): Promise<Envelope<any>> {
     return {
       success: true as const,
       data: {
-        success: true,
         fromStackId: input.stackId,
         toStackId: input.toStackId,
         passedCount: movedArr.length,
@@ -722,7 +717,7 @@ async function playOrDiscard(
     });
     return {
       success: true as const,
-      data: { success: true, action, cardId: input.cardId, fromStackId: input.stackId, toStackId: input.toStackId, newCardId: movedId },
+      data: { action, cardId: input.cardId, fromStackId: input.stackId, toStackId: input.toStackId, newCardId: movedId },
     };
   });
 }

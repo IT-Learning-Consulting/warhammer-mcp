@@ -15,7 +15,7 @@
 // NO `z.any` / `<any>` anywhere in new code.
 
 import { z } from 'zod';
-import { FOUNDRY_ID } from './primitives.js';
+import { FOUNDRY_ID, paginationFieldsDefaulted } from './primitives.js';
 
 // World + embedded doc types Phase 10 catalog covers. Walker iterates these.
 // Source: foundry_docs/CONST/variables/WORLD_DOCUMENT_TYPES.md + embedded subset
@@ -50,8 +50,7 @@ export type CrossDocFkDocTypeType = z.infer<typeof CrossDocFkDocType>;
 export const AuditOrphansInput = z.object({
     action: z.literal('audit-orphans'),
     includeCompendiums: z.boolean().default(false),
-    page: z.number().int().min(1).default(1),
-    pageSize: z.number().int().min(1).max(500).default(100),
+    ...paginationFieldsDefaulted(500, 100),
 });
 
 export const AuditDocumentInput = z.object({
@@ -66,7 +65,7 @@ export const FkOrphanRef = z.object({
     sourceDocId: FOUNDRY_ID, // polymorphic: not branded (Phase 1 design)
     sourceField: z.string().min(1),
     refDocType: CrossDocFkDocType,
-    refId: z.string().min(1), // polymorphic: not branded (Phase 1 design)
+    refId: FOUNDRY_ID, // polymorphic: not branded (Phase 1 design; FOUNDRY_ID primitive per C2 task 5.2)
 });
 export type FkOrphanRefType = z.infer<typeof FkOrphanRef>;
 

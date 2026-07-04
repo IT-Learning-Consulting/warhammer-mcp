@@ -13,6 +13,10 @@ import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
 import { moduleNotActiveContent } from '../_shared/module-guard.js';
 import { TOKEN_ATTACHER_ACTIONS } from './schemas.js';
+import { z } from 'zod';
+import { TokenAttacherInput } from '@foundry-mcp/shared';
+
+type TokenAttacherArgs = z.infer<typeof TokenAttacherInput>;
 import type {
   TAAttachResult,
   TADetachAllResult,
@@ -118,7 +122,7 @@ Example: { action: "attach", baseTokenId: "abc123", elements: [{ type: "Tile", i
     ];
   }
 
-  async execute(rawArgs: Record<string, unknown>) {
+  async execute(rawArgs: TokenAttacherArgs) {
     const action = String(rawArgs.action ?? 'unknown');
     this.logger.info('Executing module-token-attacher action', { action });
     switch (action) {

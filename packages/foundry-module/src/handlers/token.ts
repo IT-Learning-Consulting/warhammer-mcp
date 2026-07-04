@@ -53,30 +53,26 @@ import { getEmbeddedOrThrow } from '../utils/getEmbeddedOrThrow.js';
 import { notify } from '../notify.js';
 import { DEFAULT_PAGE_SIZE } from '../constants/toolLimits.js';
 // R2.2 dedup: canonical deepStripUndefined (was a local byte-identical copy).
-import { deepStripUndefined } from '../utils/embeddedCRUDFactory.js';
+import { deepStripUndefined, validateGMAccess, getSceneOrThrow } from '../utils/embeddedCRUDFactory.js';
 
 // ── Local types ──────────────────────────────────────────────────────────────
 
-type AccessGate = { allowed: boolean };
 type EnvelopeOK<T> = { success: true; data: T };
 type EnvelopeErr = { success: false; error: string };
 type Envelope<T> = EnvelopeOK<T> | EnvelopeErr;
 
 export interface TokenCreateResponse {
-  success: true;
   token: TokenViewModel;
   requestedChanges: Record<string, unknown>;
 }
 
 export interface TokenUpdateResponse {
-  success: true;
   token: TokenViewModel;
   requestedChanges: Record<string, unknown>;
   changedFields: string[];
 }
 
 export interface TokenDeleteResponse {
-  success: true;
   deletedId: string;
   deletedName: string;
   sceneId: string;
@@ -84,22 +80,25 @@ export interface TokenDeleteResponse {
 }
 
 export interface TokenGetResponse {
-  success: true;
   token: TokenViewModel;
 }
 
 export interface TokenListResponse {
-  success: true;
   tokens: TokenListItem[];
   total: number;
   page: number;
   pageSize: number;
-  countOnly?: boolean;
+  countOnly?: false;
   filterApplied?: string | null;
+}
+// BUG-435: canonical LEAN countOnly shape — uniform across list handlers (scene/light/token/region/note/…).
+export interface TokenListCountResponse {
+  total: number;
+  filterApplied: string | null;
+  countOnly: true;
 }
 
 export interface TokenAddResponse {
-  success: true;
   sceneId: string;
   added: number;
   tokenIds: string[];
@@ -122,6 +121,7 @@ export type TokenResponse =
   | TokenDeleteResponse
   | TokenGetResponse
   | TokenListResponse
+  | TokenListCountResponse
   | TokenAddResponse;
 
 // Minimal scene-placement surface the dispatcher needs for the add-tokens / delete-token actions.
@@ -139,18 +139,6 @@ export interface TokenDataAccessFacade {
 }
 
 // ── Access gate + helpers ────────────────────────────────────────────────────
-
-function validateGMAccess(): AccessGate {
-  if (!game.user?.isGM) return { allowed: false };
-  return { allowed: true };
-}
-
-
-function getSceneOrThrow(sceneId: string): any {
-  const scene = (game as any).scenes?.get(sceneId);
-  if (!scene) throw new Error(`SCENE_NOT_FOUND: no Scene with id "${sceneId}"`);
-  return scene;
-}
 
 function getActiveSceneOrThrow(): any {
   const scene = (game as any).scenes?.active;
@@ -267,7 +255,6 @@ export async function createToken(data: unknown): Promise<Envelope<TokenCreateRe
     return {
       success: true as const,
       data: {
-        success: true,
         token: serializeTokenViewModel(scene, persisted),
         requestedChanges,
       } satisfies TokenCreateResponse,
@@ -342,7 +329,6 @@ export async function updateToken(data: unknown): Promise<Envelope<TokenUpdateRe
     return {
       success: true as const,
       data: {
-        success: true,
         token: serializeTokenViewModel(scene, fresh),
         requestedChanges,
         changedFields,
@@ -386,7 +372,6 @@ export async function deleteToken(data: unknown): Promise<Envelope<TokenDeleteRe
     return {
       success: true as const,
       data: {
-        success: true,
         deletedId: input.tokenId,
         deletedName,
         sceneId: input.sceneId,
@@ -405,7 +390,7 @@ export async function getToken(data: unknown): Promise<Envelope<TokenGetResponse
     const token = getEmbeddedOrThrow<any>(scene, 'tokens', input.tokenId, 'Token');
     return {
       success: true,
-      data: { success: true, token: serializeTokenViewModel(scene, token) },
+      data: { token: serializeTokenViewModel(scene, token) },
     };
   } catch (e) {
     return { success: false, error: e instanceof Error ? e.message : 'getToken failed' };
@@ -414,7 +399,7 @@ export async function getToken(data: unknown): Promise<Envelope<TokenGetResponse
 
 // ── 5. listTokens ────────────────────────────────────────────────────────────
 
-export async function listTokens(data: unknown): Promise<Envelope<TokenListResponse>> {
+export async function listTokens(data: unknown): Promise<Envelope<TokenListResponse | TokenListCountResponse>> {
   const input: TokenListInputType = TokenListInput_strict_parse(data);
   try {
     const scene = input.sceneId ? getSceneOrThrow(input.sceneId) : getActiveSceneOrThrow();
@@ -433,19 +418,28 @@ export async function listTokens(data: unknown): Promise<Envelope<TokenListRespo
     }
 
     const total = tokens.length;
+
+    // BUG-435: countOnly returns the canonical LEAN {total, filterApplied, countOnly:true} shape
+    // (no empty tokens[] + pagination echo on a cheap count probe — uniform with scene/light/…).
+    if (input.countOnly) {
+      return {
+        success: true,
+        data: { total, filterApplied, countOnly: true } satisfies TokenListCountResponse,
+      };
+    }
+
     const page = input.page ?? 1;
     const pageSize = input.pageSize ?? DEFAULT_PAGE_SIZE;
-    const items = input.countOnly ? [] : tokens.slice((page - 1) * pageSize, page * pageSize);
+    const items = tokens.slice((page - 1) * pageSize, page * pageSize);
 
     return {
       success: true,
       data: {
-        success: true,
         tokens: items.map((t) => serializeTokenListItem(scene, t)),
         total,
         page,
         pageSize,
-        countOnly: input.countOnly ?? false,
+        countOnly: false,
         filterApplied,
       } satisfies TokenListResponse,
     };
@@ -505,7 +499,6 @@ export async function addTokens(
     return {
       success: true as const,
       data: {
-        success: true,
         sceneId,
         // F12: fallback to tokenIds.length when the underlying facade omits `added`.
         added: (result?.added as number) ?? tokenIds.length,
@@ -558,7 +551,6 @@ export async function deleteTokenAction(
     return {
       success: true as const,
       data: {
-        success: true,
         deletedId: input.tokenId,
         deletedName,
         sceneId: input.sceneId,

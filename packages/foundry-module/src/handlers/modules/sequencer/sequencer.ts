@@ -25,16 +25,12 @@
 //   - CCR-4: confirm gates on destructive/broadcast actions.
 
 import { requireModuleActive } from '../_shared/require-module-active.js';
-import { ModuleSequencerInput, type ModuleSequencerInputType, ALLOWED_SECTION_TYPES } from './schemas.js';
+import { ModuleSequencerInput, type ModuleSequencerInputType, ALLOWED_SECTION_TYPES } from '@foundry-mcp/shared';
 import { notify } from '../../../notify.js';
+import { Envelope, isGM } from '../_shared/handler-utils.js';
 
-type Envelope<T> = { success: true; data: T } | { success: false; error: string };
 
 // ── Local helpers ──────────────────────────────────────────────────────────────
-
-function isGM(): boolean {
-  return Boolean((globalThis as any).game?.user?.isGM);
-}
 
 function getSequencer(): any {
   const s = (globalThis as any).Sequencer;
@@ -441,7 +437,12 @@ async function handlePermissionWrite(input: PermissionWriteInput): Promise<Envel
     const game = (globalThis as any).game;
     await game.settings.set('sequencer', input.key, input.value);
     const verified = game.settings.get('sequencer', input.key);
-    if (verified !== input.value) {
+    // mcp_code_quality_v2 Phase C3 (F03 type-aware redesign): input.value is a Zod z.number()
+    // permission-level (0-3), NOT boolean — the prior safety annotation here mislabeled the
+    // field type. `value` is a genuine coercion-hazard type (this third-party Sequencer
+    // setting's own registered type is not under our control), so the compare is now
+    // String()-wrapped (coercion-tolerant) rather than silenced with an unverified annotation.
+    if (String(verified) !== String(input.value)) {
       return { success: false, error: `PERMISSION_WRITE_FAILED: setting ${input.key} expected ${input.value} but got ${verified}` };
     }
     notify.updated('sequencer', `Set permission ${input.key} = ${input.value}`, {});

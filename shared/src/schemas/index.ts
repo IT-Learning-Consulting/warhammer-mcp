@@ -23,7 +23,6 @@ export * from './update-active-effect.js';
 export * from './delete-active-effect.js';
 export * from './get-active-effect-by-name.js';
 export * from './ownership.js';
-export * from './targets.js';
 export * from './outputs.js';
 // Phase 11 mcp_code_quality_hardening — mutation-tool output DTOs + 18 outputSchema consts (R11.1).
 export * from './mutation-outputs.js';
@@ -55,7 +54,6 @@ export * from './user.js';
 // Phase 10 mcp_crud_expansion — cross-doc FK audit + repair umbrella (3 actions).
 export * from './cross-doc-fk.js';
 // Phase wfrp-disease — bidirectional event-push transport (EventEnvelope + RollResultPayload).
-export * from './event-envelope.js';
 // Phase wfrp-disease — Disease umbrella (8 actions).
 export * from './disease.js';
 // wfrp_layer_expansion_v1 Phase 6 (P-10) — availability-test primitive (single action, never rolls).
@@ -85,8 +83,11 @@ export * from './document-io.js';
 // Phase 10 mcp_coverage_expansion — keybinding tool (list/get/set/reset-action/reset-all/find-conflicts over game.keybindings).
 export * from './keybinding.js';
 // Phase 1 module_integration_v1 — module-probe umbrella (is-active / list-active).
-// Generic types only; module-specific schemas live in package-local tools/modules/<id>/schemas.ts.
 export * from './module-probe.js';
+// mcp_code_quality_v2 Phase C2 task 3.1 (user decision 2026-07-04) — per-module Zod schemas
+// promoted from foundry-module package-local (old CCR-5 convention, superseded) to here as the
+// single source of truth for both packages. See ./modules/index.ts header.
+export * from './modules/index.js';
 // Phase 5 wfrp_battle_simulator — apply-token-casualties (batch per-token ActorDelta casualty writer).
 export * from './apply-token-casualties.js';
 // Phase 13 wfrp_layer_expansion_v1 (R16) — sheet-flow primitives: apply-fear/apply-terror,

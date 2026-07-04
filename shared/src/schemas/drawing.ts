@@ -19,6 +19,7 @@
 // Thin primitive (HC1 / CCR-3): no CONFIG reads, no game-rule logic.
 
 import { z } from 'zod';
+import { paginationFields } from './primitives.js';
 import { SceneId, DrawingId } from './branded-ids.js';
 const HEX_COLOR = z
   .string()
@@ -181,8 +182,7 @@ export const DrawingListInput = z
     hidden: z.boolean().optional(),
     locked: z.boolean().optional(),
     shapeType: SHAPE_TYPE.optional(),
-    page: z.number().int().min(1).optional(),
-    pageSize: z.number().int().min(1).max(100).optional(),
+    ...paginationFields(),
     countOnly: z.boolean().optional(),
   })
   .strict();
