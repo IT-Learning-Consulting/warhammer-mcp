@@ -309,6 +309,10 @@ export class SceneTool extends BaseTool {
         return this.handlePreload(args);
       case 'import-from-compendium':
         return this.handleImportFromCompendium(args);
+      default:
+        // BUG-439: an unknown action must throw (clean isError envelope via the
+        // dispatch catch) instead of falling through to an undefined result.
+        throw new Error(`Unknown action "${String((args as any).action)}" — valid actions: create, update, delete, clone, activate, view, thumbnail, get, list, clear-layer, reset-fog, lighting-transition, preload, import-from-compendium`);
     }
   }
 

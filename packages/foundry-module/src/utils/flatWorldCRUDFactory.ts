@@ -111,7 +111,7 @@ export interface FlatWorldFactoryConfig<_TCreate, TUpdate, TViewModel, TListItem
     create?: (ctx: { doc: any; requestedChanges: Record<string, unknown> }) => Record<string, any>;
     update?: (ctx: { doc: any; requestedChanges: Record<string, unknown>; changedFields: string[] }) => Record<string, any>;
     delete?: (ctx: { deletedId: string; remainingCount: number; preDeleteAudit?: Record<string, unknown> }) => Record<string, any>;
-    listBare?: (ctx: { items: any[]; total: number }) => Record<string, any>;
+    listBare?: (ctx: { items: any[]; total: number; filterApplied?: boolean | string | null }) => Record<string, any>;
     listPaginated?: (ctx: {
       items: any[];
       total: number;
@@ -379,9 +379,11 @@ export function createFlatWorldDocCRUDHandlers<
       filtered = applyListFilters(input, allDocs);
     }
     const total = filtered.length;
+    // Computed once for all three list shapes (folders#3: the bare/paginated branches
+    // previously omitted it — countOnly-only). Additive across all factory consumers.
+    const filterApplied = isFilterApplied ? isFilterApplied(input) : false;
 
     if (input.countOnly) {
-      const filterApplied = isFilterApplied ? isFilterApplied(input) : false;
       return {
         success: true,
         data: buildListCountResponse(total, filterApplied, input.page, input.pageSize),
@@ -397,14 +399,14 @@ export function createFlatWorldDocCRUDHandlers<
       const paged = filtered.slice(offset, offset + pageSize);
       return {
         success: true,
-        data: buildListPaginatedResponse(paged, total, page, pageSize, pageCount),
+        data: buildListPaginatedResponse(paged, total, page, pageSize, pageCount, filterApplied),
       };
     }
 
     // Bare list
     return {
       success: true,
-      data: buildListBareResponse(filtered),
+      data: buildListBareResponse(filtered, filterApplied),
     };
   }
 
@@ -518,10 +520,12 @@ export function createFlatWorldDocCRUDHandlers<
     page: number,
     pageSize: number,
     pageCount: number,
+    filterApplied: boolean | string | null = false,
   ) {
     if (responseBuilders.listPaginated) {
       return {
         success: true,
+        filterApplied,
         ...responseBuilders.listPaginated({
           items: paged.map((d) => listItemFormatter(d)),
           total,
@@ -537,22 +541,28 @@ export function createFlatWorldDocCRUDHandlers<
       page,
       pageSize,
       pageCount,
+      filterApplied,
       [responseKeys.listArray]: paged.map((d) => listItemFormatter(d)),
     };
   }
 
-  function buildListBareResponse(items: any[]) {
+  function buildListBareResponse(items: any[], filterApplied: boolean | string | null = false) {
     if (responseBuilders.listBare) {
       return {
         success: true,
+        total: items.length,
+        filterApplied,
         ...responseBuilders.listBare({
           items: items.map((d) => listItemFormatter(d)),
           total: items.length,
+          filterApplied,
         }),
       };
     }
     return {
       success: true,
+      total: items.length,
+      filterApplied,
       [responseKeys.listArray]: items.map((d) => listItemFormatter(d)),
     };
   }

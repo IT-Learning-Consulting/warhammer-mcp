@@ -452,6 +452,10 @@ export class RollTableTool extends BaseTool {
                 return this.handleDrawMany(args);
             case "import-from-compendium":
                 return this.handleImportFromCompendium(args);
+          default:
+            // BUG-439: an unknown action must throw (clean isError envelope via the
+            // dispatch catch) instead of falling through to an undefined result.
+            throw new Error(`Unknown action "${String((args as any).action)}" — valid actions: create, list, get, roll, delete, update, add-results, update-results, delete-results, normalize, reset, draw-many, import-from-compendium`);
         }
     }
 

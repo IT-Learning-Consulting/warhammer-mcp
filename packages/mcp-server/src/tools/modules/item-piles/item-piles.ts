@@ -56,6 +56,7 @@ function formatCreate(d: ItemPileCreateResult): string {
 function formatUpdate(d: ItemPileUpdateResult): string {
   return [
     `module-itempiles.update-pile: updated pile ${d.actorUuid}`,
+    `- pileUuid: ${d.pileUuid ?? d.actorUuid}`,
     `- updated: ${JSON.stringify(d.updated)}`,
     `- flagData: ${JSON.stringify(d.flagData)}`,
   ].join('\n');

@@ -292,6 +292,10 @@ export class RegionTool extends BaseTool {
         return this.handleDeleteBehavior(args);
       case 'add-shape':
         return this.handleAddShape(args);
+      default:
+        // BUG-439: an unknown action must throw (clean isError envelope via the
+        // dispatch catch) instead of falling through to an undefined result.
+        throw new Error(`Unknown action "${String((args as any).action)}" — valid actions: create, update, delete, get, list, createBehavior, updateBehavior, deleteBehavior, add-shape`);
     }
   }
 

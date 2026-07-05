@@ -622,15 +622,26 @@ export async function handleTokenmagicPreset(input: TokenmagicPresetInput): Prom
       }
 
       case 'reset-library': {
-        // RC1.1b — Q&A decision 3 (2026-07-03): state-change assert, not a shipped-defaults
-        // compare (fragile across TokenMagic versions) or a full field diff (76-preset library
-        // replace has no natural before/after shape). Snapshot pre-call, then require the
-        // post-reset library to be non-empty AND to differ from the pre-call snapshot WHEN the
-        // pre-call library had actually been modified (an already-default library legitimately
-        // resets to an identical snapshot — that's still success, not drift).
+        // RC1.1b — Q&A decision 3 (2026-07-03), reworked for BUG-440 (2026-07-05): the old
+        // guard compared the MAIN-library-only read (52 installed) against a hardcoded 76 —
+        // the COMBINED default (52 MAIN + 24 TEMPLATE) — so an already-default library
+        // false-failed TOKENMAGIC_PRESET_NOT_PERSISTED. "Default-shaped" is now derived at
+        // runtime from TokenMagic's own settings registration (settings.js:137-144 registers
+        // the shipped defaults as the setting default), filtered to tmfx-main — version-proof,
+        // no magic counts. Snapshot pre-call; drift = pre-call names differ from the shipped
+        // defaults AND the post-reset snapshot is unchanged (an already-default library
+        // legitimately resets to an identical snapshot — that's still success, not drift).
         const before = TM.getPresets('tmfx-main') ?? [];
         const beforeArr = Array.isArray(before) ? before : [...(before as any)];
         const beforeSnapshot = JSON.stringify(beforeArr.map((p: any) => p?.name).sort());
+
+        const settingDefault = (globalThis as any).game?.settings?.settings?.get?.('tokenmagic.presets')?.default;
+        // null → defaults unavailable (registration shape changed): skip the drift check
+        // rather than false-fail — the non-empty post-reset assert below still holds.
+        const defaultMainNames: string[] | null = Array.isArray(settingDefault)
+          ? settingDefault.filter((p: any) => p?.library === 'tmfx-main').map((p: any) => String(p?.name)).sort()
+          : null;
+        const defaultMainSnapshot = defaultMainNames ? JSON.stringify(defaultMainNames) : null;
 
         // DIALOG_GUARDED (ADR-10.1 extension — BUG-432, discovered mcp_code_quality_v2 C1):
         // TM.resetPresetLibrary() internally `await`s a native `window.confirm()` before
@@ -654,21 +665,22 @@ export async function handleTokenmagicPreset(input: TokenmagicPresetInput): Prom
           return { success: false, error: `${ErrorTokens.TOKENMAGIC_PRESET_NOT_PERSISTED}: preset library is empty after resetPresetLibrary` };
         }
         const afterSnapshot = JSON.stringify(afterArr.map((p: any) => p?.name).sort());
-        // Only flag drift when we KNOW the pre-call library was non-default-shaped (76 entries is
-        // the documented default count) — an already-default library resetting to itself is fine.
-        if (beforeArr.length !== 76 && afterSnapshot === beforeSnapshot) {
+        // Only flag drift when we KNOW the pre-call MAIN library was non-default-shaped
+        // (names differ from the shipped defaults) — an already-default library resetting
+        // to itself is fine. With defaults unavailable, skip rather than false-fail.
+        if (defaultMainSnapshot !== null && beforeSnapshot !== defaultMainSnapshot && afterSnapshot === beforeSnapshot) {
           return { success: false, error: `${ErrorTokens.TOKENMAGIC_PRESET_NOT_PERSISTED}: preset library unchanged after resetPresetLibrary despite a non-default pre-call state (${beforeArr.length} presets)` };
         }
 
         notify.updated('setting', 'tokenmagic presets', {
-          summary: 'preset library reset to built-in defaults (76 presets)',
+          summary: `preset library reset to built-in defaults (${afterArr.length} MAIN presets)`,
         });
         return {
           success: true,
           data: {
             subAction: 'reset-library',
             reset: true,
-            note: 'Preset library restored to 76 built-in defaults (52 MAIN + 24 TEMPLATE).',
+            note: `Preset library restored to built-in defaults (${afterArr.length} MAIN-library presets${defaultMainNames ? ` of ${defaultMainNames.length} shipped` : ''}).`,
           },
         };
       }

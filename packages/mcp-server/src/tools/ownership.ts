@@ -248,6 +248,10 @@ export class OwnershipTool extends BaseTool {
         return this.handleBulkSet(args);
       case "reset":
         return this.handleReset(args);
+      default:
+        // BUG-439: an unknown action must throw (clean isError envelope via the
+        // dispatch catch) instead of falling through to an undefined result.
+        throw new Error(`Unknown action "${String((args as any).action)}" — valid actions: assign, remove, list, bulk-set, reset`);
     }
   }
 

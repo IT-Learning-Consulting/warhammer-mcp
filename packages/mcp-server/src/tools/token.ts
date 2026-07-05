@@ -308,6 +308,10 @@ export class TokenTool extends BaseTool {
         return this.handleAdd(args);
       case 'delete-token':
         return this.handleDeleteToken(args);
+      default:
+        // BUG-439: an unknown action must throw (clean isError envelope via the
+        // dispatch catch) instead of falling through to an undefined result.
+        throw new Error(`Unknown action "${String((args as any).action)}" — valid actions: create, update, delete, get, list, add, delete-token`);
     }
   }
 
@@ -322,7 +326,7 @@ export class TokenTool extends BaseTool {
       const text =
         `🎭 **Token Created**\n\n${formatTokenView(data.token)}\n\n` +
         `_Requested fields: ${reqFields}_`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('create', e instanceof Error ? e.message : String(e));
     }
@@ -333,7 +337,7 @@ export class TokenTool extends BaseTool {
       const data = await this.query<TokenUpdateResponse>('token', args);
       const text =
         `✏️ **Token Updated**\n\n**Changed fields:** ${data.changedFields.join(', ')}\n\n${formatTokenView(data.token)}`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('update', e instanceof Error ? e.message : String(e));
     }
@@ -347,7 +351,7 @@ export class TokenTool extends BaseTool {
         `**ID:** \`${data.deletedId}\` · **Name:** ${data.deletedName}\n` +
         `**Scene:** \`${data.sceneId}\` · **Remaining tokens:** ${data.remainingTokens}\n\n` +
         `⚠️ Permanent.`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('delete', e instanceof Error ? e.message : String(e));
     }
@@ -372,7 +376,7 @@ export class TokenTool extends BaseTool {
       }
 
       if (data.tokens.length === 0) {
-        return { content: [{ type: 'text' as const, text: '🎭 **No Tokens Found**' }] };
+        return { content: [{ type: 'text' as const, text: '🎭 **No Tokens Found**' }], structuredContent: data as unknown as Record<string, unknown> };
       }
 
       const pageInfo = `page ${data.page} · ${data.tokens.length} of ${data.total} total`;

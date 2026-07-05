@@ -174,6 +174,10 @@ Use extraFields for any unmodeled field.
         return this.handleGetArt(args);
       case 'set-art':
         return this.handleSetArt(args);
+      default:
+        // BUG-439: an unknown action must throw (clean isError envelope via the
+        // dispatch catch) instead of falling through to an undefined result.
+        throw new Error(`Unknown action "${String((args as any).action)}" — valid actions: get-prototype-token, update-prototype-token, get-art, set-art`);
     }
   }
 

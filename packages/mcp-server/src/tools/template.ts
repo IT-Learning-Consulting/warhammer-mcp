@@ -210,6 +210,10 @@ export class TemplateTool extends BaseTool {
         return this.handleList(args);
       case 'duplicate':
         return this.handleDuplicate(args);
+      default:
+        // BUG-439: an unknown action must throw (clean isError envelope via the
+        // dispatch catch) instead of falling through to an undefined result.
+        throw new Error(`Unknown action "${String((args as any).action)}" — valid actions: create, update, delete, get, list, duplicate`);
     }
   }
 

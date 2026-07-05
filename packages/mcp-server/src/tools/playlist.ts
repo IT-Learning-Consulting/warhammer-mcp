@@ -375,6 +375,10 @@ export class PlaylistTool extends BaseTool {
         return this.handleBulkImportSounds(args);
       case 'preload-sound':
         return this.handlePreloadSound(args);
+      default:
+        // BUG-439: an unknown action must throw (clean isError envelope via the
+        // dispatch catch) instead of falling through to an undefined result.
+        throw new Error(`Unknown action "${String((args as any).action)}" — valid actions: create-playlist, update-playlist, delete-playlist, get-playlist, list-playlists, add-sound, update-sound, delete-sound, play, stop, duplicate-playlist, pause-sound, bulk-import-sounds, preload-sound`);
     }
   }
 

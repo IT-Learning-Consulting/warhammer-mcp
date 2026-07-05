@@ -213,6 +213,10 @@ export class ItemDirectoryTool extends BaseTool {
         return this.handleDuplicate(args);
       case 'import-from-compendium':
         return this.handleImportFromCompendium(args);
+      default:
+        // BUG-439: an unknown action must throw (clean isError envelope via the
+        // dispatch catch) instead of falling through to an undefined result.
+        throw new Error(`Unknown action "${String((args as any).action)}" — valid actions: list, get, search, duplicate, import-from-compendium`);
     }
   }
 
@@ -222,13 +226,13 @@ export class ItemDirectoryTool extends BaseTool {
     try {
       const data = await this.query<ItemDirectoryListResponse>('item-directory', args);
       if (data.items.length === 0) {
-        return { content: [{ type: 'text' as const, text: '📦 **No world items found**' }] };
+        return { content: [{ type: 'text' as const, text: '📦 **No world items found**' }], structuredContent: data as unknown as Record<string, unknown> };
       }
       const pageInfo = `page ${data.page} · ${data.items.length} of ${data.total} total`;
       const filterNote = data.typeFilter ? ` · type: ${data.typeFilter}` : '';
       const lines = data.items.map(formatWorldItem);
       const text = `📦 **World Items** (${pageInfo}${filterNote})\n\n${lines.join('\n')}`;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('list', e instanceof Error ? e.message : String(e));
     }
@@ -256,7 +260,7 @@ export class ItemDirectoryTool extends BaseTool {
         `- **img:** ${data.img ?? '_(none)_'}\n` +
         `- **folderId:** ${data.folderId ?? '_(root)_'}\n\n` +
         `**Full serialized item:**\n\`\`\`json\n${JSON.stringify(fullDoc, null, 2)}\n\`\`\``;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('get', e instanceof Error ? e.message : String(e));
     }
@@ -266,13 +270,13 @@ export class ItemDirectoryTool extends BaseTool {
     try {
       const data = await this.query<ItemDirectorySearchResponse>('item-directory', args);
       if (data.items.length === 0) {
-        return { content: [{ type: 'text' as const, text: '📦 **No items matched the search**' }] };
+        return { content: [{ type: 'text' as const, text: '📦 **No items matched the search**' }], structuredContent: data as unknown as Record<string, unknown> };
       }
       const lines = data.items.map(formatWorldItem);
       const text =
         `📦 **Item Search** (${data.total} results${data.query ? ` · query: "${data.query}"` : ''})\n\n` +
         lines.join('\n');
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('search', e instanceof Error ? e.message : String(e));
     }
@@ -287,7 +291,7 @@ export class ItemDirectoryTool extends BaseTool {
         `- **Name:** ${data.name}\n` +
         `- **Type:** ${data.type}\n` +
         `- **Source id:** \`${data.sourceId}\``;
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('duplicate', e instanceof Error ? e.message : String(e));
     }
@@ -304,7 +308,7 @@ export class ItemDirectoryTool extends BaseTool {
         `- **Pack:** ${data.packId}\n` +
         `- **Compendium id:** \`${data.compendiumItemId}\`` +
         (data.idMatchesCompendium ? ` _(preserved — Foundry v13 keeps the compendium id on import)_` : ` _(re-keyed to a new world id)_`);
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('import-from-compendium', e instanceof Error ? e.message : String(e));
     }

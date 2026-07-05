@@ -241,6 +241,10 @@ export class TileTool extends BaseTool {
         return this.handleZOrder(args, 'bring-to-front');
       case 'send-to-back':
         return this.handleZOrder(args, 'send-to-back');
+      default:
+        // BUG-439: an unknown action must throw (clean isError envelope via the
+        // dispatch catch) instead of falling through to an undefined result.
+        throw new Error(`Unknown action "${String((args as any).action)}" — valid actions: create, update, delete, get, list, duplicate, bring-to-front, send-to-back`);
     }
   }
 

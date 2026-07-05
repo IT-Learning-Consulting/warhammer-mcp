@@ -504,6 +504,10 @@ export class CompendiumUmbrellaTools extends BaseTool {
         return this.handleUpdateFolderInPack(args);
       case 'delete-folder-in-pack':
         return this.handleDeleteFolderInPack(args);
+      default:
+        // BUG-439: an unknown action must throw (clean isError envelope via the
+        // dispatch catch) instead of falling through to an undefined result.
+        throw new Error(`Unknown action "${String((args as any).action)}" — valid actions: create-pack, update-pack, read-pack, add-document-to-pack, update-document-in-pack, read-document-from-pack, create-folder-in-pack, list-folders-in-pack, update-folder-in-pack, delete-folder-in-pack`);
     }
   }
 

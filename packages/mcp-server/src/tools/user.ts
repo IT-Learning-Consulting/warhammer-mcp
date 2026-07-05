@@ -255,6 +255,10 @@ Examples:
                 return this.handleFlagSet(args);
             case 'flag-clear':
                 return this.handleFlagClear(args);
+          default:
+            // BUG-439: an unknown action must throw (clean isError envelope via the
+            // dispatch catch) instead of falling through to an undefined result.
+            throw new Error(`Unknown action "${String((args as any).action)}" — valid actions: list, get, update, set-role, hotbar-list, hotbar-assign, hotbar-clear, flag-set, flag-clear`);
         }
     }
 

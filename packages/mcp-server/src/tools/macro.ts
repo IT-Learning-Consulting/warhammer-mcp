@@ -412,6 +412,10 @@ export class MacroTool extends BaseTool {
         return this.handleListWorldScripts(args);
       case 'get-execution-target':
         return this.handleGetExecutionTarget(args);
+      default:
+        // BUG-439: an unknown action must throw (clean isError envelope via the
+        // dispatch catch) instead of falling through to an undefined result.
+        throw new Error(`Unknown action "${String((args as any).action)}" — valid actions: create, update, delete, get, list, execute, execute-by-name, import-from-compendium, set-execution-target, list-world-scripts, get-execution-target`);
     }
   }
 
@@ -520,7 +524,7 @@ export class MacroTool extends BaseTool {
         return { content: [{ type: 'text' as const, text }], structuredContent: p as unknown as Record<string, unknown> };
       }
 
-      if ('filterApplied' in data) {
+      if ('filterApplied' in data && !('items' in data)) {
         const c = data as MacroListCountResponse;
         const filterLine = c.filterApplied ? `\n**Filter applied:** ${c.filterApplied}` : '';
         const text = `Macro count\n\n**Total:** ${c.total}${filterLine}`;

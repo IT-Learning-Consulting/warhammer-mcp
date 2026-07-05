@@ -227,6 +227,10 @@ export class CardsTool extends BaseTool {
       case 'pass': return this.handlePass(args);
       case 'play': return this.handlePlay(args);
       case 'discard': return this.handleDiscard(args);
+      default:
+        // BUG-439: an unknown action must throw (clean isError envelope via the
+        // dispatch catch) instead of falling through to an undefined result.
+        throw new Error(`Unknown action "${String((args as any).action)}" — valid actions: create-stack, get-stack, list-stacks, update-stack, delete-stack, duplicate-stack, add-card, get-card, update-card, delete-card, list-cards, flip-card, shuffle, recall, deal, draw, pass, play, discard`);
     }
   }
 

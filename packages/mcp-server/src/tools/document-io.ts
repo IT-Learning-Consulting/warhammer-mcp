@@ -183,6 +183,10 @@ IMPORTANT: This tool implements CLONE / TEMPLATE semantics, NOT backup/restore.
       case 'export': return this.handleExport(args);
       case 'import-as-new': return this.handleImportAsNew(args);
       case 'preview': return this.handlePreview(args);
+      default:
+        // BUG-439: an unknown action must throw (clean isError envelope via the
+        // dispatch catch) instead of falling through to an undefined result.
+        throw new Error(`Unknown action "${String((args as any).action)}" — valid actions: export, import-as-new, preview`);
     }
   }
 

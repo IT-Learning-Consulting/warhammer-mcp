@@ -158,6 +158,139 @@ export async function handleTransferItems(input: TransferItemsInput): Promise<En
 
 // ── 3A: Currency flow ─────────────────────────────────────────────────────────
 
+// BUG-428 bypass plumbing. item-piles' removeCurrencies/transferCurrencies route through
+// getPaymentData → getPriceData, which synthesizes a fake item whose system.price is a bare
+// number; item-piles-wfrp4e's ITEM_COST_TRANSFORMER expects {gc,ss,bp} at that path, so the
+// cost recomputes to 0 → "free item" branch → empty deltas → silent no-op. remove/transfer are
+// rebuilt as: subtract in string space (calculateCurrencies — pure arithmetic, safe), then
+// write the result back as an ABSOLUTE per-denomination set.
+//
+// ⚠ API.updateCurrencies is NOT usable for that write (live-falsified 2026-07-05, validate
+// smoke): for item-type currencies _updateCurrencies maps each denomination to
+// { item, quantity: 1, cost: <target> } (dist :84079-84081) but Transaction.appendItemChanges
+// reads only `quantity` (the hardcoded 1) and is ALWAYS additive for existing items —
+// newQuantity = itemQuantity + incomingQuantity even under set:true (dist :41693, :41719) —
+// so every mentioned denomination gains +1 instead of being set. No absolute-set primitive
+// exists on the public API (setCurrencies is world currency CONFIG, not balances), so the
+// absolute set is written directly onto the resolved actor's money items via
+// updateEmbeddedDocuments (applyAbsoluteCurrencies below). addCurrencies IS sound (its
+// quantity mapping is correct, dist :84114) and stays in use for the transfer add side and
+// for creating missing denomination items.
+
+// Float tolerance for primary-unit totals (exchange rates like 1/240 are not exact binary;
+// e.g. 20 × 0.05 !== 1 in IEEE 754 — an exact-balance removal must not false-refuse).
+const CURRENCY_EPSILON = 1e-6;
+
+/** Total value of parsed currency entries in primary-currency units (quantity × exchangeRate). */
+function currencyTotal(entries: unknown): number {
+  return (Array.isArray(entries) ? entries : [])
+    .reduce((acc: number, c: any) => acc + (Number(c?.quantity) || 0) * (Number(c?.exchangeRate) || 0), 0);
+}
+
+/** An actor's balance as entries + primary-unit total + a currency string calculateCurrencies accepts. */
+function readBalance(API: any, actorUuid: string): { entries: any[]; total: number; str: string } {
+  const entries: any[] = API.getActorCurrencies(actorUuid) ?? [];
+  const total = currencyTotal(entries);
+  let str = '';
+  if (entries.length > 0) {
+    // Public getStringFromCurrencies validates {cost:number>=0, abbreviation:string}
+    // (dist :98938-98951) — getActorCurrencies entries carry {quantity}, so re-map.
+    str = API.getStringFromCurrencies(
+      entries.map((c: any) => ({ cost: Number(c?.quantity) || 0, abbreviation: c?.abbreviation })),
+    );
+  }
+  return { entries, total, str };
+}
+
+/**
+ * Expand a calculateCurrencies result into an explicit absolute set covering EVERY registered
+ * currency. updateCurrencies only writes denominations mentioned in the string (dist :84079-84083,
+ * set:true per mentioned currency) and calculateCurrencies drops zero-cost denominations from its
+ * output — so zeroed denominations must be spelled out or they would keep their old quantity.
+ */
+function absoluteSetString(API: any, newAbsolute: string): string {
+  const quantities = new Map<string, number>();
+  if (newAbsolute && newAbsolute.trim() !== '') {
+    for (const c of (API.getCurrenciesFromString(newAbsolute) ?? []) as any[]) {
+      const key = String(c?.abbreviation ?? '');
+      quantities.set(key, (quantities.get(key) ?? 0) + (Number(c?.quantity) || 0));
+    }
+  }
+  const all: any[] = API.CURRENCIES ?? [];
+  return all
+    .map((c) => {
+      const abbr = String(c?.abbreviation ?? '');
+      const qty = quantities.get(abbr) ?? 0;
+      return abbr.includes('{#}') ? abbr.replace('{#}', String(qty)) : `${qty}${abbr}`;
+    })
+    .join(' ')
+    .trim();
+}
+
+/** One denomination as a currency string ("3SS" from abbreviation "{#}SS"). */
+function denominationString(abbr: string, qty: number): string {
+  return abbr.includes('{#}') ? abbr.replace('{#}', String(qty)) : `${qty}${abbr}`;
+}
+
+/**
+ * Write an absolute per-denomination set DIRECTLY onto the actor's money items (see the
+ * plumbing block above for why API.updateCurrencies cannot do this). Existing items get their
+ * quantity path set via updateEmbeddedDocuments (synthetic token actors resolve via fromUuid;
+ * the write lands on the ActorDelta as usual); denominations with no item and a positive
+ * target are created via addCurrencies (its creation path is sound). Attribute-type
+ * currencies are out of scope (WFRP4e registers item currencies only) — fail loud if one
+ * would need changing. Returns the abbreviation → quantity target map for exact verification.
+ */
+async function applyAbsoluteCurrencies(API: any, actorUuid: string, setString: string): Promise<Map<string, number>> {
+  const targets = new Map<string, number>();
+  for (const c of (API.getCurrenciesFromString(setString) ?? []) as any[]) {
+    const key = String(c?.abbreviation ?? '');
+    targets.set(key, (targets.get(key) ?? 0) + (Number(c?.quantity) || 0));
+  }
+  const qtyPath = String(API.ITEM_QUANTITY_ATTRIBUTE ?? '');
+  if (!qtyPath) throw new Error('ITEM_QUANTITY_ATTRIBUTE unavailable — cannot write an absolute currency set');
+  const actor: any = await (globalThis as any).fromUuid(actorUuid);
+  if (!actor) throw new Error(`actor ${actorUuid} did not resolve via fromUuid`);
+
+  const current: any[] = API.getActorCurrencies(actorUuid) ?? [];
+  const updates: Record<string, unknown>[] = [];
+  const creations: string[] = [];
+  for (const cur of current) {
+    const abbr = String(cur?.abbreviation ?? '');
+    const target = targets.get(abbr) ?? 0;
+    const have = Number(cur?.quantity) || 0;
+    if (cur?.type === 'attribute') {
+      if (target !== have) throw new Error(`attribute-type currency ${abbr} is not supported by the absolute-set path`);
+      continue;
+    }
+    if (cur?.id) {
+      if (target !== have) updates.push({ _id: cur.id, [qtyPath]: target });
+    } else if (target > 0) {
+      creations.push(denominationString(abbr, target));
+    }
+  }
+  if (updates.length > 0) await actor.updateEmbeddedDocuments('Item', updates);
+  for (const c of creations) {
+    const r = await API.addCurrencies(actorUuid, c);
+    if (r === false) throw new Error(`NO_ACTIVE_GM: item-piles socket returned false while creating ${c}`);
+  }
+  return targets;
+}
+
+/**
+ * Exact-match settle predicate: every item-type denomination reads back at its target
+ * quantity. "Balance changed" is too weak — the 2026-07-05 live smoke proved a WRONG write
+ * (upstream +1 drift) also "changes" the balance and would pass a difference check.
+ */
+function absoluteSetSettled(API: any, actorUuid: string, targets: Map<string, number>): boolean {
+  const entries: any[] = API.getActorCurrencies(actorUuid) ?? [];
+  return entries.every((cur: any) => {
+    if (cur?.type === 'attribute') return true;
+    const abbr = String(cur?.abbreviation ?? '');
+    return (Number(cur?.quantity) || 0) === (targets.get(abbr) ?? 0);
+  });
+}
+
 type AddCurrencyInput = Extract<ModuleItempilesInputType, { action: 'add-currency' }>;
 
 export async function handleAddCurrency(input: AddCurrencyInput): Promise<Envelope<unknown>> {
@@ -217,26 +350,45 @@ export async function handleRemoveCurrency(input: RemoveCurrencyInput): Promise<
     };
   }
 
-  // Pre-check: verify sufficient balance BEFORE calling the API
+  // BUG-428 bypass: removeCurrencies silently no-ops in WFRP4e (see plumbing block above) —
+  // subtract in string space and write the result back as an absolute per-denomination set.
   try {
     const API = getItemPilesAPI();
-    const currentCurrencies = API.getActorCurrencies(input.actorUuid);
 
-    const removeCurrResult = await API.removeCurrencies(input.actorUuid, input.currencies);
-    // M-2: socket returns false when GM disconnects mid-call
-    if (removeCurrResult === false) {
-      return { success: false, error: 'NO_ACTIVE_GM: item-piles socket returned false — GM may have disconnected' };
+    let balance: { entries: any[]; total: number; str: string };
+    try {
+      balance = readBalance(API, input.actorUuid);
+    } catch (e) {
+      return { success: false, error: `CURRENCY_STRING_MAP_ERROR: could not express ${input.actorUuid}'s balance as a currency string — ${e instanceof Error ? e.message : String(e)}` };
+    }
+    const removeEntries = API.getCurrenciesFromString(input.currencies) ?? [];
+    const removeTotal = currencyTotal(removeEntries);
+    if (removeTotal <= 0) {
+      return { success: false, error: `INVALID_CURRENCY_STRING: "${input.currencies}" resolves to a non-positive amount — nothing to remove` };
+    }
+    // Sufficiency pre-check BEFORE any write: calculateCurrencies on a would-go-negative
+    // subtraction produces garbage denomination splits (getPriceArray on negative totals,
+    // dist :35455-35519) — refuse cleanly instead.
+    if (removeTotal > balance.total + CURRENCY_EPSILON) {
+      return { success: false, error: `INSUFFICIENT_CURRENCY: not enough currency to remove "${input.currencies}" from ${input.actorUuid} — current balance: ${balance.str || '(none)'}` };
     }
 
-    // DP-16: post-write verify (settle-polled) — currencies must actually have changed.
-    const beforeJson = JSON.stringify(currentCurrencies);
-    const persisted = await settlePoll(() => JSON.stringify(API.getActorCurrencies(input.actorUuid)) !== beforeJson);
+    // Snapshot BEFORE the write — getActorCurrencies returns live references, so serializing
+    // balance.entries after the write would alias the post-write state (observed 2026-07-05).
+    const previousBalance = JSON.parse(JSON.stringify(balance.entries));
+
+    const newAbsolute: string = API.calculateCurrencies(balance.str, input.currencies, true);
+    const setString = absoluteSetString(API, newAbsolute);
+    const targets = await applyAbsoluteCurrencies(API, input.actorUuid, setString);
+
+    // DP-16 (exact-match): every denomination must read back at its computed target.
+    const persisted = await settlePoll(() => absoluteSetSettled(API, input.actorUuid, targets));
     if (!persisted) {
-      return notPersisted(ErrorTokens.ITEM_PILES_REMOVE_CURRENCY_NOT_PERSISTED, `remove-currency "${input.currencies}" from ${input.actorUuid} left currencies unchanged`);
+      return notPersisted(ErrorTokens.ITEM_PILES_REMOVE_CURRENCY_NOT_PERSISTED, `remove-currency "${input.currencies}" from ${input.actorUuid} did not settle at the computed target quantities`);
     }
     const afterCurrencies = API.getActorCurrencies(input.actorUuid);
     notify.updated('item-piles', `Removed currencies "${input.currencies}" from ${input.actorUuid}`, {});
-    return { success: true, data: { actorUuid: input.actorUuid, currenciesRemoved: input.currencies, previousBalance: currentCurrencies, currentCurrencies: afterCurrencies } };
+    return { success: true, data: { actorUuid: input.actorUuid, currenciesRemoved: input.currencies, previousBalance, currentCurrencies: afterCurrencies } };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     if (msg.includes('insufficient') || msg.includes('Insufficient') || msg.includes('enough')) {
@@ -276,7 +428,72 @@ export async function handleTransferCurrency(input: TransferCurrencyInput): Prom
       }
       const currErr = validateCurrencyString(input.currencies);
       if (currErr) return { success: false, error: currErr };
-      result = await API.transferCurrencies(input.sourceUuid, input.targetUuid, input.currencies);
+
+      // BUG-428 bypass: transferCurrencies silently no-ops in WFRP4e (see plumbing block
+      // above). Rebuilt as remove-from-source (absolute set) → verify → addCurrencies to
+      // target → verify. NON-ATOMIC: no cross-actor Transaction exists on the public API
+      // that isn't the broken _transferCurrencies path, and automatic rollback is not
+      // attempted — an add-side failure surfaces ITEM_PILES_PARTIAL_TRANSFER instead.
+      let sourceBalance: { entries: any[]; total: number; str: string };
+      try {
+        sourceBalance = readBalance(API, input.sourceUuid);
+      } catch (e) {
+        return { success: false, error: `CURRENCY_STRING_MAP_ERROR: could not express ${input.sourceUuid}'s balance as a currency string — ${e instanceof Error ? e.message : String(e)}` };
+      }
+      const transferEntries = API.getCurrenciesFromString(input.currencies) ?? [];
+      const transferTotal = currencyTotal(transferEntries);
+      if (transferTotal <= 0) {
+        return { success: false, error: `INVALID_CURRENCY_STRING: "${input.currencies}" resolves to a non-positive amount — nothing to transfer` };
+      }
+      if (transferTotal > sourceBalance.total + CURRENCY_EPSILON) {
+        return { success: false, error: `INSUFFICIENT_CURRENCY: source ${input.sourceUuid} cannot cover "${input.currencies}" — current balance: ${sourceBalance.str || '(none)'}` };
+      }
+
+      // Remove side: subtract in string space, write absolute per-denomination set directly
+      // (see plumbing block — API.updateCurrencies is upstream-broken for item currencies).
+      const sourceBefore = new Map<string, number>(
+        (sourceBalance.entries as any[]).map((c: any) => [String(c?.abbreviation ?? ''), Number(c?.quantity) || 0]),
+      );
+      const newAbsolute: string = API.calculateCurrencies(sourceBalance.str, input.currencies, true);
+      const setString = absoluteSetString(API, newAbsolute);
+      const sourceTargets = await applyAbsoluteCurrencies(API, input.sourceUuid, setString);
+      // DP-16 (exact-match): source must settle at the computed targets before the target
+      // side is touched — a remove-side failure aborts here with nothing moved (safe).
+      const removedPersisted = await settlePoll(() => absoluteSetSettled(API, input.sourceUuid, sourceTargets));
+      if (!removedPersisted) {
+        return notPersisted(ErrorTokens.ITEM_PILES_TRANSFER_CURRENCY_NOT_PERSISTED, `transfer-currency (mode: transfer) source ${input.sourceUuid} did not settle at the computed target quantities — verify balance before retrying`);
+      }
+
+      // Add side: addCurrencies is proven immune to the BUG-428 chain.
+      try {
+        const addResult = await API.addCurrencies(input.targetUuid, input.currencies);
+        if (addResult === false) {
+          return { success: false, error: `ITEM_PILES_PARTIAL_TRANSFER: removed "${input.currencies}" from ${input.sourceUuid} but the add to ${input.targetUuid} returned no-active-GM — manual reconcile needed (transfer is non-atomic, no automatic rollback)` };
+        }
+      } catch (e) {
+        return { success: false, error: `ITEM_PILES_PARTIAL_TRANSFER: removed "${input.currencies}" from ${input.sourceUuid} but failed to add to ${input.targetUuid} — manual reconcile needed (transfer is non-atomic, no automatic rollback). Cause: ${e instanceof Error ? e.message : String(e)}` };
+      }
+      // DP-16: add side must land on the target too — a timeout here is still a
+      // partial transfer (source already debited), not a plain no-op.
+      const beforeTargetJson2 = JSON.stringify(beforeTargetCurrencies);
+      const addPersisted = await settlePoll(() => JSON.stringify(API.getActorCurrencies(input.targetUuid)) !== beforeTargetJson2);
+      if (!addPersisted) {
+        return { success: false, error: `ITEM_PILES_PARTIAL_TRANSFER: removed "${input.currencies}" from ${input.sourceUuid} but target ${input.targetUuid} currencies never changed — manual reconcile needed (transfer is non-atomic, no automatic rollback)` };
+      }
+
+      // Deltas computed from the verified source write (before → target per denomination);
+      // the direct-write path has no Transaction resolution to echo.
+      const dtoT = {
+        ok: true,
+        itemDeltas: Array.from(sourceTargets.entries())
+          .filter(([abbr, qty]) => (sourceBefore.get(abbr) ?? 0) !== qty)
+          .map(([abbr, qty]) => ({ abbreviation: abbr, quantity: qty - (sourceBefore.get(abbr) ?? 0) })),
+        attributeDeltas: {},
+      };
+      const sourceAfter = API.getActorCurrencies(input.sourceUuid);
+      const targetAfter = API.getActorCurrencies(input.targetUuid);
+      notify.updated('item-piles', `Transferred currencies (mode: ${mode}) from ${input.sourceUuid} to ${input.targetUuid}`, {});
+      return { success: true, data: { mode, sourceUuid: input.sourceUuid, targetUuid: input.targetUuid, sourceCurrencies: sourceAfter, targetCurrencies: targetAfter, result: dtoT } };
     }
 
     // M-2: socket returns false when GM disconnects mid-call

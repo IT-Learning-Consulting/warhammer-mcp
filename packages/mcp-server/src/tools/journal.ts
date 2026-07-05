@@ -253,6 +253,10 @@ export class JournalTool extends BaseTool {
         return this.handleShowToPlayers(args);
       case 'duplicate-entry':
         return this.handleDuplicateEntry(args);
+      default:
+        // BUG-439: an unknown action must throw (clean isError envelope via the
+        // dispatch catch) instead of falling through to an undefined result.
+        throw new Error(`Unknown action "${String((args as any).action)}" — valid actions: create-entry, update-entry, delete-entry, list-entries, get-entry, add-page, update-page, delete-page, reorder-pages, add-category, update-category, delete-category, assign-page-to-category, show-to-players, duplicate-entry`);
     }
   }
 

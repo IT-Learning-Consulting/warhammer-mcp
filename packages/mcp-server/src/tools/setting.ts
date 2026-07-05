@@ -179,6 +179,10 @@ Examples:
                 return this.handleList(args);
             case 'list-world-db':
                 return this.handleListWorldDb(args);
+          default:
+            // BUG-439: an unknown action must throw (clean isError envelope via the
+            // dispatch catch) instead of falling through to an undefined result.
+            throw new Error(`Unknown action "${String((args as any).action)}" — valid actions: get, set, list, list-world-db`);
         }
     }
 

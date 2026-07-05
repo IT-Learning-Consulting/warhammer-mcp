@@ -315,6 +315,12 @@ async function startBackend(): Promise<void> {
               let payload: any;
               if (result && typeof result === 'object' && 'structuredContent' in result && 'content' in result) {
                 payload = result;
+              } else if (result === undefined) {
+                // BUG-439: an unknown/unhandled action can fall through a tool execute()
+                // switch and resolve undefined — JSON.stringify(undefined) is undefined,
+                // leaving content[0] with NO text (violates the MCP content schema on the
+                // client). Emit a valid isError envelope instead.
+                payload = { content: [{ type: 'text', text: `Tool "${name}" returned no result — likely an unknown or unhandled action` }], isError: true };
               } else {
                 payload = { content: [{ type: 'text', text: typeof result === 'string' ? result : JSON.stringify(result) }] };
               }

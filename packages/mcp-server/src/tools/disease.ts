@@ -107,6 +107,10 @@ export class DiseaseTool extends BaseTool {
       case 'finish-duration': return this.handleFinishDuration(args);
       case 'apply-symptom':   return this.handleApplySymptom(args);
       case 'cure':            return this.handleCure(args);
+      default:
+        // BUG-439: an unknown action must throw (clean isError envelope via the
+        // dispatch catch) instead of falling through to an undefined result.
+        throw new Error(`Unknown action "${String((args as any).action)}" — valid actions: list, contract, start, increment, decrement, finish-duration, apply-symptom, cure`);
     }
   }
 

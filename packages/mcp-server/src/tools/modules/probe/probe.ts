@@ -121,6 +121,10 @@ Examples:
                 return this.handleIsActive(args);
             case 'list-active':
                 return this.handleListActive(args);
+          default:
+            // BUG-439: an unknown action must throw (clean isError envelope via the
+            // dispatch catch) instead of falling through to an undefined result.
+            throw new Error(`Unknown action "${String((args as any).action)}" — valid actions: is-active, list-active`);
         }
     }
 

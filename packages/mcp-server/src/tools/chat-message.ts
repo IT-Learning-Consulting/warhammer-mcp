@@ -340,6 +340,10 @@ Examples:
                 return this.handleExportChatLog(args);
             case 'clear-chat-log':
                 return this.handleClearChatLog(args);
+          default:
+            // BUG-439: an unknown action must throw (clean isError envelope via the
+            // dispatch catch) instead of falling through to an undefined result.
+            throw new Error(`Unknown action "${String((args as any).action)}" — valid actions: create, update, delete, get, list, export-chat-log, clear-chat-log`);
         }
     }
 

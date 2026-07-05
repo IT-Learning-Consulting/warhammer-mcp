@@ -150,7 +150,14 @@ export async function handleUpdatePile(input: UpdatePileInput): Promise<Envelope
       }
     }
 
-    const updateResult = await API.updateItemPile(input.actorUuid, updateData);
+    // BUG-429: token-pile synthetic-actor uuids (Scene.<s>.Token.<t>.Actor.<a>) must target
+    // the parent TokenDocument — Item Piles keys token-pile flags on the token, not the
+    // synthetic actor, so both the write and the flag re-read silently miss on the actor
+    // uuid and the type change never lands. World-actor uuids (Actor.<id>) pass through.
+    const tokenMatch = /^(Scene\.[^.]+\.Token\.[^.]+)\.Actor\./.exec(input.actorUuid);
+    const pileUuid = tokenMatch ? tokenMatch[1] : input.actorUuid;
+
+    const updateResult = await API.updateItemPile(pileUuid, updateData);
     // M-2: socket returns false when GM disconnects mid-call
     if (updateResult === false) {
       return { success: false, error: 'NO_ACTIVE_GM: item-piles socket returned false — GM may have disconnected' };
@@ -158,15 +165,15 @@ export async function handleUpdatePile(input: UpdatePileInput): Promise<Envelope
 
     // DP-16: post-write verify — closure-diff against the requested field set (excluding the
     // advisory-only _simpleCalendarWarning marker, which is never persisted by design).
-    const flagData: any = API.getActorFlagData(input.actorUuid);
+    const flagData: any = API.getActorFlagData(pileUuid);
     const drift = Object.keys(updateData)
       .filter((k) => k !== '_simpleCalendarWarning')
       .filter((k) => String(flagData?.[k]) !== String(updateData[k]));
     if (drift.length > 0) {
-      return notPersisted(ErrorTokens.ITEM_PILES_UPDATE_NOT_PERSISTED, `pile ${input.actorUuid} field(s) did not persist: ${drift.join(', ')}`);
+      return notPersisted(ErrorTokens.ITEM_PILES_UPDATE_NOT_PERSISTED, `pile ${pileUuid} field(s) did not persist: ${drift.join(', ')}`);
     }
-    notify.updated('item-piles', `Updated pile ${input.actorUuid}`, {});
-    return { success: true, data: { actorUuid: input.actorUuid, updated: updateData, flagData } };
+    notify.updated('item-piles', `Updated pile ${pileUuid}`, {});
+    return { success: true, data: { actorUuid: input.actorUuid, pileUuid, updated: updateData, flagData } };
   } catch (e) {
     return { success: false, error: `UPDATE_PILE_ERROR: ${e instanceof Error ? e.message : String(e)}` };
   }

@@ -555,6 +555,7 @@ export async function handleClearTileFaces(input: ClearTileFacesInput): Promise<
         clearedAltImagesCount: currentAltImages.length,
         clearedOriginalImage: currentOriginalImage,
         verifiedAltImages,
+        verifiedAltImagesCount: verifiedAltImages.length,
         verifiedOriginalImage,
         activeSrc: tileDoc.texture?.src ?? null,
         note: 'Alt faces cleared. The tile\'s active texture.src is unchanged — switch or reset manually if needed.',

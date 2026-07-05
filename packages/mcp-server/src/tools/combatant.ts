@@ -188,6 +188,10 @@ export class CombatantTool extends BaseTool {
         return this.handleSetHidden(args);
       case 'set-defeated':
         return this.handleSetDefeated(args);
+      default:
+        // BUG-439: an unknown action must throw (clean isError envelope via the
+        // dispatch catch) instead of falling through to an undefined result.
+        throw new Error(`Unknown action "${String((args as any).action)}" — valid actions: get-combatant, update-combatant, set-initiative, clear-initiative, reroll-initiative, set-hidden, set-defeated`);
     }
   }
 

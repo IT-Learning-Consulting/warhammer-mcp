@@ -222,6 +222,10 @@ export class DiagnosticTool extends BaseTool {
         return this.handleModuleInventory(args);
       case 'settings-inventory':
         return this.handleSettingsInventory(args);
+      default:
+        // BUG-439: an unknown action must throw (clean isError envelope via the
+        // dispatch catch) instead of falling through to an undefined result.
+        throw new Error(`Unknown action "${String((args as any).action)}" — valid actions: recent-errors, world-issues, support-snapshot, validate-wfrp-config, scan-broken-uuids, scan-career-refs, validate-ae-scripts, inspect-document, hook-inventory, module-inventory, settings-inventory`);
     }
   }
 

@@ -15,6 +15,7 @@ export interface ItemPileCreateResult {
 
 export interface ItemPileUpdateResult {
   actorUuid: string;
+  pileUuid?: string;
   updated: Record<string, unknown>;
   flagData: unknown;
 }
