@@ -204,12 +204,26 @@ describe('cross-type rejection — character-only fields on npc/creature', () =>
 });
 
 describe('schema edge cases', () => {
-  it('rejects update-stats with no characterName', () => {
+  // BUG-457 (sprint 444-459): characterName is now OPTIONAL at the Zod layer — actorId is
+  // the primary identity, characterName the fallback, mirroring get-career-info/roll-income.
+  // At-least-one-of is enforced at runtime in resolveCharacterOrError (a .refine() here
+  // would produce a ZodEffects wrapper that z.discriminatedUnion rejects) — so the schema
+  // PASSES an identity-less payload and the handler returns the ❌ identity error instead.
+  it('accepts update-stats with actorId only (no characterName) — BUG-457 parity', () => {
+    const r = ManageCharacterSchema.safeParse({
+      action: 'update-stats',
+      actorId: 'abc123def456ghi7',
+      updates: { weaponSkill: 30 },
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it('update-stats with neither actorId nor characterName parses (runtime enforces at-least-one-of)', () => {
     const r = ManageCharacterSchema.safeParse({
       action: 'update-stats',
       updates: { weaponSkill: 30 },
     });
-    expect(r.success).toBe(false);
+    expect(r.success).toBe(true);
   });
 
   it('accepts update-stats with empty updates object', () => {

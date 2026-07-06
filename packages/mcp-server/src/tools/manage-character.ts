@@ -37,10 +37,14 @@ const CHARACTERISTIC_VERIFY_MAP: Record<string, string> = {
     willpower: 'system.characteristics.wp.initial', fellowship: 'system.characteristics.fel.initial',
 };
 
-// Update stats schema
+// Update stats schema — BUG-457: accepts actorId (branded, primary identity) +
+// characterName (optional name fallback), matching get-career-info / roll-income.
+// At least one is required — enforced in the handler via resolveCharacterOrError
+// (a .refine() here would produce a ZodEffects wrapper that z.discriminatedUnion rejects).
 const UpdateStatsSchema = z.object({
     action: z.literal("update-stats"),
-    characterName: z.string(),
+    actorId: ActorId.optional(),
+    characterName: z.string().optional(),
     // Back-compat (HC5): actorType defaults to 'character' so existing callers are unaffected.
     // Pass 'npc' or 'creature' to route to the NPC/creature-shared branch.
     actorType: z.enum(['character', 'npc', 'creature']).optional().default('character'),
@@ -98,7 +102,7 @@ const UpdateStatsSchema = z.object({
         gender: z.string().optional(),
         move: z.union([z.string(), z.number()]).optional(),
     })
-});
+}).strict();
 
 // Update skill/talent schema
 const UpdateSkillTalentSchema = z.object({
@@ -301,8 +305,8 @@ Use for quick stat changes, character creation, testing, or corrections where yo
                         enum: ["update-stats", "update-skill-talent", "add-skill-talent", "update-notes", "add-xp-log", "get-career-info", "roll-income", "apply-fear", "apply-terror", "add-money", "direct-pay"],
                         description: "Action to perform"
                     },
-                    characterName: { type: "string", description: "Character name (or use actorId for get-career-info / roll-income)" },
-                    actorId: { type: "string", description: "Actor document id — primary identity for get-career-info and roll-income (characterName is an optional fallback)" },
+                    characterName: { type: "string", description: "Character name. Fallback identity where actorId is accepted (update-stats, add-xp-log, get-career-info, roll-income, apply-fear/terror, add-money, direct-pay); still the sole identity for update-skill-talent / add-skill-talent / update-notes." },
+                    actorId: { type: "string", description: "Actor document id — primary identity for update-stats (BUG-457), add-xp-log, get-career-info, roll-income, apply-fear/terror, add-money and direct-pay (characterName is an optional fallback; at least one required)" },
                     actorType: {
                         type: "string",
                         enum: ["character", "npc", "creature"],
@@ -468,7 +472,7 @@ Use for quick stat changes, character creation, testing, or corrections where yo
 
     private async handleUpdateStats(args: z.infer<typeof UpdateStatsSchema>): Promise<string> {
         const actorType = args.actorType ?? 'character';
-        this.logger.info("Updating character stats", { characterName: args.characterName, actorType });
+        this.logger.info("Updating character stats", { identifier: args.actorId ?? args.characterName, actorType });
 
         // Characteristics mapping shared across all actor types
         const charMap: Record<string, string> = {
@@ -495,8 +499,9 @@ Use for quick stat changes, character creation, testing, or corrections where yo
             }
         }
 
-        // Get actor
-        const character = await this.resolveCharacterOrError({ characterName: args.characterName }, "update-stats");
+        // Get actor — BUG-457: actorId primary, characterName fallback; the resolver
+        // enforces at-least-one-of at runtime.
+        const character = await this.resolveCharacterOrError({ actorId: args.actorId, characterName: args.characterName }, "update-stats");
         if (typeof character === "string") return character;
 
         const updateData: Record<string, any> = {};
@@ -606,7 +611,9 @@ Use for quick stat changes, character creation, testing, or corrections where yo
                 statusTier: 'system.details.status.tier',
                 statusStanding: 'system.details.status.standing',
             };
-        const clampNotes = await this.verifyStatsPersisted(args.characterName, args.updates, fieldMap);
+        // BUG-457: verify via the RESOLVED actor name (always defined post-resolution) so
+        // actorId-only calls don't break the DP-16 re-read.
+        const clampNotes = await this.verifyStatsPersisted(character.name, args.updates, fieldMap);
 
         let result = `✅ Updated stats for **${character.name}** (actorType: ${actorType})\n`;
         const updates = Object.entries(args.updates).filter(([_, v]) => v !== undefined);

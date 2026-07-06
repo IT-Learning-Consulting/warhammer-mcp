@@ -175,15 +175,19 @@ function formatVaultInfo(d: ItemPileVaultInfoResult): string {
 }
 
 function formatRollTable(d: ItemPileRollTableResult): string {
+  // BUG-446: targetItems is null on the documented no-target shape and result is the raw
+  // API resolution — the old unguarded .length threw a raw TypeError masking a successful roll.
+  const result = Array.isArray(d.result) ? d.result : [];
+  const targetItems = Array.isArray(d.targetItems) ? d.targetItems : null;
   const lines = [
     `module-itempiles.roll-item-table: rolled table ${d.tableUuid}`,
     `- targetActorUuid: ${d.targetActorUuid ?? '(none)'}`,
-    `- result entries: ${d.result.length}`,
-    `- targetItems: ${d.targetItems.length} item(s)`,
+    `- result entries: ${result.length}`,
+    targetItems === null ? '- targetItems: (none — no targetActorUuid)' : `- targetItems: ${targetItems.length} item(s)`,
   ];
-  if (d.targetItems.length > 0) {
+  if (targetItems !== null && targetItems.length > 0) {
     const itemLines = truncatedJoin(
-      d.targetItems.map((i) => `  • ${i.name} [${i.type}] qty:${i.quantity} id:${i.id}`),
+      targetItems.map((i) => `  • ${i.name} [${i.type}] qty:${i.quantity} id:${i.id}`),
       10,
       '\n',
       (h) => `\n  … and ${h} more`,
@@ -260,7 +264,7 @@ WFRP4e bridge (item-piles-wfrp4e): GC/SS/BP currencies at 240/12/1 bp. Currency 
 17 actions:
 PILE LIFECYCLE:
 - create-pile         { sceneId, type?, position?, items?, createDedicatedActor?, ... }  — create token (sceneId REQUIRED — C5); createDedicatedActor required for merchant/vault
-- update-pile         { actorUuid, type?, locked?, enabled?, merchantColumns?, vaultAccess?, overheadCost?, ... }
+- update-pile         { actorUuid, type?, locked?, enabled?, merchantColumns?, vaultAccess?, overheadCost?, tablesForPopulate?, ... }
 - delete-pile         { tokenUuid, confirm }                                    — confirm required; Token UUID only (C10)
 - set-pile-state      { actorUuid|tokenUuids, state, confirm? }                 — state: open/close/lock/unlock/rattle/turnTokens/revertTokens
 
@@ -268,7 +272,7 @@ CONTENTS READ:
 - get-contents        { actorUuid, includeLog? }                                — items + currencies + flags + type checks
 
 ITEM MUTATIONS:
-- add-items           { actorUuid, items[] }                                    — items array required (C1)
+- add-items           { actorUuid, items[] }                                    — items array required (C1); returns { actorUuid, itemsAdded, totalItems }
 - remove-items        { actorUuid, items[] }                                    — items array required (C2)
 - transfer-items      { sourceUuid, targetUuid, items?, mode?, confirm? }       — mode: transfer/all/combine; confirm required for all/combine
 
@@ -278,7 +282,7 @@ CURRENCY FLOW:
 - transfer-currency   { sourceUuid, targetUuid, currencies?, mode? }            — mode: transfer/all; confirm required for all
 
 LOOT DISTRIBUTION:
-- split-loot          { actorUuid, targets[], instigator?, confirm }            — targets REQUIRED (C8 — omitting = silent no-op)
+- split-loot          { actorUuid, targets[], instigator?, confirm }            — targets REQUIRED (C8 — omitting = silent no-op); returns { actorUuid, targets, itemsRemaining }
 
 VAULT:
 - vault-info          { actorUuid, itemUuid?, quantity?, subAction? }           — subAction: fit-check/grid-data/fit-items; read-only
@@ -286,7 +290,7 @@ VAULT:
 ROLLTABLE / MERCHANT:
 - roll-item-table     { tableUuid, targetActorUuid?, rollData?, timesToRoll? }
 - refresh-merchant    { merchantUuid, removeExistingActorItems?, confirm? }
-                                                                                — removeExistingActorItems defaults FALSE (asymmetric safe default); tablesForPopulate is an actor flag (set via update-pile, not a refresh arg)
+                                                                                — removeExistingActorItems defaults FALSE (asymmetric safe default); restocks from the pile's tablesForPopulate flag — set it first via update-pile's tablesForPopulate param
 TRADE / PRICE:
 - trade-items         { merchantUuid, buyerUuid, items[], confirm }             — scripted buy with currency exchange; confirm required
 - update-price-modifiers { actorUuid, subAction?, buyPriceModifier?, sellPriceModifier?, relative?, itemUuid? }
@@ -295,13 +299,17 @@ SAFETY:
 - banker/auctioneer pile types → MODULE_DEPENDENCY_NOT_ACTIVE (companion not installed)
 - No active GM → NO_ACTIVE_GM structured error on all socket operations
 - delete-pile, remove-currency, split-loot, trade-items, refresh-merchant(removeExisting:true) require confirm:true
+- CONFIRM_REQUIRED previews are readable summaries (denomination strings like "4GC 2SS", first-item price), not raw JSON
+- remove-currency writes an absolute per-denomination set: the VALUE removed is exact but coin shapes may consolidate (e.g. 12 BP → 1 SS)
+- transfer-currency is non-atomic: an add-side failure after a debited source surfaces ITEM_PILES_PARTIAL_TRANSFER (manual reconcile; no automatic rollback)
 - turnTokens/revertTokens: tokenUuids are resolved server-side — UUID strings NOT passed to API (C6/C7)
 - relative:true price modifiers require finite numbers (C9 — silent NaN corruption otherwise)
 - Simple Calendar GUIDANCE_ONLY: openTimes.status:"auto" without SC rewrites flag to "open"
 
 ERROR TOKENS: MODULE_NOT_ACTIVE, MODULE_DEPENDENCY_NOT_ACTIVE, NO_ACTIVE_GM, GM_REQUIRED,
-INSUFFICIENT_CURRENCY, VAULT_FULL, INVALID_PILE_TYPE, INVALID_PILE_UUID, INVALID_CURRENCY_STRING,
-ROLLTABLE_NOT_FOUND, TOKEN_NOT_FOUND, CONFIRM_REQUIRED
+INSUFFICIENT_CURRENCY, VAULT_FULL, INVALID_PILE_TYPE (set-pile-state on non-container; trade/modifiers on non-merchant),
+INVALID_PILE_UUID (delete-pile only), INVALID_CURRENCY_STRING, ITEM_PILES_PARTIAL_TRANSFER,
+TOKEN_NOT_FOUND, CONFIRM_REQUIRED
 
 GM required for all write actions.`,
         inputSchema: {
@@ -335,7 +343,7 @@ GM required for all write actions.`,
             merchantUuid: { type: 'string', description: '[refresh-merchant/trade-items] Merchant actor UUID.' },
             buyerUuid: { type: 'string', description: '[trade-items] Buyer actor UUID.' },
             tableUuid: { type: 'string', description: '[roll-item-table] RollTable UUID.' },
-            targetActorUuid: { type: 'string', description: '[roll-item-table/update-price-modifiers] Actor to receive rolled items (roll-item-table) or the target actor UUID for update-price-modifiers (required for update-modifiers subAction — each modifier entry needs this as the actorUuid key).' },
+            targetActorUuid: { type: 'string', description: '[roll-item-table/update-price-modifiers] Actor to receive rolled items (roll-item-table) or the per-actor target for update-price-modifiers (OPTIONAL — defaults to actorUuid, i.e. the merchant\'s own modifier entry).' },
             rollData: { type: 'object', description: '[roll-item-table] Formula context for roll expressions.' },
             timesToRoll: { type: 'number', description: '[roll-item-table] How many times to roll (default 1).' },
             removeExistingActorItems: { type: 'boolean', description: '[add-items/refresh-merchant] Default FALSE (safe). Setting true on refresh-merchant WIPES inventory before restocking.' },
@@ -381,6 +389,20 @@ GM required for all write actions.`,
             rows: { type: 'number', description: '[update-pile vault] Vault grid rows.' },
             vaultExpansion: { type: 'boolean', description: '[update-pile vault] Allow vault grid expansion.' },
             openTimes: { type: 'object', description: '[update-pile merchant] Merchant open/close schedule. status:"auto" requires Simple Calendar (GUIDANCE_ONLY).' },
+            tablesForPopulate: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  uuid: { type: 'string', description: 'RollTable UUID (e.g. "RollTable.<id>").' },
+                  addAll: { type: 'boolean', description: 'Add every table entry instead of rolling.' },
+                  items: { type: 'array', items: { type: 'object' }, description: 'Per-entry overrides (upstream UI detail; usually omitted).' },
+                  timesToRoll: { oneOf: [{ type: 'string' }, { type: 'number' }], description: 'Roll count or formula, e.g. 4 or "1d4".' },
+                  customCategory: { type: 'string', description: 'Category label applied to rolled items.' },
+                },
+              },
+              description: '[update-pile] RollTable population config (top-level pile flag, item-piles.js:64389). refresh-merchant consumes it to restock.',
+            },
             closedImage: { type: 'string', description: '[create-pile/update-pile] Token image when closed.' },
             openedImage: { type: 'string', description: '[create-pile/update-pile] Token image when open.' },
             lockedImage: { type: 'string', description: '[create-pile/update-pile] Token image when locked.' },

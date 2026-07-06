@@ -15,6 +15,8 @@ import { ModuleMattTool } from '../tools/modules/monks-active-tiles/matt.js';
 import { ModuleSequencerTool } from '../tools/modules/sequencer/sequencer.js';
 import { ModuleTaggerTool } from '../tools/modules/tagger/tagger.js';
 import { ModuleCssTool } from '../tools/modules/custom-css/css.js';
+import { ModuleItempilesTool } from '../tools/modules/item-piles/item-piles.js';
+import { CreateCustomItemTool } from '../tools/create-custom-item.js';
 import { DocumentIoTool } from '../tools/document-io.js';
 import { KeybindingTools } from '../tools/keybinding.js';
 import {
@@ -22,6 +24,8 @@ import {
   ModuleSequencerInput as ModuleSequencerToolInput,
   ModuleTaggerInput as ModuleTaggerToolInput,
   ModuleCssInput as ModuleCssToolInput,
+  ModuleItempilesInput,
+  CreateCustomItemInputSchema,
   DocumentIoToolInput,
   KeybindingToolInput,
 } from '@foundry-mcp/shared';
@@ -92,6 +96,12 @@ const cases: ParityCase[] = [
   { toolName: 'request-player-rolls', makeTool: () => new DiceRollTools(toolOptions), zodSchema: RequestPlayerRollsArgs, hasActionEnum: false },
   { toolName: 'document-io', makeTool: () => new DocumentIoTool(toolOptions), zodSchema: DocumentIoToolInput, hasActionEnum: true },
   { toolName: 'keybinding', makeTool: () => new KeybindingTools(toolOptions), zodSchema: KeybindingToolInput, hasActionEnum: true },
+  // BUG-450 sprint 444-459: the two tools whose undeclared typed fields rode
+  // additionalProperties, arrived stringified, and Zod-rejected — the guard that would
+  // have caught the bug class. create-custom-item discriminates on itemType (no action
+  // enum); property-key parity still applies across the union.
+  { toolName: 'module-itempiles', makeTool: () => new ModuleItempilesTool(toolOptions), zodSchema: ModuleItempilesInput, hasActionEnum: true },
+  { toolName: 'create-custom-item', makeTool: () => new CreateCustomItemTool(toolOptions), zodSchema: CreateCustomItemInputSchema, hasActionEnum: false },
 ];
 
 describe('BUG-330 published inputSchema ↔ Zod schema parity', () => {

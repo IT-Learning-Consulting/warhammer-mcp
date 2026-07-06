@@ -152,6 +152,23 @@ describe('ModuleItempilesTool — characterization', () => {
     expect((r as any).content[0].text).toMatchSnapshot();
   });
 
+  // BUG-446 (sprint 444-459): the documented no-target shape — handler returns
+  // targetItems: null when no targetActorUuid was given, and result is the raw API
+  // resolution (object-shaped here, per the live evidence in the skill-audit sweep).
+  // The old formatter deref'd .length on both unguarded → raw TypeError masked a
+  // successful roll. Fixture mirrors flow.ts handleRollItemTable's return literal.
+  it('roll-item-table — no target actor (targetItems null, non-array result) renders without throwing', async () => {
+    const r = await tool({
+      tableUuid: 'RollTable.tbl01',
+      targetActorUuid: null,
+      result: { items: [{ name: 'Sword' }], rolls: 1 },
+      targetItems: null,
+    }).execute({ action: 'roll-item-table', tableUuid: 'RollTable.tbl01', timesToRoll: 1 });
+    expect((r as any).isError).toBeFalsy();
+    expect((r as any).content[0].text).toContain('(none — no targetActorUuid)');
+    expect((r as any).content[0].text).toMatchSnapshot();
+  });
+
   it('MODULE_NOT_ACTIVE — probe inactive branch', async () => {
     const r = await new ModuleItempilesTool(
       makeToolDeps(null, 'MODULE_NOT_ACTIVE: item-piles is not active'),

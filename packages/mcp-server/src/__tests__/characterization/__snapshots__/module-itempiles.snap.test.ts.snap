@@ -36,6 +36,13 @@ exports[`ModuleItempilesTool — characterization > get-contents — pile with i
 - flagData: {"type":"container"}"
 `;
 
+exports[`ModuleItempilesTool — characterization > roll-item-table — no target actor (targetItems null, non-array result) renders without throwing 1`] = `
+"module-itempiles.roll-item-table: rolled table RollTable.tbl01
+- targetActorUuid: (none)
+- result entries: 0
+- targetItems: (none — no targetActorUuid)"
+`;
+
 exports[`ModuleItempilesTool — characterization > set-pile-state turnTokens — pileActorUuids echoed (BUG-420) 1`] = `
 "module-itempiles.set-pile-state: state="turnTokens"
 - tokenCount: 2

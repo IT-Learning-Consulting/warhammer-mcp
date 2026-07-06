@@ -108,6 +108,15 @@ export const ModuleItempilesInput = z.discriminatedUnion('action', [
     rows: z.number().int().positive().optional(),
     // open times (GUIDANCE_ONLY: requires Simple Calendar for enforcement)
     openTimes: z.record(z.unknown()).optional(),
+    // BUG-448#6: rolltable population config — top-level pile flag (item-piles.js:64389-64394);
+    // consumed by refresh-merchant. Shape per the upstream UI writer.
+    tablesForPopulate: z.array(z.object({
+      uuid: z.string(),
+      addAll: z.boolean().optional(),
+      items: z.array(z.unknown()).optional(),
+      timesToRoll: z.union([z.string(), z.number()]).optional(),
+      customCategory: z.string().optional(),
+    })).optional(),
   }).strict(),
 
   // 3. delete-pile — deleteItemPile; requires Token UUID (C10); confirm required (dangerous)
@@ -227,8 +236,8 @@ export const ModuleItempilesInput = z.discriminatedUnion('action', [
     action: z.literal('refresh-merchant'),
     merchantUuid: z.string().min(1),
     removeExistingActorItems: z.boolean().optional(),   // defaults false in catalog (asymmetric safe)
-    // tablesForPopulate removed — it's an actor flag not an API arg (item-piles.js:99278);
-    // set table population via update-pile pile flags instead
+    // tablesForPopulate is an actor flag, not an API arg (item-piles.js:99278) — set it via
+    // update-pile's tablesForPopulate param (BUG-448#6), then call refresh-merchant to consume it
     confirm: z.boolean().optional(),    // required when removeExistingActorItems:true
   }).strict(),
 

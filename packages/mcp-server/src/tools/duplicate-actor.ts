@@ -44,6 +44,20 @@ export class DuplicateActorTool extends BaseTool {
               type: 'string',
               description: 'Optional name for the clone. Defaults to the source actor name.',
             },
+            // BUG-458: mirror of create-actor's options.skipItems (actor-creation.ts).
+            options: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                skipItems: {
+                  type: 'boolean',
+                  description:
+                    'Pass-through to Foundry Actor.create(data, options). When true, suppresses the wfrp4e ActorWFRP4e._preCreate basic-skills DialogV2.confirm on the clone. Only bare sources need it — the _preCreate guard (!data.items?.length) already skips item-bearing sources. Mirror of create-actor options.skipItems (HC9).',
+                },
+              },
+              description:
+                'Optional Foundry creation-options bag passed through to Actor.create(data, options). Currently supports skipItems.',
+            },
           },
           required: ['sourceActorId'],
         },

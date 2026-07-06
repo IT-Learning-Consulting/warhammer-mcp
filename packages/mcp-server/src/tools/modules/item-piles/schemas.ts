@@ -146,11 +146,16 @@ export interface ItemPileVaultInfoResult {
   fitResult?: unknown;
 }
 
+// BUG-446: the handler returns targetItems: null on the documented no-target call shape
+// (flow.ts roll-item-table — targetItems only populated when targetActorUuid was given) and
+// `result` is the raw API resolution (not guaranteed an array). The old non-optional types
+// were a lie that let the formatter deref .length unguarded — a raw TypeError masked a
+// successful roll. Nullable types force the guards at every use site (D16).
 export interface ItemPileRollTableResult {
   tableUuid: string;
   targetActorUuid: string | null;
-  result: unknown[];
-  targetItems: { id: string; name: string; type: string; quantity: number }[];
+  result: unknown;
+  targetItems: { id: string; name: string; type: string; quantity: number }[] | null;
 }
 
 export interface ItemPileRefreshMerchantResult {

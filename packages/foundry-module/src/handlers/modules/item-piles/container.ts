@@ -136,6 +136,9 @@ export async function handleUpdatePile(input: UpdatePileInput): Promise<Envelope
       'type', 'enabled', 'locked', 'closed', 'closedImage', 'openedImage', 'lockedImage',
       'emptyImage', 'lockedSound', 'closedSound', 'openedSound', 'merchantColumns',
       'overheadCost', 'vaultAccess', 'vaultExpansion', 'cols', 'rows', 'openTimes',
+      // BUG-448#6: tablesForPopulate is a top-level pile flag (item-piles.js:64389-64394);
+      // it rides the same updateItemPile write. refresh-merchant consumes it.
+      'tablesForPopulate',
     ];
     for (const f of fields) {
       if (input[f] !== undefined) updateData[f as string] = input[f];
@@ -165,10 +168,15 @@ export async function handleUpdatePile(input: UpdatePileInput): Promise<Envelope
 
     // DP-16: post-write verify — closure-diff against the requested field set (excluding the
     // advisory-only _simpleCalendarWarning marker, which is never persisted by design).
+    // BUG-448#6(c): non-scalar fields (tablesForPopulate, openTimes, merchantColumns,
+    // vaultAccess, overheadCost) String()-compare as "[object Object]" and always match —
+    // JSON.stringify-compare objects/arrays instead.
     const flagData: any = API.getActorFlagData(pileUuid);
+    const sameValue = (a: unknown, b: unknown): boolean =>
+      (typeof b === 'object' && b !== null) ? JSON.stringify(a) === JSON.stringify(b) : String(a) === String(b);
     const drift = Object.keys(updateData)
       .filter((k) => k !== '_simpleCalendarWarning')
-      .filter((k) => String(flagData?.[k]) !== String(updateData[k]));
+      .filter((k) => !sameValue(flagData?.[k], updateData[k]));
     if (drift.length > 0) {
       return notPersisted(ErrorTokens.ITEM_PILES_UPDATE_NOT_PERSISTED, `pile ${pileUuid} field(s) did not persist: ${drift.join(', ')}`);
     }
@@ -200,17 +208,25 @@ export async function handleDeletePile(input: DeletePileInput): Promise<Envelope
   }
 
   try {
-    const API = getItemPilesAPI();
-    const deleteResult = await API.deleteItemPile(input.tokenUuid);
-    // M-2: socket returns false when GM disconnects mid-call
-    if (deleteResult === false) {
-      return { success: false, error: 'NO_ACTIVE_GM: item-piles socket returned false — GM may have disconnected' };
+    // BUG-444: do NOT route through API.deleteItemPile — its getToken() helper returns the
+    // bare TokenDocument when the token's scene is not viewed (`.object` is null,
+    // item-piles.js:34269), and the upstream delete path then derefs `target.document.delete()`
+    // (item-piles.js:85022) → "Cannot read properties of undefined (reading 'delete')".
+    // Resolve the TokenDocument ourselves and delete it directly — canvas-render-independent.
+    // Upstream's PRE_DELETE hook choreography is intentionally not re-implemented (plan D10).
+    const tokenDoc: any = await (globalThis as any).fromUuid(input.tokenUuid);
+    if (!tokenDoc) {
+      return { success: false, error: `INVALID_PILE_UUID: token UUID "${input.tokenUuid}" did not resolve to a document` };
     }
+    if (tokenDoc.documentName !== 'Token') {
+      return { success: false, error: `INVALID_PILE_UUID: "${input.tokenUuid}" resolved to a ${tokenDoc.documentName ?? typeof tokenDoc}, not a TokenDocument` };
+    }
+    await tokenDoc.delete();
     // DP-16: NEW post-write read-back (this site had zero verify at baseline) — confirm the
     // pile token no longer resolves.
     const stillResolves = (globalThis as any).fromUuidSync?.(input.tokenUuid);
     if (stillResolves) {
-      return notPersisted(ErrorTokens.ITEM_PILES_DELETE_NOT_PERSISTED, `pile token ${input.tokenUuid} still resolves after deleteItemPile`);
+      return notPersisted(ErrorTokens.ITEM_PILES_DELETE_NOT_PERSISTED, `pile token ${input.tokenUuid} still resolves after the delete`);
     }
     notify.deleted('item-piles', `Deleted pile token ${input.tokenUuid}`, {});
     return { success: true, data: { tokenUuid: input.tokenUuid, deleted: true } };
@@ -287,6 +303,16 @@ export async function handleSetPileState(input: SetPileStateInput): Promise<Enve
     // open/close/lock/unlock/rattle — all take actorUuid
     if (!input.actorUuid) {
       return { success: false, error: 'MISSING_ACTOR_UUID: actorUuid is required for open/close/lock/unlock/rattle states' };
+    }
+
+    // BUG-447: open/close/lock/unlock return the same bare `false` for "not a container" as
+    // for hook-veto / no-GM (item-piles.js:97969/:98001) — pre-check the pile type so a
+    // non-container gets a truthful token instead of NO_ACTIVE_GM. 'rattle' is exempt (it
+    // doesn't gate on container). NO_ACTIVE_GM below is now reserved for `false` returned
+    // on a VERIFIED container.
+    if (input.state !== 'rattle' && !API.isItemPileContainer(input.actorUuid)) {
+      const actualType = (API.getActorFlagData(input.actorUuid) as any)?.type ?? 'unknown';
+      return { success: false, error: `INVALID_PILE_TYPE: set-pile-state "${input.state}" requires a container pile — this pile is type "${actualType}"` };
     }
 
     let result: unknown;

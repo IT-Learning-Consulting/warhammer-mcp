@@ -193,15 +193,17 @@ export async function handleSetVariables(input: SetVariablesInput): Promise<Enve
 export async function handleResetHistory(input: ResetHistoryInput): Promise<Envelope<unknown>> {
   const { scene, tile } = getTileByUuidOrThrow(input.tileUuid);
   const flags = readMattFlags(tile);
-  const history = { ...(flags.history ?? {}) } as Record<string, unknown>;
 
+  // BUG-452: Document.update() MERGES plain objects — writing `history: {}` contributes zero
+  // keys (no-op on non-empty history) and writing a filtered copy re-asserts the remaining
+  // keys without DELETING the removed one. Use Foundry's `-=` deletion-marker syntax instead,
+  // mirroring upstream MATT's own resetHistory idiom (monks-active-tiles.js:5263-5276).
   let cleared: string;
   if (input.tokenId) {
-    delete history[input.tokenId];
-    await tile.update({ [`flags.${MATT_FLAG}.history`]: history });
+    await tile.update({ [`flags.${MATT_FLAG}.history.-=${input.tokenId}`]: null });
     cleared = `token ${input.tokenId}`;
   } else {
-    await tile.update({ [`flags.${MATT_FLAG}.history`]: {} });
+    await tile.update({ [`flags.${MATT_FLAG}.-=history`]: null });
     cleared = 'all tokens';
   }
 

@@ -103,6 +103,13 @@ export const FindActorInput = z.object({
 export const DuplicateActorInput = z.object({
   sourceActorId: ActorId,
   newName: z.string().optional(),
+  // BUG-458: passthrough to Foundry Actor.create(data, options) — options.skipItems suppresses
+  // the wfrp4e ActorWFRP4e._preCreate basic-skills DialogV2 on bare-source clones (the
+  // `!data.items?.length` guard means item-bearing sources skip it anyway). Mirrors
+  // CreateActorInput.options (HC9).
+  options: z.object({
+    skipItems: z.boolean().optional(),
+  }).strict().optional(),
 }).strict();
 
 export const ApplyNpcCareerAdvanceInput = z.object({

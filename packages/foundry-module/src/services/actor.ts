@@ -406,7 +406,7 @@ export class ActorService {
    * then persists via Actor.create. Preferred for /wfrp-build-npc Branch 2/3 (NPC-type
    * templates) to avoid compendium re-cloning.
    */
-  async duplicateActor(data: { sourceActorId: string; newName?: string | undefined }): Promise<any> {
+  async duplicateActor(data: { sourceActorId: string; newName?: string | undefined; options?: { skipItems?: boolean | undefined } | undefined }): Promise<any> {
     this.validateState();
 
     try {
@@ -428,7 +428,10 @@ export class ActorService {
         if (actorData.prototypeToken) actorData.prototypeToken.name = data.newName;
       }
 
-      const actor = await (Actor as any).create(actorData);
+      // BUG-458: forward options.skipItems to Actor.create(data, options), mirroring
+      // createActor above — suppresses the wfrp4e _preCreate basic-skills dialog on
+      // bare-source clones.
+      const actor = await (Actor as any).create(actorData, (data.options ?? {}) as any);
       if (!actor) {
         throw new Error('Actor.create returned no actor');
       }

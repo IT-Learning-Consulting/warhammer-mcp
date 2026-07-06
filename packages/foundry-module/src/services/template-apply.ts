@@ -441,7 +441,23 @@ export class TemplateApplyService {
     await actor.update(updateWrite.updateData, updateWrite.options as any);
     verifyDocWrite(await (globalThis as any).fromUuid((actor as any).uuid), updateWrite.updateData, ErrorTokens.TEMPLATE_APPLY_WRITE_NOT_PERSISTED);
     const created: any[] = (await (actor as any).createEmbeddedDocuments(createWrite.documentType, createWrite.items, createWrite.options)) ?? [];
-    if (created.length !== createWrite.items.length) { throw new Error(`${ErrorTokens.TEMPLATE_APPLY_WRITE_NOT_PERSISTED}: expected ${createWrite.items.length} embedded item(s), got ${created.length}`); }
+    // BUG-451 (same wrong-dimension class as BUG-445): a raw doc-count compare false-fails
+    // when wfrp4e MERGES same-name skills/talents into existing embedded items instead of
+    // creating new docs (re-apply onto a pre-templated actor: expected 15, got 13 while the
+    // write fully persisted — and threw after the writes, so ROLLBACK_UNAVAILABLE surfaced).
+    // Reconcile per requested item: PASS if it came back in `created` OR a same-name item of
+    // the same type exists on the actor post-write (merged advance/stack).
+    const postItems: any[] = Array.from(((actor as any).items ?? []) as Iterable<any>);
+    const unreconciled = (createWrite.items as any[]).filter((req: any) => {
+      const name = String(req?.name ?? '');
+      const type = String(req?.type ?? '');
+      const inCreated = created.some((c: any) => String(c?.name ?? '') === name && String(c?.type ?? '') === type);
+      const onActor = postItems.some((it: any) => String(it?.name ?? '') === name && String(it?.type ?? '') === type);
+      return !inCreated && !onActor;
+    });
+    if (unreconciled.length > 0) {
+      throw new Error(`${ErrorTokens.TEMPLATE_APPLY_WRITE_NOT_PERSISTED}: ${unreconciled.length} requested item(s) neither created nor present on the actor post-write: ${unreconciled.map((m: any) => `${m?.name ?? '?'} (${m?.type ?? '?'})`).join(', ')}`);
+    }
 
     notify.updated('actor', actor.name, { summary: `applied template ${templateName}`, uuid: (actor as any).uuid });
 

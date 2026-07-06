@@ -9,6 +9,7 @@ import { Envelope } from '../_shared/handler-utils.js';
 import { settlePoll } from '../_shared/settle-poll.js';
 import { normalizeItemsArray, validateCurrencyString } from './catalog.js';
 import { getItemPilesAPI, notPersisted, gmRequired, activeGmRequired } from './helpers.js';
+import { totalQuantity } from './verify-quantity.js';
 
 // ── 3A: Item mutations ────────────────────────────────────────────────────────
 
@@ -23,8 +24,26 @@ export async function handleAddItems(input: AddItemsInput): Promise<Envelope<unk
   try {
     const API = getItemPilesAPI();
     const items = normalizeItemsArray(input.items);
-    const beforeItems = API.getActorItems(input.actorUuid);
-    const beforeCount = Array.isArray(beforeItems) ? beforeItems.length : 0;
+
+    // BUG-461(b): quantity-dimension verify. Adding an item onto an existing same-name stack
+    // merges — distinct-item COUNT stays flat while quantity grows — so the old count-based
+    // check false-failed the successful add exactly like BUG-445b. Build the added-item
+    // name/id family and measure TOTAL QUANTITY over it (verify-quantity.ts, D8). No family
+    // resolvable → whole-actor total (an add only increases it), mirroring remove-items.
+    const addedIds = new Set<string>();
+    const addedNames = new Set<string>();
+    for (const entry of items) {
+      if (entry && typeof entry === 'object') {
+        const obj = entry as Record<string, unknown>;
+        if (obj['_id'] !== undefined) addedIds.add(String(obj['_id']));
+        if (obj['id'] !== undefined) addedIds.add(String(obj['id']));
+        if (obj['name'] !== undefined) addedNames.add(String(obj['name']));
+      }
+    }
+    const family = (addedIds.size > 0 || addedNames.size > 0)
+      ? { ids: addedIds, names: addedNames }
+      : undefined;
+    const beforeQty = totalQuantity(API, input.actorUuid, family);
 
     // L-1: mergeSimilarItems/respectItemIds removed — not real addItems options (item-piles.js:98428)
     const options: Record<string, unknown> = {
@@ -37,19 +56,17 @@ export async function handleAddItems(input: AddItemsInput): Promise<Envelope<unk
       return { success: false, error: 'NO_ACTIVE_GM: item-piles socket returned false — GM may have disconnected' };
     }
 
-    // DP-16: post-write verify (settle-polled) — count must not go DOWN and, when
-    // removeExistingActorItems is false (the additive path), must strictly increase.
-    const readCount = () => {
-      const cur = API.getActorItems(input.actorUuid);
-      return Array.isArray(cur) ? cur.length : 0;
-    };
+    // DP-16 (BUG-461b): post-write verify (settle-polled) — on the additive path
+    // (removeExistingActorItems false) the added family's total quantity must strictly increase.
+    const readQty = () => totalQuantity(API, input.actorUuid, family);
     if (items.length > 0 && !options.removeExistingActorItems) {
-      const persisted = await settlePoll(() => readCount() > beforeCount);
+      const persisted = await settlePoll(() => readQty() > beforeQty);
       if (!persisted) {
-        return notPersisted(ErrorTokens.ITEM_PILES_ADD_ITEMS_NOT_PERSISTED, `add-items to ${input.actorUuid} did not increase item count (before: ${beforeCount}, after: ${readCount()})`);
+        return notPersisted(ErrorTokens.ITEM_PILES_ADD_ITEMS_NOT_PERSISTED, `add-items to ${input.actorUuid} did not increase the added item family's total quantity (before: ${beforeQty}, after: ${readQty()})`);
       }
     }
-    const count = readCount();
+    const afterItems = API.getActorItems(input.actorUuid);
+    const count = Array.isArray(afterItems) ? afterItems.length : 0;
     notify.updated('item-piles', `Added ${items.length} item(s) to ${input.actorUuid}`, {});
     return { success: true, data: { actorUuid: input.actorUuid, itemsAdded: items.length, totalItems: count } };
   } catch (e) {
@@ -68,8 +85,24 @@ export async function handleRemoveItems(input: RemoveItemsInput): Promise<Envelo
   try {
     const API = getItemPilesAPI();
     const items = normalizeItemsArray(input.items);
-    const beforeItems = API.getActorItems(input.actorUuid);
-    const beforeCount = Array.isArray(beforeItems) ? beforeItems.length : 0;
+    // BUG-445 (D8): partial-stack removal (1-of-2) keeps the distinct-item COUNT static while
+    // quantity drops 2→1 — the old count-based verify false-failed successful removals.
+    // Measure total quantity over the removed id/name family instead; when no family can be
+    // derived from the entries, fall back to the whole-actor total (removal only subtracts).
+    const removedIds = new Set<string>();
+    const removedNames = new Set<string>();
+    for (const entry of items) {
+      if (entry && typeof entry === 'object') {
+        const obj = entry as Record<string, unknown>;
+        if (obj['_id'] !== undefined) removedIds.add(String(obj['_id']));
+        if (obj['id'] !== undefined) removedIds.add(String(obj['id']));
+        if (obj['name'] !== undefined) removedNames.add(String(obj['name']));
+      }
+    }
+    const family = (removedIds.size > 0 || removedNames.size > 0)
+      ? { ids: removedIds, names: removedNames }
+      : undefined;
+    const beforeQty = totalQuantity(API, input.actorUuid, family);
 
     const removeResult = await API.removeItems(input.actorUuid, items);
     // M-2: socket returns false when GM disconnects mid-call
@@ -77,18 +110,17 @@ export async function handleRemoveItems(input: RemoveItemsInput): Promise<Envelo
       return { success: false, error: 'NO_ACTIVE_GM: item-piles socket returned false — GM may have disconnected' };
     }
 
-    // DP-16: post-write verify (settle-polled) — count must not stay the same or go up when items were requested.
-    const readCount = () => {
-      const cur = API.getActorItems(input.actorUuid);
-      return Array.isArray(cur) ? cur.length : 0;
-    };
+    // DP-16 (BUG-445c, D8): post-write verify (settle-polled) — total quantity over the
+    // removed family must drop when items were requested.
+    const readQty = () => totalQuantity(API, input.actorUuid, family);
     if (items.length > 0) {
-      const persisted = await settlePoll(() => readCount() < beforeCount);
+      const persisted = await settlePoll(() => readQty() < beforeQty);
       if (!persisted) {
-        return notPersisted(ErrorTokens.ITEM_PILES_REMOVE_ITEMS_NOT_PERSISTED, `remove-items from ${input.actorUuid} did not decrease item count (before: ${beforeCount}, after: ${readCount()})`);
+        return notPersisted(ErrorTokens.ITEM_PILES_REMOVE_ITEMS_NOT_PERSISTED, `remove-items from ${input.actorUuid} left the removed item family's total quantity unchanged (before: ${beforeQty}, after: ${readQty()})`);
       }
     }
-    const count = readCount();
+    const afterItems = API.getActorItems(input.actorUuid);
+    const count = Array.isArray(afterItems) ? afterItems.length : 0;
     notify.updated('item-piles', `Removed ${items.length} item(s) from ${input.actorUuid}`, {});
     return { success: true, data: { actorUuid: input.actorUuid, itemsRemoved: items.length, totalItems: count } };
   } catch (e) {
@@ -117,8 +149,28 @@ export async function handleTransferItems(input: TransferItemsInput): Promise<En
 
   try {
     const API = getItemPilesAPI();
-    const beforeTargetItems = API.getActorItems(input.targetUuid);
-    const beforeTargetCount = Array.isArray(beforeTargetItems) ? beforeTargetItems.length : 0;
+
+    // BUG-461(b): quantity-dimension verify (mirrors trade-items / BUG-445b). Transferred
+    // items stack-merge into the target's existing same-name items (distinct COUNT stays flat
+    // while quantity grows) AND the target copies get NEW embedded ids — so the only stable
+    // join is the item NAME family, resolved from the SOURCE before the transfer. all/combine
+    // move the whole source with no pre-known list → fall back to the whole-target total.
+    const transferredIds = new Set<string>();
+    for (const entry of (input.items ?? [])) {
+      if (entry && typeof entry === 'object') {
+        const obj = entry as Record<string, unknown>;
+        if (obj['_id'] !== undefined) transferredIds.add(String(obj['_id']));
+        if (obj['id'] !== undefined) transferredIds.add(String(obj['id']));
+      }
+    }
+    const sourceItemsPre = API.getActorItems(input.sourceUuid);
+    const transferredNames = new Set<string>(
+      (Array.isArray(sourceItemsPre) ? sourceItemsPre : [])
+        .filter((it: any) => transferredIds.has(String(it?.id ?? it?._id ?? '')))
+        .map((it: any) => String(it?.name ?? '')),
+    );
+    const targetFamily = transferredNames.size > 0 ? { names: transferredNames } : undefined;
+    const beforeTargetQty = totalQuantity(API, input.targetUuid, targetFamily);
     let result: unknown;
 
     if (mode === 'all') {
@@ -143,11 +195,13 @@ export async function handleTransferItems(input: TransferItemsInput): Promise<En
     // transferred-item records — never the rich object the formatter previously assumed.
     const dto = { ok: true, itemsTransferred: Array.isArray(result) ? result : [] };
 
-    // DP-16: post-write verify — target item count must not go down after any transfer mode.
+    // DP-16 (BUG-461b): post-write verify — the transferred family's total quantity on the
+    // target must not drop after any transfer mode (a transfer only adds to the target).
+    const afterTargetQty = totalQuantity(API, input.targetUuid, targetFamily);
     const targetItems = API.getActorItems(input.targetUuid);
     const targetCount = Array.isArray(targetItems) ? targetItems.length : 0;
-    if (dto.itemsTransferred.length > 0 && targetCount < beforeTargetCount) {
-      return notPersisted(ErrorTokens.ITEM_PILES_TRANSFER_ITEMS_NOT_PERSISTED, `transfer-items to ${input.targetUuid} target item count dropped (before: ${beforeTargetCount}, after: ${targetCount})`);
+    if (dto.itemsTransferred.length > 0 && afterTargetQty < beforeTargetQty) {
+      return notPersisted(ErrorTokens.ITEM_PILES_TRANSFER_ITEMS_NOT_PERSISTED, `transfer-items to ${input.targetUuid} target total quantity dropped (before: ${beforeTargetQty}, after: ${afterTargetQty})`);
     }
     notify.updated('item-piles', `Transferred items (mode: ${mode}) from ${input.sourceUuid} to ${input.targetUuid}`, {});
     return { success: true, data: { mode, sourceUuid: input.sourceUuid, targetUuid: input.targetUuid, targetItemCount: targetCount, result: dto } };
@@ -338,15 +392,16 @@ export async function handleRemoveCurrency(input: RemoveCurrencyInput): Promise<
 
   // CCR-4: dangerous — confirm required
   if (input.confirm !== true) {
-    // Pre-check: read current balance for the impact report
-    let currentCurrencies: unknown = null;
+    // BUG-448#7: readable preview — denomination summary ("4GC 2SS 3BP") via the
+    // readBalance()/getStringFromCurrencies idiom instead of a serialized document dump.
+    let balanceStr = 'unknown';
     try {
       const API = getItemPilesAPI();
-      currentCurrencies = API.getActorCurrencies(input.actorUuid);
+      balanceStr = readBalance(API, input.actorUuid).str || '(none)';
     } catch (_) { /* best-effort */ }
     return {
       success: false,
-      error: `CONFIRM_REQUIRED: remove-currency will permanently deduct "${input.currencies}" from ${input.actorUuid}. Current balance: ${JSON.stringify(currentCurrencies)}. Re-send with confirm:true.`,
+      error: `CONFIRM_REQUIRED: remove-currency will permanently deduct "${input.currencies}" from ${input.actorUuid}. Current balance: ${balanceStr}. Re-send with confirm:true.`,
     };
   }
 
@@ -551,14 +606,20 @@ export async function handleSplitLoot(input: SplitLootInput): Promise<Envelope<u
 
   // CCR-4: dangerous — confirm required
   if (input.confirm !== true) {
-    let previewItems: unknown = null;
+    // BUG-461(a): readable preview — item-count + name-list summary (refresh-merchant's
+    // count-only preview at merchant.ts:131 is the precedent) instead of a serialized
+    // getActorItems document dump (the multi-KB bloat class BUG-448#7 fixed elsewhere).
+    let contentsSummary = 'unknown';
     try {
       const API = getItemPilesAPI();
-      previewItems = API.getActorItems(input.actorUuid);
+      const previewItems = API.getActorItems(input.actorUuid);
+      const arr = Array.isArray(previewItems) ? previewItems : [];
+      const names = arr.map((it: any) => String(it?.name ?? '(unnamed)'));
+      contentsSummary = arr.length === 0 ? '(empty)' : `${arr.length} item(s): ${names.join(', ')}`;
     } catch (_) { /* best-effort */ }
     return {
       success: false,
-      error: `CONFIRM_REQUIRED: split-loot distributes and empties the pile ${input.actorUuid} among ${input.targets.length} target(s). Current contents: ${JSON.stringify(previewItems)}. Re-send with confirm:true.`,
+      error: `CONFIRM_REQUIRED: split-loot distributes and empties the pile ${input.actorUuid} among ${input.targets.length} target(s). Current contents: ${contentsSummary}. Re-send with confirm:true.`,
     };
   }
 
