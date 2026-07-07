@@ -707,10 +707,12 @@ async function playOrDiscard(
   const card = getCardOrThrow(from, input.cardId);
 
   return wrappedWrite(`cards.${action}`, async () => {
-    // Card#play / Card#discard both delegate to Card#pass.
-    const moved = action === 'play'
-      ? await card.play(to)
-      : await card.discard(to);
+    // BUG-518: Card#play(to)/Card#discard(to) accept only {updateData} in v13, so the chatNotification
+    // param was SILENTLY INERT (explicit false failed to suppress the broadcast). Re-route through the
+    // parent stack's Cards#pass — which supports action + chatNotification (Cards.md:847-873) and is what
+    // Card#play/#discard delegate to internally — so the param is honored, matching the `pass` action.
+    const movedArr: any[] = (await from.pass(to, [input.cardId], { action, chatNotification: input.chatNotification })) ?? [];
+    const moved = movedArr[0];
     const movedId = (moved?.id as string) ?? input.cardId;
     notify.updated('card', `Card "${card._source?.name ?? input.cardId}"`, {
       summary: `${action} → stack ${input.toStackId}`,

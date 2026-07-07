@@ -325,6 +325,15 @@ Security: script / preApplyScript / enableScript fields are executed by Foundry 
   async handle(args: unknown): Promise<any> {
     const parsed = CreateCustomItemInputSchema.parse(args);
 
+    // BUG-475(c): a mutation without mutationType silently defaulted to "physical" (shared
+    // buildMutationSystem ?? 'physical'). Refuse explicitly with a typed token — matches the skill's
+    // documented contract that mutationType is required for the mutation subtype.
+    if (parsed.itemType === 'mutation' && !(parsed as { mutationType?: string }).mutationType) {
+      throw new Error(
+        'CREATE_CUSTOM_ITEM_MUTATION_TYPE_REQUIRED: the mutation subtype requires an explicit mutationType ("physical" | "mental").',
+      );
+    }
+
     const system = buildSystemForSubtype(parsed);
     const normalizedOverrides = parsed.systemOverrides
       ? normalizeSystemOverrides(parsed.systemOverrides)

@@ -19,7 +19,6 @@ export interface ListVariationsResult {
   activeVariationIndex: number;
   variations: SceneryVariation[];
   count: number;
-  isLegacyMigrated: boolean;
 }
 
 export interface GetActiveVariationResult {
@@ -116,9 +115,9 @@ export function formatListVariations(r: ListVariationsResult): string {
     const sceneData = v.hasSceneData ? ' +sceneData' : '';
     return `  [${v.index}]${active} "${v.name}"${sceneData}`;
   });
-  const migratedNote = r.isLegacyMigrated ? ' (legacy v1 migrated in-memory)' : '';
   return [
-    `scenery: list-variations — ${r.count} variation(s) on "${r.sceneName}" (${r.sceneId})${migratedNote}.`,
+    // BUG-473(a): the handler never emits isLegacyMigrated — the migratedNote branch was dead. Removed.
+    `scenery: list-variations — ${r.count} variation(s) on "${r.sceneName}" (${r.sceneId}).`,
     `Active index: ${r.activeVariationIndex}`,
     rows.join('\n'),
   ].join('\n');

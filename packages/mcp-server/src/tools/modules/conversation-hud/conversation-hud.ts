@@ -126,7 +126,7 @@ Two surfaces:
 
 22 actions:
 Reads — list-conversations {}; get-conversation { journalId }; get-active-state {}; list-factions {}; get-faction { journalId }.
-Doc writes (GM) — create-conversation { name?, background?, participants[], defaultActiveParticipant? }; update-conversation { journalId, name?, background?, participants?, defaultActiveParticipant? }; create-faction { name?, faction }; update-faction { journalId, faction }; set-scene-conversation { sceneId, journalId?(omit or blank clears), visibilityOff? }; set-token-conversation { tokenId, journalId?(omit or blank clears), excludeFromPull? }.
+Doc writes (GM) — create-conversation { name?, background?, participants[], defaultActiveParticipant? }; update-conversation { journalId, name?, background?, participants?, defaultActiveParticipant? }; create-faction { name?, faction }; update-faction { journalId, faction }; set-scene-conversation { sceneId, journalId?(OMIT to clear the link; blank "" is Zod-rejected — BUG-467), visibilityOff? }; set-token-conversation { tokenId, journalId?(OMIT to clear the link; blank "" is Zod-rejected — BUG-467), excludeFromPull? }.
 Confirm-gated (GM + confirm:true) — delete-conversation { journalId, confirm }.
 Runtime control (GM; transient) — activate-conversation { journalId, visibilityOff? }; deactivate-conversation {}; set-active-participant { index }; add-participants { participants[] }; update-active-conversation { participants?, background?, defaultActiveParticipant? }; reorder-participants { oldIndex, newIndex }; set-visibility { visible }; set-background { background?, visible? }; toggle-speaking-as {}; set-minimize { minimized?, locked? }.
 

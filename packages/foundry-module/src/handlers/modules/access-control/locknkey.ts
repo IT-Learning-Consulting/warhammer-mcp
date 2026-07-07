@@ -92,12 +92,16 @@ function resolveTokenAnyScene(id: string): any {
 /** Read the full lock state via LnKFlags accessors. */
 function readLockState(flags: any, doc: any, documentType: string): Record<string, unknown> {
   const safe = (fn: () => unknown) => { try { return fn(); } catch { return null; } };
+  // BUG-508: the LnK DC accessors return Infinity for an impassable/ward lock (written as pickDC:-1),
+  // and Infinity JSON-serializes to `null` over MCP — so the documented pickDC:-1 ward idiom read back
+  // as null (looked like a failed write). Map non-finite DCs back to the -1 write-side sentinel.
+  const normDC = (v: unknown) => (typeof v === 'number' && !Number.isFinite(v) ? -1 : v);
   return {
     isLockable: safe(() => flags.isLockable?.(doc)),
     isLocked: safe(() => flags.isLocked?.(doc)),
-    pickDC: safe(() => flags.LockDC?.(doc)),
-    breakDC: safe(() => flags.LockBreakDC?.(doc)),
-    ccDC: safe(() => flags.LockCCDC?.(doc)),
+    pickDC: normDC(safe(() => flags.LockDC?.(doc))),
+    breakDC: normDC(safe(() => flags.LockBreakDC?.(doc))),
+    ccDC: normDC(safe(() => flags.LockCCDC?.(doc))),
     canbePicked: safe(() => flags.canbePicked?.(doc)),
     canbeBroken: safe(() => flags.canbeBroken?.(doc)),
     jammed: safe(() => flags.Lockisjammed?.(doc)),

@@ -21,7 +21,7 @@
 //   7. An unknown action → WFRP_ECONOMY_INVALID_INPUT (discriminatedUnion reject).
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { dispatchModuleWfrpEconomy } from '../wfrp-economy.js';
+import { dispatchModuleWfrpEconomy, rebucketEconomySummary } from '../wfrp-economy.js';
 
 const ECO = 'eco1';
 
@@ -300,5 +300,70 @@ describe('schema discriminatedUnion', () => {
     const res: any = await dispatchModuleWfrpEconomy({ action: 'advance-day', economyId: ECO });
     expect(res.success).toBe(false);
     expect(res.error).toContain('WFRP_ECONOMY_INVALID_INPUT');
+  });
+});
+
+// ── BUG-471: read-side re-bucketing of the module's under-reporting summary ───────
+// WHY (Rule 9): the wfrp4e-economy aggregator buckets stock sales by 'stock_sale' (underscore) while
+// rows are logged 'stock-sale' (hyphen), and only credits actor loans under targetActorId — so a
+// borrower-actor's loan and every hyphen stock-sale silently read 0. This must be corrected at READ.
+describe('BUG-471 rebucketEconomySummary', () => {
+  afterEach(() => { delete (globalThis as any).game; });
+
+  it('ACTOR: a hyphen stock-sale + a borrower-actor loan produce non-zero totals (both were 0)', () => {
+    (globalThis as any).game = {}; // no i18n → recentTransactions untouched
+    const summary: any = { totalStockSales: 0, totalLoans: 0, totalStockSalesDisplay: '0 BP', totalLoansDisplay: '0 BP' };
+    const logs = [
+      { type: 'stock-sale', amount: 480, actorId: 'A' },            // hyphen spelling, actor is seller
+      { type: 'loan', amount: 240, actorId: 'A' },                  // borrower-actor loan (module misses it)
+      { type: 'deposit', amount: 99, actorId: 'A' },                // unrelated bucket
+    ];
+    rebucketEconomySummary(summary, logs, { actorId: 'A' });
+    expect(summary.totalStockSales).toBe(480);
+    expect(summary.totalLoans).toBe(240);
+    expect(summary.totalStockSalesDisplay).toBe('480 BP');
+    expect(summary.totalLoansDisplay).toBe('240 BP');
+  });
+
+  it('ACTOR: sums both stock-sale AND stock_sale spellings, only in scope', () => {
+    (globalThis as any).game = {};
+    const summary: any = { totalStockSales: 0, totalLoans: 0 };
+    const logs = [
+      { type: 'stock-sale', amount: 100, targetActorId: 'A' },
+      { type: 'stock_sale', amount: 50, actorId: 'A' },
+      { type: 'stock-sale', amount: 999, actorId: 'B' }, // out of scope
+    ];
+    rebucketEconomySummary(summary, logs, { actorId: 'A' });
+    expect(summary.totalStockSales).toBe(150);
+  });
+
+  it('BANK (no actorId scope): sums all stock sales regardless of actor', () => {
+    (globalThis as any).game = {};
+    const summary: any = { totalStockSales: 0, totalLoans: 0 };
+    const logs = [
+      { type: 'stock-sale', amount: 100, actorId: 'A' },
+      { type: 'stock_sale', amount: 200, actorId: 'B' },
+      { type: 'loan', amount: 240, actorId: 'C' },
+    ];
+    rebucketEconomySummary(summary, logs, {});
+    expect(summary.totalStockSales).toBe(300);
+    expect(summary.totalLoans).toBe(240);
+  });
+
+  it('localizes a raw i18n-key description (the withdraw row), leaves plain text alone', () => {
+    (globalThis as any).game = {
+      i18n: { localize: (k: string) => (k === 'financial-system.bank.transactions.withdraw' ? 'Withdrawal' : k) },
+    };
+    const summary: any = {
+      totalStockSales: 0,
+      totalLoans: 0,
+      recentTransactions: [
+        { description: 'financial-system.bank.transactions.withdraw' },
+        { description: 'Bought 3× ACME for 90 BP' },
+      ],
+    };
+    rebucketEconomySummary(summary, [], {});
+    expect(summary.recentTransactions[0].description).toBe('Withdrawal');
+    expect(summary.recentTransactions[1].description).toBe('Bought 3× ACME for 90 BP');
   });
 });

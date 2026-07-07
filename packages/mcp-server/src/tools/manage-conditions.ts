@@ -64,7 +64,7 @@ export class ManageConditionsTools extends BaseTool {
           idempotentHint: false,
           openWorldHint: true,
         },
-        description: 'Apply a WFRP 4e condition to an actor via the system\'s actor.addCondition path. Stackable conditions (Minor/Major) are handled by the system via WarhammerActiveEffect._handleConditionCreation.',
+        description: 'Apply a WFRP 4e condition to an actor via the system\'s actor.addCondition path. Stackable conditions (Minor/Major) are handled by the system via WarhammerActiveEffect._handleConditionCreation. `value` is ADDITIVE by default (mode:"add" — applying value:5 twice yields stackCount 10); pass mode:"set" to write an absolute stack count (BUG-477).',
         inputSchema: {
           type: 'object',
           properties: {
@@ -78,7 +78,13 @@ export class ManageConditionsTools extends BaseTool {
               type: 'integer',
               minimum: 1,
               default: 1,
-              description: 'Stack count to apply (stackable conditions only).',
+              description: 'Stack count (stackable conditions only). ADDED to any existing stack when mode:"add" (default); written absolutely when mode:"set".',
+            },
+            mode: {
+              type: 'string',
+              enum: ['add', 'set'],
+              default: 'add',
+              description: 'BUG-477: "add" (default, back-compat) increments the existing stack additively; "set" writes the stack to the absolute `value` (moves by the delta from the current stack). Use "set" for idempotent resolve-terror / surgery-bleeding math that must not compound on re-apply.',
             },
           },
           required: ['actorId', 'conditionKey'],

@@ -9,7 +9,9 @@
 //     embers·fog·hail·rain·rats·snow·snowstorm·spiders·stars
 //   - 7 free filter types:  bloom·color·fog·lightning·oldfilm·predator·underwater
 //   - 24 free presets: acid-rain through wildfire-smoke (see FREE_PRESET_NAMES in schemas)
-//   Plus-only types / presets are rejected at the Zod schema level (enum guards them out).
+//   Plus-only particle/filter TYPES are rejected at the Zod schema level (enum guards them out).
+//   PRESET names accept a free string (ADR-020 — so Gambit-fork/classic presets pass); an unknown
+//   preset is rejected by the FXMaster API at play time, not the Zod schema.
 //
 // Envelope contract: { success: true, data } | { success: false, error } — NEVER throw for
 //   expected failures (DP-15 / Discipline rule 2).

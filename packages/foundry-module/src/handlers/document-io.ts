@@ -293,8 +293,11 @@ async function handleImportAsNew(
       verifyDocWrite(persisted, { name: stripped.name }, ErrorTokens.DOCUMENT_IO_WRITE_NOT_PERSISTED);
     }
 
-    // Assemble warnings.
-    const warnings: string[] = [WARN_UUID_MAY_BREAK];
+    // Assemble warnings. BUG-516: only warn about @UUID re-linking when the imported payload actually
+    // contains @UUID links — the preview action gates this correctly; import used to emit it
+    // unconditionally (misleading on a doc with zero UUID content).
+    const uuidLinkCount = (JSON.stringify(stripped ?? {}).match(/@UUID\[/g) ?? []).length;
+    const warnings: string[] = uuidLinkCount > 0 ? [WARN_UUID_MAY_BREAK] : [];
     if (input.documentType === 'Cards') {
       warnings.push(WARN_CARDS_ORIGIN_FK);
     }

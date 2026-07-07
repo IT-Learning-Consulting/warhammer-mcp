@@ -202,6 +202,7 @@ export type EndCombatOutputType = z.infer<typeof EndCombatOutput>;
 export const ApplyConditionOutput = z.object({
   actorId: z.string(),
   conditionKey: z.string(),
+  mode: z.enum(['add', 'set']).optional(), // BUG-477/A2: echoes the additive-vs-set mode used
   stackCount: z.number(),
 }).passthrough();
 export type ApplyConditionOutputType = z.infer<typeof ApplyConditionOutput>;

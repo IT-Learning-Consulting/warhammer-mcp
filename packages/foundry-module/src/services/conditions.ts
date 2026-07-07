@@ -18,6 +18,7 @@ export class ConditionsService {
     actorId: string;
     conditionKey: string;
     value?: number | undefined;
+    mode?: 'add' | 'set' | undefined;
   }): Promise<any> {
     this.validateState();
     const actor: any = (game as any).actors?.get(data.actorId);
@@ -34,12 +35,32 @@ export class ConditionsService {
     }
 
     const value = data.value ?? 1;
-    await actor.addCondition(data.conditionKey, value);
+    const mode: 'add' | 'set' = data.mode ?? 'add';
+    if (mode === 'set') {
+      // BUG-477/A2: absolute write. wfrp4e's actor.addCondition(key, n) is ADDITIVE (n stacks), so a
+      // naive re-apply compounds (5,5 → 10). For mode:"set" read the current stack and move by the delta
+      // to land on the requested absolute value (add-up / remove-down / no-op). Default mode "add" keeps
+      // the historical additive behavior for back-compat.
+      const before: any = actor.hasCondition?.(data.conditionKey);
+      const currentStack =
+        typeof before === 'object' ? (before?.conditionValue ?? before?.flags?.wfrp4e?.value ?? 0) : before ? 1 : 0;
+      const delta = value - currentStack;
+      if (delta > 0) await actor.addCondition(data.conditionKey, delta);
+      else if (delta < 0) await actor.removeCondition(data.conditionKey, -delta);
+    } else {
+      await actor.addCondition(data.conditionKey, value);
+    }
     const stacked: any = actor.hasCondition?.(data.conditionKey);
     const stackCount =
       typeof stacked === 'object'
         ? stacked?.conditionValue ?? stacked?.flags?.wfrp4e?.value ?? value
         : value;
+    // DP-16 (BUG-477/A2): for an absolute set, prove the stack landed on the requested value.
+    if (mode === 'set' && stackCount !== value) {
+      throw new Error(
+        `CONDITION_SET_NOT_PERSISTED: mode:"set" requested stackCount ${value} on '${data.conditionKey}' but read ${stackCount} after write`,
+      );
+    }
 
     // Surface canvas-anchored feedback when actor has a token on the current scene.
     const placedToken: any = (globalThis as any).canvas?.tokens?.placeables?.find(
@@ -55,6 +76,7 @@ export class ConditionsService {
     return {
       actorId: actor.id,
       conditionKey: data.conditionKey,
+      mode,
       stackCount,
     };
   }

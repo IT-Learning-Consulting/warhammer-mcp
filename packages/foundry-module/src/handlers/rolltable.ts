@@ -636,6 +636,7 @@ export async function normalizeRollTable(
   }
 
   return wrappedWrite('normalizeRollTable', async () => {
+    const formulaBefore = table.formula as string;
     const normalized = await table.normalize();
     if (!normalized) {
       throw new Error(
@@ -654,9 +655,17 @@ export async function normalizeRollTable(
 
     notify.updated('rolltable', table.name as string, { summary: 'normalized' });
 
+    const formulaAfter = table.formula as string;
     return {
       success: true as const,
-      data: { tableId: input.tableId, resultCount: table.results.size as number },
+      data: {
+        tableId: input.tableId,
+        resultCount: table.results.size as number,
+        // BUG-504: normalize() SILENTLY rewrites the table formula to 1d<sum-of-weights> (e.g. 1d100→1d20).
+        // Surface the rewrite so a caller who normalized a pre-banded table sees the dice range collapse.
+        formulaRewritten: formulaAfter,
+        previousFormula: formulaBefore,
+      },
     };
   });
 }
@@ -785,8 +794,13 @@ export async function drawManyFromTable(
       success: true as const,
       data: {
         results: drawnResults.map(serialiseResult),
+        // BUG-504: `roll` is the table's DICE total (Foundry's draw.roll), NOT the requested count —
+        // `requested`/`returned` carry the count so the two are always distinguishable field-wise
+        // (previously the happy path omitted them, conflating dice-total and count for the caller).
         roll: draw.roll?.total ?? 0,
         tableName: table.name as string,
+        requested: input.number,
+        returned: drawnResults.length,
       },
     };
   });

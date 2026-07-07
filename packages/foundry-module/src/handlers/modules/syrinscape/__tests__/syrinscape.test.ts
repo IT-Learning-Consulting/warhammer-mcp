@@ -81,12 +81,40 @@ describe('auth-missing pre-check', () => {
 // ── 4. is-playing needs no auth ──────────────────────────────────────────────────
 
 describe('is-playing', () => {
-  it('reads storage.isPlaying without requiring an authToken', async () => {
+  it('needs no auth and reports not-playing for an id never played this session (BUG-465 tracking)', async () => {
     (globalThis as any).game = makeGame({ authToken: '' });
+    // storage.isPlaying is stop-blind (always true) and is deliberately NO LONGER consulted.
     (globalThis as any).syrinscapeControl = { utils: {}, storage: { isPlaying: vi.fn(() => true) } };
-    const res: any = await dispatchModuleSyrinscape({ action: 'is-playing', elementId: 'e:5' });
+    const res: any = await dispatchModuleSyrinscape({ action: 'is-playing', elementId: 'e:never' });
     expect(res.success).toBe(true);
-    expect(res.data.playing).toBe(true);
+    expect(res.data.playing).toBe(false);
+  });
+});
+
+// ── BUG-465: stop is now verifiable + id-type coercion ───────────────────────────
+
+describe('BUG-465 stop-verification + id-type', () => {
+  it('set-mood -> is-playing true -> stop-mood -> is-playing false (was stuck true before)', async () => {
+    (globalThis as any).game = makeGame({ authToken: 'tok' });
+    (globalThis as any).syrinscapeControl = {
+      utils: { playMood: vi.fn(async () => true), stopMood: vi.fn(async () => true), stopAll: vi.fn(async () => true) },
+      storage: { isPlaying: vi.fn(() => true) }, // stop-blind; must NOT leak into is-playing
+    };
+    const id = 'bug465:1';
+    await dispatchModuleSyrinscape({ action: 'stop-all' }); // clean slate (session-scoped tracking)
+
+    expect((await dispatchModuleSyrinscape({ action: 'set-mood', id }) as any).success).toBe(true);
+    expect((await dispatchModuleSyrinscape({ action: 'is-playing', elementId: id }) as any).data.playing).toBe(true);
+    expect((await dispatchModuleSyrinscape({ action: 'stop-mood', id }) as any).success).toBe(true);
+    expect((await dispatchModuleSyrinscape({ action: 'is-playing', elementId: id }) as any).data.playing).toBe(false);
+  });
+
+  it('list-soundsets coerces a numeric cache id to string', async () => {
+    (globalThis as any).game = makeGame({ soundsetInfo: [{ id: 182405, name: 'pack', full_name: 'The Pack' }] });
+    const res: any = await dispatchModuleSyrinscape({ action: 'list-soundsets' });
+    expect(res.success).toBe(true);
+    expect(res.data.soundsets[0].id).toBe('182405');
+    expect(typeof res.data.soundsets[0].id).toBe('string');
   });
 });
 

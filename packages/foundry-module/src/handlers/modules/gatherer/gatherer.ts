@@ -95,7 +95,12 @@ export async function dispatchModuleGatherer(data: unknown): Promise<Envelope<un
       }
     }
   } catch (e) {
-    return { success: false, error: `GATHERER_HANDLER_ERROR: ${e instanceof Error ? e.message : String(e)}` };
+    const msg = e instanceof Error ? e.message : String(e);
+    // BUG-522: minigameGate() (and other guards) THROW already-typed tokens (e.g. GATHERER_PAGE_NOT_FOUND).
+    // Pass those through BARE so gather/harvest-token match the bare-token shape get-spot-status/reset-spot
+    // return for the same condition — don't double-wrap a typed token under GATHERER_HANDLER_ERROR.
+    if (/^GATHERER_[A-Z_]+:/.test(msg)) return { success: false, error: msg };
+    return { success: false, error: `GATHERER_HANDLER_ERROR: ${msg}` };
   }
 }
 

@@ -381,7 +381,11 @@ export function createFlatWorldDocCRUDHandlers<
     const total = filtered.length;
     // Computed once for all three list shapes (folders#3: the bare/paginated branches
     // previously omitted it — countOnly-only). Additive across all factory consumers.
-    const filterApplied = isFilterApplied ? isFilterApplied(input) : false;
+    // BUG-523: default to null (the string|null "no filter" convention shared by drawing/note/cards/
+    // light/macro) rather than `false`. NOTE: handlers that DO supply isFilterApplied (folder does —
+    // isAnyFolderFilterApplied) must themselves return null on no-filter; this default only covers
+    // the isFilterApplied-less handlers. null gives cross-handler parity.
+    const filterApplied = isFilterApplied ? isFilterApplied(input) : null;
 
     if (input.countOnly) {
       return {

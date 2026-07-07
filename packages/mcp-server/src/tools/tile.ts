@@ -181,7 +181,7 @@ export class TileTool extends BaseTool {
             sort: { type: 'integer', description: '[create/update.changes] Sort order integer.' },
             rotation: { type: 'number', minimum: 0, maximum: 360, description: '[create/update.changes] Rotation 0-360°.' },
             alpha: { type: 'number', minimum: 0, maximum: 1, description: '[create/update.changes] Opacity 0-1.' },
-            hidden: { type: 'boolean', description: '[create/update.changes] Hide the tile from players.' },
+            hidden: { type: 'boolean', description: '[create/update.changes] Hide the tile from players. Also accepted on `list` as a boolean filter (BUG-511).' },
             locked: { type: 'boolean', description: '[create/update.changes] Lock the tile against player interaction. [list] Filter by locked state.' },
             texture: {
               type: 'object',

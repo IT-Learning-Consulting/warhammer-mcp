@@ -168,6 +168,7 @@ IMPORTANT: This tool implements CLONE / TEMPLATE semantics, NOT backup/restore.
             },
             confirm: {
               type: 'boolean',
+              const: true,
               description: '[import-as-new] Must be true to execute the write (CCR-4).',
             },
           },

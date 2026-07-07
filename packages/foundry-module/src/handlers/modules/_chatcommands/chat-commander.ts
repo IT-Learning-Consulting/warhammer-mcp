@@ -324,18 +324,48 @@ async function handleUnregisterCommand(input: UnregisterInput): Promise<Envelope
     unregistered = !api.commands?.get?.(lookup);
   }
 
-  // Delete the backing world-script macro (match by name marker in the generated body).
+  // Delete the backing world-script macro (match by name+module markers in the generated body).
   let macroId: string | undefined;
   let macroDeleted = false;
   if (deleteWorldScript) {
-    const marker = `name: ${JSON.stringify(input.name)}`;
+    // BUG-506: the body embeds `name: "<original base name>"` + `module: "<module>"`, but a name
+    // conflict auto-namespaces the ACTIVE command to "<module>.<base>". Unregistering by the namespaced
+    // name made the old single `name: "<namespaced>"` marker miss the body (which holds the base name),
+    // orphaning the macro → it re-registered the "deleted" command on the next reload. Match on the
+    // MODULE marker plus any plausible base-name spelling (input.name, the registered name, and the
+    // de-namespaced base) — the module marker also disambiguates two modules sharing a base name.
+    const cmdModule = existing?.module ? String(existing.module) : undefined;
+    const nameCandidates = new Set<string>([input.name]);
+    // Registry names carry a leading slash ("/warhammer-mcp.table"), but the macro body embeds the
+    // BASE name WITH its slash ("/table") — de-namespaced candidates must restore the slash, and the
+    // module-prefix check must tolerate it (live-caught 2026-07-07: macroDeleted:false because the
+    // only de-namespaced candidate was the slashless "table").
+    for (const raw of [input.name, existing?.name ? String(existing.name) : undefined]) {
+      if (!raw) continue;
+      nameCandidates.add(raw);
+      const hasSlash = raw.startsWith('/');
+      const bare = hasSlash ? raw.slice(1) : raw;
+      if (cmdModule && bare.startsWith(`${cmdModule}.`)) {
+        const base = bare.slice(cmdModule.length + 1);
+        nameCandidates.add(base);
+        nameCandidates.add(`/${base}`);
+      }
+      const dot = bare.indexOf('.');
+      if (dot > 0) {
+        nameCandidates.add(bare.slice(dot + 1));
+        nameCandidates.add(`/${bare.slice(dot + 1)}`);
+      }
+    }
+    const nameMarkers = Array.from(nameCandidates).map((n) => `name: ${JSON.stringify(n)}`);
+    const moduleMarker = cmdModule ? `module: ${JSON.stringify(cmdModule)}` : undefined;
     for (const macro of ((globalThis as any).game?.macros?.contents ?? [])) {
       const flag = macro.getFlag?.(ADV_MACROS, 'runForSpecificUser');
       const cmd = (macro._source?.command as string) ?? '';
       if (
         (flag === 'runAsWorldScript' || flag === 'runAsWorldScriptSetup') &&
         cmd.includes('chatCommands.register') &&
-        cmd.includes(marker)
+        nameMarkers.some((m) => cmd.includes(m)) &&
+        (!moduleMarker || cmd.includes(moduleMarker))
       ) {
         macroId = macro.id as string;
         await macro.delete();

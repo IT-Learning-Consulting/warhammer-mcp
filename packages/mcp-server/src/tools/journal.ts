@@ -137,7 +137,7 @@ export class JournalTool extends BaseTool {
             categoryId: {
               type: ['string', 'null'],
               description:
-                '[update-category/delete-category/assign-page-to-category] JournalEntryCategory document ID within the entry. For assign-page-to-category: pass the categoryId to ASSIGN, or pass null to UNASSIGN.',
+                '[update-category/delete-category/assign-page-to-category] JournalEntryCategory document ID within the entry. null is ONLY valid for assign-page-to-category (pass null to UNASSIGN); update-category/delete-category REQUIRE a non-null id — null is Zod-rejected there (BUG-521).',
             },
             name: {
               type: 'string',
@@ -145,7 +145,7 @@ export class JournalTool extends BaseTool {
             },
             folder: {
               type: ['string', 'null'],
-              description: '[create-entry/update-entry] Folder ID to place the entry in. Pass null to clear (move out of any folder).',
+              description: '[create-entry/update-entry] Folder ID to place the entry in (pass null to clear). Also accepted on `list-entries` as a folder filter — id to match, or null for root-only entries (BUG-521).',
             },
             sort: {
               type: 'number',

@@ -33,6 +33,10 @@ export const ApplyConditionInput = z
     actorId: ActorId,
     conditionKey: ConditionKey,
     value: z.number().int().min(1).optional().default(1),
+    // BUG-477/A2: "add" (default, back-compat) = additive stack increment (wfrp4e addCondition);
+    // "set" writes the stack to the absolute `value` (moves by the delta from the current stack).
+    // resolve-terror + surgery-bleeding math assume SET; without this they compound on re-apply.
+    mode: z.enum(['add', 'set']).optional().default('add'),
   })
   .strict();
 

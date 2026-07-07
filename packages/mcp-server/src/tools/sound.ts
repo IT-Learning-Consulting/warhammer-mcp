@@ -171,7 +171,7 @@ export class SoundTool extends BaseTool {
             volume: { type: 'number', minimum: 0, maximum: 1, description: '[create/update.changes] Playback volume 0-1.' },
             walls: { type: 'boolean', description: '[create/update.changes] Whether sound is blocked by walls.' },
             easing: { type: 'boolean', description: '[create/update.changes] Apply distance easing to volume.' },
-            hidden: { type: 'boolean', description: '[create/update.changes] Hide the sound from players.' },
+            hidden: { type: 'boolean', description: '[create/update.changes] Hide the sound from players. Also accepted on `list` as a boolean filter (BUG-511).' },
             darkness: {
               type: 'object',
               description: '[create/update.changes] Darkness threshold: {min?: 0-1, max?: 0-1}.',

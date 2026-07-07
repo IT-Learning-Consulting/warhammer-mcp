@@ -436,7 +436,10 @@ async function handleExecuteCraft(input: ExecuteInput): Promise<Envelope<unknown
       pendingCraftIds: newPending,
       quantityPathFixed,
       quantityPathWarning,
-      products: (page.flags?.mastercrafted?.products ?? []).map((p: any) => p.name).filter(Boolean),
+      // BUG-469: read from the DELIVERED item data (productData — the resolved product item objects
+      // that were created/queued), not from the recipe's product SLOTS (whose entries carry
+      // `.components[]`, never `.name`, so the old map produced `products:[]` on every successful craft).
+      products: productData.map((d: any) => d.name).filter(Boolean),
     },
   };
 }

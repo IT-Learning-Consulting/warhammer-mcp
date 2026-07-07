@@ -913,10 +913,46 @@ async function handleListTransactions(input: ListTxInput): Promise<Envelope<unkn
   return { success: true, data: { action: 'list-transactions', count: list.length, transactions: list } };
 }
 
+// BUG-471 (D5): re-bucket the module's summary at READ, WITHOUT patching wfrp4e-economy. The module
+// aggregators (transaction-logger.js getActor/getBankTransactionSummary) match stock sales by
+// 'stock_sale' (underscore) while rows are logged 'stock-sale' (hyphen), and only credit actor-side
+// loans under the targetActorId clause — so a borrower-actor's own loan and every hyphen-spelled stock
+// sale silently drop to 0. Re-derive both from the FULL logs (both spellings, both actor sides), and
+// localize raw i18n-key descriptions (e.g. the withdraw row `financial-system.bank.transactions.withdraw`)
+// in recentTransactions. The summary itself only carries recentTransactions.slice(0,5), so we re-read
+// via getTransactionLogs. On any module-shape drift the caller keeps the unmodified module summary.
+export function rebucketEconomySummary(summary: any, logs: any[], scope: { actorId?: string }): void {
+  const isStockSale = (t: unknown) => t === 'stock-sale' || t === 'stock_sale';
+  const inScope = (l: any) => (scope.actorId ? l?.actorId === scope.actorId || l?.targetActorId === scope.actorId : true);
+  const sum = (pred: (l: any) => boolean) =>
+    logs.filter((l) => inScope(l) && pred(l)).reduce((s: number, l: any) => s + (Number(l?.amount) || 0), 0);
+  summary.totalStockSales = sum((l) => isStockSale(l?.type));
+  summary.totalLoans = sum((l) => String(l?.type) === 'loan');
+  // Displays were formatted from the module's stale (0) totals — restate in the base BP unit so they
+  // don't contradict the corrected numerics (Rule 12: no silent stale field).
+  summary.totalStockSalesDisplay = `${summary.totalStockSales} BP`;
+  summary.totalLoansDisplay = `${summary.totalLoans} BP`;
+  const i18n = (globalThis as any).game?.i18n;
+  if (i18n?.localize && Array.isArray(summary.recentTransactions)) {
+    summary.recentTransactions = summary.recentTransactions.map((tx: any) => {
+      const d = tx?.description;
+      if (typeof d === 'string' && !d.includes(' ') && /^[a-z0-9-]+(\.[A-Za-z0-9-]+)+$/.test(d)) {
+        const loc = i18n.localize(d);
+        if (loc && loc !== d) return { ...tx, description: loc };
+      }
+      return tx;
+    });
+  }
+}
+
 type ActorSummaryInput = Extract<WfrpEconomyInputType, { action: 'actor-transaction-summary' }>;
 async function handleActorSummary(input: ActorSummaryInput): Promise<Envelope<unknown>> {
   const TransactionLogger = await importTransactionLogger();
   const summary = TransactionLogger.getActorTransactionSummary(input.actorId, input.economyId) ?? {};
+  try {
+    const logs: any[] = TransactionLogger.getTransactionLogs?.({ actorId: input.actorId, economyId: input.economyId }) ?? [];
+    rebucketEconomySummary(summary, logs, { actorId: input.actorId });
+  } catch { /* module-shape drift — return the module summary unmodified */ }
   return { success: true, data: { action: 'actor-transaction-summary', actorId: input.actorId, economyId: input.economyId, summary } };
 }
 
@@ -924,5 +960,9 @@ type BankSummaryInput = Extract<WfrpEconomyInputType, { action: 'bank-transactio
 async function handleBankSummary(input: BankSummaryInput): Promise<Envelope<unknown>> {
   const TransactionLogger = await importTransactionLogger();
   const summary = TransactionLogger.getBankTransactionSummary(input.bankId, input.economyId) ?? {};
+  try {
+    const logs: any[] = TransactionLogger.getTransactionLogs?.({ bankId: input.bankId, economyId: input.economyId }) ?? [];
+    rebucketEconomySummary(summary, logs, {});
+  } catch { /* module-shape drift — return the module summary unmodified */ }
   return { success: true, data: { action: 'bank-transaction-summary', bankId: input.bankId, economyId: input.economyId, summary } };
 }

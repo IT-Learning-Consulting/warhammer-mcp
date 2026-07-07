@@ -22,7 +22,7 @@ export interface ActorCreationToolsOptions {
 
 const CreateActorSchema = z.object({
   name: z.string().min(1, 'Name is required'),
-  type: z.enum(['character', 'npc', 'creature']),
+  type: z.enum(['character', 'npc', 'creature', 'vehicle']),
   systemData: z.record(z.unknown()).optional(),
   folderId: FolderId.optional(),
   options: z.object({
@@ -147,12 +147,13 @@ export class ActorCreationTools extends BaseTool {
           idempotentHint: false,
           openWorldHint: true,
         },
-        description: `Create a world actor of type 'character', 'npc', or 'creature' with optional system data and folder placement. Unlike create-actor-from-compendium, this creates a blank actor whose shape is fully caller-controlled. Wraps the Foundry-side createActor query (GM-gated, transaction-wrapped).
+        description: `Create a world actor of type 'character', 'npc', 'creature', or 'vehicle' with optional system data and folder placement. Unlike create-actor-from-compendium, this creates a blank actor whose shape is fully caller-controlled. Wraps the Foundry-side createActor query (GM-gated, transaction-wrapped).
 
 **\`_preCreate\` auto-embed behavior (wfrp4e system hook):**
 - **type='character'**: NO PROMPT. The wfrp4e system silently auto-embeds basic skills + 3 coin items (Gold Crowns / Silver Shillings / Brass Pennies, quantity 0). Use this for /wfrp-build-pc flows where the PC sheet should land pre-populated.
 - **type='npc'**: TRIGGERS A BLOCKING DialogV2.confirm asking whether to add basic skills + money. Since MCP calls are headless, the dialog will block the response — typical resolution is to dismiss it via the Foundry UI, or pre-populate \`systemData\` to satisfy the system check. Avoid calling for 'npc' from autonomous flows unless you have a strategy for the dialog.
 - **type='creature'**: same blocking dialog as 'npc'. Same caveat applies.
+- **type='vehicle'**: DIALOG-FREE. wfrp4e's \`_preCreate\` gates the basic-skills dialog on \`this.type != "vehicle"\` (wfrp4e.js:12384), so vehicles never open getInitialItems — safe to create headless with no dialog and no skipItems needed (BUG-483).
 
 **Post-write verification (CCR-5 / DP-16):** the handler asserts the returned actor has a non-empty id and the name matches the request, throwing CREATE_ACTOR_NOT_PERSISTED on mismatch.
 
@@ -166,8 +167,8 @@ export class ActorCreationTools extends BaseTool {
             },
             type: {
               type: 'string',
-              enum: ['character', 'npc', 'creature'],
-              description: 'Actor type. See description for _preCreate dialog warnings on npc/creature.',
+              enum: ['character', 'npc', 'creature', 'vehicle'],
+              description: 'Actor type. See description for _preCreate dialog warnings on npc/creature; vehicle is dialog-free.',
             },
             systemData: {
               type: 'object',

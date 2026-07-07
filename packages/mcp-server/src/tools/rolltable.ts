@@ -114,6 +114,11 @@ const CreateRollTableSchema = z.object({
     name: z.string(),
     description: z.string().optional(),
     formula: z.string().default("1d20"),
+    // BUG-524: create now exposes folder/img/sort (the foundry createRollTable handler already builds them
+    // into the payload; they were only missing from — and stripped by — this mcp-server tool schema).
+    img: z.string().optional(),
+    folder: z.string().nullable().optional(),
+    sort: z.number().int().optional(),
     entries: z.array(z.object({
         text: z.string(),
         weight: z.number().optional(),
@@ -186,7 +191,7 @@ const UpdateTableResultsSchema = z.object({
         range: z.tuple([z.number(), z.number()]).optional(),
         weight: z.number().optional(),
         drawn: z.boolean().optional(),
-    })).min(1),
+    })).min(1, 'ROLLTABLE_EMPTY_PAYLOAD: update-results requires at least one update in `updates`'), // BUG-524: name the token
 });
 
 const DeleteTableResultsSchema = z.object({
@@ -269,7 +274,7 @@ export class RollTableTool extends BaseTool {
             description: `Manage roll tables in Foundry VTT — 13 actions: create, list, get, roll, delete, update, add-results, update-results, delete-results, normalize, reset, draw-many, import-from-compendium.
 
 **Actions:**
-- **create**: Create a table with entries (legacy text-only) or results (text/document/compendium).
+- **create**: Create a table with entries (legacy text-only) or results (text/document/compendium). Supports folder/img/sort (BUG-524).
 - **list**: List all roll tables in world.
 - **get**: Get full details + result list for a table.
 - **roll**: Roll once on a table and get a result. Response carries text + description + content (= text-or-description) + drawn. READ the 'content' field for the row body — many WFRP4e tables leave 'text' empty and store the row HTML in 'description', so 'content' gives the right body in one field without a follow-up get.
@@ -278,9 +283,9 @@ export class RollTableTool extends BaseTool {
 - **add-results**: Append one or more new results (text/document/compendium types) to an existing table.
 - **update-results**: Update fields on existing results by _id (text, range, weight, drawn, etc.).
 - **delete-results**: Permanently remove specific results by ID. ⚠️ Irreversible.
-- **normalize**: Recalculate all result range values from weights. ⚠️ Overwrites manually-set ranges (Risk 2.B).
+- **normalize**: Recalculate all result range values from weights. ⚠️ This REWRITES the table formula to 1d<sum-of-weights> (e.g. 1d100→1d20) — the response now surfaces 'formulaRewritten' + 'previousFormula' so the change isn't silent (BUG-504). Overwrites manually-set ranges (Risk 2.B); collapses pre-banded published tables, so avoid on tables whose author set explicit bands.
 - **reset**: Clear all drawn flags so all results are available again (for non-replacement tables).
-- **draw-many**: Draw multiple results in one call (1–50). Returns partial + exhausted flag if pool runs dry. Each result carries text + description + content (= text-or-description); READ the 'content' field for the row body (WFRP4e tables store it in 'description').
+- **draw-many**: Draw multiple results in one call (1–50). Returns partial + exhausted flag if pool runs dry. The 'roll' field is the table's DICE total (Foundry's draw.roll), while 'requested'/'returned' carry the count — the two are now distinct fields (BUG-504). 'rollMode' accepts Foundry's canonical DICE_ROLL_MODES (publicroll/gmroll/blindroll/selfroll). Each result carries text + description + content (= text-or-description); READ the 'content' field for the row body (WFRP4e tables store it in 'description').
 - **import-from-compendium**: Import a roll table from a compendium pack into the world.
 
 **Formula Examples:** "1d100", "1d20", "2d6"
@@ -324,6 +329,18 @@ export class RollTableTool extends BaseTool {
                         type: "string",
                         description: "[create] Dice formula (e.g., '1d100', '1d20', '2d6')"
                     },
+                    img: {
+                        type: "string",
+                        description: "[create] Optional table image path (BUG-524)"
+                    },
+                    folder: {
+                        type: ["string", "null"],
+                        description: "[create] Optional folder id for placement (null = root) (BUG-524)"
+                    },
+                    sort: {
+                        type: "integer",
+                        description: "[create] Optional sort weight (BUG-524)"
+                    },
                     entries: {
                         type: "array",
                         items: {
@@ -358,7 +375,7 @@ export class RollTableTool extends BaseTool {
                     rollMode: {
                         type: "string",
                         enum: ["public", "private", "blind", "self"],
-                        description: "[roll/draw-many] How to display the roll result"
+                        description: "[roll/draw-many] How to display the roll result (maps to Foundry's canonical DICE_ROLL_MODES: public=publicroll, private=gmroll, blind=blindroll, self=selfroll)"
                     },
                     modifier: {
                         type: "number",
@@ -465,6 +482,9 @@ export class RollTableTool extends BaseTool {
         name: string;
         description?: string | undefined;
         formula: string;
+        img?: string | undefined;
+        folder?: string | null | undefined;
+        sort?: number | undefined;
         entries?: Array<{
             text: string;
             weight?: number | undefined;
@@ -495,6 +515,9 @@ export class RollTableTool extends BaseTool {
                 formula: args.formula,
                 replacement: args.replacement,
                 displayRoll: args.displayRoll,
+                ...(args.img !== undefined ? { img: args.img } : {}),
+                ...(args.folder !== undefined ? { folder: args.folder } : {}),
+                ...(args.sort !== undefined ? { sort: args.sort } : {}),
                 ...(resolvedResults !== undefined ? { results: resolvedResults } : {}),
             }
         );

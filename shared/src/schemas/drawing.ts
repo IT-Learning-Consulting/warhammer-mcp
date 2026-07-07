@@ -34,7 +34,9 @@ const DrawingShapeInput = z
     width: z.number().optional(),
     height: z.number().optional(),
     radius: z.number().optional(),
-    points: z.array(z.number()).optional(),
+    // BUG-523: a polygon needs ≥3 vertices = ≥6 flat coordinates [x1,y1,x2,y2,x3,y3,...]. Enforce the
+    // documented minimum for a clean typed error instead of leaving Foundry to reject the degenerate shape.
+    points: z.array(z.number()).min(6, 'polygon requires at least 3 points (≥6 flat coordinates)').optional(),
   })
   .strict();
 

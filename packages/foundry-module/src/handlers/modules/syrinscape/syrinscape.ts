@@ -37,6 +37,14 @@ import { Envelope, getGame, isGM } from '../_shared/handler-utils.js';
 
 const MODULE_ID = 'syrinscape-control';
 
+// BUG-465: the module's own `storage.isPlaying()` is stop-blind — the WS echo only flips it TRUE on
+// play; an accepted stop never clears it, so the documented is-playing read-back was useless for stop
+// verification (stayed true across 4 polls / 60s post-stop). Track MCP-issued play/stop intent in a
+// handler-scoped set so is-playing reflects the last command WE sent. This is the WS-accepted ceiling,
+// NOT confirmed cloud playback, and sounds started outside MCP (Syrinscape Browser) are not tracked —
+// documented honestly in the tool description + SKILL error/ceiling notes.
+const trackedPlaying = new Set<string>();
+
 function getControl(): any {
   return (globalThis as any).syrinscapeControl;
 }
@@ -124,6 +132,10 @@ async function handlePlayAction(
   const result = await control.utils[fn](id);
   if (result === false) return playbackRejected(action);
 
+  // BUG-465: reflect the accepted command in our tracking set so is-playing is stop-verifiable.
+  if (fn === 'playMood' || fn === 'playElement') trackedPlaying.add(String(id));
+  else trackedPlaying.delete(String(id)); // stopMood / stopElement
+
   notify.updated('sound', id, { summary: `syrinscape ${action}` });
   return { success: true, data: { action, id, accepted: true } };
 }
@@ -133,6 +145,7 @@ async function handleStopAll(): Promise<Envelope<unknown>> {
   const control = getControl();
   if (typeof control?.utils?.stopAll !== 'function') return notReady();
   await control.utils.stopAll();
+  trackedPlaying.clear(); // BUG-465: accepted stop-all clears all tracked play intent.
   notify.updated('sound', 'all syrinscape sounds', { summary: 'stop-all' });
   return { success: true, data: { action: 'stop-all', accepted: true } };
 }
@@ -140,12 +153,18 @@ async function handleStopAll(): Promise<Envelope<unknown>> {
 // ── is-playing (pure in-memory read, no auth needed) ─────────────────────────────
 
 function handleIsPlaying(elementId: string): Envelope<unknown> {
-  const control = getControl();
-  const storage = control?.storage;
-  if (!storage || typeof storage.isPlaying !== 'function') {
-    return { success: true, data: { action: 'is-playing', elementId, playing: false, note: 'storage not initialized yet (pre-ready or audio not unlocked) — treated as not-playing.' } };
-  }
-  return { success: true, data: { action: 'is-playing', elementId, playing: Boolean(storage.isPlaying(elementId)) } };
+  // BUG-465: consult OUR tracking set (stop-verifiable) rather than the module's stop-blind
+  // storage.isPlaying(). Reflects MCP-issued play/stop commands this session (WS-accepted), not
+  // confirmed cloud playback; sounds started outside MCP are not tracked.
+  return {
+    success: true,
+    data: {
+      action: 'is-playing',
+      elementId,
+      playing: trackedPlaying.has(String(elementId)),
+      note: 'Reflects MCP play/stop commands issued this session (WS-accepted); not confirmed cloud audio, and untracked for sounds started via the Syrinscape Browser.',
+    },
+  };
 }
 
 // ── list-soundsets / list-moods (cache reads, never REST) ─────────────────────────
@@ -185,7 +204,7 @@ function handleListSoundsets(): Envelope<unknown> {
   if (soundsetInfo.length === 0) {
     return { success: true, data: { action: 'list-soundsets', soundsets: [], hint: COLD_CACHE_HINT } };
   }
-  const soundsets = soundsetInfo.map((row) => ({ id: row.id, name: row.name, fullName: row.full_name }));
+  const soundsets = soundsetInfo.map((row) => ({ id: String(row.id), name: row.name, fullName: row.full_name })); // BUG-465: cache returns numeric ids though typed string
   return { success: true, data: { action: 'list-soundsets', soundsets } };
 }
 
@@ -198,7 +217,7 @@ function handleListMoods(soundsetName: string | undefined): Envelope<unknown> {
   const soundsetInfo = readSoundsetInfo();
   const soundsetByName = new Map(soundsetInfo.map((row) => [row.name, row.full_name]));
   const filtered = entries.filter((e) => e.type === 'mood' && (!soundsetName || e.soundset === soundsetName));
-  const moods = filtered.map((e) => ({ id: e.id, name: e.name, soundset: e.soundset, soundsetFullName: soundsetByName.get(e.soundset) ?? e.soundset }));
+  const moods = filtered.map((e) => ({ id: String(e.id), name: e.name, soundset: e.soundset, soundsetFullName: soundsetByName.get(e.soundset) ?? e.soundset })); // BUG-465: numeric ids coerced to string
   if (moods.length === 0) {
     return { success: true, data: { action: 'list-moods', moods: [], hint: soundsetName ? `no moods found for soundset "${soundsetName}" in the cache; ${COLD_CACHE_HINT}` : COLD_CACHE_HINT } };
   }

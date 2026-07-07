@@ -90,12 +90,14 @@ function applyFolderListFilters(input: any, items: any[]): any[] {
   return out;
 }
 
-function isAnyFolderFilterApplied(input: any): boolean | string {
+function isAnyFolderFilterApplied(input: any): string | null {
   const applied: string[] = [];
   if (input.typeFilter) applied.push(`type="${input.typeFilter}"`);
   if (input.nameFilter) applied.push(`name="${input.nameFilter}"`);
   if (input.parentId !== undefined) applied.push(`parentId="${input.parentId}"`);
-  return applied.length > 0 ? applied.join(', ') : false;
+  // BUG-523: no-filter reads null (string|null convention, parity with drawing) — the factory's
+  // default only covers handlers that supply NO isFilterApplied; folder supplies this one.
+  return applied.length > 0 ? applied.join(', ') : null;
 }
 
 // ── Factory configuration ─────────────────────────────────────────────────

@@ -76,7 +76,6 @@ describe('ModuleSceneAtmosphereTool (read) — characterization', () => {
         { index: 1, name: 'Ruined', gmBackground: 'modules/bg/ruined.webp', plBackground: null, hasSceneData: true },
       ],
       count: 2,
-      isLegacyMigrated: false,
     }).execute({ action: 'list-variations' });
     expect((r as any).content[0].text).toMatchSnapshot();
   });

@@ -295,7 +295,12 @@ function resolveExecuteScope(input: {
   if (input.actorId) {
     const actor = (game as any).actors?.get(input.actorId);
     if (actor) scope.actor = actor;
-    else warnings.push(`MACRO_EXECUTE_SCOPE_ACTOR_NOT_FOUND: no actor with id "${input.actorId}"`);
+    else {
+      // BUG-507: explicitly NULL (not omit) — an omitted key lets macro.execute fall back to a stale
+      // binding (the previous call's actor leaked into scope.actor). Null forces a clean unbound actor.
+      scope.actor = null;
+      warnings.push(`MACRO_EXECUTE_SCOPE_ACTOR_NOT_FOUND: no actor with id "${input.actorId}"`);
+    }
   }
   if (input.tokenId) {
     let tokenDoc: any = null;

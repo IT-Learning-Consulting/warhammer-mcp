@@ -28,6 +28,7 @@ exports[`template-apply engine — applyTemplate (world actor) write capture > c
         "trait": 0,
         "trapping": 0,
       },
+      "merged": [],
       "name": "Wight Skeleton",
     },
     "createdDocumentIds": [
@@ -102,6 +103,7 @@ exports[`template-apply engine — applyTemplateToToken (synthetic delta) write 
         "trait": 0,
         "trapping": 0,
       },
+      "merged": [],
       "name": "Skirmisher Goblin",
     },
     "createdDocumentIds": [
@@ -183,6 +185,7 @@ exports[`template-apply engine — planTemplateApply / executeTemplatePlan split
         "trait": 0,
         "trapping": 0,
       },
+      "merged": [],
       "name": "Wight Skeleton",
     },
     "success": true,

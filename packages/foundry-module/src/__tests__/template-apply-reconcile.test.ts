@@ -80,6 +80,95 @@ describe('BUG-451: executeTemplatePlan per-item reconciliation', () => {
     );
   });
 
+  // BUG-460 (sprint 460-525): the pre-merge converts a same-name skill/talent re-apply into an explicit
+  // actor.updateEmbeddedDocuments advance-bump (existing + incoming), drops it from the create batch, and
+  // DP-16-verifies the bump landed on the embedded item — so wfrp4e's broken world-scope merge never fires.
+  // Mock citations (PF-003): items {id,name,type,system.advances.value} match live wfrp4e embedded skill
+  // shapes; updateEmbeddedDocuments mutates the referenced item, mirroring Foundry's in-place embedded update.
+  it('BUG-460: re-apply of a same-name skill advance-bumps in place instead of duplicating', async () => {
+    const chan = { id: 'i0', name: 'Channelling', type: 'skill', system: { advances: { value: 10 } } };
+    const requested = [{ name: 'Channelling', type: 'skill', system: { advances: { value: 10 } } }];
+    const actor: any = {
+      id: 'a1',
+      name: 'Test Shaman',
+      uuid: 'Actor.a1',
+      update: vi.fn().mockResolvedValue(undefined),
+      createEmbeddedDocuments: vi.fn().mockResolvedValue([]),
+      updateEmbeddedDocuments: vi.fn().mockImplementation(async (_type: string, updates: any[]) => {
+        for (const u of updates) if (u._id === chan.id) chan.system.advances.value = u['system.advances.value'];
+        return updates;
+      }),
+      items: [chan],
+    };
+    const svc = new TemplateApplyService(() => {});
+
+    const result = await svc.executeTemplatePlan(makePlan(actor, requested));
+
+    // Advance-bump routed to the EMBEDDED collection (existing 10 + incoming 10 = 20), not a create.
+    expect(actor.updateEmbeddedDocuments).toHaveBeenCalledWith('Item', [{ _id: 'i0', 'system.advances.value': 20 }]);
+    // The dup was dropped from the create batch → the create fires with an EMPTY array (no new docs).
+    expect(actor.createEmbeddedDocuments).toHaveBeenCalledWith('Item', [], expect.anything());
+    expect(chan.system.advances.value).toBe(20);
+    expect(result.applied.merged).toEqual([{ name: 'Channelling', type: 'skill', from: 10, to: 20 }]);
+    expect(result.applied.itemIds).toEqual([]); // nothing newly created
+    expect(result.success).toBe(true);
+  });
+
+  it('BUG-460 verify snapshot: Foundry mutating the update objects in place does NOT false-fail the DP-16 verify', async () => {
+    // Live-caught 2026-07-07 (validate smoke): Foundry's updateEmbeddedDocuments EXPANDS the
+    // dotted-key update objects in place ({'system.advances.value': N} → {system:{advances:{value:N}}}),
+    // so a verify reading bump['system.advances.value'] post-await saw undefined and threw
+    // TEMPLATE_APPLY_WRITE_NOT_PERSISTED on a fully-persisted merge. The verify must compare
+    // against a pre-write snapshot. This mock mutates its inputs exactly like Foundry.
+    const chan = { id: 'i0', name: 'Channelling', type: 'skill', system: { advances: { value: 10 } } };
+    const requested = [{ name: 'Channelling', type: 'skill', system: { advances: { value: 10 } } }];
+    const actor: any = {
+      id: 'a1',
+      name: 'Test Shaman',
+      uuid: 'Actor.a1',
+      update: vi.fn().mockResolvedValue(undefined),
+      createEmbeddedDocuments: vi.fn().mockResolvedValue([]),
+      updateEmbeddedDocuments: vi.fn().mockImplementation(async (_type: string, updates: any[]) => {
+        for (const u of updates) {
+          if (u._id === chan.id) chan.system.advances.value = u['system.advances.value'];
+          // Foundry-faithful in-place expansion of the dotted key on the CALLER'S object.
+          u.system = { advances: { value: u['system.advances.value'] } };
+          delete u['system.advances.value'];
+        }
+        return updates;
+      }),
+      items: [chan],
+    };
+    const svc = new TemplateApplyService(() => {});
+
+    const result = await svc.executeTemplatePlan(makePlan(actor, requested));
+
+    expect(chan.system.advances.value).toBe(20);
+    expect(result.applied.merged).toEqual([{ name: 'Channelling', type: 'skill', from: 10, to: 20 }]);
+    expect(result.success).toBe(true);
+  });
+
+  it('BUG-460: DP-16 throws when the advance-bump does not persist (world-scope merge simulation)', async () => {
+    const chan = { id: 'i0', name: 'Channelling', type: 'skill', system: { advances: { value: 10 } } };
+    const requested = [{ name: 'Channelling', type: 'skill', system: { advances: { value: 10 } } }];
+    const actor: any = {
+      id: 'a1',
+      name: 'Test',
+      uuid: 'Actor.a1',
+      update: vi.fn().mockResolvedValue(undefined),
+      createEmbeddedDocuments: vi.fn().mockResolvedValue([]),
+      // Simulate the BUG-460 failure: the update is accepted but the embedded value never changes
+      // (routed to the world Items collection where the id doesn't resolve).
+      updateEmbeddedDocuments: vi.fn().mockResolvedValue([]),
+      items: [chan],
+    };
+    const svc = new TemplateApplyService(() => {});
+
+    await expect(svc.executeTemplatePlan(makePlan(actor, requested))).rejects.toThrow(
+      /TEMPLATE_APPLY_WRITE_NOT_PERSISTED.*advance-bump/,
+    );
+  });
+
   it('clean-base regression: all requested items created → PASS (15/15 class)', async () => {
     const requested = [
       { name: 'Melee (Basic)', type: 'skill' },

@@ -571,6 +571,18 @@ async function addDocumentToPack(input: any): Promise<Envelope<AddDocumentRespon
         const msg = e instanceof Error ? e.message : String(e);
         warnings.push(`COMPENDIUM_FOLDER_PLACEMENT_FAILED: document added but not placed in folder — ${msg}`);
       }
+    } else if (input.source.kind === 'uuid') {
+      // BUG-510: importDocument copies the source world-doc's folder id verbatim (toCompendium
+      // clearFolder defaults false) — an orphan cross-collection FK pointing at a WORLD folder that
+      // doesn't exist in this pack. With no explicit in-pack placement requested, strip it → pack root.
+      const copiedFolder = (newDoc as any)._source?.folder ?? (newDoc as any).folder;
+      if (copiedFolder) {
+        try {
+          await newDoc.update({ folder: null });
+        } catch (e) {
+          warnings.push(`COMPENDIUM_ORPHAN_FOLDER_STRIP_FAILED: ${e instanceof Error ? e.message : String(e)}`);
+        }
+      }
     }
 
     // Post-verify registry hit.

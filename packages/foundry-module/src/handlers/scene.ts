@@ -253,7 +253,10 @@ function serializeSceneViewModel(scene: any): SceneViewModel {
     playlist: src.playlist ?? null,
     playlistLinked: !!scene.playlist,
     playlistSound: src.playlistSound ?? null,
-    playlistSoundLinked: !!scene.playlistSound,
+    // BUG-505: a playlistSound link is only valid if its parent playlist still resolves — after a
+    // non-cascade playlist delete the raw sound ref survives and `scene.playlistSound` read true while
+    // `playlistLinked` correctly went false. Gate through the SAME existence check as playlistLinked.
+    playlistSoundLinked: !!scene.playlist && !!scene.playlistSound,
     weather: scene.weather ?? '',
     folder: src.folder ?? null,
     folderLinked: !!scene.folder,

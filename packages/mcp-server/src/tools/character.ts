@@ -149,7 +149,7 @@ export class CharacterTools extends BaseTool {
     // table (TOOL-IDEA-006). It's a combat-resolution field (which RollTable to roll on for crit
     // location), so it belongs with the other combat vitals.
     const identityKeys = ['species', 'career', 'class', 'careerLevel', 'status', 'gender', 'age', 'height', 'weight', 'hair', 'eyes', 'starSign', 'movement', 'distinguishingMarks'];
-    const vitalsKeys = ['wounds', 'fortune', 'fate', 'resilience', 'resolve', 'corruption', 'toughness', 'encumbrance', 'money', 'criticalWounds', 'hitLocationTable'];
+    const vitalsKeys = ['wounds', 'fortune', 'fate', 'resilience', 'resolve', 'corruption', 'toughness', 'encumbrance', 'money', 'criticalWounds', 'hitLocationTable', 'advantage', 'sin', 'statusModifier']; // BUG-480: advantage/sin/status-modifier
     const biographyKeys = ['biography', 'gmNotes', 'experience', 'experienceLog'];
 
     const pick = (src: CharacterBasicInfoView, keys: string[]): CharacterBasicInfoView => {
@@ -299,6 +299,22 @@ export class CharacterTools extends BaseTool {
         current: system.status.corruption.value || 0,
         max: system.status.corruption.max || 0,
       };
+    }
+
+    // BUG-480: advantage {value,max}, social-status modifier, and sin — previously unreadable via the
+    // primary read tool. getCharacterInfo already returned the full system in structuredContent, but this
+    // rendered (content[].text) view — the surface a client actually reads — omitted all three.
+    if (system.status?.advantage !== undefined) {
+      basicInfo.advantage = {
+        value: system.status.advantage.value || 0,
+        max: system.status.advantage.max ?? 0,
+      };
+    }
+    if (system.status?.sin !== undefined) {
+      basicInfo.sin = system.status.sin.value || 0;
+    }
+    if (system.details?.status?.modifier !== undefined) {
+      basicInfo.statusModifier = system.details.status.modifier;
     }
 
     // Critical Wounds (count critical wound items)

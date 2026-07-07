@@ -55,12 +55,12 @@ export class DiseaseTool extends BaseTool {
 **Actions:**
 - **list**: List all disease items on an actor. Returns id, name, incubation/duration timers, symptoms.
 - **contract**: Add a disease to an actor. Looks up disease by name from compendia. By default (autoEnduranceTest: true) rolls a server-side GM Endurance test; if it passes, disease is resisted. Set endured: true to skip the test and force contraction.
-- **start**: Resolve the dice-string timer (incubation or duration) to a numeric value. Call this after contracting to roll incubation, or when incubation hits zero to roll duration.
+- **start**: Resolve the dice-string timer (incubation or duration) to a numeric value. Call this after contracting to roll incubation, or when incubation hits zero to roll duration. NOTE (BUG-475): the wfrp4e system may PRE-RESOLVE incubation to a numeric on contract, so list/read can already show a number here before you call start — start is idempotent on an already-numeric timer.
 - **increment**: Increment the active timer by 1 day.
 - **decrement**: Decrement the active timer by 1 day. Auto-cascades: incubation→0 starts duration; duration→0 calls finishDuration.
 - **finish-duration**: Manually trigger the end-of-duration resolution. Rolls Lingering Endurance test if applicable; may cure, extend, or create a new disease.
 - **apply-symptom**: Set the disease's symptom set. REPLACE semantics — wraps WFRP4e DiseaseModel.updateSymptoms() which deletes existing symptom AEs and creates new ones from the specified set. To preserve existing symptoms while adding more, the caller must pass the full target set (existing + new). Input: symptoms array [{key, severity?}] where key matches CONFIG.WFRP4E.symptoms (e.g. "fever", "delirium"). Severity is an optional difficulty modifier (e.g. "Hard").
-- **cure**: Remove a disease item from the actor. Requires confirm: true.`,
+- **cure**: Remove a disease item from the actor. Requires confirm: true; an omitted or false confirm returns the friendly DISEASE_CURE_NOT_CONFIRMED (never a raw Zod error).`,
         inputSchema: {
           type: 'object',
           properties: {
@@ -71,7 +71,7 @@ export class DiseaseTool extends BaseTool {
             },
             actorId: { type: 'string', description: 'Foundry actor ID' },
             diseaseItemId: { type: 'string', description: 'ID of the disease item on the actor (required for start/increment/decrement/finish-duration/apply-symptom/cure)' },
-            diseaseName: { type: 'string', description: 'Disease name as it appears in the compendium, e.g. "Bloody Flux" (contract only)' },
+            diseaseName: { type: 'string', description: 'Disease name EXACTLY as it appears in the compendium (findDiseaseByName is exact-match), e.g. "The Bloody Flux" (contract only)' },
             autoEnduranceTest: { type: 'boolean', description: 'When true (default), rolls a server-side Endurance test before contracting (contract only)' },
             endured: { type: 'boolean', description: 'Set to true to skip the Endurance test and force disease contraction (contract only)' },
             type: { type: 'string', enum: ['incubation', 'duration'], description: 'Which timer to resolve (start only)' },
@@ -87,7 +87,7 @@ export class DiseaseTool extends BaseTool {
                 required: ['key'],
               },
             },
-            confirm: { type: 'boolean', description: 'Must be true to confirm cure (cure only)' },
+            confirm: { type: 'boolean', default: false, description: 'Must be true to confirm cure (cure only). Omitted defaults to false → friendly DISEASE_CURE_NOT_CONFIRMED (BUG-475).' },
             reason: { type: 'string', description: 'Optional cure reason for audit log (cure only)' },
           },
           required: ['action', 'actorId'],
@@ -274,7 +274,10 @@ export class DiseaseTool extends BaseTool {
 
   private async handleCure(args: ArgsFor<'cure'>) {
     try {
-      const data = await this.query<DiseaseCureResponse>('disease', args);
+      // BUG-475(b): default confirm to false so an OMITTED confirm reaches the foundry gate and yields
+      // the friendly DISEASE_CURE_NOT_CONFIRMED, matching the confirm:false shape — not a raw "Required"
+      // Zod error. Kept mcp-server-side (the shared Zod stays required) to avoid a 2nd foundry build (D7).
+      const data = await this.query<DiseaseCureResponse>('disease', { ...args, confirm: (args as any).confirm ?? false });
       return {
         content: [
           {
