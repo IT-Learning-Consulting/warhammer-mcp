@@ -146,6 +146,10 @@ export const ReadDocumentFromPackInput = z.object({
   action: z.literal('read-document-from-pack'),
   packId: PackId,
   documentId: FOUNDRY_ID, // polymorphic: not branded (Phase 1 design; FOUNDRY_ID primitive per C2 task 5.2)
+  // BUG-490 (Wave 2): 'summary' returns a compact projection (id/name/type/img +
+  // embedded counts + top-level keys); 'full' (default) returns the whole document
+  // and is subject to the global RESPONSE_TOO_LARGE size guard.
+  projection: z.enum(['summary', 'full']).optional(),
 }).strict();
 
 // ────────────────────────────────────────────────────────────────────────────

@@ -479,7 +479,25 @@ type GrantInput = Extract<ModuleMastercraftedInputType, { action: 'grant-recipe-
 async function handleGrantDiscovery(input: GrantInput): Promise<Envelope<unknown>> {
   const page = await (globalThis as any).fromUuid?.(input.pageUuid);
   if (!page) return { success: false, error: `MASTERCRAFTED_PAGE_NOT_FOUND: ${input.pageUuid}` };
+  // Effective default is Observer=1 (BUG-468: the old "default 2/Owner" doc claim was drift).
   const level = input.level ?? 1;
+
+  // BUG-468 (Wave 2): level:0 = REVOKE — delete the per-user ownership override
+  // (deletion marker) so the page falls back to the journal's default visibility.
+  // Pre-fix the documented revoke was Zod-unreachable ([1,2] literals only).
+  if (level === 0) {
+    await page.update({ [`ownership.-=${input.userId}`]: null });
+    const residual = page._source?.ownership?.[input.userId];
+    if (residual !== undefined) {
+      throw new Error(
+        `${ErrorTokens.MASTERCRAFTED_OWNERSHIP_NOT_PERSISTED}: revoke did not remove the ownership override for ` +
+        `${input.userId} (still ${JSON.stringify(residual)})`,
+      );
+    }
+    notify.updated('mastercrafted', page.name, { summary: `discovery revoked from ${input.userId}` });
+    return { success: true, data: { pageUuid: input.pageUuid, name: page.name, userId: input.userId, level: 0, revoked: true } };
+  }
+
   await page.update({ [`ownership.${input.userId}`]: level });
   // RC1.1b — CORE-05: route through verifyDocWrite's _source-compare instead of the prior
   // hand-rolled !== read-back (never hand-roll a new JSON.stringify/!== loop).

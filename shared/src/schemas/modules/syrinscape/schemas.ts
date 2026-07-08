@@ -35,8 +35,21 @@ export const SyrinscapeInput = z.discriminatedUnion('action', [
   z.object({ action: z.literal('stop-element'), id: z.string().min(1) }).strict(),
   z.object({ action: z.literal('stop-all') }).strict(),
   z.object({ action: z.literal('is-playing'), elementId: z.string().min(1) }).strict(),
-  z.object({ action: z.literal('list-soundsets') }).strict(),
-  z.object({ action: z.literal('list-moods'), soundsetName: z.string().min(1).optional() }).strict(),
+  // BUG-464 (Wave 2): both list actions are bounded — limit/offset + case-insensitive
+  // name filter (the live warm cache measured 53 KB/516 soundsets and 721 KB/4,571 moods).
+  z.object({
+    action: z.literal('list-soundsets'),
+    limit: z.number().int().min(1).max(500).optional(),
+    offset: z.number().int().min(0).optional(),
+    filter: z.string().min(1).optional(),
+  }).strict(),
+  z.object({
+    action: z.literal('list-moods'),
+    soundsetName: z.string().min(1).optional(),
+    limit: z.number().int().min(1).max(500).optional(),
+    offset: z.number().int().min(0).optional(),
+    filter: z.string().min(1).optional(),
+  }).strict(),
 ]);
 
 export type SyrinscapeInputType = z.infer<typeof SyrinscapeInput>;

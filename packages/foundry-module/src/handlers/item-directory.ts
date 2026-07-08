@@ -18,6 +18,7 @@ import {
   type ItemDirectoryToolInputType,
 } from '@foundry-mcp/shared';
 import { wrappedWrite } from '../transaction-manager.js';
+import { boundList } from '../services/bounded-response.js';
 import { notify } from '../notify.js';
 import { MAX_PAGE_SIZE } from '../constants/toolLimits.js';
 import { validateGMAccess as validateGMAccessGate } from '../utils/embeddedCRUDFactory.js';
@@ -91,15 +92,32 @@ function getWorldItem(input: Extract<ItemDirectoryToolInputType, { action: 'get'
 function searchWorldItems(input: Extract<ItemDirectoryToolInputType, { action: 'search' }>): Envelope<unknown> {
   const searchOpts: Record<string, unknown> = {};
   if (input.query) searchOpts.query = input.query;
-  if (input.filters) searchOpts.filters = input.filters;
   if (input.exclude) searchOpts.exclude = input.exclude;
 
-  const results: any[] = (game.items as any)?.search(searchOpts) ?? [];
+  // BUG-495 (Wave 2): Foundry's DocumentCollection#search expects `filters` as an
+  // ARRAY of FieldFilters — forwarding the documented {type?, folder?} OBJECT crashed
+  // with "filters is not iterable". Apply the documented object shape ourselves on
+  // the search results (deterministic; folder matches the scalar _source FK id).
+  let results: any[] = (game.items as any)?.search(searchOpts) ?? [];
+  if (input.filters?.type !== undefined) {
+    results = results.filter((i: any) => i?.type === input.filters!.type);
+  }
+  if (input.filters?.folder !== undefined) {
+    results = results.filter(
+      (i: any) => ((i?._source?.folder ?? i?.folder?.id ?? i?.folder) ?? null) === input.filters!.folder,
+    );
+  }
+  // BUG-528 (7th proven overflow surface): bound the result set — full serialized
+  // items at 164 world items measured 75.6k chars, over the BUG-490 budget.
+  const bounded = boundList(results, { limit: input.limit, offset: input.offset });
   return {
     success: true,
     data: {
-      items: results.map(serializeWorldItem),
-      total: results.length,
+      items: bounded.items.map(serializeWorldItem),
+      totalAvailable: bounded.totalAvailable,
+      truncated: bounded.truncated,
+      offset: bounded.offset,
+      limit: bounded.limit,
       query: input.query ?? null,
     },
   };

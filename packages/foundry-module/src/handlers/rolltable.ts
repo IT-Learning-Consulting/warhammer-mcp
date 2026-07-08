@@ -19,6 +19,8 @@ import { z } from 'zod';
 import { wrappedWrite } from '../transaction-manager.js';
 import { notify } from '../notify.js';
 import { validateGMAccess, stripUndefined } from '../utils/embeddedCRUDFactory.js';
+// BUG-490 (Wave 2): bounded list pages (the live world's full dump was 11.2 MB).
+import { boundList } from '../services/bounded-response.js';
 import type {
   CreateRollTableInputType,
   AddTableResultsInputType,
@@ -301,21 +303,33 @@ export async function addTableResults(data: unknown): Promise<Envelope<{ tableId
 
 // ── 3. listRollTables ─────────────────────────────────────────────────────────
 
-export async function listRollTables(data: unknown): Promise<Envelope<any[]>> {
+export async function listRollTables(data: unknown): Promise<Envelope<any>> {
   const gate = validateGMAccess();
   if (!gate.allowed) return { success: false, error: 'Access denied: listRollTables requires GM' };
 
-  ListRollTablesInput.strict().parse(data ?? {});
+  const input = ListRollTablesInput.strict().parse(data ?? {});
 
-  const tables = ((game as any).tables as any).map((table: any) => ({
+  // BUG-490 (Wave 2): summary projection — id/name/formula/resultCount, NO embedded
+  // results (the full-results dump measured 11.2 MB on the live world). Use
+  // getRollTable for one table's results.
+  const all = ((game as any).tables as any).map((table: any) => ({
     id: table.id,
     name: table.name,
     formula: table.formula,
-    description: table.description || '',
-    results: (table.results as any).map(serialiseResult),
+    resultCount: ((table.results as any).size ?? 0) as number,
   }));
 
-  return { success: true, data: tables };
+  const bounded = boundList(all, { limit: input.limit, offset: input.offset });
+  return {
+    success: true,
+    data: {
+      tables: bounded.items,
+      totalAvailable: bounded.totalAvailable,
+      truncated: bounded.truncated,
+      offset: bounded.offset,
+      limit: bounded.limit,
+    },
+  };
 }
 
 // ── 4. getRollTable (Phase 2.2.2 — extended result shape) ────────────────────
@@ -347,6 +361,27 @@ export async function getRollTable(data: unknown): Promise<Envelope<any>> {
 // Intentional notify silence: table.draw() posts a ChatMessage with the drawn
 // result, which is the user-facing signal. A notify toast would duplicate.
 
+/**
+ * BUG-491 (Wave 2): a multi-row table whose EVERY range is [1,1] is degenerate —
+ * Foundry's draw matches every row at once, so roll/draw-many silently return the
+ * whole table. Fail loud instead of returning all rows with a success envelope.
+ * Returns the typed error string, or null when the table is rollable.
+ */
+export function degenerateRangesError(table: any): string | null {
+  const results: any[] = (table.results as any)?.contents ?? Array.from((table.results as any) ?? []);
+  if (results.length <= 1) return null;
+  const allCollapsed = results.every(
+    (r: any) => Array.isArray(r.range) && r.range.length === 2 && r.range[0] === 1 && r.range[1] === 1,
+  );
+  if (!allCollapsed) return null;
+  return (
+    `ROLLTABLE_DEGENERATE_RANGES: all ${results.length} results on table "${table.name}" have range [1,1] — ` +
+    `a draw would return every result at once. Call normalizeRollTable to rebalance ranges ` +
+    `(WARNING: overwrites author bands + rewrites the formula), or re-import — rangeless imports ` +
+    `now auto-assign sequential ranges.`
+  );
+}
+
 export async function rollOnTable(data: unknown): Promise<Envelope<any>> {
   const gate = validateGMAccess();
   if (!gate.allowed) return { success: false, error: 'Access denied: rollOnTable requires GM' };
@@ -358,6 +393,10 @@ export async function rollOnTable(data: unknown): Promise<Envelope<any>> {
   if (!table) {
     return { success: false, error: `ROLLTABLE_TABLE_NOT_FOUND: no table with id "${input.tableId}"` };
   }
+
+  // BUG-491: fail loud on degenerate all-[1,1] tables instead of returning every row.
+  const degenerate = degenerateRangesError(table);
+  if (degenerate) return { success: false, error: degenerate };
 
   const rollMode = input.rollMode || 'public';
   // BUG-305: draw() marks results drawn on non-replacement tables — a real
@@ -737,6 +776,10 @@ export async function drawManyFromTable(
     return { success: false, error: `ROLLTABLE_TABLE_NOT_FOUND: no table with id "${input.tableId}"` };
   }
 
+  // BUG-491: fail loud on degenerate all-[1,1] tables instead of returning every row.
+  const degenerateMany = degenerateRangesError(table);
+  if (degenerateMany) return { success: false, error: degenerateMany };
+
   const options: Record<string, unknown> = {};
   if (input.displayChat !== undefined) options.displayChat = input.displayChat;
   if (input.recursive !== undefined) options.recursive = input.recursive;
@@ -810,7 +853,13 @@ export async function drawManyFromTable(
 
 export async function importRollTableFromCompendium(
   data: unknown,
-): Promise<Envelope<{ newTableId: string; name: string; normalized: boolean }>> {
+): Promise<Envelope<{
+  newTableId: string;
+  name: string;
+  normalized: boolean;
+  rangesAssigned?: boolean;
+  formulaRewritten?: { from: string; to: string };
+}>> {
   const gate = validateGMAccess();
   if (!gate.allowed) return { success: false, error: 'Access denied: importRollTableFromCompendium requires GM' };
 
@@ -871,6 +920,41 @@ export async function importRollTableFromCompendium(
       }
     }
 
+    // BUG-491 (Wave 2): compendium/document-typed results carry no ranges; Foundry
+    // defaults EVERY range to [1,1] on an un-normalized import, so roll/draw-many
+    // return the whole table. When ALL ranges collapsed (i.e. no author bands
+    // existed — banded tables under normalize:false keep their bands and are left
+    // untouched, BUG-416 class), assign sequential [1,1],[2,2],…[N,N] and align the
+    // formula to 1dN (Wave-1 D13 formulaRewritten precedent).
+    let rangesAssigned = false;
+    let formulaRewritten: { from: string; to: string } | undefined;
+    if (!input.normalize && worldTable.results.size > 1) {
+      const results = worldTable.results.contents as any[];
+      const allCollapsed = results.every(
+        (r: any) => Array.isArray(r.range) && r.range.length === 2 && r.range[0] === 1 && r.range[1] === 1,
+      );
+      if (allCollapsed) {
+        const updates = results.map((r: any, i: number) => ({ _id: r.id, range: [i + 1, i + 1] }));
+        await worldTable.updateEmbeddedDocuments('TableResult', updates);
+        const fromFormula = String(worldTable.formula ?? '');
+        const toFormula = `1d${results.length}`;
+        if (fromFormula !== toFormula) {
+          await worldTable.update({ formula: toFormula });
+          formulaRewritten = { from: fromFormula, to: toFormula };
+        }
+        rangesAssigned = true;
+
+        // BUG-070 post-verify: last result's range must reflect the assignment.
+        const freshLast = (game as any).tables?.get(newDoc.id)?.results?.contents?.[results.length - 1];
+        if (!Array.isArray(freshLast?.range) || freshLast.range[0] !== results.length) {
+          throw new Error(
+            `${ErrorTokens.ROLLTABLE_WRITE_NOT_PERSISTED}: sequential range assignment did not persist — ` +
+            `last result range is ${JSON.stringify(freshLast?.range)} (expected [${results.length},${results.length}])`,
+          );
+        }
+      }
+    }
+
     notify.created('rolltable', newDoc.name as string, {
       summary: `from compendium ${input.pack}`,
     });
@@ -881,6 +965,8 @@ export async function importRollTableFromCompendium(
         newTableId: newDoc.id as string,
         name: newDoc.name as string,
         normalized: input.normalize,
+        ...(rangesAssigned ? { rangesAssigned } : {}),
+        ...(formulaRewritten ? { formulaRewritten } : {}),
       },
     };
   });

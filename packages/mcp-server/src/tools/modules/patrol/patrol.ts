@@ -4,8 +4,9 @@
 // it returns MODULE_NOT_ACTIVE which BaseTool.query() converts to a throw → moduleNotActiveContent().
 // Use module-probe.is-active patrol to pre-flight.
 //
-// 7 actions: read (get-config) + GM writes (enable-token, disable-token, set-wander-zone, set-path,
-// apply-undetectable) + confirm-gated write (toggle-global).
+// 12 actions: reads (get-token-config, get-world-settings, list-tokens) + GM writes (enable-token,
+// disable-token, set-wander-zone, set-path, apply-undetectable, configure, set-waypoint) +
+// confirm-gated writes (toggle-global, remap-paths).
 //
 // Anchors: DP-15 (concrete this.query<T> per action — never <any>).
 
@@ -39,7 +40,7 @@ function itemLine(r: EnableTokenItem): string {
 function formatGetConfig(d: GetConfigResult): string {
   const flags = Object.entries(d.flags).map(([k, v]) => `${k}=${v}`).join(', ');
   return [
-    `module-patrol.get-config: ${d.tokenName}`,
+    `module-patrol.get-token-config: ${d.tokenName}`,
     `- flags: ${flags}`,
     `- global: wander=${d.global.wanderStarted} path=${d.global.pathStarted}`,
   ].join('\n');
@@ -119,10 +120,10 @@ export class ModulePatrolTool extends BaseTool {
 Conditional: returns MODULE_NOT_ACTIVE when patrol is absent/inactive.
 Pre-flight: module-probe.is-active patrol before using this tool.
 
-7 actions:
-Read — get-config { tokenUuid } (all patrol flags + global engine state).
-GM writes — enable-token { tokenUuids[], mode: wander|path, spotting?, patrolPathName? (path), pathNodeIndex? (path), multiPath? (path) }; disable-token { tokenUuids[] } (clears all patrol flags); set-wander-zone { sceneId, points[]? (≥3 polygon verts) | drawingId? } (creates a "Patrol"-labeled Drawing); set-path { sceneId, pathName, points[]? (≥2) | drawingId? }; apply-undetectable { actorUuid, active }.
-Confirm-gated write — toggle-global { started, engines?: wander|path|both, confirm:true } (starts/stops ALL patrol movement; runtime-only — resets on reload).
+12 actions:
+Reads — get-token-config { tokenUuid } (all patrol flags + global engine state); get-world-settings {} (module-level config); list-tokens { filter?: all|wander|path|spotting } (patrol-enabled tokens).
+GM writes — enable-token { tokenUuids[], mode: wander|path, spotting?, patrolPathName? (path), pathNodeIndex? (path), multiPath? (path) }; disable-token { tokenUuids[] } (clears all patrol flags); set-wander-zone { sceneId, points[]? (≥3 polygon verts) | drawingId? } (creates a "Patrol"-labeled Drawing); set-path { sceneId, pathName, points[]? (≥2) | drawingId? }; apply-undetectable { actorUuid, active }; configure { patrolDelay?, pathPatrolDelay?, patrolAlertDelay?, patrolDiagonals?, patrolSmooth?, … } (engine tick/detection settings); set-waypoint { tokenUuids[], pathNodeIndex } (jump path-followers to a node).
+Confirm-gated writes — toggle-global { started, engines?: wander|path|both, confirm:true } (starts/stops ALL patrol movement; runtime-only — resets on reload); remap-paths { sceneId, confirm:true } (re-resolves every path-follower token's pathID against the scene's current "Path"-labeled Drawings — use after renaming/redrawing paths).
 
 WRITE-ORDER: for path mode, call set-path FIRST (the named Drawing must exist before enable-token, else pathID resolves empty). Patrols pause during active combat and resume after. Global state is in-memory (not persisted).
 

@@ -38,7 +38,14 @@ const text = (s: string) => ({ content: [{ type: 'text' as const, text: s }] });
 // ── Per-action formatters (surface every handler-returned field — Phase-6 drift lesson) ─────
 
 function formatGroupTest(d: GmtoolkitGroupTestResult): string {
-  return `module-gmtoolkit.run-group-test: "${d.testSkill}" rolled (bypass) for ${d.targetCount ?? 'the party'} target(s).`;
+  // BUG-492 (Wave 2): render the compact per-target rows (name/SL/outcome) — the raw
+  // aggregate used to embed full actor docs (~97 KB / 8 targets) and blow the query window.
+  const rows = Array.isArray(d.results)
+    ? (d.results as Array<Record<string, unknown>>)
+        .map((r) => `  - ${r.name ?? '(unknown)'}: SL ${r.sl ?? '?'} — ${r.outcome ?? '?'}${r.roll !== null && r.roll !== undefined ? ` (rolled ${r.roll} vs ${r.target ?? '?'})` : ''}`)
+        .join('\n')
+    : '';
+  return `module-gmtoolkit.run-group-test: "${d.testSkill}" rolled (bypass) for ${d.targetCount ?? 'the party'} target(s).${rows ? `\n${rows}` : ''}`;
 }
 function formatAdvantage(d: GmtoolkitAdvantageResult): string {
   if (d.mode === 'clear-bulk') return `module-gmtoolkit.update-advantage: cleared advantage on ${d.clearedCount ?? 0} token(s).`;
@@ -115,7 +122,7 @@ Pre-flight: module-probe.is-active wfrp4e-gm-toolkit before using this tool.
 
 12 actions:
 Reads — get-session-info; get-group { groupType?, activeOnly?, presentOnly? }; check-conditions { actorId }.
-Writes (GM) — run-group-test { testSkill, difficulty?, testModifier?, rollMode?, targetGroup? } (always dialog-free bypass); update-advantage { mode, tokenId?, confirm? } (mode increase/reduce/clear-single/clear-bulk; increase/reduce only apply in active combat; player-owned tokens are socket-routed — the GM Toolkit fix; clear-bulk needs confirm:true); adjust-status { actorId, status, change } (resolve/sin/corruption/fortune); toggle-scene-light { sceneId?, tokenVision?, globalLight? }; pull-to-scene { sceneId? } (activates the scene); toggle-compendium-visibility { packId, private? }; roll-d100 { flavor? }.
+Writes (GM) — run-group-test { testSkill, difficulty?, testModifier?, rollMode?, targetGroup? } (always dialog-free bypass; response carries COMPACT per-target rows {name,id,skill,sl,outcome,roll,target} — never embedded actor docs, BUG-492; malformed targetGroup UUIDs fail loud with GMTOOLKIT_INVALID_TARGET before any roll; a client timeout is NOT a cancellation — the server may have completed and posted rolls, so re-read chat before retrying, never blind-retry); update-advantage { mode, tokenId?, confirm? } (mode increase/reduce/clear-single/clear-bulk; increase/reduce only apply in active combat; player-owned tokens are socket-routed — the GM Toolkit fix; clear-bulk needs confirm:true; response 'value' is the settle-polled POST-write value, BUG-500); adjust-status { actorId, status, change } (resolve/sin/corruption/fortune); toggle-scene-light { sceneId?, tokenVision?, globalLight? }; pull-to-scene { sceneId? } (activates the scene); toggle-compendium-visibility { packId, private? }; roll-d100 { flavor? }.
 Confirm-gated writes (GM + confirm:true) — session-turnover { actorId, xp?, reason?, resetFortune?, activateSceneId?, confirm } (dialog-free decompose: XP + fortune reset + scene); add-xp { actorId, amount, reason?, confirm } (writes total/current + appends the experience log).
 
 NOTE: lose-momentum (use update-advantage reduce/clear) and deal-damage (use warhammer-mcp.apply-damage) are reachable via those safe paths.

@@ -162,3 +162,65 @@ describe('verifyScalarWrite (mcp_code_quality_v2 Phase C2, RC2.4)', () => {
     expect(() => verifyScalarWrite(false, true, 'SETTING_NOT_PERSISTED')).toThrow(/SETTING_NOT_PERSISTED/);
   });
 });
+
+// ── BUG-499 (Wave 2, D6): dimension-normalizing verify ─────────────────────────
+// The BUG-445/451/191/499 wrong-dimension family: a real, persisted write false-
+// failed the drift-check because the direct read returned a different DIMENSION of
+// the same value (Folder document getter vs scalar id; numeric string vs number).
+import { normalizedEquals } from '../utils/verifyWrite.js';
+
+describe('normalizedEquals + normalizeDimensions (BUG-499)', () => {
+  it('folder FK move: Document-object getter vs requested scalar id passes', () => {
+    // Live shape (BUG-499 repro a): fresh.folder returns the linked Folder document.
+    const folderDoc = { id: 'folderAAAAAAAAA1', name: 'Heroes', depth: 1 };
+    expect(normalizedEquals(folderDoc, 'folderAAAAAAAAA1')).toBe(true);
+    expect(normalizedEquals(folderDoc, 'differentFolder1')).toBe(false);
+  });
+
+  it('advantage numeric coercion: "3" vs 3 passes; real drift still fails', () => {
+    expect(normalizedEquals('3', 3)).toBe(true);
+    expect(normalizedEquals(3, '3')).toBe(true);
+    expect(normalizedEquals('4', 3)).toBe(false);
+    expect(normalizedEquals('', 3)).toBe(false); // blank never coerces to a match
+  });
+
+  it('FK clear: null request vs undefined/"" persisted passes', () => {
+    expect(normalizedEquals(undefined, null)).toBe(true);
+    expect(normalizedEquals('', null)).toBe(true);
+    expect(normalizedEquals('stillSet', null)).toBe(false);
+  });
+
+  it('verifyDocWrite normalizeDimensions:true passes the two live BUG-499 fixtures', () => {
+    const fresh = {
+      folder: { id: 'folderAAAAAAAAA1', name: 'Heroes' },
+      system: { status: { advantage: { value: '3' } } },
+    };
+    expect(() =>
+      verifyDocWrite(
+        fresh,
+        { folder: 'folderAAAAAAAAA1', 'system.status.advantage.value': 3 },
+        'UPDATE_ACTOR_NOT_PERSISTED',
+        { readSource: false, normalizeDimensions: true },
+      ),
+    ).not.toThrow();
+  });
+
+  it('verifyDocWrite normalizeDimensions:true still throws on REAL drift', () => {
+    const fresh = { folder: { id: 'wrongFolderIdAA1' }, system: { status: { advantage: { value: 0 } } } };
+    expect(() =>
+      verifyDocWrite(
+        fresh,
+        { folder: 'folderAAAAAAAAA1', 'system.status.advantage.value': 3 },
+        'UPDATE_ACTOR_NOT_PERSISTED',
+        { readSource: false, normalizeDimensions: true },
+      ),
+    ).toThrow(/UPDATE_ACTOR_NOT_PERSISTED/);
+  });
+
+  it('default (no normalizeDimensions) keeps strict structural semantics', () => {
+    const fresh = { folder: { id: 'folderAAAAAAAAA1' } };
+    expect(() =>
+      verifyDocWrite(fresh, { folder: 'folderAAAAAAAAA1' }, 'X_NOT_PERSISTED', { readSource: false }),
+    ).toThrow(/X_NOT_PERSISTED/);
+  });
+});

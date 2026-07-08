@@ -15,12 +15,16 @@ import path from 'node:path';
 const ASSET = 'E:/warhammer_system/.claude/skills/wfrp-encounter-builder/assets/skill-weapon-correlation.json';
 void path;
 
+// CI runners (GitHub Actions ubuntu-latest) don't check out the vault repo — this
+// test validates parity with a vault-only skill asset and is skipped when absent.
+const HAS_VAULT = fs.existsSync(ASSET);
+
 const WFRP4E_WEAPON_GROUPS = [
   'basic', 'polearm', 'twohanded', 'cavalry', 'flail', 'fencing', 'brawling', 'parry',
   'bow', 'crossbow', 'sling', 'throwing', 'blackpowder', 'explosives', 'engineering',
 ];
 
-describe('skill-weapon-correlation.json', () => {
+describe.skipIf(!HAS_VAULT)('skill-weapon-correlation.json', () => {
   let data: Record<string, { path: string; operation: string; value: string }>;
 
   it('parses cleanly', () => {

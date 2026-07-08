@@ -141,6 +141,8 @@ interface CompendiumReadDocumentResponse {
   documentId: string; // not a branded id (polymorphic / non-document)
   documentUuid: FoundryUuid;
   data: Record<string, unknown>;
+  // BUG-490 (Wave 2): which projection produced `data`.
+  projection?: 'summary' | 'full';
 }
 
 // ── Utilities ─────────────────────────────────────────────────────────────
@@ -291,17 +293,25 @@ function formatUpdateDocumentResponse(r: CompendiumUpdateDocumentResponse): stri
 function formatReadDocumentResponse(r: CompendiumReadDocumentResponse): string {
   const dataKeys = Object.keys(r.data);
   const preview = truncatedJoin(dataKeys, 25, ', ', (n) => `, … (+${n} more)`);
+  const isSummary = r.projection === 'summary';
+  // Full dumps render COMPACT: the 64k RESPONSE_TOO_LARGE guard measures the
+  // handler's compact JSON, and pretty-printing here re-inflated payloads past the
+  // budget the guard had already cleared (Wave-2 validate F04, 2026-07-07). Summary
+  // payloads are small — keep them pretty for readability.
+  const dataStr = isSummary ? JSON.stringify(r.data, null, 2) : JSON.stringify(r.data);
   return [
     `## Compendium Document \`${r.documentId}\``,
     ``,
     `- **packId:** \`${r.packId}\``,
     `- **documentUuid:** \`${r.documentUuid}\``,
+    `- **projection:** ${r.projection ?? 'full'}`,
     `- **top-level data keys (${dataKeys.length}):** ${preview || '_(empty)_'}`,
     ``,
-    `### Full data`,
+    isSummary ? `### Summary` : `### Full data`,
     '```json',
-    JSON.stringify(r.data, null, 2),
+    dataStr,
     '```',
+    ...(isSummary ? ['', '_Pass projection:"full" (default) for the whole document — large documents fail loud with RESPONSE_TOO_LARGE._'] : []),
   ].join('\n');
 }
 
@@ -339,7 +349,7 @@ export class CompendiumUmbrellaTools extends BaseTool {
 - **read-pack**: List a pack's entries with optional pagination. packId, optional page (1-based) + pageSize (1-500, default 100). Returns metadata, totalEntries, page, pageSize, pageCount, entries[{id,name,type,img,uuid,folder}], and folders[{id,name,color,sort,folder,depth}] (the full in-pack folder tree — not paginated). Each entry's \`folder\` is its in-pack folder id (null = pack root).
 - **add-document-to-pack**: Add a document to a pack. packId + source + optional folder. Two source kinds: {kind:"uuid", uuid:"<world-doc-uuid>"} imports a hydrated world document (COPY semantics; source persists; pack collision rejected via COMPENDIUM_DOCUMENT_ALREADY_EXISTS since importDocument preserves source ID); {kind:"inline", data:{...}} creates a doc inline via CONFIG[type].documentClass.create(). Optional \`folder\`: an in-pack folder id to place the document into (must already exist — create via create-folder-in-pack first; importDocument otherwise lands the doc at pack root regardless of its world folder). Returns documentId, documentUuid, name, type, entryCount, warnings.
 - **update-document-in-pack**: Update a document inside a pack. packId + documentId + changes (free-form Record). Renaming via changes.name is allowed; also accepts img, sort, system.*, flags.* paths, and \`folder\` (move the document to a different in-pack folder, or null for root). system/flags paths skip strict post-verify (appear in changedFields unconditionally). Returns documentUuid + changedFields. DP-16 post-verify on non-system/non-flags fields.
-- **read-document-from-pack**: Fetch a hydrated document's full data. packId + documentId. Returns documentUuid + data (toObject() output).
+- **read-document-from-pack**: Fetch a hydrated document. packId + documentId. Optional projection: "summary" (compact — id/name/type/img + embeddedCounts + a bounded embeddedPreview of names + topLevelKeys) or "full" (default; whole toObject() output — a large document fails loud with RESPONSE_TOO_LARGE pointing back to projection:"summary"; a full actor read measured 72.5k chars live, BUG-490).
 - **create-folder-in-pack**: Create a folder INSIDE a pack (organizes pack entries; distinct from the pack's sidebar folder). packId + folderName. Optional: parentFolderId (nest under an existing in-pack folder), color (hex), sort (int). Folder type is derived from the pack's document type. Pack folder depth cap is 3 (one less than world folders); exceeding it rejects with COMPENDIUM_FOLDER_MAX_DEPTH_EXCEEDED. Returns folderId, name, uuid, depth.
 - **list-folders-in-pack**: List all folders inside a pack. packId. Returns folders[{id,name,color,sort,folder,depth}] (depth 1 = root-level). Use this to discover folder ids for add-document-to-pack placement.
 - **update-folder-in-pack**: Rename / recolor / reparent / re-sort an in-pack folder. packId + folderId + changes (≥1 of: folderName, color (nullable), sort, parentFolderId (nullable for root)). type is immutable. Reparent is depth-checked and cycle-checked (cannot move a folder under itself or a descendant). Returns changedFields.
@@ -439,6 +449,11 @@ export class CompendiumUmbrellaTools extends BaseTool {
             documentId: {
               type: 'string',
               description: '[update-document-in-pack/read-document-from-pack] Document id inside the pack. Last segment of the 5-segment UUID.',
+            },
+            projection: {
+              type: 'string',
+              enum: ['summary', 'full'],
+              description: '[read-document-from-pack] "summary" = compact projection (id/name/type/img + embedded counts/name preview); "full" (default) = whole document, subject to the RESPONSE_TOO_LARGE size guard (BUG-490).',
             },
             // add-document-to-pack placement + folder actions
             folder: {

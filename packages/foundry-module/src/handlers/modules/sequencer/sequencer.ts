@@ -122,6 +122,78 @@ export async function dispatchModuleSequencer(data: unknown): Promise<any> {
 
 type PlaySeqInput = Extract<ModuleSequencerInputType, { action: 'play-sequence-json' }>;
 
+// BUG-462 (Wave 2, D4): resolve a simplified-section location — {x,y} literal, or a
+// placeable id/name resolved against canvas tokens (then measured templates).
+function resolveSimpleLocation(loc: unknown): unknown {
+  if (loc && typeof loc === 'object' && Number.isFinite((loc as any).x) && Number.isFinite((loc as any).y)) {
+    return loc;
+  }
+  if (typeof loc === 'string') {
+    const canvas = (globalThis as any).canvas;
+    const token = canvas?.tokens?.get?.(loc)
+      ?? canvas?.tokens?.placeables?.find?.((t: any) => t?.name === loc);
+    if (token) return token;
+    const template = canvas?.templates?.get?.(loc);
+    if (template) return template;
+  }
+  throw new Error(
+    `SEQUENCER_LOCATION_UNRESOLVED: could not resolve location ${JSON.stringify(loc)} — pass {x,y} coordinates or a canvas token id/name`,
+  );
+}
+
+// BUG-462 (Wave 2, D4): server-side simplified-section expander. The taught payload
+// shape ([{type:"effect", file:"jb2a.flames.orange"}]) is built through Sequencer's
+// own fluent API — so Sequencer applies its own defaults (repetitionsDelay etc.)
+// instead of this handler hand-crafting the fragile toJSON sectionData blob.
+// Supported simple types: effect + sound ONLY (other types keep toJSON passthrough).
+function buildSimplifiedSequence(seq: any, sections: Array<Record<string, unknown>>): void {
+  for (let i = 0; i < sections.length; i++) {
+    const s = sections[i]!;
+    if (s.type !== 'effect' && s.type !== 'sound') {
+      throw new Error(
+        `SEQUENCER_UNSUPPORTED_SIMPLE_SECTION: section ${i} has type "${String(s.type)}" — simplified sections ` +
+        `support only "effect" and "sound". Other section types must be supplied as full Sequence.toJSON() output.`,
+      );
+    }
+    if (typeof s.file !== 'string' || s.file === '') {
+      throw new Error(`SEQUENCER_PLAY_ERROR: simplified section ${i} (${s.type}) requires a non-empty "file" (a DB path like "jb2a.flames.orange" or a file path)`);
+    }
+    if (s.type === 'effect') {
+      const eff = seq.effect().file(s.file);
+      if (s.atLocation !== undefined) eff.atLocation(resolveSimpleLocation(s.atLocation));
+      if (s.attachTo !== undefined) eff.attachTo(resolveSimpleLocation(s.attachTo));
+      if (s.stretchTo !== undefined) eff.stretchTo(resolveSimpleLocation(s.stretchTo));
+      if (typeof s.scale === 'number') eff.scale(s.scale);
+      if (typeof s.duration === 'number') eff.duration(s.duration);
+      if (typeof s.fadeIn === 'number') eff.fadeIn(s.fadeIn);
+      if (typeof s.fadeOut === 'number') eff.fadeOut(s.fadeOut);
+      if (typeof s.opacity === 'number') eff.opacity(s.opacity);
+      if (typeof s.delay === 'number') eff.delay(s.delay);
+      if (typeof s.rotate === 'number') eff.rotate(s.rotate);
+      if (typeof s.tint === 'string') eff.tint(s.tint);
+      if (typeof s.name === 'string') eff.name(s.name);
+      if (typeof s.origin === 'string') eff.origin(s.origin);
+      if (typeof s.repeats === 'number') {
+        eff.repeats(s.repeats, (s.repeatDelayMin as number) ?? 0, (s.repeatDelayMax as number) ?? ((s.repeatDelayMin as number) ?? 0));
+      }
+      if (s.persist === true) eff.persist();
+      if (s.belowTokens === true) eff.belowTokens();
+      if (s.waitUntilFinished === true) eff.waitUntilFinished();
+    } else {
+      const snd = seq.sound().file(s.file);
+      if (typeof s.volume === 'number') snd.volume(s.volume);
+      if (typeof s.duration === 'number') snd.duration(s.duration);
+      if (typeof s.fadeInAudio === 'number') snd.fadeInAudio(s.fadeInAudio);
+      if (typeof s.fadeOutAudio === 'number') snd.fadeOutAudio(s.fadeOutAudio);
+      if (typeof s.delay === 'number') snd.delay(s.delay);
+      if (typeof s.repeats === 'number') {
+        snd.repeats(s.repeats, (s.repeatDelayMin as number) ?? 0, (s.repeatDelayMax as number) ?? ((s.repeatDelayMin as number) ?? 0));
+      }
+      if (s.waitUntilFinished === true) snd.waitUntilFinished();
+    }
+  }
+}
+
 async function handlePlaySequenceJson(input: PlaySeqInput): Promise<Envelope<unknown>> {
   if (!isGM()) return { success: false, error: 'GM_REQUIRED: only the GM can play sequences' };
 
@@ -129,21 +201,37 @@ async function handlePlaySequenceJson(input: PlaySeqInput): Promise<Envelope<unk
   const guardErr = checkMacroGuard(input.sequence as Array<{ type: string; [key: string]: unknown }>);
   if (guardErr) return { success: false, error: guardErr };
 
-  // Structural pre-check: play-sequence-json consumes the output of Sequence.toJSON(). Every
-  // serialized section carries `repetitionsDelay` as a [min,max] array; Section._deserialize reads
-  // `data.repetitionsDelay[0]` unconditionally. A hand-authored stub (e.g. {type:"effect",file:…})
-  // lacks it, and because fromJSON invokes the async _deserialize WITHOUT awaiting it, the resulting
-  // TypeError escapes this try/catch as a DETACHED unhandled promise rejection (console noise, no
-  // envelope). Reject incomplete sections up-front with a clean SEQUENCER_PLAY_ERROR. Real toJSON()
-  // blobs always carry repetitionsDelay, so legitimate session-transport is unaffected.
-  const badIdx = (input.sequence as Array<Record<string, unknown>>).findIndex(
-    (s) => !Array.isArray((s as any)?.repetitionsDelay),
-  );
-  if (badIdx !== -1) {
+  const sections = input.sequence as Array<Record<string, unknown>>;
+  const isSerialized = (s: Record<string, unknown>) => Array.isArray((s as any)?.repetitionsDelay);
+
+  // BUG-462 (Wave 2, D4): two accepted payload styles —
+  //   simplified (no section carries repetitionsDelay): expanded via the fluent API;
+  //   serialized (every section carries repetitionsDelay): raw Sequence.toJSON() passthrough.
+  const serializedCount = sections.filter(isSerialized).length;
+  if (serializedCount > 0 && serializedCount < sections.length) {
     return {
       success: false,
-      error: `SEQUENCER_PLAY_ERROR: section ${badIdx} is not a valid serialized section (missing repetitionsDelay[min,max]). play-sequence-json consumes the output of Sequence.toJSON(), not hand-authored section stubs.`,
+      error:
+        'SEQUENCER_PLAY_ERROR: mixed payload — some sections carry repetitionsDelay (serialized toJSON shape) and ' +
+        'some do not (simplified shape). Send either one full Sequence.toJSON() output or an all-simplified section array.',
     };
+  }
+
+  if (serializedCount === 0) {
+    // Simplified path (the shape every doc teaches: [{type:"effect", file:"jb2a.flames.orange"}]).
+    try {
+      const Sequence = getSequenceClass();
+      const seq = new Sequence();
+      buildSimplifiedSequence(seq, sections);
+      await seq.play(input.options ?? {});
+      notify.updated('sequencer', 'Played sequence', { summary: `${sections.length} simplified section(s)` });
+      return {
+        success: true,
+        data: { played: true, sectionCount: sections.length, mode: 'simplified' },
+      };
+    } catch (e) {
+      return { success: false, error: e instanceof Error && /^SEQUENCER_/.test(e.message) ? e.message : `SEQUENCER_PLAY_ERROR: ${e instanceof Error ? e.message : String(e)}` };
+    }
   }
 
   try {

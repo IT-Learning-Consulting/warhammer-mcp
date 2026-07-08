@@ -109,10 +109,13 @@ export class CharacterTools extends BaseTool {
 
     try {
       const isId = /^[A-Za-z0-9]{16}$/.test(identifier);
-      const characterData = await this.query<FoundryRawActor>('getCharacterInfo', isId
-        ? { characterId: identifier }
-        : { characterName: identifier }
-      );
+      const characterData = await this.query<FoundryRawActor>('getCharacterInfo', {
+        ...(isId ? { characterId: identifier } : { characterName: identifier }),
+        // BUG-529: forward sections so the foundry-module prunes items/effects BEFORE
+        // the BUG-490 size guard measures the payload; applySectionsFilter below stays
+        // as the view-shaping fallback.
+        ...(sections && sections.length > 0 ? { sections } : {}),
+      });
 
       this.logger.debug('Successfully retrieved character data', {
         characterId: characterData.id,

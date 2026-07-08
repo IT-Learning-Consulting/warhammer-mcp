@@ -4,8 +4,11 @@
 // when inactive it returns MODULE_NOT_ACTIVE which BaseTool.query() converts to a throw →
 // moduleNotActiveContent(). Use module-probe.is-active simple-timekeeping to pre-flight.
 //
-// 7 actions: reads (get-time, list-events) + GM writes (advance, set-time, advance-to,
-// set-scene-sync, add-event).
+// 19 actions: reads (get-time, list-events, get-config) + GM writes (advance, set-time,
+// advance-to, set-scene-sync, add-event, update-event, set-clock-paused,
+// set-darkness-sync-global, set-weather, generate-weather, set-moon-badge,
+// set-custom-badge, set-macro-triggers) + confirm-gated (delete-event, set-config,
+// activate-calendar).
 //
 // Anchors: DP-15 (concrete this.query<T> per action — never <any>).
 
@@ -78,7 +81,14 @@ function formatConfig(d: GetConfigResult): string {
 }
 
 function formatActivateCalendar(d: ActivateCalendarResult): string {
-  return `module-timekeeping.activate-calendar: "${d.calendar}" active (id=${d.activeCalendarId ?? '?'}, ${d.monthCount ?? '?'} months)`;
+  // BUG-501 (Wave 2): render applied/note so the on-reload caveat is visible in text —
+  // pre-fix a GM couldn't see that a preset only applies on the next world reload.
+  const lines = [
+    `module-timekeeping.activate-calendar: "${d.calendar}" — applied: ${d.applied ?? '?'} (indicator id=${d.activeCalendarId ?? '?'}, ${d.monthCount ?? '?'} months)`,
+  ];
+  if (d.note) lines.push(`- note: ${d.note}`);
+  if (d.indicatorCaveat) lines.push(`- caveat: ${d.indicatorCaveat}`);
+  return lines.join('\n');
 }
 
 function formatGeneric(action: string) {
@@ -119,9 +129,10 @@ export class ModuleTimekeepingTool extends BaseTool {
 Conditional: returns MODULE_NOT_ACTIVE when simple-timekeeping is absent/inactive.
 Pre-flight: module-probe.is-active simple-timekeeping before using this tool.
 
-7 actions:
-Reads — get-time {} (worldTime, components, date text, dayTimePercent, season, Mannslieb/Morrslieb phase); list-events { includeExpired?, journalName? }.
-GM writes — advance { seconds? | minutes? | hours? | days? } (negative = reverse; one required); set-time { worldTime? | year?, month? (name or 0-index), dayOfMonth?, hour?, minute?, second? }; advance-to { target: dawn|dusk|midday|midnight, dawnHour?, duskHour? } (surfaces a no-op when already at target); set-scene-sync { sceneId, sync: sync|darknessOnly|weatherOnly|noSync|default }; add-event { name, eventTime (worldTime seconds), eventEnd?, repeat?: day|week|month|year, journalName? }.
+19 actions:
+Reads — get-time {} (worldTime, components, date text, dayTimePercent, season, Mannslieb/Morrslieb phase, activeCalendar); list-events { includeExpired?, journalName? }; get-config {} (the module's world configuration object).
+GM writes — advance { seconds? | minutes? | hours? | days? } (negative = reverse; one required); set-time { worldTime? | year?, month? (name or 0-index), dayOfMonth?, hour?, minute?, second? } (month/dayOfMonth persist — the handler recomputes the day-of-year ordinal Foundry actually consumes, BUG-493; out-of-range dayOfMonth fails loud); advance-to { target: dawn|dusk|midday|midnight, dawnHour?, duskHour? } (surfaces a no-op when already at target); set-scene-sync { sceneId, sync: sync|darknessOnly|weatherOnly|noSync|default }; add-event { name, eventTime (worldTime seconds), eventEnd?, repeat?: day|week|month|year, journalName? }; update-event { pageUuid, name?, eventTime?, eventEnd?, repeat? }; set-clock-paused { paused }; set-darkness-sync-global { sync }; set-weather { label, color?, sceneId?, weatherEffect? }; generate-weather { latitude?, dayOfYear?, seasonIndex? } (GM-client widget required); set-moon-badge { … }; set-custom-badge { badgeId: 1|2|3, … }; set-macro-triggers { trigger: dawn|dusk|midday|newDay, op: add|remove, macroUuid }.
+Confirm-gated writes — delete-event { pageUuid, confirm:true }; set-config { changes, confirm:true } (can change calendar/secondsPerRound); activate-calendar { calendar, confirm:true } (preset ids VALIDATED against the module's calendar list — unknown ids fail with TIMEKEEPING_CALENDAR_UNKNOWN_PRESET; response carries applied ("live" only for custom; presets apply "on-reload") + note + indicatorCaveat — the activeCalendar indicator flips immediately and is session-scoped-until-reload, BUG-501).
 
 NOTE: advance/set-time mutate the LIVE world clock — capture get-time first if you intend to restore it. Darkness sync only updates scenes active/viewed on the GM client. Month-name set-time enumerates all calendar months (Imperial feast days have no intercalary flag).
 

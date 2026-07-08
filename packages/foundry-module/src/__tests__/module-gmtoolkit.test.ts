@@ -159,3 +159,74 @@ describe('dispatchModuleGmtoolkit', () => {
     expect(r.data.members[1].name).toBe('Salundra');
   });
 });
+
+// ── BUG-492 + BUG-500 (Wave 2) ──────────────────────────────────────────────────
+// Aggregate entry shape source-verified at wfrp4e-gm-toolkit/modules/group-test.mjs:216-229
+// ({ actor: <token|actor doc>, skill, outcome, sl, description, roll, target }) — the raw
+// `actor` field embeds the full doc (~97 KB / 8 targets live), which is WHY the compact
+// projection exists. Not an invented mock shape (PF-003).
+
+describe('BUG-492: run-group-test guard + compact projection', () => {
+  it('malformed explicit targetGroup entry fails loud with GMTOOLKIT_INVALID_TARGET (no run call)', async () => {
+    const run = vi.fn();
+    setGame({ active: true, isGM: true, gmtoolkit: { grouptest: { run } } });
+    (globalThis as any).fromUuid = vi.fn(async (u: string) => (u === 'Actor.good' ? { id: 'good' } : null));
+    const r = await dispatchModuleGmtoolkit({
+      action: 'run-group-test',
+      testSkill: 'Perception',
+      targetGroup: ['Actor.good', 'not-a-uuid'],
+    } as any);
+    expect(r.success).toBe(false);
+    expect((r as any).error).toMatch(/GMTOOLKIT_INVALID_TARGET/);
+    expect((r as any).error).toContain('not-a-uuid');
+    expect(run).not.toHaveBeenCalled();
+    delete (globalThis as any).fromUuid;
+  });
+
+  it('response carries compact per-target rows, never the embedded actor doc', async () => {
+    const run = vi.fn(async () => undefined);
+    setGame({ active: true, isGM: true, gmtoolkit: { grouptest: { run } } });
+    (globalThis as any).fromUuid = vi.fn(async () => ({ id: 'ok' }));
+    // Heavy live-shaped aggregate entry (group-test.mjs:216-229).
+    const heavyActor = { name: 'Hero', id: 'A1', prototypeToken: { texture: { src: 'x'.repeat(500) } }, items: [{ big: 'y'.repeat(500) }] };
+    (globalThis as any).game.settings = {
+      get: (_scope: string, key: string) =>
+        key === 'aggregateResultGroupTest'
+          ? [{ actor: heavyActor, skill: { name: 'Perception', system: { huge: 'z'.repeat(500) } }, outcome: 'success', sl: '+2', description: 'Astounding Success', roll: 12, target: 55 }]
+          : undefined,
+    };
+    const r: any = await dispatchModuleGmtoolkit({
+      action: 'run-group-test',
+      testSkill: 'Perception',
+      targetGroup: ['Actor.A1'],
+    } as any);
+    expect(r.success).toBe(true);
+    expect(r.data.results).toEqual([
+      { name: 'Hero', id: 'A1', skill: 'Perception', outcome: 'success', sl: '+2', description: 'Astounding Success', roll: 12, target: 55 },
+    ]);
+    // No embedded docs survive the projection.
+    const json = JSON.stringify(r.data);
+    expect(json).not.toContain('prototypeToken');
+    expect(json).not.toContain('items');
+    delete (globalThis as any).fromUuid;
+  });
+});
+
+describe('BUG-500: update-advantage returns the settled post-write value', () => {
+  it('later-tick write (module socket tick) is picked up by the settle-poll re-read', async () => {
+    const adv = { value: 1 };
+    // Live failure mode: Advantage.update returns BEFORE the document write lands
+    // (the ×5 chained live repro always echoed previousValue). Simulate the
+    // later-tick apply with a 120ms deferred mutation.
+    const update = vi.fn().mockImplementation(async (_t: any, mode: string) => {
+      setTimeout(() => { if (mode === 'increase') adv.value += 1; }, 120);
+    });
+    const token = { id: 'T1', actor: { name: 'Hero', inCombat: true, isOwner: true, system: { status: { advantage: adv } } } };
+    setGame({ active: true, isGM: true, gmtoolkit: { advantage: { update } }, tokens: [token] });
+    const r: any = await dispatchModuleGmtoolkit({ action: 'update-advantage', mode: 'increase', tokenId: 'T1' });
+    expect(r.success).toBe(true);
+    expect(r.data.previousValue).toBe(1);
+    expect(r.data.value).toBe(2); // fresh, not the stale echo
+    expect(r.data.note).toBeUndefined();
+  });
+});

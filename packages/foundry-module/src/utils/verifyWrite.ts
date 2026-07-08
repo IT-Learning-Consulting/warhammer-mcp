@@ -49,14 +49,51 @@ function flattenLeafPaths(
   return out;
 }
 
+/**
+ * BUG-499 (Wave 2, plan D6) — dimension-normalizing comparator for the
+ * BUG-445/451/191/499 wrong-dimension family. A live-document direct read can
+ * legitimately return a DIFFERENT DIMENSION of the same persisted value than the
+ * request carried:
+ *   - FK getters return the linked Document object while the request carried the
+ *     scalar id (actor `folder` moves → false UPDATE_ACTOR_NOT_PERSISTED);
+ *   - prepared numerics can round-trip as strings (system.status.advantage.value).
+ * Structural equality stays the FIRST check; normalization only rescues these
+ * known same-value dimension mismatches. Exported for unit tests.
+ */
+export function normalizedEquals(actual: unknown, expected: unknown): boolean {
+  if (JSON.stringify(actual) === JSON.stringify(expected)) return true;
+  // FK unwrap: document-object getter vs requested scalar id.
+  const actualId = (actual as any)?.id ?? (actual as any)?._id;
+  if (typeof expected === 'string' && typeof actualId === 'string') return actualId === expected;
+  // Numeric coercion: "3" vs 3 (both sides must be cleanly numeric).
+  if (
+    (typeof expected === 'number' || typeof expected === 'string') &&
+    (typeof actual === 'number' || typeof actual === 'string') &&
+    String(actual).trim() !== '' &&
+    String(expected).trim() !== '' &&
+    Number.isFinite(Number(actual)) &&
+    Number.isFinite(Number(expected))
+  ) {
+    return Number(actual) === Number(expected);
+  }
+  // FK clear: null/'' request vs null/undefined/'' persisted.
+  if ((expected === null || expected === '') && (actual === null || actual === undefined || actual === '')) {
+    return true;
+  }
+  return false;
+}
+
 export function verifyDocWrite(
   freshDoc: unknown,
   expectedFields: Record<string, unknown>,
   errorToken: string,
-  options?: { readSource?: boolean; skipPaths?: string[] },
+  options?: { readSource?: boolean; skipPaths?: string[]; normalizeDimensions?: boolean },
 ): void {
   const readSource = options?.readSource !== false; // default true (F08-safe)
   const skipPaths = options?.skipPaths ?? [];
+  // BUG-499: opt-in per call site — default false keeps the stricter structural
+  // semantics for _source-based verifies (which never see derived dimensions).
+  const normalize = options?.normalizeDimensions === true;
 
   const drift: string[] = [];
   for (const [path, expected] of Object.entries(flattenLeafPaths(expectedFields))) {
@@ -70,7 +107,10 @@ export function verifyDocWrite(
       ? (foundry as any).utils.getProperty((freshDoc as any)?._source, path)
       : (foundry as any).utils.getProperty(freshDoc, path);
 
-    if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+    const matches = normalize
+      ? normalizedEquals(actual, expected)
+      : JSON.stringify(actual) === JSON.stringify(expected);
+    if (!matches) {
       drift.push(`${path}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
     }
   }

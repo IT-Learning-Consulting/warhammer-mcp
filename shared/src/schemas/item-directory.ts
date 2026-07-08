@@ -37,6 +37,11 @@ export const ItemDirectorySearchInput = z
       })
       .optional(),
     exclude: z.array(z.string()).optional(),
+    // BUG-528: bounding params (boundList pattern) — search returned all matches
+    // unbounded; 75.6k chars on a 164-item world tripped the BUG-490 size guard
+    // with no way to narrow. Same shape as ListRollTablesInput.
+    limit: z.number().int().min(1).max(500).optional(),
+    offset: z.number().int().min(0).optional(),
   })
   .strict();
 

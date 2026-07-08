@@ -6,16 +6,7 @@ exports[`DocumentIoTool — characterization > export — full toObject JSON out
 The toObject() payload is below. Pass it to action:"import-as-new" with confirm:true to create a clone.
 
 \`\`\`json
-{
-  "_id": "oldActor1",
-  "name": "Hans Mauer",
-  "type": "character",
-  "system": {
-    "characteristics": {}
-  },
-  "items": [],
-  "effects": []
-}
+{"_id":"oldActor1","name":"Hans Mauer","type":"character","system":{"characteristics":{}},"items":[],"effects":[]}
 \`\`\`"
 `;
 

@@ -33,6 +33,8 @@ import {
 import { wrappedWrite } from '../transaction-manager.js';
 import { notify } from '../notify.js';
 import { verifyDocWrite } from '../utils/verifyWrite.js';
+// BUG-490 (Wave 2): handler-side export size bound (whole-doc surface — no pagination).
+import { DEFAULT_RESPONSE_BUDGET_CHARS } from '../services/bounded-response.js';
 import {
   validateGMAccess,
   type Envelope,
@@ -214,6 +216,26 @@ async function handleExport(
   }
 
   const exported = (doc as any).toObject() as Record<string, unknown>;
+
+  // BUG-490 (Wave 2): export is whole-document by nature — pagination would corrupt
+  // the round-trip payload, so the bound lands as a fail-loud guidance error instead
+  // (a live Actor export measured 96.5k chars). The handler-side check mirrors the
+  // global choke-point guard but names the document + the preview alternative.
+  let serializedLength = 0;
+  try {
+    serializedLength = JSON.stringify(exported)?.length ?? 0;
+  } catch {
+    serializedLength = 0;
+  }
+  if (serializedLength > DEFAULT_RESPONSE_BUDGET_CHARS) {
+    return {
+      success: false,
+      error:
+        `RESPONSE_TOO_LARGE: exporting ${input.documentType} "${input.id}" serializes to ${serializedLength} chars ` +
+        `(budget ${DEFAULT_RESPONSE_BUDGET_CHARS}). Use action:"preview" for a summary, or export a smaller document.`,
+    };
+  }
+
   return {
     success: true,
     data: {

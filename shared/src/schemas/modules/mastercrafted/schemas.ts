@@ -86,7 +86,9 @@ export const ModuleMastercraftedInput = z.discriminatedUnion('action', [
       action: z.literal('grant-recipe-discovery'),
       pageUuid: FoundryUuid,
       userId: UserId,
-      level: z.union([z.literal(1), z.literal(2)]).optional(), // Observer=1 (default) / Owner=2
+      // BUG-468 (Wave 2): 0 = REVOKE (removes the discovery grant); Observer=1 is the
+      // effective default (the old "default 2/Owner" doc claim was drift).
+      level: z.union([z.literal(0), z.literal(1), z.literal(2)]).optional(),
     })
     .strict(),
 

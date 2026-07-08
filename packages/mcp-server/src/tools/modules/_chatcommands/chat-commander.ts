@@ -107,12 +107,12 @@ Pre-flight: module-probe.is-active _chatcommands before using this tool.
 
 4 actions:
 Reads — list-commands { filter? { module?, requiredRole?, nameSubstring? } }; get-command { name } (primary name or alias; null if absent).
-Confirm-gated writes — register-command { name (must start with "/"), callbackBody, module?, description?, icon?, requiredRole?, aliases?, closeOnComplete?, autocompleteBody?, confirm:true } (HIGH: callbackBody is raw JS run in Foundry — always show the body + require confirm; DEPENDENCY_GATED — needs advanced-macros active to persist via a world-script macro); unregister-command { name, deleteWorldScript?, immediateUnregister?, confirm:true } (MEDIUM: destructive — warns when unregistering a built-in chat-commander-wfrp4e command, which re-registers on reload).
+Confirm-gated writes — register-command { name (must start with "/"), callbackBody, module?, description?, icon?, requiredRole?, aliases?, closeOnComplete?, autocompleteBody?, confirm:true } (HIGH: callbackBody is raw JS run in Foundry — always show the body + require confirm; DEPENDENCY_GATED — needs advanced-macros active to persist via a world-script macro); unregister-command { name, deleteWorldScript?, immediateUnregister?, confirm:true } (MEDIUM: destructive — warns when unregistering a built-in WFRP4e slash command — those are registered under module id "wfrp4e" and re-register on reload).
 
 Persistence: register-command creates a world-script macro (advanced-macros runAsWorldScript + chatCommandsReady hook) so the command re-registers on every world reload, AND registers it immediately in the current session. Without advanced-macros, register-command fails with ADVANCED_MACROS_NOT_ACTIVE.
 Naming conflicts: _chatcommands auto-namespaces collisions to /<moduleId>.<name>; register-command returns the ACTUAL commandName (compare to requestedName).
 
-Example: { action: "list-commands", filter: { module: "chat-commander-wfrp4e" } }`,
+Example: { action: "list-commands", filter: { module: "wfrp4e" } } — the WFRP4e built-ins register under module id "wfrp4e" (BUG-502: filtering by the module PACKAGE id returns 0).`,
         inputSchema: {
           type: 'object',
           properties: {
@@ -125,7 +125,7 @@ Example: { action: "list-commands", filter: { module: "chat-commander-wfrp4e" } 
               type: 'object',
               description: 'list-commands: optional filter.',
               properties: {
-                module: { type: 'string', description: 'Filter by registrant module ID (e.g. "chat-commander-wfrp4e").' },
+                module: { type: 'string', description: 'Filter by REGISTRANT module id — the id commands were registered under, not the package id (WFRP4e built-ins: "wfrp4e").' },
                 requiredRole: { type: 'string', enum: ['NONE', 'PLAYER', 'TRUSTED', 'ASSISTANT', 'GAMEMASTER'], description: 'Filter by role gate.' },
                 nameSubstring: { type: 'string', description: 'Case-insensitive substring match on the command name.' },
               },

@@ -63,6 +63,22 @@ export function removeSensitiveFields(obj: any, visited: WeakSet<object> = new W
     return { $ref: 'cycle' };
   }
 
+  // BUG-529 (second half, live-discovered 2026-07-08): prepared wfrp4e data embeds LIVE
+  // cross-document references — e.g. system.characteristics.<c>.career → the career Item,
+  // and career.system.previousCareer → a warhammer-lib DocumentReferenceModel whose
+  // `relative` EmbeddedCollection carries `_source` = the raw source of EVERY actor item
+  // (~82k on a 54-item actor). Object.entries walks straight into them, inflating
+  // TestCharacter's 2.6k system to ~90k and EACH career-bearing item by another ~83k
+  // (fresh WeakSet per sanitizeData call), which is what actually tripped the BUG-490
+  // size guard. Collapse both node classes to compact stubs. Duck-typed (not instanceof)
+  // so the util stays inert under vitest's plain-object mocks and in Node contexts.
+  if (depth > 0 && typeof (obj as any).documentName === 'string' && (obj as any).id !== undefined) {
+    return { $doc: (obj as any).documentName, _id: (obj as any).id, name: (obj as any).name ?? null };
+  }
+  if (typeof (obj as any).documentClass === 'function' && Array.isArray((obj as any)._source)) {
+    return { $ref: 'embeddedCollection', size: (obj as any).size ?? (obj as any)._source.length };
+  }
+
   // Mark this object as visited
   visited.add(obj);
 

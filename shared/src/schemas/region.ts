@@ -26,15 +26,16 @@ const RegionVisibilityEnum = z
   .max(2)
   .describe('CONST.REGION_VISIBILITY: 0=LAYER, 1=GAMEMASTER, 2=ALWAYS');
 
-// 16 region events from CONST.REGION_EVENTS (Phase 0 probe). Reference only.
+// 16 region events from CONST.REGION_EVENTS (Phase 0 probe).
 // Per-subtype `events` SetField in Foundry's _createEventsField() restricts choices
 // per subtype, but the restriction list is NOT exposed via schema.fields.events.element.choices
 // (live F12 probe: all 3 event-carrying subtypes return choices: []). The actual
 // restriction is enforced in each subtype's strict-mode validate flow (varies per subtype:
 // executeMacro/executeScript log non-fatal warnings; displayScrollingText rejects writes).
-// Zod defers to Foundry's runtime: events is `z.array(z.string())` here; invalid strings
-// surface as DataModelValidationError in console; displayScrollingText writes with
-// non-empty events surface as BEHAVIOR_WRITE_NOT_PERSISTED via DP-16 post-verify.
+// BUG-498 rider (Wave 2, D5): this list is now ENFORCED as RegionEventEnum on the
+// executeMacro/executeScript `events` fields — Foundry's warn-only validators let
+// unknown names persist as permanently-inert dead data (live-verified), so bad names
+// must fail loud at the Zod boundary instead.
 // See bugs_to_fix.md BUG-078 for the displayScrollingText events upstream issue.
 const REGION_EVENTS_REFERENCE = [
   'regionBoundary',
@@ -148,10 +149,16 @@ const TeleportTokenSystem = z
   })
   .strict();
 
+// BUG-498 rider (Wave 2, D5): unknown event names (e.g. "tokenMove"/"tokenAnimate")
+// used to persist verbatim as permanently-INERT dead data (live-verified) — Foundry's
+// executeMacro/executeScript validators only log non-fatal warnings. Enforce the real
+// v13 CONST.REGION_EVENTS list (REGION_EVENTS_REFERENCE above) so bad names fail loud
+// at the Zod boundary. displayScrollingText stays .max(0) (BUG-078 — do not regress).
+const RegionEventEnum = z.enum(REGION_EVENTS_REFERENCE);
+
 const ExecuteMacroSystem = z
   .object({
-    // F06: events is z.array(z.string()) — Foundry's per-subtype validator is authoritative.
-    events: z.array(z.string()).optional(),
+    events: z.array(RegionEventEnum).optional(),
     uuid: z.string().nullable().optional(),
     everyone: z.boolean().optional(),
   })
@@ -185,8 +192,8 @@ const DisplayScrollingTextSystem = z
 
 const ExecuteScriptSystem = z
   .object({
-    // F06: events is z.array(z.string()) — Foundry's per-subtype validator is authoritative.
-    events: z.array(z.string()).optional(),
+    // BUG-498 rider (Wave 2, D5): real event names enforced — see RegionEventEnum above.
+    events: z.array(RegionEventEnum).optional(),
     source: z.string(),
   })
   .strict();

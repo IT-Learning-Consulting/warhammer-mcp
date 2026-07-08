@@ -139,7 +139,7 @@ export class SceneTool extends BaseTool {
           openWorldHint: true,
         },
         description:
-          `Manage Foundry VTT Scenes via 13 actions (entity-level CRUD + activation + view + thumbnail + list + Phase 9A reset/presentation). Token placement lives on the dedicated \`token\` umbrella.
+          `Manage Foundry VTT Scenes via 14 actions: create, update, delete, clone, activate, view, thumbnail, get, list, clear-layer, reset-fog, lighting-transition, preload, import-from-compendium. Token placement lives on the dedicated \`token\` umbrella.
 
 **Actions:**
 - **create**: Create a Scene. Required: name. Optional: full SceneConfig surface (background, grid, fog, environment, foreground, dimensions, padding, FK fields journal/playlist/folder, ownership, flags, navigation). Returns full SceneView. **Dimension auto-fit (BUG-080 fix):** when \`background.src\` is set and both \`width\` and \`height\` are omitted (or null), the handler probes the texture and sets scene dimensions to the image's natural width/height. Pass explicit \`width\`/\`height\` to override.

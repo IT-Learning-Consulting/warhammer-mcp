@@ -4,8 +4,9 @@
 // inactive it returns MODULE_NOT_ACTIVE which BaseTool.query() converts to a throw →
 // moduleNotActiveContent(). Use module-probe.is-active gatherer to pre-flight.
 //
-// 5 actions: read (get-spot-status) + GM writes (gather, harvest-token, reset-spot, configure-spot).
-// The WFRP-flavored composition skill is `wfrp-gatherer`.
+// 9 actions: reads (get-spot-status, list-spots) + GM writes (gather, harvest-token,
+// reset-spot, configure-spot, create-spot, set-harvest-source, configure-settings).
+// The WFRP-flavored composition skill is `module-gatherer`.
 //
 // Anchors: DP-15 (concrete this.query<T> per action — never <any>).
 
@@ -115,13 +116,13 @@ export class ModuleGathererTool extends BaseTool {
           idempotentHint: false,
           openWorldHint: false,
         },
-        description: `Integrate gatherer: execute gather/harvest draws from JournalEntryPage gather sources and manage their config. Items are written to the actor via the module's API. The WFRP-flavored composition skill is /wfrp-gatherer.
+        description: `Integrate gatherer: execute gather/harvest draws from JournalEntryPage gather sources and manage their config. Items are written to the actor via the module's API. The WFRP-flavored composition skill is /module-gatherer.
 Conditional: returns MODULE_NOT_ACTIVE when gatherer is absent/inactive.
 Pre-flight: module-probe.is-active gatherer before using this tool.
 
-5 actions:
-Read — get-spot-status { pageUuid } (draws remaining, reset time, table, minigame flag).
-GM writes — gather { pageUuid, actorUuid }; harvest-token { actorUuid (creature carrying gatherSheet), gatheringActorUuid }; reset-spot { pageUuid }; configure-spot { pageUuid, tableUuid?, draws?, quantity?, require?, time?, expression? }.
+9 actions:
+Reads — get-spot-status { pageUuid } (draws remaining, reset time, table, minigame flag); list-spots { journalUuid?, exhaustedOnly? } (enumerate gather-source pages).
+GM writes — gather { pageUuid, actorUuid }; harvest-token { actorUuid (creature carrying gatherSheet), gatheringActorUuid }; reset-spot { pageUuid }; configure-spot { pageUuid, tableUuid?, draws?, quantity?, require?, time?, expression?, modifierList? }; create-spot { journalUuid, name, tableUuid?, draws?, quantity?, time?, expression?, modifierList? }; set-harvest-source { actorUuid, gatherSheetUuid }; configure-settings { quantityPath?, resourcePath?, resourceValue?, enableHarvesting? }.
 
 MINIGAME: pages flagged with a minigame open the slot-machine dialog on the GM client (fire-and-forget; gather/harvest-token return minigame:"opened" + a note rather than awaiting — awaiting would hang the socket). The GM completes the dialog on screen and the item lands when they click through. For WFRP4e, the world setting gatherer.quantityPath must be "quantity.value" or item stacking silently fails — gather surfaces a warning (fix via /foundry-setting).
 

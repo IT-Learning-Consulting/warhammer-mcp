@@ -179,7 +179,11 @@ export const AddTableResultsInput = z.object({
   results: z.array(TableResultInputSchema).min(1),
 }).strict();
 
-export const ListRollTablesInput = z.object({}).strict();
+// BUG-490 (Wave 2): list is bounded — summary rows + limit/offset paging.
+export const ListRollTablesInput = z.object({
+  limit: z.number().int().min(1).max(500).optional(),
+  offset: z.number().int().min(0).optional(),
+}).strict();
 
 export const GetRollTableInput = z.object({
   tableId: RollTableId,

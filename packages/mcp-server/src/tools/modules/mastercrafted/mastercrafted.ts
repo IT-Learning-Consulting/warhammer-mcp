@@ -89,7 +89,7 @@ function formatProcess(d: ProcessDelayedResult): string {
 }
 
 function formatGrant(d: GrantDiscoveryResult): string {
-  return `module-mastercrafted.grant-recipe-discovery: ${d.name} → user ${d.userId} level ${d.level} (${d.level === 2 ? 'Owner' : 'Observer'})`;
+  return `module-mastercrafted.grant-recipe-discovery: ${d.name} → user ${d.userId} level ${d.level} (${d.level === 0 ? 'REVOKED' : d.level === 2 ? 'Owner' : 'Observer'})`;
 }
 
 function formatSearch(d: SearchResult): string {
@@ -146,7 +146,7 @@ Pre-flight: module-probe.is-active mastercrafted before using this tool.
 
 7 actions:
 Reads — list-recipes { filter? }; get-recipe { pageUuid }; check-craftable { pageUuid, actorUuid, inventoryActorUuid? }; list-pending-crafts { actorUuids? }.
-GM writes — execute-craft { pageUuid, actorUuid, inventoryActorUuid?, componentSelections? {ingredientId:componentId}, productId?, confirm:true } (consumes ingredients, delivers products; timed recipes queue a pending flag); process-delayed-crafts { actorUuids? } (resolves crafts past their worldTime); grant-recipe-discovery { pageUuid, userId, level?: 1|2 }.
+GM writes — execute-craft { pageUuid, actorUuid, inventoryActorUuid?, componentSelections? {ingredientId:componentId}, productId?, confirm:true } (consumes ingredients, delivers products; timed recipes queue a pending flag); process-delayed-crafts { actorUuids? } (resolves crafts past their worldTime); grant-recipe-discovery { pageUuid, userId, level?: 0|1|2 } (default 1/Observer; level:0 REVOKES the per-user discovery override — BUG-468).
 
 WFRP4e: execute-craft auto-sets the world setting customQuantityPath = "quantity.value" (when unset / the broken "quantity" default) so item quantities stack correctly. Timed recipe "time" is in MINUTES.
 
@@ -173,7 +173,7 @@ Example: { action: "execute-craft", pageUuid: "JournalEntry.x.JournalEntryPage.y
             productId: { type: 'string', description: 'execute-craft: select which product to make (default first).' },
             actorUuids: { type: 'array', items: { type: 'string' }, description: 'list-pending-crafts/process-delayed-crafts: actor UUIDs (all actors if omitted).' },
             userId: { type: 'string', description: 'grant-recipe-discovery: the user to grant access to.' },
-            level: { type: 'number', enum: [1, 2], description: 'grant-recipe-discovery: Observer=1 (default) / Owner=2.' },
+            level: { type: 'number', enum: [0, 1, 2], description: 'grant-recipe-discovery: Observer=1 (default) / Owner=2 / 0=REVOKE the per-user discovery override (BUG-468).' },
             bookUuid: { type: 'string', description: 'create-recipe/update-recipe-book/get-recipe-book/delete-recipe-book: the recipe-book JournalEntry UUID.' },
             folderId: { type: 'string', description: 'create-recipe-book: optional folder to create the book in.' },
             name: { type: 'string', description: 'create-recipe/update-recipe/create-recipe-book/update-recipe-book: name.' },

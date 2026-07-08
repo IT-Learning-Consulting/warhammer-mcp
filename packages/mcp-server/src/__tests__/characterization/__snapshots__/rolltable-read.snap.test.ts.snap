@@ -42,7 +42,7 @@ There are no roll tables in this world yet. Create one using the 'create' action
 `;
 
 exports[`RollTableTool — characterization (read) > list — tables in world 1`] = `
-"🎲 **Roll Tables** (2)
+"🎲 **Roll Tables** (2 of 2)
 
 **Random Encounters**
    ID: tbl001
@@ -54,6 +54,18 @@ exports[`RollTableTool — characterization (read) > list — tables in world 1`
    Formula: 1d100
    Entries: 0
 
+"
+`;
+
+exports[`RollTableTool — characterization (read) > list — truncated page surfaces the paging notice 1`] = `
+"🎲 **Roll Tables** (1 of 120)
+
+**Random Encounters**
+   ID: tbl001
+   Formula: 1d20
+   Entries: 2
+
+⚠️ Truncated — 119 more table(s). Page with limit/offset (offset 0, limit 1).
 "
 `;
 

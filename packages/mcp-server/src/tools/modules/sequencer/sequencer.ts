@@ -143,7 +143,9 @@ This is an ALLOWLIST, not a denylist — unknown future types are denied by defa
 
 ~16 actions:
 EFFECTS:
-- play-sequence-json  { sequence }                    — Sequence.fromJSON(arr).play()
+- play-sequence-json  { sequence, options? }          — TWO payload styles (BUG-462):
+    SIMPLIFIED (recommended): sections like {type:"effect", file:"jb2a.flames.orange", atLocation? ({x,y} or token id/name), attachTo?, stretchTo?, scale?, duration?, fadeIn?, fadeOut?, opacity?, delay?, rotate?, tint?, name?, origin?, repeats?, persist?, belowTokens?, waitUntilFinished?} or {type:"sound", file, volume?, duration?, fadeInAudio?, fadeOutAudio?, delay?, repeats?, waitUntilFinished?} — expanded server-side through Sequencer's fluent API. Simplified supports ONLY effect + sound (others → SEQUENCER_UNSUPPORTED_SIMPLE_SECTION).
+    SERIALIZED: full Sequence.toJSON() output (every section carries repetitionsDelay[min,max]) — passthrough via fromJSON. Mixing the two styles in one call is rejected.
 - end-effects         { filter? }                     — EffectManager.endEffects(filter)
 - end-all-effects     { sceneId?, confirm:true }      — clears all effects (scene-level, confirm required)
 - get-effects         { filter? }                     — returns serialized effect .data
@@ -170,7 +172,7 @@ GM required for all actions.
 
 Examples:
 - { action: "database-search", path: "autoanimations.melee" }
-- { action: "play-sequence-json", sequence: [{"type":"effect","file":"jb2a.flames.orange"}] }
+- { action: "play-sequence-json", sequence: [{"type":"effect","file":"jb2a.flames.orange","atLocation":{"x":1000,"y":1000},"duration":3000}] }
 - { action: "end-all-effects", sceneId: "abc123", confirm: true }
 - { action: "get-effects", filter: { name: "firebolt" } }`,
         inputSchema: {
@@ -190,7 +192,7 @@ Examples:
             sequence: {
               type: 'array',
               items: { type: 'object' },
-              description: '[play-sequence-json] Array of section objects. type must be in [effect,sound,scrollingText,canvasPan,wait].',
+              description: '[play-sequence-json] Array of section objects. SIMPLIFIED style: {type:"effect"|"sound", file, ...options} (recommended; expanded server-side, BUG-462). SERIALIZED style: full Sequence.toJSON() sections (type in [effect,sound,scrollingText,canvasPan,wait], each with repetitionsDelay[min,max]). Never mix styles in one call.',
             },
             options: { type: 'object', description: '[play-sequence-json/play-sound] Play options passed to .play().' },
             filter: { type: 'object', description: '[end-effects/get-effects/update-effects/end-sounds/get-sounds] EffectManager InFilters: {name?,sceneId?,source?,target?,origin?,effects?}.' },

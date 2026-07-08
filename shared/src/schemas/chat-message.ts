@@ -107,9 +107,13 @@ export const ChatMessageListInput = z.object({
 // ── Phase 9C — export / clear chat log ──────────────────────────────────────
 
 // R9C.1 — export-chat-log: read-only render of the chat log. CCR-2b (read-only).
+// BUG-490 (Wave 2): bounded — defaults to the most recent `limit` messages;
+// pass `offset` to page chronologically from the start of the log.
 export const ChatMessageExportLogInput = z.object({
   action: z.literal('export-chat-log'),
   format: z.enum(['text', 'markdown']).optional(),
+  limit: z.number().int().min(1).max(500).optional(),
+  offset: z.number().int().min(0).optional(),
 }).strict();
 
 // R9C.2 — clear-chat-log: bulk delete with CCR-4 dryRun preview + confirm.
@@ -180,10 +184,16 @@ export interface ChatMessageListItem {
 }
 
 // Phase 9C — export-chat-log response (read-only render).
+// BUG-490 (Wave 2): bounded envelope — messageCount is the EXPORTED count;
+// totalAvailable/truncated/offset/limit carry the paging contract.
 export interface ChatMessageExportLogResponse {
   format: 'text' | 'markdown';
   messageCount: number;
   content: string;
+  totalAvailable: number;
+  truncated: boolean;
+  offset: number;
+  limit: number;
 }
 
 // Phase 9C — clear-chat-log response. dryRun returns the visibility breakdown

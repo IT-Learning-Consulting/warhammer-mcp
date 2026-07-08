@@ -260,9 +260,12 @@ Examples:
           description: 'Scene atmosphere action. Pre-flight with get-bundle-status to check member availability.',
         },
         // ── fxmaster preset fields ────────────────────────────────────
+        // BUG-472 (Wave 2): type ["string","null"] so a JSON null survives transport —
+        // pre-fix the string-only schema coerced null → "null" and the documented
+        // switch-preset stop-all edge was unreachable over MCP.
         preset: {
-          type: 'string',
-          description: 'Preset name for play-preset/stop-preset/toggle-preset/switch-preset. Null for switch-preset to stop all.',
+          type: ['string', 'null'],
+          description: 'Preset name for play-preset/stop-preset/toggle-preset/switch-preset. Pass null with switch-preset to stop all presets.',
         },
         options: {
           type: 'object',

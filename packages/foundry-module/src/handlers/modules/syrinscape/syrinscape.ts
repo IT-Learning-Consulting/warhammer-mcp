@@ -33,6 +33,8 @@ import { ErrorTokens } from '@foundry-mcp/shared';
 import { SyrinscapeInput, type SyrinscapeInputType, PLAY_ACTIONS } from '@foundry-mcp/shared';
 import { notify } from '../../../notify.js';
 import { Envelope, getGame, isGM } from '../_shared/handler-utils.js';
+// BUG-464 (Wave 2): bounded list pages over the cache reads.
+import { boundList } from '../../../services/bounded-response.js';
 
 
 const MODULE_ID = 'syrinscape-control';
@@ -104,9 +106,9 @@ export async function dispatchModuleSyrinscape(data: unknown): Promise<Envelope<
       case 'is-playing':
         return handleIsPlaying(input.elementId);
       case 'list-soundsets':
-        return handleListSoundsets();
+        return handleListSoundsets(input);
       case 'list-moods':
-        return handleListMoods(input.soundsetName);
+        return handleListMoods(input);
       default: {
         const _exhaustive: never = input;
         return { success: false, error: `${ErrorTokens.SYRINSCAPE_UNKNOWN_ACTION}: ${String((_exhaustive as any)?.action)}` };
@@ -199,16 +201,35 @@ function readSoundsetInfo(): SoundsetInfoRow[] {
 
 const COLD_CACHE_HINT = 'cache empty — refresh via the Syrinscape Browser once with a valid authToken to populate it.';
 
-function handleListSoundsets(): Envelope<unknown> {
+// BUG-464 (Wave 2): both list actions are bounded — limit/offset + case-insensitive
+// name filter over the cache reads (warm cache measured 53 KB/516 soundsets and
+// 721 KB/4,571 moods; both blew the response budget unbounded).
+interface ListBounds { limit?: number | undefined; offset?: number | undefined; filter?: string | undefined }
+
+function handleListSoundsets(bounds: ListBounds): Envelope<unknown> {
   const soundsetInfo = readSoundsetInfo();
   if (soundsetInfo.length === 0) {
     return { success: true, data: { action: 'list-soundsets', soundsets: [], hint: COLD_CACHE_HINT } };
   }
-  const soundsets = soundsetInfo.map((row) => ({ id: String(row.id), name: row.name, fullName: row.full_name })); // BUG-465: cache returns numeric ids though typed string
-  return { success: true, data: { action: 'list-soundsets', soundsets } };
+  const needle = bounds.filter?.toLowerCase();
+  const all = soundsetInfo
+    .filter((row) => !needle || String(row.name ?? '').toLowerCase().includes(needle) || String(row.full_name ?? '').toLowerCase().includes(needle))
+    .map((row) => ({ id: String(row.id), name: row.name, fullName: row.full_name })); // BUG-465: cache returns numeric ids though typed string
+  const bounded = boundList(all, { limit: bounds.limit, offset: bounds.offset });
+  return {
+    success: true,
+    data: {
+      action: 'list-soundsets',
+      soundsets: bounded.items,
+      totalAvailable: bounded.totalAvailable,
+      truncated: bounded.truncated,
+      offset: bounded.offset,
+      limit: bounded.limit,
+    },
+  };
 }
 
-function handleListMoods(soundsetName: string | undefined): Envelope<unknown> {
+function handleListMoods(input: ListBounds & { soundsetName?: string | undefined }): Envelope<unknown> {
   const bulkData = readBulkData();
   const entries = Object.values(bulkData);
   if (entries.length === 0) {
@@ -216,10 +237,27 @@ function handleListMoods(soundsetName: string | undefined): Envelope<unknown> {
   }
   const soundsetInfo = readSoundsetInfo();
   const soundsetByName = new Map(soundsetInfo.map((row) => [row.name, row.full_name]));
-  const filtered = entries.filter((e) => e.type === 'mood' && (!soundsetName || e.soundset === soundsetName));
-  const moods = filtered.map((e) => ({ id: String(e.id), name: e.name, soundset: e.soundset, soundsetFullName: soundsetByName.get(e.soundset) ?? e.soundset })); // BUG-465: numeric ids coerced to string
-  if (moods.length === 0) {
-    return { success: true, data: { action: 'list-moods', moods: [], hint: soundsetName ? `no moods found for soundset "${soundsetName}" in the cache; ${COLD_CACHE_HINT}` : COLD_CACHE_HINT } };
+  const needle = input.filter?.toLowerCase();
+  const filtered = entries.filter(
+    (e) =>
+      e.type === 'mood' &&
+      (!input.soundsetName || e.soundset === input.soundsetName) &&
+      (!needle || String(e.name ?? '').toLowerCase().includes(needle)),
+  );
+  const all = filtered.map((e) => ({ id: String(e.id), name: e.name, soundset: e.soundset, soundsetFullName: soundsetByName.get(e.soundset) ?? e.soundset })); // BUG-465: numeric ids coerced to string
+  if (all.length === 0) {
+    return { success: true, data: { action: 'list-moods', moods: [], hint: input.soundsetName ? `no moods found for soundset "${input.soundsetName}" in the cache; ${COLD_CACHE_HINT}` : COLD_CACHE_HINT } };
   }
-  return { success: true, data: { action: 'list-moods', moods } };
+  const bounded = boundList(all, { limit: input.limit, offset: input.offset });
+  return {
+    success: true,
+    data: {
+      action: 'list-moods',
+      moods: bounded.items,
+      totalAvailable: bounded.totalAvailable,
+      truncated: bounded.truncated,
+      offset: bounded.offset,
+      limit: bounded.limit,
+    },
+  };
 }

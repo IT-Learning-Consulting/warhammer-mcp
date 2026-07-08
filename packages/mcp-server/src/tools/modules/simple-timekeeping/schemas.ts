@@ -72,6 +72,11 @@ export interface ActivateCalendarResult {
   calendar: string;
   activeCalendarId?: string; // not a branded id (polymorphic / non-document)
   monthCount?: number;
+  // BUG-501 (Wave 2): rendered into text — "live" only for the custom calendar;
+  // presets apply "on-reload". indicatorCaveat documents the session-scoped indicator.
+  applied?: 'live' | 'on-reload';
+  note?: string;
+  indicatorCaveat?: string;
 }
 
 export interface GenericOkResult {

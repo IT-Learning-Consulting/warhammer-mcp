@@ -21,7 +21,11 @@ interface LegalityResult {
 // Junction-safe absolute path (see build-npc-assets.test.ts for rationale)
 // 2026-05-16: assets migrated to _shared/wfrp-character-build/ (bi-skill share).
 const ASSET = 'E:/warhammer_system/.claude/skills/_shared/wfrp-character-build';
-const matrix = JSON.parse(fs.readFileSync(path.join(ASSET, 'species-career-matrix.json'), 'utf8'));
+
+// CI runners (GitHub Actions ubuntu-latest) don't check out the vault repo — this
+// test validates parity with a vault-only skill asset and is skipped when absent.
+const HAS_VAULT = fs.existsSync(ASSET);
+const matrix = HAS_VAULT ? JSON.parse(fs.readFileSync(path.join(ASSET, 'species-career-matrix.json'), 'utf8')) : {};
 
 function checkLegality(species: string, careergroup: string, mode: LegalityMode): LegalityResult {
   const row = matrix[careergroup];
@@ -45,7 +49,7 @@ function checkLegality(species: string, careergroup: string, mode: LegalityMode)
   return { allow: false, warnings: [], legalAlternatives: legal };
 }
 
-describe('build-npc legality — Halfling + Wizard (canonical illegal)', () => {
+describe.skipIf(!HAS_VAULT)('build-npc legality — Halfling + Wizard (canonical illegal)', () => {
   it('warn: allows + emits 1 warning', () => {
     const r = checkLegality('Halfling', 'Wizard', 'warn');
     expect(r.allow).toBe(true);
@@ -71,7 +75,7 @@ describe('build-npc legality — Halfling + Wizard (canonical illegal)', () => {
   });
 });
 
-describe('build-npc legality — legal combo (Dwarf + Slayer)', () => {
+describe.skipIf(!HAS_VAULT)('build-npc legality — legal combo (Dwarf + Slayer)', () => {
   it('warn: allows, zero warnings', () => {
     const r = checkLegality('Dwarf', 'Slayer', 'warn');
     expect(r.allow).toBe(true);
@@ -90,7 +94,7 @@ describe('build-npc legality — legal combo (Dwarf + Slayer)', () => {
   });
 });
 
-describe('build-npc legality — unknown inputs throw', () => {
+describe.skipIf(!HAS_VAULT)('build-npc legality — unknown inputs throw', () => {
   it('unknown careergroup throws', () => {
     expect(() => checkLegality('Human', 'Necromancer', 'warn')).toThrow(/careergroup/);
   });

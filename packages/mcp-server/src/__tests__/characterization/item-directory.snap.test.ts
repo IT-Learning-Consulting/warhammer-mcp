@@ -56,7 +56,10 @@ describe('ItemDirectoryTool — characterization', () => {
       items: [
         { id: 'item-003', name: 'Healing Draught', type: 'trapping', img: null, folderId: null, system: {}, flags: {} },
       ],
-      total: 1,
+      totalAvailable: 1,
+      truncated: false,
+      offset: 0,
+      limit: 50,
       query: 'Healing',
     }).execute({ action: 'search', query: 'Healing' });
     expect((r as any).content[0].text).toMatchSnapshot();

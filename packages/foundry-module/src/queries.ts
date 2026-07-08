@@ -10,6 +10,8 @@ import { notify } from './notify.js';
 // it used became a shared pure util, and the ring-buffer cap a named tool-limit constant.
 import { sanitizeData } from './utils/sanitize-data.js';
 import { AUDIT_LOG_RING_BUFFER } from './constants/toolLimits.js';
+// BUG-490 (Wave 2 D2b): global response-size guard installed at the registration choke point.
+import { wrapWithSizeGuard } from './services/bounded-response.js';
 // Phase 1 mcp_crud_expansion — polymorphic ownership handlers.
 import {
   setDocumentOwnership as setDocumentOwnershipHandler,
@@ -541,7 +543,9 @@ export class QueryHandlers {
     const modulePrefix = MODULE_ID;
     const handlerTable = this.buildHandlerTable();
     for (const [key, handler] of Object.entries(handlerTable)) {
-      CONFIG.queries[`${modulePrefix}.${key}`] = handler;
+      // BUG-490 (Wave 2 D2b): every handler response passes the global size guard —
+      // would-be response-budget overflows become typed RESPONSE_TOO_LARGE errors.
+      CONFIG.queries[`${modulePrefix}.${key}`] = wrapWithSizeGuard(key, handler);
     }
   }
 
@@ -577,7 +581,7 @@ export class QueryHandlers {
       const parsed = GetCharacterInfoInput.strict().parse(data ?? {});
       const identifier = parsed.characterName || parsed.characterId;
       if (!identifier) throw new Error('characterName or characterId is required');
-      return { success: true, data: await this.dataAccess.getCharacterInfo(identifier) };
+      return { success: true, data: await this.dataAccess.getCharacterInfo(identifier, parsed.sections) };
     });
   }
 

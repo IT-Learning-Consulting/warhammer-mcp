@@ -140,15 +140,47 @@ async function updatePrototypeToken(
       if (key === 'flags') continue; // arbitrary module data — do not verify
       flattenForVerify(value, `prototypeToken.${key}`, expectedFields);
     }
-
-    if (Object.keys(expectedFields).length > 0) {
-      // Re-read from world collection for a fresh doc reference.
-      const freshActor = (game.actors as any)?.get(input.actorId);
-      if (freshActor) {
-        verifyDocWrite(freshActor, expectedFields, ErrorTokens.UPDATE_PROTOTYPE_TOKEN_NOT_PERSISTED, {
-          readSource: true,
-        });
+    // BUG-496 (Wave 2): extraFields were written but never verified — a dropped
+    // passthrough field returned a success envelope. Verify EVERY requested field.
+    if (input.extraFields) {
+      for (const [key, value] of Object.entries(input.extraFields)) {
+        if (key === 'flags' || key.startsWith('flags.')) continue; // arbitrary module data
+        flattenForVerify(value, `prototypeToken.${key}`, expectedFields);
       }
+    }
+
+    // Re-read from world collection for a fresh doc reference.
+    const freshActor = (game.actors as any)?.get(input.actorId);
+    if (!freshActor) {
+      throw new Error(
+        `${ErrorTokens.UPDATE_PROTOTYPE_TOKEN_NOT_PERSISTED}: actor "${input.actorId}" could not be re-read for post-write verification`,
+      );
+    }
+    if (Object.keys(expectedFields).length > 0) {
+      verifyDocWrite(freshActor, expectedFields, ErrorTokens.UPDATE_PROTOTYPE_TOKEN_NOT_PERSISTED, {
+        readSource: true,
+      });
+    }
+
+    // BUG-496 (Wave 2): _source can hold the persisted value while the EFFECTIVE
+    // prototype token diverges (a system/module override re-clobbers the field in
+    // prepared data — the live displayName drop pattern: partial write + success
+    // envelope). Compare the effective layer too and surface any divergence loudly
+    // instead of returning a silent partial success.
+    let effectiveDivergence: string[] = [];
+    try {
+      const effective = freshActor.prototypeToken?.toObject?.(false) ?? null;
+      if (effective) {
+        effectiveDivergence = Object.entries(expectedFields)
+          .filter(([path, expected]) => {
+            const effPath = path.replace(/^prototypeToken\./, '');
+            const actual = (foundry as any).utils.getProperty(effective, effPath);
+            return JSON.stringify(actual) !== JSON.stringify(expected);
+          })
+          .map(([path]) => path);
+      }
+    } catch {
+      effectiveDivergence = [];
     }
 
     notify.updated('actor', actor.name, { summary: `prototype-token updated` });
@@ -163,6 +195,14 @@ async function updatePrototypeToken(
         requestedChanges: input.changes,
         extraFields: input.extraFields ?? null,
         prototypeToken: updatedPrototypeToken,
+        ...(effectiveDivergence.length > 0
+          ? {
+              warning:
+                `PROTOTYPE_TOKEN_EFFECTIVE_OVERRIDE: ${effectiveDivergence.join(', ')} persisted to _source but the ` +
+                `EFFECTIVE prototype token shows a different value — a system/module override is re-clobbering the ` +
+                `field in prepared data.`,
+            }
+          : {}),
       },
     } satisfies Envelope<unknown>;
   });
@@ -235,7 +275,11 @@ async function setArt(
     if (which === 'texture' || which === 'both') {
       // NOTE: CCR-9 boundary — this writes prototypeToken.texture.src (on the Actor document),
       // NOT placed-token texture.src. For placed tokens, use `token {action:"update"}`.
-      updatePayload['prototypeToken.texture.src'] = src;
+      // BUG-497 (Wave 2, regression of BUG-294): a clear must write NULL, not '' —
+      // v13 cleans a blank string on this FilePathField to the document DEFAULT icon,
+      // which both violates the BUG-294 clear contract (clear → ''/null) and then
+      // hard-fails verifyArtWrite's still-non-empty check. null persists as a true clear.
+      updatePayload['prototypeToken.texture.src'] = src === '' ? null : src;
       written.push('prototypeToken.texture.src');
     }
 

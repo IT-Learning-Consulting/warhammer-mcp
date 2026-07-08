@@ -19,6 +19,11 @@ const TEMPLATE_INDEX = 'E:/warhammer_system/.claude/skills/wfrp-encounter-builde
 const BASE_REGISTRY = 'E:/warhammer_system/.claude/skills/wfrp-encounter-builder/assets/base-registry.json';
 void path;
 
+// CI runners (GitHub Actions ubuntu-latest) don't check out the vault repo. The
+// stacking-plan describe below already falls back to a fixture when TEMPLATE_INDEX
+// is absent; only the base-registry invariant (which has no fallback) needs skipping.
+const HAS_BASE_REGISTRY = fs.existsSync(BASE_REGISTRY);
+
 // Hahnbrandt rank templates (validated against template-index.json when present).
 // These are the only canonical rank-layer templates per Phase 0 research memo.
 const RANK_TEMPLATES = new Set(['Captain', 'Sergeant', 'Veteran']);
@@ -134,7 +139,7 @@ describe('encounter-builder stacking plan', () => {
   });
 });
 
-describe('base-registry × stacking invariant', () => {
+describe.skipIf(!HAS_BASE_REGISTRY)('base-registry × stacking invariant', () => {
   it('armies-of-man set has at least one base actor — required for stacking to work', () => {
     const bases = JSON.parse(fs.readFileSync(BASE_REGISTRY, 'utf8'));
     expect(bases['armies-of-man']?.length).toBeGreaterThanOrEqual(1);

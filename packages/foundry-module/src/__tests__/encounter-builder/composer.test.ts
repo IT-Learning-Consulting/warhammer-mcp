@@ -19,6 +19,10 @@ const BANDS_ASSET = 'E:/warhammer_system/.claude/skills/wfrp-encounter-builder/a
 const BASE_REGISTRY_ASSET = 'E:/warhammer_system/.claude/skills/wfrp-encounter-builder/assets/base-registry.json';
 void path;
 
+// CI runners (GitHub Actions ubuntu-latest) don't check out the vault repo — these
+// tests validate parity with vault-only skill assets and are skipped when absent.
+const HAS_VAULT = fs.existsSync(BANDS_ASSET);
+
 const SETS = ['humanoids', 'undead', 'chaos', 'armies-of-man', 'dark-elf'];
 const DIFFICULTIES = ['easy', 'medium', 'hard'];
 
@@ -104,7 +108,7 @@ function mulberry32(seed: number): () => number {
   };
 }
 
-describe('difficulty-bands.json', () => {
+describe.skipIf(!HAS_VAULT)('difficulty-bands.json', () => {
   let bands: Record<string, Record<string, Band>>;
 
   it('parses cleanly', () => {
@@ -141,7 +145,7 @@ describe('difficulty-bands.json', () => {
   });
 });
 
-describe('composer simulation per {set × difficulty}', () => {
+describe.skipIf(!HAS_VAULT)('composer simulation per {set × difficulty}', () => {
   let bands: Record<string, Record<string, Band>>;
 
   it('loads bands', () => {
@@ -187,7 +191,7 @@ describe('composer simulation per {set × difficulty}', () => {
   }
 });
 
-describe('base-registry × bands invariant', () => {
+describe.skipIf(!HAS_VAULT)('base-registry × bands invariant', () => {
   it('every set with bands has at least one base actor', () => {
     const bands = JSON.parse(fs.readFileSync(BANDS_ASSET, 'utf8'));
     const bases = JSON.parse(fs.readFileSync(BASE_REGISTRY_ASSET, 'utf8'));

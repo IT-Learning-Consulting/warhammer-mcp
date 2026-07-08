@@ -38,6 +38,8 @@ import {
 } from '@foundry-mcp/shared';
 import { wrappedWrite } from '../transaction-manager.js';
 import { notify } from '../notify.js';
+// BUG-490 (Wave 2): bounded export window (138 KB / 657-message live log precedent).
+import { boundList } from '../services/bounded-response.js';
 import {
   createFlatWorldDocCRUDHandlers,
   validateGMAccess,
@@ -334,7 +336,16 @@ export async function exportChatLog(data: unknown): Promise<Envelope<ChatMessage
     (a: any, b: any) => (a._source?.timestamp ?? 0) - (b._source?.timestamp ?? 0),
   );
 
-  const lines = sorted.map((m: any) => {
+  // BUG-490 (Wave 2): bounded export — the live 657-message log rendered 138 KB.
+  // Default window = the most recent `limit` messages (tail); an explicit offset
+  // pages chronologically from the start.
+  const limit = Math.min(Math.max(1, input.limit ?? 200), 500);
+  const offset = input.offset !== undefined
+    ? Math.max(0, input.offset)
+    : Math.max(0, sorted.length - limit);
+  const bounded = boundList(sorted, { limit, offset });
+
+  const lines = bounded.items.map((m: any) => {
     const src = m._source ?? {};
     const alias = src.speaker?.alias || src.author || 'Unknown';
     const when = src.timestamp ? new Date(src.timestamp).toISOString() : '';
@@ -349,8 +360,15 @@ export async function exportChatLog(data: unknown): Promise<Envelope<ChatMessage
     success: true as const,
     data: {
       format,
-      messageCount: sorted.length,
+      messageCount: bounded.items.length,
       content: lines.join('\n'),
+      totalAvailable: bounded.totalAvailable,
+      // Partial-export flag: true whenever ANY message (before OR after the
+      // window) was left out — the tail-default window skips earlier messages,
+      // which boundList's after-the-window flag alone would not report.
+      truncated: bounded.items.length < bounded.totalAvailable,
+      offset: bounded.offset,
+      limit: bounded.limit,
     },
   };
 }

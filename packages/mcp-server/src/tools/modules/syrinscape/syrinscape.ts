@@ -29,9 +29,12 @@ function formatResult(d: SyrinscapeResult): string {
     case 'is-playing':
       return `${p}.is-playing: "${d.elementId}" playing=${d.playing}${d.note ? ` (${d.note})` : ''}.`;
     case 'list-soundsets':
-      return d.hint ? `${p}.list-soundsets: ${d.hint}` : `${p}.list-soundsets: ${d.soundsets.length} soundset(s).`;
+      if (d.hint) return `${p}.list-soundsets: ${d.hint}`;
+      // BUG-464 (Wave 2): surface the bounded-page envelope.
+      return `${p}.list-soundsets: ${d.soundsets.length}${d.totalAvailable !== undefined ? ` of ${d.totalAvailable}` : ''} soundset(s)${d.truncated ? ` — truncated; page with limit/offset (offset ${d.offset ?? 0}, limit ${d.limit ?? d.soundsets.length}) or narrow with filter` : ''}.`;
     case 'list-moods':
-      return d.hint ? `${p}.list-moods: ${d.hint}` : `${p}.list-moods: ${d.moods.length} mood(s).`;
+      if (d.hint) return `${p}.list-moods: ${d.hint}`;
+      return `${p}.list-moods: ${d.moods.length}${d.totalAvailable !== undefined ? ` of ${d.totalAvailable}` : ''} mood(s)${d.truncated ? ` — truncated; page with limit/offset (offset ${d.offset ?? 0}, limit ${d.limit ?? d.moods.length}) or narrow with soundsetName/filter` : ''}.`;
     default: {
       const _exhaustive: never = d;
       return `${p}: ${JSON.stringify(_exhaustive)}`;
@@ -74,8 +77,8 @@ CACHE-ONLY LIST ACTIONS: list-soundsets/list-moods read the world's cached setti
 set-mood { id } / stop-mood { id } / play-element { id } / stop-element { id } — GM-only, auth-gated.
 stop-all {} — GM-only, auth-gated.
 is-playing { elementId } — ungated, pure in-memory read, works without an authToken.
-list-soundsets {} — ungated cache read, returns [] + hint when cold.
-list-moods { soundsetName? } — ungated cache read, optionally filtered by soundset slug name.
+list-soundsets { limit?, offset?, filter? } — ungated cache read, returns [] + hint when cold. BOUNDED (BUG-490/464): default page 50 (max 500); response carries totalAvailable + truncated; filter = case-insensitive name substring. The live warm cache holds 500+ soundsets / 4,500+ moods — unbounded dumps overflowed the response budget.
+list-moods { soundsetName?, limit?, offset?, filter? } — ungated cache read, same bounded contract; soundsetName narrows to one soundset slug, filter matches mood names.
 
 Example: { action: "set-mood", id: "m:12345" }`,
         inputSchema: {
@@ -85,6 +88,9 @@ Example: { action: "set-mood", id: "m:12345" }`,
             id: { type: 'string', description: 'set-mood/stop-mood/play-element/stop-element: the mood or element id (as listed by list-moods, e.g. "m:12345").' },
             elementId: { type: 'string', description: 'is-playing: the mood/element id to check.' },
             soundsetName: { type: 'string', description: 'list-moods (optional): filter to a single soundset by its slug name (from list-soundsets).' },
+            limit: { type: 'number', description: '[list-soundsets/list-moods] Max rows per page (default 50, max 500). BUG-464 bounded contract.' },
+            offset: { type: 'number', description: '[list-soundsets/list-moods] Zero-based row offset for paging.' },
+            filter: { type: 'string', description: '[list-soundsets/list-moods] Case-insensitive name substring filter.' },
           },
           required: ['action'],
         },

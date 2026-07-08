@@ -191,7 +191,32 @@ export async function createFolder(data: unknown): Promise<Envelope<any>> {
     }
   }
 
-  return folderFactoryHandlers.create(data);
+  // BUG-494 (Wave 2): an Adventure-type folder create can land at the data layer while
+  // the client promise rejects (no Adventure sidebar directory) — the pre-fix behavior
+  // masked a successful write as a failure. Catch, re-check the data layer, and return
+  // a clean envelope when the folder actually exists.
+  try {
+    return await folderFactoryHandlers.create(data);
+  } catch (e) {
+    if (input.type === 'Adventure') {
+      const candidates: any[] = (((game as any).folders?.contents ?? []) as any[]).filter(
+        (f: any) => f?.type === 'Adventure' && f?.name === input.name,
+      );
+      const doc = candidates[candidates.length - 1];
+      if (doc) {
+        notify.created('folder', `Folder "${doc.name}"`, { summary: 'Adventure folder (client render crash suppressed)' });
+        return {
+          success: true,
+          data: {
+            folderId: doc.id,
+            folder: serializeFolderViewModel(doc),
+            note: 'BUG-494: create landed at the data layer; a client-side Adventure-directory crash was suppressed.',
+          },
+        };
+      }
+    }
+    throw e;
+  }
 }
 
 export const getFolder = folderFactoryHandlers.get;
@@ -242,7 +267,32 @@ export async function updateFolder(data: unknown): Promise<Envelope<any>> {
   }
 
   // Delegate to factory's update (carries BUG-075 + DP-16)
-  return folderFactoryHandlers.update(data);
+  // BUG-494 (Wave 2): same masked-success class as create — an Adventure folder update
+  // can land while the client promise rejects. Catch, verify the requested changes at
+  // the data layer, and return a clean envelope when they all landed.
+  try {
+    return await folderFactoryHandlers.update(data);
+  } catch (e) {
+    const doc = (game as any).folders?.get?.(input.folderId);
+    if (doc?.type === 'Adventure') {
+      const landed = Object.entries(input.changes ?? {}).every(
+        ([k, v]) => (doc._source?.[k] ?? null) === (v ?? null),
+      );
+      if (landed) {
+        notify.updated('folder', `Folder "${doc.name}"`, { summary: 'Adventure folder (client render crash suppressed)' });
+        return {
+          success: true,
+          data: {
+            folderId: doc.id,
+            folder: serializeFolderViewModel(doc),
+            changedFields: Object.keys(input.changes ?? {}),
+            note: 'BUG-494: update landed at the data layer; a client-side Adventure-directory crash was suppressed.',
+          },
+        };
+      }
+    }
+    throw e;
+  }
 }
 
 // ── Custom delete (confirm gate + deleteContents cascade) ─────────────────
@@ -320,8 +370,38 @@ export async function deleteFolder(data: unknown): Promise<Envelope<any>> {
       }
     }
 
+    // BUG-494 (Wave 2): world folders of type "Adventure" crash Foundry's server-side
+    // Folder._preDelete — it calls db[this.type].implementation.sublevel.findUpdate(...)
+    // to unfile contained world documents, and Adventure documents have NO world
+    // sublevel (compendium-only), so the delete dies with "Cannot read properties of
+    // undefined (reading 'findUpdate')" BEFORE the document op (source-verified at
+    // E:\foundry_v13\code\dist\database\documents\folder.mjs). A world Adventure
+    // folder is structurally empty of world documents, so retype it to JournalEntry
+    // first (Folder.type is a mutable DocumentTypeField) and delete the retyped doc.
+    if (folder.type === 'Adventure') {
+      try {
+        await folder.update({ type: 'JournalEntry' });
+      } catch {
+        /* the update promise can reject client-side after the write lands — verified below */
+      }
+      const retyped = folders.get(input.folderId);
+      if (retyped?.type !== 'JournalEntry') {
+        throw new Error(
+          'FOLDER_ADVENTURE_RETYPE_FAILED: could not retype the Adventure folder for deletion — it must be removed manually',
+        );
+      }
+    }
+
     // Delete the folder itself (Foundry native: un-parents children if deleteContents=false)
-    await folder.delete();
+    // (re-fetch: the BUG-494 retype above may have replaced the client doc)
+    const target = folders.get(input.folderId) ?? folder;
+    try {
+      await target.delete();
+    } catch (e) {
+      // BUG-494: a client-side crash can reject the promise AFTER the op landed —
+      // trust the data layer, not the promise.
+      if (folders.get(input.folderId)) throw e;
+    }
 
     // DP-16 post-verify: confirm removal
     if (folders.get(input.folderId)) {

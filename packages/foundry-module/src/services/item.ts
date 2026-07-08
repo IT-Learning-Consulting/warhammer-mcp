@@ -443,6 +443,17 @@ export class ItemService {
     if (!itemDoc) throw new Error(`Item with UUID "${uuid}" not found in compendium`);
 
     const itemData = itemDoc.toObject();
+    // BUG-476 (Wave 2, D3 + ADR-10.1): wfrp4e's LocationalItemModel._preCreate opens a
+    // BLOCKING DialogV2 ("Choose Location") whenever an owned item carries
+    // system.prompt:true with no location.key (ALL core critical wounds) — the MCP
+    // query timed out while the create completed minutes later, and a retry
+    // double-embedded. No creation option gates that dialog (the guard is only
+    // `!location && this.prompt`), so ALWAYS pre-strip prompt on the carried copy:
+    // the embed returns immediately; location stays unset for the GM to resolve on
+    // the sheet (never invent a hit location).
+    if (itemData?.system?.prompt === true && !itemData?.system?.location?.key) {
+      itemData.system.prompt = false;
+    }
     const embedOptions: Record<string, unknown> = {};
     if (parsed.skipSpecialisationChoice) embedOptions.skipSpecialisationChoice = true;
     const createdItems = await actor.createEmbeddedDocuments('Item', [itemData], embedOptions);

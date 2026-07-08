@@ -55,16 +55,12 @@ exports[`CompendiumUmbrellaTools — characterization > read-document-from-pack 
 
 - **packId:** \`wfrp4e-core.actors\`
 - **documentUuid:** \`Compendium.wfrp4e-core.actors.Actor.ent001\`
+- **projection:** full
 - **top-level data keys (4):** _id, name, type, system
 
 ### Full data
 \`\`\`json
-{
-  "_id": "ent001",
-  "name": "Goblin",
-  "type": "npc",
-  "system": {}
-}
+{"_id":"ent001","name":"Goblin","type":"npc","system":{}}
 \`\`\`"
 `;
 

@@ -34,6 +34,8 @@ import { notify } from '../../../notify.js';
 import { verifyDocWrite } from '../../../utils/verifyWrite.js';
 import { WFRP_GM_TOOLKIT as MODULE_ID } from '../../../constants/moduleIds.js';
 import { Envelope, isGM } from '../_shared/handler-utils.js';
+// BUG-500 (Wave 2): bounded settle-poll for the later-tick advantage write.
+import { settlePoll } from '../_shared/settle-poll.js';
 
 
 // ── Local helpers ──────────────────────────────────────────────────────────────
@@ -154,6 +156,25 @@ async function handleRunGroupTest(input: GroupTestInput): Promise<Envelope<unkno
   if (input.testModifier !== undefined) testOptions.testModifier = input.testModifier;
   if (input.rollMode !== undefined) testOptions.rollMode = input.rollMode;
   if (input.targetGroup !== undefined) {
+    // BUG-492 (Wave 2): the module's runGroupTest does `fromUuid(member)` then uses the
+    // result without a null check (group-test.mjs:52-83) — a malformed/unresolvable entry
+    // null-derefs as a raw GMTOOLKIT_HANDLER_ERROR (the unguarded sibling of the BUG-351
+    // omitted-array crash). Pre-resolve every explicit entry and fail loud instead.
+    const invalid: string[] = [];
+    for (const member of input.targetGroup) {
+      let doc: unknown = null;
+      try { doc = await (globalThis as any).fromUuid?.(member); } catch { doc = null; }
+      if (!doc) invalid.push(String(member));
+    }
+    if (invalid.length > 0) {
+      return {
+        success: false,
+        error:
+          `GMTOOLKIT_INVALID_TARGET: ${invalid.length} targetGroup entr${invalid.length === 1 ? 'y' : 'ies'} did not ` +
+          `resolve to a document: ${invalid.join(', ')}. Pass full UUIDs (e.g. "Actor.<id>" or ` +
+          `"Scene.<sceneId>.Token.<tokenId>").`,
+      };
+    }
     testOptions.targetGroup = input.targetGroup;
   } else {
     // BUG-351: api.grouptest.run IS the module's bare runGroupTest, whose first line is
@@ -187,7 +208,39 @@ async function handleRunGroupTest(input: GroupTestInput): Promise<Envelope<unkno
   let aggregate: unknown = null;
   try { aggregate = (globalThis as any).game?.settings?.get?.(MODULE_ID, 'aggregateResultGroupTest') ?? null; } catch { aggregate = null; }
   notify.updated('gmtoolkit', `group test: ${input.testSkill}`, { summary: `bypass roll for ${resolvedTarget.length} target(s)` });
-  return { success: true, data: { testSkill: input.testSkill, ran: true, targetCount: resolvedTarget.length, aggregate } };
+  return {
+    success: true,
+    data: {
+      testSkill: input.testSkill,
+      ran: true,
+      targetCount: resolvedTarget.length,
+      // BUG-492 (Wave 2): compact projection — the raw aggregate embeds the full
+      // token/actor doc per entry (group-test.mjs:216-229 `actor: testData.token ||
+      // testData.actor`), ~97 KB for an 8-target party, which blew the query window
+      // and made the client-side timeout mask a silently-completed server run.
+      results: compactGroupTestAggregate(aggregate),
+    },
+  };
+}
+
+/**
+ * BUG-492 (Wave 2): per-target summary rows from the module's aggregate setting.
+ * Entry shape source-verified at wfrp4e-gm-toolkit/modules/group-test.mjs:216-229:
+ * { actor: <token|actor doc>, skill, outcome, sl, description, roll, target, characteristic? }.
+ */
+export function compactGroupTestAggregate(aggregate: unknown): unknown {
+  if (!Array.isArray(aggregate)) return aggregate == null ? null : aggregate;
+  return aggregate.map((e: any) => ({
+    name: e?.actor?.name ?? null,
+    id: e?.actor?.id ?? e?.actor?._id ?? null,
+    skill: typeof e?.skill === 'string' ? e.skill : e?.skill?.name ?? null,
+    ...(e?.characteristic !== undefined ? { characteristic: e.characteristic } : {}),
+    outcome: e?.outcome ?? null,
+    sl: e?.sl ?? null,
+    description: e?.description ?? null,
+    roll: e?.roll ?? null,
+    target: e?.target ?? null,
+  }));
 }
 
 // ── Advantage (player-owned socket-route fix + !inCombat guard) ────────────────────
@@ -241,11 +294,21 @@ async function handleUpdateAdvantage(input: AdvantageInput): Promise<Envelope<un
   // Bound call (advantage.update) — Advantage.update is a class static using this.adjust internally.
   await advantage.update(token, adjustment, 'mcp');
 
-  // DP-16 read-back (best-effort: a socket-applied write to a player-owned token may settle async).
-  const value = Number(token.actor?.system?.status?.advantage?.value ?? previousValue);
+  // BUG-500 (Wave 2): the module applies the write on a later tick, so an immediate
+  // re-read systematically echoed previousValue in `value` (live ×5 chained repro).
+  // Settle-poll the re-read (settle-poll §8 pattern) until the expected movement is
+  // observed — clear-single settles at 0; increase/reduce settle on ANY change.
+  const readValue = () => Number(resolveToken(input.tokenId!)?.actor?.system?.status?.advantage?.value ?? previousValue);
+  const value = await settlePoll<number>(
+    readValue,
+    (v) => (input.mode === 'clear-single' ? v === 0 : v !== previousValue),
+    10,
+    100,
+  );
   const isOwner = Boolean(actor?.isOwner);
-  const note = !isOwner && value === previousValue
-    ? 'Write routed via the GM Toolkit socket (player-owned token) — verify the value settled on the sheet.'
+  const unsettled = input.mode === 'clear-single' ? value !== 0 : value === previousValue;
+  const note = unsettled
+    ? 'Advantage value did not change within the settle window — the write may still be in flight (GM Toolkit socket); verify on the sheet.'
     : undefined;
   notify.updated('gmtoolkit', actor?.name ?? input.tokenId, { summary: `advantage ${input.mode}: ${previousValue} → ${value}` });
   return { success: true, data: { tokenId: input.tokenId, actorName: actor?.name ?? null, mode: input.mode, previousValue, value, playerOwned: !isOwner, ...(note ? { note } : {}) } };

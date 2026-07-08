@@ -91,9 +91,12 @@ export class FoundryDataAccess {
   // listActiveEffects, getCharacterInfo, listActors, getWfrp4eConfig, applyDamage, validateFoundryState).
 
   /**
-   * Get character/actor information by name or ID
+   * Get character/actor information by name or ID.
+   * BUG-529: optional `sections` narrows items/effects at the source, BEFORE the
+   * BUG-490 size guard (queries.ts wrapWithSizeGuard) measures the response —
+   * otherwise large actors overflow even for sections:["identity"].
    */
-  async getCharacterInfo(identifier: string): Promise<CharacterInfo> {
+  async getCharacterInfo(identifier: string, sections?: string[]): Promise<CharacterInfo> {
 
     let actor: any | undefined;
 
@@ -119,6 +122,35 @@ export class FoundryDataAccess {
       throw new Error(`${ERROR_MESSAGES.CHARACTER_NOT_FOUND}: ${identifier}`);
     }
 
+    // BUG-529: per-section raw item-type needs — mirrors the mcp-server view mapping
+    // (mcp-server/src/tools/character.ts extractBasicInfo/extractStats/formatConditions/
+    // applySectionsFilter; keep the two in sync). The 'items' section and any UNKNOWN
+    // section are absent from this map on purpose: they fail OPEN to the full items array.
+    const SECTION_ITEM_TYPES: Record<string, string[]> = {
+      identity: ['career'],
+      vitals: ['critical', 'money'],
+      biography: [],
+      characteristics: [],
+      skills: ['skill'],
+      talents: ['talent', 'trait'],
+      conditions: ['injury', 'mutation', 'disease', 'psychology'],
+      effects: [],
+    };
+    const narrowing = !!(sections && sections.length > 0);
+    let keepAllItems = !narrowing;
+    const keepTypes = new Set<string>();
+    if (narrowing) {
+      for (const s of sections!) {
+        const types = SECTION_ITEM_TYPES[s];
+        if (types === undefined) { keepAllItems = true; break; } // 'items' or unknown → full
+        for (const t of types) keepTypes.add(t);
+      }
+    }
+    const sourceItems = Array.from(actor.items || []).filter(
+      (item: any) => keepAllItems || keepTypes.has(item.type)
+    );
+    const includeEffects = !narrowing || sections!.includes('effects');
+
     // Build character data structure
     const characterData: CharacterInfo = {
       id: actor.id || '',
@@ -126,14 +158,14 @@ export class FoundryDataAccess {
       type: actor.type,
       ...(actor.img ? { img: actor.img } : {}),
       system: sanitizeData(actor.system),
-      items: Array.from(actor.items || []).map((item: any) => ({
+      items: sourceItems.map((item: any) => ({
         id: item.id,
         name: item.name,
         type: item.type,
         ...(item.img ? { img: item.img } : {}),
         system: sanitizeData(item.system),
       })),
-      effects: Array.from(actor.effects || []).map((effect: any) => ({
+      effects: (includeEffects ? Array.from(actor.effects || []) : []).map((effect: any) => ({
         id: effect.id,
         name: effect.name || effect.label || 'Unknown Effect',
         ...(effect.icon ? { icon: effect.icon } : {}),

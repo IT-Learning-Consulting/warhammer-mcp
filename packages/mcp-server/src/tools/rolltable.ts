@@ -130,8 +130,11 @@ const CreateRollTableSchema = z.object({
 });
 
 // List roll tables schema
+// BUG-490 (Wave 2): bounded — summary rows + limit/offset paging.
 const ListRollTablesSchema = z.object({
-    action: z.literal("list")
+    action: z.literal("list"),
+    limit: z.number().int().min(1).max(500).optional(),
+    offset: z.number().int().min(0).optional()
 });
 
 // Get roll table schema
@@ -275,9 +278,9 @@ export class RollTableTool extends BaseTool {
 
 **Actions:**
 - **create**: Create a table with entries (legacy text-only) or results (text/document/compendium). Supports folder/img/sort (BUG-524).
-- **list**: List all roll tables in world.
+- **list**: BOUNDED list of roll tables — summary rows only (id/name/formula/resultCount, NO embedded results; the old full dump overflowed the response budget). Accepts limit (default 50, max 500) + offset; response carries totalAvailable + truncated. Oversize responses fail loud with RESPONSE_TOO_LARGE naming these params. Use 'get' for one table's results.
 - **get**: Get full details + result list for a table.
-- **roll**: Roll once on a table and get a result. Response carries text + description + content (= text-or-description) + drawn. READ the 'content' field for the row body — many WFRP4e tables leave 'text' empty and store the row HTML in 'description', so 'content' gives the right body in one field without a follow-up get.
+- **roll**: Roll once on a table and get a result. Response carries text + description + content (= text-or-description) + drawn. READ the 'content' field for the row body — many WFRP4e tables leave 'text' empty and store the row HTML in 'description', so 'content' gives the right body in one field without a follow-up get. Rolling a degenerate table whose EVERY range is [1,1] fails loud with ROLLTABLE_DEGENERATE_RANGES (pre-fix it silently returned ALL rows).
 - **delete**: Permanently delete entire table. ⚠️ Irreversible. Requires confirm: true.
 - **update**: Edit top-level table fields (name, formula, img, description, replacement, displayRoll, folder, sort).
 - **add-results**: Append one or more new results (text/document/compendium types) to an existing table.
@@ -286,7 +289,7 @@ export class RollTableTool extends BaseTool {
 - **normalize**: Recalculate all result range values from weights. ⚠️ This REWRITES the table formula to 1d<sum-of-weights> (e.g. 1d100→1d20) — the response now surfaces 'formulaRewritten' + 'previousFormula' so the change isn't silent (BUG-504). Overwrites manually-set ranges (Risk 2.B); collapses pre-banded published tables, so avoid on tables whose author set explicit bands.
 - **reset**: Clear all drawn flags so all results are available again (for non-replacement tables).
 - **draw-many**: Draw multiple results in one call (1–50). Returns partial + exhausted flag if pool runs dry. The 'roll' field is the table's DICE total (Foundry's draw.roll), while 'requested'/'returned' carry the count — the two are now distinct fields (BUG-504). 'rollMode' accepts Foundry's canonical DICE_ROLL_MODES (publicroll/gmroll/blindroll/selfroll). Each result carries text + description + content (= text-or-description); READ the 'content' field for the row body (WFRP4e tables store it in 'description').
-- **import-from-compendium**: Import a roll table from a compendium pack into the world.
+- **import-from-compendium**: Import a roll table from a compendium pack into the world. With normalize:false, a rangeless import (compendium/document-typed results, which collapse to all-[1,1]) auto-assigns sequential ranges [1,1]..[N,N] + rewrites the formula to 1dN (response carries rangesAssigned + formulaRewritten); author bands are preserved untouched.
 
 **Formula Examples:** "1d100", "1d20", "2d6"
 
@@ -316,6 +319,14 @@ export class RollTableTool extends BaseTool {
                     tableId: {
                         type: "string",
                         description: "[get/roll/delete/update/add-results/update-results/delete-results/normalize/reset/draw-many] ID of the roll table"
+                    },
+                    limit: {
+                        type: "number",
+                        description: "[list] Max summary rows per page (default 50, max 500). BUG-490 bounded-list contract."
+                    },
+                    offset: {
+                        type: "number",
+                        description: "[list] Zero-based row offset for paging."
                     },
                     name: {
                         type: "string",
@@ -446,7 +457,7 @@ export class RollTableTool extends BaseTool {
             case "create":
                 return this.handleCreate(args);
             case "list":
-                return this.handleList();
+                return this.handleList(args as { limit?: number; offset?: number });
             case "get":
                 return this.handleGet(args);
             case "roll":
@@ -535,15 +546,23 @@ export class RollTableTool extends BaseTool {
         };
     }
 
-    private async handleList() {
+    private async handleList(args: { limit?: number; offset?: number } = {}) {
         this.logger.info("Listing roll tables");
 
+        // BUG-490 (Wave 2): bounded envelope { tables, totalAvailable, truncated, offset, limit } —
+        // summary rows only (id/name/formula/resultCount; the old full-results dump measured
+        // 11.2 MB on the live world). Use 'get' for one table's results.
         const response = await this.query<any>(
             "listRollTables",
-            {}
+            {
+                ...(args.limit !== undefined ? { limit: args.limit } : {}),
+                ...(args.offset !== undefined ? { offset: args.offset } : {}),
+            }
         );
 
-        const tables = response ?? [];
+        const tables = response?.tables ?? [];
+        const totalAvailable = response?.totalAvailable ?? tables.length;
+        const truncated = Boolean(response?.truncated);
         if (tables.length === 0) {
             return {
                 content: [
@@ -552,26 +571,29 @@ export class RollTableTool extends BaseTool {
                         text: `📋 **No Roll Tables Found**\n\nThere are no roll tables in this world yet. Create one using the 'create' action.`,
                     },
                 ],
-                structuredContent: { tables } as unknown as Record<string, unknown>,
+                structuredContent: { tables, totalAvailable, truncated } as unknown as Record<string, unknown>,
             };
         }
 
-        let resultText = `🎲 **Roll Tables** (${tables.length})\n\n`;
+        let resultText = `🎲 **Roll Tables** (${tables.length} of ${totalAvailable})\n\n`;
         for (const table of tables) {
             resultText += `**${table.name}**\n`;
             resultText += `   ID: ${table.id}\n`;
             if (table.formula) {
                 resultText += `   Formula: ${table.formula}\n`;
             }
-            if (table.results) {
-                resultText += `   Entries: ${table.results.length}\n`;
+            if (table.resultCount !== undefined) {
+                resultText += `   Entries: ${table.resultCount}\n`;
             }
             resultText += `\n`;
+        }
+        if (truncated) {
+            resultText += `⚠️ Truncated — ${totalAvailable - tables.length} more table(s). Page with limit/offset (offset ${response?.offset ?? 0}, limit ${response?.limit ?? tables.length}).\n`;
         }
 
         return {
             content: [{ type: "text", text: resultText }],
-            structuredContent: { tables } as unknown as Record<string, unknown>,
+            structuredContent: { tables, totalAvailable, truncated, offset: response?.offset, limit: response?.limit } as unknown as Record<string, unknown>,
         };
     }
 

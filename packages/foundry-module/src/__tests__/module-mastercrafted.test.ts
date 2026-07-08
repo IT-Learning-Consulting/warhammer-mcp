@@ -110,4 +110,46 @@ describe('dispatchModuleMastercrafted', () => {
     expect(page.update).toHaveBeenCalled();
     expect(own['user9']).toBe(2);
   });
+
+  // BUG-468 (Wave 2): level:0 revoke — the documented revoke was Zod-unreachable
+  // ([1,2] literals); post-fix it deletes the per-user ownership override via the
+  // Foundry deletion marker and verifies the key is gone.
+  it('grant-recipe-discovery level:0 REVOKES the ownership override (deletion marker)', async () => {
+    const own: Record<string, number> = { user9: 1 };
+    const page = {
+      name: 'Secret Recipe',
+      uuid: 'p1',
+      ownership: own,
+      _source: { ownership: own },
+      update: vi.fn(async (data: any) => {
+        for (const [k, v] of Object.entries(data)) {
+          if (k.startsWith('ownership.-=')) delete own[k.slice('ownership.-='.length)];
+          else if (k.startsWith('ownership.')) own[k.slice('ownership.'.length)] = v as number;
+        }
+      }),
+    };
+    PAGES['p1'] = page;
+    setGame({ active: true });
+    const r = (await dispatchModuleMastercrafted({ action: 'grant-recipe-discovery', pageUuid: 'p1', userId: 'user9', level: 0 })) as any;
+    expect(r.success).toBe(true);
+    expect(r.data.revoked).toBe(true);
+    expect(page.update).toHaveBeenCalledWith({ 'ownership.-=user9': null });
+    expect(own['user9']).toBeUndefined();
+  });
+
+  it('grant-recipe-discovery revoke that does not persist fails loud', async () => {
+    const own: Record<string, number> = { user9: 1 };
+    const page = {
+      name: 'Secret Recipe',
+      uuid: 'p1',
+      ownership: own,
+      _source: { ownership: own },
+      update: vi.fn(async () => undefined), // silent no-op — override survives
+    };
+    PAGES['p1'] = page;
+    setGame({ active: true });
+    const r = (await dispatchModuleMastercrafted({ action: 'grant-recipe-discovery', pageUuid: 'p1', userId: 'user9', level: 0 })) as any;
+    expect(r.success).toBe(false);
+    expect(String(r.error)).toContain('MASTERCRAFTED_OWNERSHIP_NOT_PERSISTED');
+  });
 });

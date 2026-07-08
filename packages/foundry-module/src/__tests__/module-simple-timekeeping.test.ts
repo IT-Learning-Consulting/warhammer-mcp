@@ -186,3 +186,116 @@ describe('dispatchModuleTimekeeping', () => {
     expect(r.data.darknessSync).toBe('darknessOnly');
   });
 });
+
+// ── BUG-493 + BUG-501 (Wave 2) ─────────────────────────────────────────────────
+// The original makeTime() mock had componentsToTime read `dayOfMonth` directly —
+// a circular mock that could never reproduce the live silent drop. This block uses
+// a V13-FAITHFUL mock: componentsToTime derives worldTime from year + `day`
+// (day-of-YEAR) + hour/minute/second and IGNORES month/dayOfMonth, per
+// foundry_docs/data/interfaces/types.TimeComponents.md (day = "number of days
+// completed within the year") and the BUG-493 live 6-probe matrix.
+
+const DAYS_PER_YEAR = CAL_MONTHS.reduce((a, m) => a + m.days, 0); // 99
+
+function makeV13Time(initial: number) {
+  let wt = initial;
+  const toComponents = (t: number) => {
+    const totalDays = Math.floor(t / SECONDS_PER_DAY);
+    const year = 2512 + Math.floor(totalDays / DAYS_PER_YEAR);
+    let day = totalDays % DAYS_PER_YEAR;
+    let month = 0;
+    let rem = day;
+    while (month < CAL_MONTHS.length - 1 && rem >= CAL_MONTHS[month]!.days) {
+      rem -= CAL_MONTHS[month]!.days;
+      month++;
+    }
+    const sod = t % SECONDS_PER_DAY;
+    return {
+      year, day, month, dayOfMonth: rem, dayOfWeek: totalDays % 8,
+      hour: Math.floor(sod / 3600), minute: Math.floor((sod % 3600) / 60), second: sod % 60,
+      leapYear: false, season: 0,
+    };
+  };
+  return {
+    get worldTime() { return wt; },
+    get components() { return toComponents(wt); },
+    advance: vi.fn(async (s: number) => { wt += s; return wt; }),
+    set: vi.fn(async (t: number) => { wt = t; return wt; }),
+    calendar: {
+      months: { values: CAL_MONTHS },
+      days: { values: Array.from({ length: 8 }, (_, i) => ({ name: `Day${i}` })) },
+      timeToComponents: toComponents,
+      // v13-faithful: year/day/hour/minute/second only — month/dayOfMonth IGNORED.
+      componentsToTime: (c: any) =>
+        ((c.year ?? 2512) - 2512) * DAYS_PER_YEAR * SECONDS_PER_DAY +
+        (c.day ?? 0) * SECONDS_PER_DAY +
+        (c.hour ?? 0) * 3600 + (c.minute ?? 0) * 60 + (c.second ?? 0),
+    },
+  };
+}
+
+function setV13Game(opts: { worldTime?: number } = {}) {
+  const time = makeV13Time(opts.worldTime ?? 10 * 3600);
+  const sets: Record<string, any> = { configuration: { calendar: 'imperial' } };
+  (globalThis as any).game = {
+    modules: { get: (id: string) => (id === 'simple-timekeeping' ? { active: true } : { active: true }) },
+    user: { isGM: true },
+    time,
+    scenes: { get: () => undefined },
+    journal: { contents: [] },
+    settings: {
+      get: (_m: string, k: string) => sets[k],
+      set: vi.fn(async (_m: string, k: string, v: any) => { sets[k] = v; }),
+    },
+  };
+  return { time, sets };
+}
+
+describe('BUG-493: set-time month/dayOfMonth actually move the clock', () => {
+  it('month NAME + dayOfMonth recompute day-of-year and persist', async () => {
+    const { time } = setV13Game({ worldTime: 10 * 3600 }); // day 0, 10:00
+    const r = (await dispatchModuleTimekeeping({ action: 'set-time', month: 'Jahrdrung', dayOfMonth: 4 })) as any;
+    expect(r.success).toBe(true);
+    // Jahrdrung = index 2 → day-of-year 32 + 1 + 4 = 37, hour 10 preserved.
+    expect(time.worldTime).toBe(37 * SECONDS_PER_DAY + 10 * 3600);
+    expect(r.data.components.month).toBe(2);
+    expect(r.data.components.dayOfMonth).toBe(4);
+  });
+
+  it('month INDEX alone moves the clock (dayOfMonth preserved from current)', async () => {
+    const { time } = setV13Game({ worldTime: 0 }); // day 0 = Nachexen 0
+    const r = (await dispatchModuleTimekeeping({ action: 'set-time', month: 3 })) as any;
+    expect(r.success).toBe(true);
+    // Pflugzeit (index 3) day 0 → day-of-year 32+1+33 = 66.
+    expect(time.worldTime).toBe(66 * SECONDS_PER_DAY);
+    expect(r.data.components.month).toBe(3);
+  });
+
+  it('dayOfMonth out of range for the month fails loud', async () => {
+    setV13Game();
+    const r = (await dispatchModuleTimekeeping({ action: 'set-time', month: 'Hexenstag', dayOfMonth: 1 })) as any;
+    expect(r.success).toBe(false);
+    expect(r.error).toContain('TIMEKEEPING_INVALID_INPUT');
+    expect(r.error).toContain('Hexenstag');
+  });
+});
+
+describe('BUG-501: activate-calendar preset validation', () => {
+  it('bogus preset id fails with TIMEKEEPING_CALENDAR_UNKNOWN_PRESET and writes nothing', async () => {
+    const { sets } = setV13Game();
+    const r = (await dispatchModuleTimekeeping({ action: 'activate-calendar', calendar: 'totally-bogus', confirm: true })) as any;
+    expect(r.success).toBe(false);
+    expect(r.error).toContain('TIMEKEEPING_CALENDAR_UNKNOWN_PRESET');
+    expect((globalThis as any).game.settings.set).not.toHaveBeenCalled();
+    expect(sets.configuration.calendar).toBe('imperial'); // untouched
+  });
+
+  it('valid preset id persists and reports applied/note', async () => {
+    const { sets } = setV13Game();
+    const r = (await dispatchModuleTimekeeping({ action: 'activate-calendar', calendar: 'gregorian', confirm: true })) as any;
+    expect(r.success).toBe(true);
+    expect(sets.configuration.calendar).toBe('gregorian');
+    expect(['live', 'on-reload']).toContain(r.data.applied);
+    expect(r.data.indicatorCaveat).toContain('session-scoped');
+  });
+});

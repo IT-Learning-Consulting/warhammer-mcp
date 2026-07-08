@@ -330,6 +330,35 @@ async function handleSetTime(input: SetTimeInput): Promise<Envelope<unknown>> {
     if (!cal?.componentsToTime) {
       return { success: false, error: 'TIMEKEEPING_CALENDAR_UNAVAILABLE: game.time.calendar.componentsToTime is not available; pass worldTime instead' };
     }
+    // BUG-493 (Wave 2): componentsToTime derives worldTime from `day` (the DAY-OF-YEAR
+    // ordinal — TimeComponents.day, foundry_docs/data/interfaces/types.TimeComponents.md),
+    // treating month/dayOfMonth as derived OUTPUT fields it ignores — which is why the
+    // live 6-probe matrix showed year/hour/minute/second moving the clock while
+    // month/dayOfMonth silently no-oped. Recompute `day` from the overlaid
+    // month/dayOfMonth so those components actually land.
+    if (input.month !== undefined || input.dayOfMonth !== undefined) {
+      const months: any[] = cal.months?.values ?? [];
+      if (months.length === 0) {
+        return { success: false, error: 'TIMEKEEPING_CALENDAR_UNAVAILABLE: active calendar defines no months; pass worldTime instead' };
+      }
+      const targetMonth = Number(cur.month ?? 0);
+      const dayOfMonth = Number(cur.dayOfMonth ?? 0);
+      const isLeap = Boolean(cur.leapYear);
+      const monthDays = (m: any): number => Number((isLeap ? m?.leapDays ?? m?.days : m?.days) ?? 0);
+      const monthDef = months[targetMonth];
+      if (!monthDef) {
+        return { success: false, error: `TIMEKEEPING_MONTH_NOT_FOUND: month index ${targetMonth} out of range (calendar has ${months.length} months)` };
+      }
+      if (dayOfMonth < 0 || dayOfMonth >= monthDays(monthDef)) {
+        return {
+          success: false,
+          error: `TIMEKEEPING_INVALID_INPUT: dayOfMonth ${dayOfMonth} out of range for ${monthDef.name ?? `month ${targetMonth}`} (0-based; month has ${monthDays(monthDef)} days)`,
+        };
+      }
+      let dayOfYear = 0;
+      for (let i = 0; i < targetMonth; i++) dayOfYear += monthDays(months[i]);
+      cur.day = dayOfYear + dayOfMonth;
+    }
     target = cal.componentsToTime(cur);
   }
 
@@ -512,8 +541,42 @@ async function handleSetConfig(input: SetConfigInput): Promise<Envelope<unknown>
   return { success: true, data: { changed: Object.keys(input.changes), calendarApplied: calendarApply?.applied, calendarNote: calendarApply?.note, secondsPerRound: merged.secondsPerRound } };
 }
 
+// BUG-501 (Wave 2) fallback preset list — source-verified against the installed
+// module's scripts/calendars.js (15 preset ids); used only when the runtime
+// CALENDARS static (SimpleTimekeeping app class, main.js:20) is unreachable.
+const FALLBACK_CALENDAR_PRESET_IDS = [
+  'gregorian', 'harptos', 'barovian', 'galifar', 'golarion', 'thyatian', 'commonyear',
+  'athasian', 'drag_solamnia', 'ansalon', 'cerilian', 'exandrian', 'drakkenheim',
+  'imperial', 'forbiddenlands',
+];
+
 type ActivateCalendarInput = Extract<ModuleTimekeepingInputType, { action: 'activate-calendar' }>;
+// BUG-501 KNOWN LIMITATION (documented, not engineered around — plan D8): the
+// `activeCalendar` indicator in get-time/`buildTimeResult` reads
+// CONFIG.time.worldCalendarConfig.id, which flips IMMEDIATELY on any activate even
+// when applied:'on-reload', and cannot be restored in-session (re-activating the
+// original id or set-config only fixes the PERSISTED setting). The indicator is
+// session-scoped-until-reload; the functional time math is unaffected.
 async function handleActivateCalendar(input: ActivateCalendarInput): Promise<Envelope<unknown>> {
+  // BUG-501 (Wave 2): validate the preset id BEFORE any write — pre-fix, a bogus id
+  // "succeeded" (applied:'on-reload') and one-way-flipped the session indicator.
+  // Decision (plan D8): the phantom TIMEKEEPING_CALENDAR_SWAP_UNAVAILABLE token is
+  // DELETED from the docs (Phase 3 re-sync); unknown presets fail with
+  // TIMEKEEPING_CALENDAR_UNKNOWN_PRESET.
+  const runtimeCalendars: any[] =
+    (globalThis as any).ui?.simpleTimekeeping?.constructor?.CALENDARS ?? [];
+  const knownIds: string[] = runtimeCalendars.length > 0
+    ? runtimeCalendars.map((c: any) => String(c?.id ?? '')).filter((s: string) => s.length > 0)
+    : FALLBACK_CALENDAR_PRESET_IDS;
+  if (input.calendar !== 'custom' && !knownIds.includes(input.calendar)) {
+    return {
+      success: false,
+      error:
+        `TIMEKEEPING_CALENDAR_UNKNOWN_PRESET: "${input.calendar}" is not a known calendar preset. ` +
+        `Known presets: ${[...knownIds, 'custom'].join(', ')}`,
+    };
+  }
+
   await writeConfig({ calendar: input.calendar });
   const apply = await applyCalendar(input.calendar);
   const active = (globalThis as any).CONFIG?.time?.worldCalendarConfig;
@@ -526,6 +589,8 @@ async function handleActivateCalendar(input: ActivateCalendarInput): Promise<Env
       note: apply.note,
       activeCalendarId: active?.id,
       monthCount: active?.months?.values?.length,
+      indicatorCaveat:
+        'activeCalendarId reflects the session indicator, which flips immediately and is session-scoped-until-reload; the persisted setting is `calendar`.',
     },
   };
 }

@@ -48,6 +48,8 @@ import {
 import { wrappedWrite } from '../transaction-manager.js';
 import { notify } from '../notify.js';
 import { validateGMAccess, type Envelope } from '../utils/flatWorldCRUDFactory.js';
+// BUG-490 (Wave 2): bounded embedded-name preview inside the summary projection.
+import { boundList } from '../services/bounded-response.js';
 
 // ── Error tag helper ──────────────────────────────────────────────────────
 
@@ -161,6 +163,8 @@ interface ReadDocumentResponse {
   documentId: string;
   documentUuid: string;
   data: Record<string, unknown>;
+  // BUG-490 (Wave 2): which projection produced `data` ('full' when omitted pre-fix).
+  projection?: 'summary' | 'full';
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────
@@ -733,12 +737,45 @@ async function readDocumentFromPack(input: any): Promise<Envelope<ReadDocumentRe
     };
   }
 
-  const data = typeof doc.toObject === 'function'
+  const full = typeof doc.toObject === 'function'
     ? (doc.toObject() as Record<string, unknown>)
     : ({ ...(doc as any) } as Record<string, unknown>);
 
   const docUuid: string = doc.uuid
     ?? `Compendium.${input.packId}.${pack.metadata?.type ?? 'unknown'}.${doc.id}`;
+
+  // BUG-490 (Wave 2): 'summary' projection — a full actor read measured 72.5k chars
+  // live. 'full' (default) stays whole-document and rides the global size guard,
+  // whose RESPONSE_TOO_LARGE hint points the caller here.
+  const projection: 'summary' | 'full' = input.projection === 'summary' ? 'summary' : 'full';
+  const data: Record<string, unknown> = projection === 'summary'
+    ? {
+        _id: full._id ?? doc.id,
+        name: full.name ?? doc.name,
+        type: full.type ?? null,
+        img: full.img ?? null,
+        folder: full.folder ?? null,
+        embeddedCounts: Object.fromEntries(
+          Object.entries(full)
+            .filter(([, v]) => Array.isArray(v))
+            .map(([k, v]) => [k, (v as unknown[]).length]),
+        ),
+        // Bounded name preview per embedded collection (first 25) so an agent can
+        // see what's on the document without fetching the full read.
+        embeddedPreview: Object.fromEntries(
+          Object.entries(full)
+            .filter(([, v]) => Array.isArray(v) && (v as unknown[]).length > 0)
+            .map(([k, v]) => {
+              const bounded = boundList(v as any[], { defaultLimit: 25 });
+              return [k, {
+                names: bounded.items.map((e: any) => e?.name ?? e?._id ?? String(e).slice(0, 40)),
+                truncated: bounded.truncated,
+              }];
+            }),
+        ),
+        topLevelKeys: Object.keys(full),
+      }
+    : full;
 
   return {
     success: true,
@@ -747,6 +784,7 @@ async function readDocumentFromPack(input: any): Promise<Envelope<ReadDocumentRe
       documentId: String(doc.id),
       documentUuid: docUuid,
       data,
+      projection,
     },
   };
 }

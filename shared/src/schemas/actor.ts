@@ -39,6 +39,9 @@ export const CharacterInfoSchema = z.object({
 export const GetCharacterInfoInput = z.object({
   characterName: z.string().optional(),
   characterId: ActorId.optional(),
+  // BUG-529: module-side narrowing hint, applied before the BUG-490 size guard
+  // measures the response. Plain strings (not an enum): unknown values fail OPEN.
+  sections: z.array(z.string()).optional(),
 }).strict();
 
 export const ListActorsInput = z.object({

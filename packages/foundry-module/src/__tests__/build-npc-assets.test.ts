@@ -23,7 +23,15 @@ import path from 'node:path';
 // 2026-05-16: wfrp-build-npc/assets/ migrated to _shared/wfrp-character-build/ (bi-skill share with /wfrp-build-pc).
 const ASSET = 'E:/warhammer_system/.claude/skills/_shared/wfrp-character-build';
 
+// CI runners (GitHub Actions ubuntu-latest) don't check out the vault repo — these
+// tests validate parity with vault-only skill assets and are skipped when absent.
+// Guarded at the loader level (not just describe.skipIf) because several describe
+// bodies below call these loaders directly, outside any `it()`, so they'd otherwise
+// still execute — and throw — during test collection even on a skipped suite.
+const HAS_VAULT = fs.existsSync(ASSET);
+
 function readJson(name: string): any {
+  if (!HAS_VAULT) return {};
   return JSON.parse(fs.readFileSync(path.join(ASSET, name), 'utf8'));
 }
 
@@ -33,6 +41,7 @@ function readJson(name: string): any {
 // invariant — expansion modules (wfrp4e-archives, wfrp4e-soc, wfrp4e-wom, etc.)
 // add their own variants under `__<module>` suffixes which are out of scope here.
 function loadCoreCareers(): Record<string, any> {
+  if (!HAS_VAULT) return {};
   const CAREERS_DIR = path.join(ASSET, 'careers');
   const result: Record<string, any> = {};
   for (const filename of fs.readdirSync(CAREERS_DIR)) {
@@ -48,6 +57,7 @@ function loadCoreCareers(): Record<string, any> {
 // career, keyed by name, value = {pack_id, item_id, level, careergroup}) from
 // the new flat NDJSON. Filter to wfrp4e-core for the original 256-entry invariant.
 function loadCoreCareerIndex(): Record<string, any> {
+  if (!HAS_VAULT) return {};
   const ndjson = fs.readFileSync(path.join(ASSET, 'career-lookup.ndjson'), 'utf8');
   const result: Record<string, any> = {};
   for (const line of ndjson.split(/\r?\n/)) {
@@ -64,7 +74,7 @@ function loadCoreCareerIndex(): Record<string, any> {
   return result;
 }
 
-describe('build-npc assets — careers/* (per-careergroup files; core-filtered)', () => {
+describe.skipIf(!HAS_VAULT)('build-npc assets — careers/* (per-careergroup files; core-filtered)', () => {
   const careers = loadCoreCareers();
   const keys = Object.keys(careers);
 
@@ -116,7 +126,7 @@ describe('build-npc assets — careers/* (per-careergroup files; core-filtered)'
   });
 });
 
-describe('build-npc assets — career-lookup.ndjson (per-career index; core-filtered)', () => {
+describe.skipIf(!HAS_VAULT)('build-npc assets — career-lookup.ndjson (per-career index; core-filtered)', () => {
   const index = loadCoreCareerIndex();
 
   it('has exactly 256 core entries (64 careergroups × 4 levels)', () => {
@@ -143,7 +153,7 @@ describe('build-npc assets — career-lookup.ndjson (per-career index; core-filt
   });
 });
 
-describe('build-npc assets — species-bases.json', () => {
+describe.skipIf(!HAS_VAULT)('build-npc assets — species-bases.json', () => {
   const species = readJson('species-bases.json');
 
   it('has exactly 8 species (5 core + Norse/Gnome/Ogre via wfrp4e-core fallbacks)', () => {
@@ -166,7 +176,7 @@ describe('build-npc assets — species-bases.json', () => {
   });
 });
 
-describe('build-npc assets — species-career-matrix.json', () => {
+describe.skipIf(!HAS_VAULT)('build-npc assets — species-career-matrix.json', () => {
   const matrix = readJson('species-career-matrix.json');
   const careers = loadCoreCareers();
   const species = ['Human', 'Dwarf', 'Halfling', 'High Elf', 'Wood Elf', 'Norse'];
@@ -245,7 +255,7 @@ describe('build-npc assets — species-career-matrix.json', () => {
   });
 });
 
-describe('build-npc assets — cost-tables.json', () => {
+describe.skipIf(!HAS_VAULT)('build-npc assets — cost-tables.json', () => {
   const cost = readJson('cost-tables.json');
 
   it('characteristic + skill curves are 15-entry arrays', () => {
@@ -267,10 +277,10 @@ describe('build-npc assets — cost-tables.json', () => {
   });
 });
 
-describe('build-npc assets — config.json', () => {
+describe.skipIf(!HAS_VAULT)('build-npc assets — config.json', () => {
   // config.json is npc-specific and stayed in wfrp-build-npc/assets/ post-2026-05-16 rename.
   const NPC_CONFIG = 'E:/warhammer_system/.claude/skills/wfrp-build-npc/assets';
-  const config = JSON.parse(fs.readFileSync(path.join(NPC_CONFIG, 'config.json'), 'utf8'));
+  const config = HAS_VAULT ? JSON.parse(fs.readFileSync(path.join(NPC_CONFIG, 'config.json'), 'utf8')) : {};
 
   it('has all 9 top-level keys', () => {
     // BUG-427: criminal_mode added for /wfrp-build-npc --mode criminal (SKILL.md §criminal mode).

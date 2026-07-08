@@ -170,3 +170,58 @@ describe('direct-call dispatch', () => {
     expect(res.error).toContain('SYRINSCAPE_PLAYBACK_REJECTED');
   });
 });
+
+// ── 7. BUG-464 (Wave 2): bounded list actions ───────────────────────────────────
+// Warm-cache overflow was live-proven (53 KB/516 soundsets, 721 KB/4,571 moods —
+// BUG-464 ledger body). Row shapes mirror the Phase-13C live cache capture already
+// encoded in the handler interfaces (SoundsetInfoRow / BulkDataEntry), not invented.
+
+describe('BUG-464 bounded lists', () => {
+  function warmGame() {
+    const soundsetInfo = Array.from({ length: 120 }, (_, i) => ({
+      id: 1000 + i,
+      name: `set-${i}`,
+      full_name: `Soundset ${i}`,
+    }));
+    const bulkData: Record<string, any> = {};
+    for (let i = 0; i < 300; i++) {
+      bulkData[`m${i}`] = { id: 2000 + i, type: 'mood', name: `mood-${i}`, soundset: `set-${i % 3}` };
+    }
+    bulkData['el1'] = { id: 9999, type: 'element', name: 'not-a-mood', soundset: 'set-0' };
+    return makeGame({ bulkData, soundsetInfo });
+  }
+
+  it('list-soundsets defaults to a bounded page with totalAvailable/truncated', async () => {
+    (globalThis as any).game = warmGame();
+    const res: any = await dispatchModuleSyrinscape({ action: 'list-soundsets' });
+    expect(res.success).toBe(true);
+    expect(res.data.soundsets.length).toBe(50);
+    expect(res.data.totalAvailable).toBe(120);
+    expect(res.data.truncated).toBe(true);
+  });
+
+  it('list-soundsets honors limit/offset + name filter', async () => {
+    (globalThis as any).game = warmGame();
+    const res: any = await dispatchModuleSyrinscape({ action: 'list-soundsets', filter: 'Soundset 11', limit: 5 });
+    expect(res.success).toBe(true);
+    // matches Soundset 11, 110..119
+    expect(res.data.totalAvailable).toBe(11);
+    expect(res.data.soundsets.length).toBe(5);
+    expect(res.data.truncated).toBe(true);
+  });
+
+  it('list-moods unfiltered is bounded; soundsetName + filter still narrow', async () => {
+    (globalThis as any).game = warmGame();
+    const all: any = await dispatchModuleSyrinscape({ action: 'list-moods' });
+    expect(all.success).toBe(true);
+    expect(all.data.moods.length).toBe(50);
+    expect(all.data.totalAvailable).toBe(300);
+    expect(all.data.truncated).toBe(true);
+
+    const narrowed: any = await dispatchModuleSyrinscape({ action: 'list-moods', soundsetName: 'set-1', filter: 'mood-10', limit: 10 });
+    expect(narrowed.success).toBe(true);
+    // set-1 moods are i%3===1; names mood-10x matching 'mood-10' → mood-10, mood-100..109 ∩ set-1
+    expect(narrowed.data.moods.every((m: any) => m.soundset === 'set-1')).toBe(true);
+    expect(narrowed.data.moods.every((m: any) => String(m.name).includes('mood-10'))).toBe(true);
+  });
+});

@@ -50,7 +50,10 @@ interface ItemDirectoryGetResponse {
 
 interface ItemDirectorySearchResponse {
   items: WorldItemSummary[];
-  total: number;
+  totalAvailable: number;
+  truncated: boolean;
+  offset: number;
+  limit: number;
   query: string | null;
 }
 
@@ -123,7 +126,7 @@ export class ItemDirectoryTool extends BaseTool {
 **Actions:**
 - **list**: List world items. Optional: typeFilter (item type string), folderId (folder id), page/pageSize (default 100).
 - **get**: Get a single world item by itemId. Returns full serialized item.
-- **search**: Search world items. Optional: query (name substring), filters ({type?, folder?}), exclude (id array).
+- **search**: Search world items. Optional: query (name substring), filters ({type?, folder?}), exclude (id array), limit/offset (default 50, max 500 — results carry totalAvailable + truncated).
 - **duplicate**: Clone a world item. Strips _id/folder/sort + effects._id so Foundry generates fresh ids. Optional: newName. Returns new id + sourceId.
 - **import-from-compendium**: Import a compendium entry to the world Items directory. Required: packId (e.g. "wfrp4e-core.items"), itemId (bare in-pack id). Optional: updateData (merge overrides). Uses the canonical importFromCompendium path (clears the compendium folder FK). Foundry v13 PRESERVES the source compendium id on the imported world item, so the returned world id normally equals the compendium id (see idMatchesCompendium). Re-importing the same entry collides on that id — delete the existing world item first.
 
@@ -180,6 +183,17 @@ export class ItemDirectoryTool extends BaseTool {
               type: 'array',
               items: { type: 'string' },
               description: '[search] Array of item ids to exclude from results.',
+            },
+            limit: {
+              type: 'integer',
+              minimum: 1,
+              maximum: 500,
+              description: '[search] Max results per page (default 50, max 500).',
+            },
+            offset: {
+              type: 'integer',
+              minimum: 0,
+              description: '[search] 0-based result offset for paging.',
             },
             newName: {
               type: 'string',
@@ -273,8 +287,10 @@ export class ItemDirectoryTool extends BaseTool {
         return { content: [{ type: 'text' as const, text: '📦 **No items matched the search**' }], structuredContent: data as unknown as Record<string, unknown> };
       }
       const lines = data.items.map(formatWorldItem);
+      const window = `${data.items.length} of ${data.totalAvailable} results` +
+        (data.truncated ? ` · truncated — pass offset:${data.offset + data.limit} for the next page` : '');
       const text =
-        `📦 **Item Search** (${data.total} results${data.query ? ` · query: "${data.query}"` : ''})\n\n` +
+        `📦 **Item Search** (${window}${data.query ? ` · query: "${data.query}"` : ''})\n\n` +
         lines.join('\n');
       return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {

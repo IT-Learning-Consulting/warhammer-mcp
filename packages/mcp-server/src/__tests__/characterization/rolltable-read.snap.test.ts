@@ -9,16 +9,36 @@ import { makeToolDeps } from '../test-utils.js';
 const tool = (mockReturn: any) => new RollTableTool(makeToolDeps(mockReturn));
 
 describe('RollTableTool — characterization (read)', () => {
+  // BUG-490 (Wave 2): list is bounded — the handler returns the summary-row envelope
+  // { tables (id/name/formula/resultCount), totalAvailable, truncated, offset, limit }
+  // (pinned by foundry-module's rolltable handler unit tests), never embedded results.
   it('list — tables in world', async () => {
-    const r = await tool([
-      { id: 'tbl001', name: 'Random Encounters', formula: '1d20', results: [{ text: 'Wolves' }, { text: 'Goblins' }] },
-      { id: 'tbl002', name: 'Critical Hits', formula: '1d100', results: [] },
-    ]).execute({ action: 'list' });
+    const r = await tool({
+      tables: [
+        { id: 'tbl001', name: 'Random Encounters', formula: '1d20', resultCount: 2 },
+        { id: 'tbl002', name: 'Critical Hits', formula: '1d100', resultCount: 0 },
+      ],
+      totalAvailable: 2,
+      truncated: false,
+      offset: 0,
+      limit: 50,
+    }).execute({ action: 'list' });
+    expect((r as any).content[0].text).toMatchSnapshot();
+  });
+
+  it('list — truncated page surfaces the paging notice', async () => {
+    const r = await tool({
+      tables: [{ id: 'tbl001', name: 'Random Encounters', formula: '1d20', resultCount: 2 }],
+      totalAvailable: 120,
+      truncated: true,
+      offset: 0,
+      limit: 1,
+    }).execute({ action: 'list', limit: 1 });
     expect((r as any).content[0].text).toMatchSnapshot();
   });
 
   it('list — empty world', async () => {
-    const r = await tool([]).execute({ action: 'list' });
+    const r = await tool({ tables: [], totalAvailable: 0, truncated: false, offset: 0, limit: 50 }).execute({ action: 'list' });
     expect((r as any).content[0].text).toMatchSnapshot();
   });
 

@@ -236,7 +236,7 @@ export class MacroTool extends BaseTool {
           openWorldHint: true,
         },
         description:
-          `Manage Foundry VTT Macro documents and execute them with explicit consent gating. 8 actions span CRUD + safe execution + Phase 9B name-execute/import.
+          `Manage Foundry VTT Macro documents and execute them with explicit consent gating. 11 actions: create, update, delete, get, list, execute, execute-by-name, import-from-compendium, set-execution-target, list-world-scripts, get-execution-target.
 
 **Actions:**
 - **create**: Create a new Macro. Required: name, type (chat or script). Optional: scope (global/actors/actor, default global), command, img, folder, flags. Returns macroId + macro view + requestedChanges.

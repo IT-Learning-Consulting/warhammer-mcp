@@ -70,6 +70,8 @@ export interface GrantDiscoveryResult {
   name: string;
   userId: UserId;
   level: number;
+  // BUG-468 (Wave 2): present (true) when level:0 removed the per-user override.
+  revoked?: boolean;
 }
 
 // Phase 14 full-functionality expansion.

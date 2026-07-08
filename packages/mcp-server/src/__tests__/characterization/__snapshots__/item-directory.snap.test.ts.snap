@@ -62,7 +62,7 @@ exports[`ItemDirectoryTool — characterization > list — world items page view
 `;
 
 exports[`ItemDirectoryTool — characterization > search — name substring results 1`] = `
-"📦 **Item Search** (1 results · query: "Healing")
+"📦 **Item Search** (1 of 1 results · query: "Healing")
 
 - **Healing Draught** \`item-003\` · type: trapping"
 `;

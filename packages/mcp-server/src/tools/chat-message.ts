@@ -126,7 +126,7 @@ export class ChatMessageTool extends BaseTool {
                     openWorldHint: true,
                 },
                 description:
-                    `Manage Foundry ChatMessage documents through one umbrella tool. 5 actions: create, update, delete, get, list.
+                    `Manage Foundry ChatMessage documents through one umbrella tool. 7 actions: create, update, delete, get, list, export-chat-log, clear-chat-log.
 
 IMPORTANT — author vs user trap: always pass the Foundry user ID in the \`author\` field. The legacy \`user\` accessor is a shimData backward-compat alias; passing it will silently fail.
 
@@ -151,7 +151,7 @@ Key rules:
 - delete: requires confirm:true. Returns CHATMESSAGE_DELETE_NOT_CONFIRMED otherwise.
 - list: always paginated (default pageSize:20, sortOrder:desc). Use filters to narrow by author/speaker/type/style.
 - get: returns full ChatMessageViewModel including speaker sub-object, whisper array, rolls, flags.
-- export-chat-log (Phase 9C): read-only render of the whole chat log as text/markdown. Optional format ('text'|'markdown'). Returns {format, messageCount, content}.
+- export-chat-log (Phase 9C, BOUNDED per BUG-490): read-only render of a chat-log WINDOW as text/markdown. Defaults to the most recent \`limit\` messages (default 200, max 500); pass \`offset\` to page chronologically from the start. Returns {format, messageCount, content, totalAvailable, truncated, offset, limit} — truncated:true means messages outside the window were omitted. Oversize responses fail loud with RESPONSE_TOO_LARGE naming limit/offset.
 - clear-chat-log (Phase 9C): ⚠️ bulk-delete the chat log. confirm:true REQUIRED. Pass dryRun:true first for a {totalCount, byVisibility:{public,gmOnly,whispered}, oldest, newest} preview. Optional olderThanDays filter to delete only old messages.
 
 Examples:
@@ -314,6 +314,8 @@ Examples:
                         },
                         // Phase 9C export/clear fields.
                         format: { type: 'string', enum: ['text', 'markdown'], description: '[export-chat-log] Output format (default text).' },
+                        limit: { type: 'number', description: '[export-chat-log] Max messages in the window (default 200, max 500). BUG-490 bounded contract.' },
+                        offset: { type: 'number', description: '[export-chat-log] Zero-based chronological offset; omit to export the most recent window (tail).' },
                         olderThanDays: { type: 'number', minimum: 0, description: '[clear-chat-log] Only delete messages older than N days (omit = all).' },
                         dryRun: { type: 'boolean', description: '[clear-chat-log] Preview only — returns the visibility breakdown without deleting.' },
                     },
@@ -350,7 +352,11 @@ Examples:
     private async handleExportChatLog(args: ArgsFor<'export-chat-log'>) {
         try {
             const data = await this.query<ChatMessageExportLogResponse>('chat-message', args);
-            const text = `📜 **Chat Log Export** (${data.format}, ${data.messageCount} messages)\n\n${data.content || '_(no messages)_'}`;
+            // BUG-490 (Wave 2): render the truncation notice so a partial window is never silent.
+            const windowNote = data.truncated
+                ? `\n⚠️ Truncated window — ${data.messageCount} of ${data.totalAvailable} messages (offset ${data.offset}, limit ${data.limit}). Page with limit/offset for the rest.`
+                : '';
+            const text = `📜 **Chat Log Export** (${data.format}, ${data.messageCount}${data.totalAvailable !== undefined ? ` of ${data.totalAvailable}` : ''} messages)${windowNote}\n\n${data.content || '_(no messages)_'}`;
             return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
         } catch (e) {
             return this.errorResponse('export-chat-log', e instanceof Error ? e.message : String(e));

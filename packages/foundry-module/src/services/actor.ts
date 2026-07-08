@@ -581,7 +581,14 @@ export class ActorService {
         // JSON.stringify drift loop). readSource:false preserves the original direct-property read
         // (the hand-rolled loop never read via ._source; switching the default broke test doubles
         // that model a flat live-document shape without a ._source bag).
-        verifyDocWrite(fresh, flat, ErrorTokens.UPDATE_ACTOR_NOT_PERSISTED, { readSource: false });
+        // BUG-499 (Wave 2, D6): normalizeDimensions rescues the wrong-dimension family —
+        // folder FK moves (Document getter vs scalar id) and numeric coercion
+        // (system.status.advantage.value) false-failed real, persisted writes as
+        // NOT_PERSISTED. Structural equality is still checked first.
+        verifyDocWrite(fresh, flat, ErrorTokens.UPDATE_ACTOR_NOT_PERSISTED, {
+          readSource: false,
+          normalizeDimensions: true,
+        });
       }
 
       // Debug: Log the updateData structure to help diagnose issues

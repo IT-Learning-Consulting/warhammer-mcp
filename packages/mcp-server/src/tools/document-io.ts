@@ -38,7 +38,10 @@ interface PreviewResponse { success: true; documentType: string; name: string; e
 
 
 function formatExport(r: DocumentIoExportResult): string {
-  const dataStr = JSON.stringify(r.data, null, 2);
+  // Compact on purpose: the 64k RESPONSE_TOO_LARGE guard measures the handler's
+  // compact JSON — pretty-printing here re-inflated payloads past the budget the
+  // guard had already cleared (Wave-2 validate F04, 2026-07-07).
+  const dataStr = JSON.stringify(r.data);
   return [
     `## Exported ${r.documentType} \`${r.id}\``,
     '',
@@ -124,6 +127,7 @@ IMPORTANT: This tool implements CLONE / TEMPLATE semantics, NOT backup/restore.
 
 - **export**: Read-only. Returns the full toObject() JSON of an existing document. No confirm required.
   Required: documentType, id.
+  BOUND (BUG-490): export is whole-document by nature — pagination would corrupt the round-trip payload — so an oversize document fails loud with RESPONSE_TOO_LARGE (budget 64k chars; a live Actor export measured 96.5k). Use action:"preview" for a summary, or export a smaller document.
 
 - **import-as-new**: Write. Validates the payload type, strips _id/sort/folder/ownership (per flags), calls DocClass.create, re-reads and verifies the persisted document, returns {newId, oldId, idMap, warnings[]}. confirm:true is required (CCR-4).
   Required: documentType, data (toObject payload), confirm:true.

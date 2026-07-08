@@ -5,11 +5,25 @@
 
 import type { TokenId, ActorId, SceneId, PackId } from '@foundry-mcp/shared';
 
+// BUG-492 (Wave 2): compact per-target rows replace the raw `aggregate` (which
+// embedded full actor docs — ~97 KB for an 8-target party, blowing the query window).
+export interface GmtoolkitGroupTestRow {
+  name: string | null;
+  id: string | null;
+  skill: string | null;
+  characteristic?: string;
+  outcome: string | null;
+  sl: string | number | null;
+  description: string | null;
+  roll: number | null;
+  target: number | null;
+}
+
 export interface GmtoolkitGroupTestResult {
   testSkill: string;
   ran: boolean;
   targetCount: number | null;
-  aggregate: unknown;
+  results: GmtoolkitGroupTestRow[] | unknown;
 }
 
 export interface GmtoolkitAdvantageResult {

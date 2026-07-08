@@ -10,7 +10,7 @@ exports[`ModulePatrolTool — characterization > enable-token — wander mode 1`
 `;
 
 exports[`ModulePatrolTool — characterization > get-token-config — token with wander flags 1`] = `
-"module-patrol.get-config: Goblin Sentry
+"module-patrol.get-token-config: Goblin Sentry
 - flags: patrolWander=true, patrolPath=false, enableSpotting=true, patrolundetectable=false
 - global: wander=true path=false"
 `;

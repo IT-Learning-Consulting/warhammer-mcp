@@ -26,10 +26,15 @@ export interface SyrinscapeSoundsetRow {
   name: string;
   fullName: string;
 }
+// BUG-464 (Wave 2): both list results carry the bounded-page envelope.
 export interface SyrinscapeListSoundsetsResult {
   action: 'list-soundsets';
   soundsets: SyrinscapeSoundsetRow[];
   hint?: string;
+  totalAvailable?: number;
+  truncated?: boolean;
+  offset?: number;
+  limit?: number;
 }
 
 export interface SyrinscapeMoodRow {
@@ -42,6 +47,10 @@ export interface SyrinscapeListMoodsResult {
   action: 'list-moods';
   moods: SyrinscapeMoodRow[];
   hint?: string;
+  totalAvailable?: number;
+  truncated?: boolean;
+  offset?: number;
+  limit?: number;
 }
 
 export type SyrinscapeResult =
