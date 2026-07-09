@@ -208,6 +208,31 @@ export const TokenDeleteTokenInput = z
   })
   .strict();
 
+// BUG-190 — wfrp4e native mount linkage. Replicates the system's token-HUD mount
+// button write contract (wfrp4e.js token() hooks): rider actor system.status.mount
+// + rider token flags.wfrp4e.mount + snap-to-mount x/y. Explicit roles are honored
+// (no HUD-style size auto-swap — that exists only because two SELECTED tokens are
+// role-ambiguous); a rider larger than its mount yields a warning, not a swap.
+export const TokenMountInput = z
+  .object({
+    action: z.literal('mount'),
+    sceneId: SceneId,
+    riderTokenId: TokenId,
+    mountTokenId: TokenId,
+    dryRun: z.boolean().optional(),
+  })
+  .strict();
+
+// Full mount-data clear (sheet remove-mount contract) + flags.wfrp4e.mount removal.
+export const TokenDismountInput = z
+  .object({
+    action: z.literal('dismount'),
+    sceneId: SceneId,
+    riderTokenId: TokenId,
+    dryRun: z.boolean().optional(),
+  })
+  .strict();
+
 export const TokenToolInput = z.discriminatedUnion('action', [
   TokenCreateInput,
   TokenUpdateInput,
@@ -216,6 +241,8 @@ export const TokenToolInput = z.discriminatedUnion('action', [
   TokenListInput,
   TokenAddInput,
   TokenDeleteTokenInput,
+  TokenMountInput,
+  TokenDismountInput,
 ]);
 
 export type TokenToolInputType = z.infer<typeof TokenToolInput>;
@@ -226,6 +253,8 @@ export type TokenGetInputType = z.infer<typeof TokenGetInput>;
 export type TokenListInputType = z.infer<typeof TokenListInput>;
 export type TokenAddInputType = z.infer<typeof TokenAddInput>;
 export type TokenDeleteTokenInputType = z.infer<typeof TokenDeleteTokenInput>;
+export type TokenMountInputType = z.infer<typeof TokenMountInput>;
+export type TokenDismountInputType = z.infer<typeof TokenDismountInput>;
 
 export interface TokenViewModel {
   id: string;

@@ -1,8 +1,9 @@
-// Phase 5 mcp_crud_expansion — Token umbrella tool (7 actions).
+// Phase 5 mcp_crud_expansion — Token umbrella tool (9 actions).
 //
 // Wraps the `token` Foundry-side handler (dispatchToken).
-// Actions: create / update / delete / get / list / add / delete-token.
-// The last two (add + delete-token) were migrated from the scene umbrella.
+// Actions: create / update / delete / get / list / add / delete-token / mount / dismount.
+// add + delete-token were migrated from the scene umbrella; mount + dismount
+// (BUG-190) replicate wfrp4e's native mount linkage.
 //
 // **CCR-Envelope-Consumer:** every handler uses a concrete typed generic on
 // `this.query<...>` — no `<any>`. Each handler wraps its query call in
@@ -69,6 +70,27 @@ interface TokenAddResponse {
   // RC1.2 (mcp_code_quality_v2 Phase C1) — additive batch partial-failure detail.
   failedItems?: Array<{ id: string; reason: string }>;
   warnings?: string[];
+}
+// BUG-190 — mount/dismount (wfrp4e native mount linkage).
+interface TokenMountResponse {
+  sceneId: SceneId;
+  riderTokenId: TokenId;
+  mountTokenId: TokenId;
+  riderName: string;
+  mountName: string;
+  mountData: Record<string, unknown>;
+  dryRun: boolean;
+  warnings: string[];
+  updatedDocumentIds?: string[];
+}
+interface TokenDismountResponse {
+  sceneId: SceneId;
+  riderTokenId: TokenId;
+  riderName: string;
+  previousMountTokenId: string | null;
+  dryRun: boolean;
+  warnings: string[];
+  updatedDocumentIds?: string[];
 }
 
 // ── Utilities ────────────────────────────────────────────────────────────────
@@ -160,7 +182,7 @@ export class TokenTool extends BaseTool {
           openWorldHint: true,
         },
         description:
-          `Manage Foundry VTT TokenDocument objects via 7 actions (embedded-doc CRUD + list + bulk-add + delete-token). Tokens live on scenes (scene.tokens collection).
+          `Manage Foundry VTT TokenDocument objects via 9 actions (embedded-doc CRUD + list + bulk-add + delete-token + wfrp4e mount/dismount). Tokens live on scenes (scene.tokens collection).
 
 **Actions:**
 - **create**: Place a new Token on a scene. Required: sceneId, name, x, y. Optional: full write surface (actorId, actorLink, width/height, texture, shape, elevation, sort, locked, lockRotation, rotation, alpha, hidden, disposition, displayName, displayBars, bar1, bar2, light, sight, occludable, ring, turnMarker, movementAction, flags). Returns full TokenViewModel.
@@ -170,6 +192,8 @@ export class TokenTool extends BaseTool {
 - **list**: List tokens on a scene. sceneId optional (defaults to active scene). Filters: hidden (boolean), onlyLinked (boolean), filter (name substring). Pagination: page/pageSize (1-100). countOnly=true for cheap inventory probe.
 - **add**: Bulk-drop prototype tokens for one or more actors. Required: actorIds[]. Optional: quantities[] (per-actor count, defaults 1), placement (random/grid/center), hidden, sceneId. Returns placed tokenIds + per-actor summary.
 - **delete-token**: Remove a token by sceneId + tokenId (migrated from scene umbrella). Action key is 'delete-token' (distinct from 'delete').
+- **mount**: Link a rider token onto a mount token using the wfrp4e system's NATIVE mount mechanics (same writes as the token-HUD horse button). Required: sceneId, riderTokenId, mountTokenId. Optional: dryRun (preview, zero writes). Once linked the SYSTEM handles everything: the mount token follows the rider's movement, the rider inherits the mount's Move/Walk/Run, charge math uses mount speed, and the rider auto-dismounts if the mount drops to 0 wounds. Explicit roles are honored — a rider LARGER than its mount is allowed with a SIZE_INVERSION warning (the HUD auto-swaps; this API does not). Both tokens must have actors.
+- **dismount**: Clear a rider token's mount linkage (full system.status.mount reset + flags.wfrp4e.mount removal). Required: sceneId, riderTokenId. Optional: dryRun. Rejects with TOKEN_DISMOUNT_NOT_MOUNTED when no linkage exists.
 
 **actorLinked:** True iff actorId is set AND the referenced Actor currently exists. False = stale FK (actor was deleted). Surfaced in get (with warning) and list.
 
@@ -184,19 +208,21 @@ export class TokenTool extends BaseTool {
 - get: {action:"get", sceneId:"abc", tokenId:"tok1"}
 - list: {action:"list", sceneId:"abc", hidden:false, onlyLinked:true}
 - add: {action:"add", actorIds:["actor1","actor2"], quantities:[2,1], placement:"grid"}
-- delete-token: {action:"delete-token", sceneId:"abc", tokenId:"tok1"}`,
+- delete-token: {action:"delete-token", sceneId:"abc", tokenId:"tok1"}
+- mount: {action:"mount", sceneId:"abc", riderTokenId:"tokKnight", mountTokenId:"tokHorse"}
+- dismount: {action:"dismount", sceneId:"abc", riderTokenId:"tokKnight"}`,
         inputSchema: {
           type: 'object',
           properties: {
             action: {
               type: 'string',
-              enum: ['create', 'update', 'delete', 'get', 'list', 'add', 'delete-token'],
+              enum: ['create', 'update', 'delete', 'get', 'list', 'add', 'delete-token', 'mount', 'dismount'],
               description: 'The token action to perform.',
             },
             sceneId: {
               type: 'string',
               description:
-                '[create/update/delete/get/delete-token] Required scene ID. [list/add] Optional — defaults to active scene.',
+                '[create/update/delete/get/delete-token/mount/dismount] Required scene ID. [list/add] Optional — defaults to active scene.',
             },
             tokenId: {
               type: 'string',
@@ -284,6 +310,19 @@ export class TokenTool extends BaseTool {
               enum: ['random', 'grid', 'center'],
               description: '[add] Token placement strategy (default: random).',
             },
+            // mount / dismount (BUG-190)
+            riderTokenId: {
+              type: 'string',
+              description: '[mount/dismount] Rider token document ID (the token that sits ON the mount). Must have an actor.',
+            },
+            mountTokenId: {
+              type: 'string',
+              description: '[mount] Mount token document ID (the creature being ridden). Must have an actor.',
+            },
+            dryRun: {
+              type: 'boolean',
+              description: '[mount/dismount] Preview the planned writes without persisting anything.',
+            },
           },
           required: ['action'],
         },
@@ -308,10 +347,14 @@ export class TokenTool extends BaseTool {
         return this.handleAdd(args);
       case 'delete-token':
         return this.handleDeleteToken(args);
+      case 'mount':
+        return this.handleMount(args);
+      case 'dismount':
+        return this.handleDismount(args);
       default:
         // BUG-439: an unknown action must throw (clean isError envelope via the
         // dispatch catch) instead of falling through to an undefined result.
-        throw new Error(`Unknown action "${String((args as any).action)}" — valid actions: create, update, delete, get, list, add, delete-token`);
+        throw new Error(`Unknown action "${String((args as any).action)}" — valid actions: create, update, delete, get, list, add, delete-token, mount, dismount`);
     }
   }
 
@@ -434,6 +477,51 @@ export class TokenTool extends BaseTool {
       return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('delete-token', e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  // ── mount / dismount (BUG-190 — wfrp4e native mount linkage) ─────────────
+
+  private async handleMount(args: ArgsFor<'mount'>) {
+    try {
+      const data = await this.query<TokenMountResponse>('token', args);
+      const warningsBlock = data.warnings.length > 0
+        ? `\n\n**Warnings:**\n${data.warnings.map((w) => `- ⚠️ ${w}`).join('\n')}`
+        : '';
+      const writesBlock = Object.entries(data.mountData)
+        .map(([k, v]) => `- \`${k}\` → \`${JSON.stringify(v)}\``)
+        .join('\n');
+      const header = data.dryRun ? '🐎 **Mount (dry run — nothing written)**' : '🐎 **Mounted**';
+      const text =
+        `${header}\n\n` +
+        `**Rider:** ${data.riderName} \`${data.riderTokenId}\`\n` +
+        `**Mount:** ${data.mountName} \`${data.mountTokenId}\` · **Scene:** \`${data.sceneId}\`\n\n` +
+        `**Rider-actor writes${data.dryRun ? ' (planned)' : ''}:**\n${writesBlock}\n` +
+        `**Rider-token writes${data.dryRun ? ' (planned)' : ''}:** \`flags.wfrp4e.mount\` → \`"${data.mountTokenId}"\` + snap to mount x/y` +
+        warningsBlock +
+        (data.dryRun ? '' : `\n\n_The wfrp4e system now handles follow-movement, shared Move/Walk/Run, charge math, and auto-dismount at 0 mount wounds natively._`);
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
+    } catch (e) {
+      return this.errorResponse('mount', e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  private async handleDismount(args: ArgsFor<'dismount'>) {
+    try {
+      const data = await this.query<TokenDismountResponse>('token', args);
+      const warningsBlock = data.warnings.length > 0
+        ? `\n\n**Warnings:**\n${data.warnings.map((w) => `- ⚠️ ${w}`).join('\n')}`
+        : '';
+      const header = data.dryRun ? '🐎 **Dismount (dry run — nothing written)**' : '🐎 **Dismounted**';
+      const text =
+        `${header}\n\n` +
+        `**Rider:** ${data.riderName} \`${data.riderTokenId}\` · **Scene:** \`${data.sceneId}\`\n` +
+        `**Previous mount token:** ${data.previousMountTokenId ? `\`${data.previousMountTokenId}\`` : '_(actor-side linkage only)_'}\n\n` +
+        `${data.dryRun ? 'Planned' : 'Applied'}: full \`system.status.mount\` reset on the rider actor + \`flags.wfrp4e.mount\` removal on the rider token.` +
+        warningsBlock;
+      return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
+    } catch (e) {
+      return this.errorResponse('dismount', e instanceof Error ? e.message : String(e));
     }
   }
 }

@@ -5,11 +5,12 @@
 //   share the factory's clean shape. F08 _source pattern retrofitted in-place
 //   (Phase 6.2.7 B1).
 //
-// Phase 5 mcp_crud_expansion — Token handlers (umbrella, 7 actions).
+// Phase 5 mcp_crud_expansion — Token handlers (umbrella, 9 actions).
 //
 // Foundry-side write/read for the `token` MCP umbrella tool. 5 base embedded-CRUD
 // actions (create / update / delete / get / list) plus 2 migrated from the Phase 4
-// scene umbrella (add ← scene.add-tokens; delete-token ← scene.delete-token).
+// scene umbrella (add ← scene.add-tokens; delete-token ← scene.delete-token) plus
+// 2 wfrp4e mount-linkage actions (mount / dismount — BUG-190).
 //
 // CCR-Trust: every write function starts with validateGMAccess().
 // CCR-Transactions: every write routes through wrappedWrite('token.<name>', ...).
@@ -35,6 +36,8 @@ import {
   TokenListInput,
   TokenAddInput,
   TokenDeleteTokenInput,
+  TokenMountInput,
+  TokenDismountInput,
   type TokenToolInputType,
   type TokenCreateInputType,
   type TokenUpdateInputType,
@@ -43,6 +46,8 @@ import {
   type TokenListInputType,
   type TokenAddInputType,
   type TokenDeleteTokenInputType,
+  type TokenMountInputType,
+  type TokenDismountInputType,
   type TokenViewModel,
   type TokenListItem,
   formatFKLink,
@@ -115,6 +120,37 @@ export interface TokenAddResponse {
   failedItems?: Array<{ id: string; reason: string }>;
 }
 
+// BUG-190 — mount/dismount (wfrp4e native mount linkage).
+export interface TokenMountResponse {
+  sceneId: string;
+  riderTokenId: string;
+  mountTokenId: string;
+  riderName: string;
+  mountName: string;
+  /** The system.status.mount payload written to the rider actor. */
+  mountData: Record<string, unknown>;
+  dryRun: boolean;
+  warnings: string[];
+  operationId?: string;
+  createdDocumentIds?: string[];
+  updatedDocumentIds?: string[];
+  deletedDocumentIds?: string[];
+}
+
+export interface TokenDismountResponse {
+  sceneId: string;
+  riderTokenId: string;
+  riderName: string;
+  /** Mount token id the rider was linked to before the clear (from flags.wfrp4e.mount). */
+  previousMountTokenId: string | null;
+  dryRun: boolean;
+  warnings: string[];
+  operationId?: string;
+  createdDocumentIds?: string[];
+  updatedDocumentIds?: string[];
+  deletedDocumentIds?: string[];
+}
+
 export type TokenResponse =
   | TokenCreateResponse
   | TokenUpdateResponse
@@ -122,7 +158,9 @@ export type TokenResponse =
   | TokenGetResponse
   | TokenListResponse
   | TokenListCountResponse
-  | TokenAddResponse;
+  | TokenAddResponse
+  | TokenMountResponse
+  | TokenDismountResponse;
 
 // Minimal scene-placement surface the dispatcher needs for the add-tokens / delete-token actions.
 // Phase 6 (R5.2): scene-placement was promoted off FoundryDataAccess to QueryHandlers, which now
@@ -560,6 +598,230 @@ export async function deleteTokenAction(
   }, { sceneId: input.sceneId });
 }
 
+// ── 8. mountToken (BUG-190 — wfrp4e native mount linkage) ────────────────────
+//
+// Replicates the wfrp4e token-HUD mount button's write contract (wfrp4e.js
+// token() hooks, live-verified 2026-07-08):
+//   1. rider ACTOR:  system.status.mount = { id, mounted:true, isToken, tokenData? }
+//   2. rider TOKEN:  flags.wfrp4e.mount = <mountTokenId>, x/y = mount's x/y
+// Everything downstream is native system behavior: the updateToken hook makes the
+// mount token follow the rider, computeMount() gives the rider the mount's
+// Move/Walk/Run, charging math uses mount speed, auto-dismount at mount 0 wounds.
+//
+// Deliberate deviation from the HUD: explicit riderTokenId/mountTokenId roles are
+// HONORED, never size-auto-swapped (the HUD swaps only because two SELECTED tokens
+// are role-ambiguous). A rider larger than its mount produces a warning instead.
+//
+// ADR-10.1: DIALOG_FREE — plain actor.update()/token.update(); no dialog paths.
+// DP-16 caveat: computeMount() zeroes PREPARED status.mount.mounted when the mount
+// is at 0 wounds, so the post-write verify reads _source, never prepared data.
+
+export async function mountToken(data: unknown): Promise<Envelope<TokenMountResponse>> {
+  const gate = validateGMAccess();
+  if (!gate.allowed) return { success: false, error: 'Access denied: token.mount requires GM' };
+
+  const input: TokenMountInputType = TokenMountInput.parse(data ?? {});
+  const scene = getSceneOrThrow(input.sceneId);
+
+  if (input.riderTokenId === input.mountTokenId) {
+    return { success: false, error: 'TOKEN_MOUNT_SELF: riderTokenId and mountTokenId must differ' };
+  }
+
+  const riderToken = getEmbeddedOrThrow<any>(scene, 'tokens', input.riderTokenId, 'Token');
+  const mountToken = getEmbeddedOrThrow<any>(scene, 'tokens', input.mountTokenId, 'Token');
+
+  const riderActor = riderToken.actor;
+  const mountActor = mountToken.actor;
+  if (!riderActor) {
+    return { success: false, error: `TOKEN_MOUNT_NO_ACTOR: rider token "${input.riderTokenId}" has no actor (actorless tokens cannot mount)` };
+  }
+  if (!mountActor) {
+    return { success: false, error: `TOKEN_MOUNT_NO_ACTOR: mount token "${input.mountTokenId}" has no actor (actorless tokens cannot be mounted)` };
+  }
+  const mountActorId = (mountToken._source?.actorId ?? mountToken.actorId) as string | null;
+  if (!mountActorId) {
+    return { success: false, error: `TOKEN_MOUNT_NO_ACTOR: mount token "${input.mountTokenId}" has no actorId to link` };
+  }
+
+  const warnings: string[] = [];
+
+  // Size sanity (native HUD would have swapped roles here; we warn instead).
+  const sizeNums = (game as any).wfrp4e?.config?.actorSizeNums;
+  if (sizeNums && typeof sizeNums === 'object') {
+    const riderSize = sizeNums[riderActor.details?.size?.value] ?? null;
+    const mountSize = sizeNums[mountActor.details?.size?.value] ?? null;
+    if (riderSize !== null && mountSize !== null && riderSize > mountSize) {
+      warnings.push(
+        `SIZE_INVERSION: rider "${riderActor.name}" (${riderActor.details.size.value}) is larger than mount "${mountActor.name}" (${mountActor.details.size.value}) — the native HUD would have swapped roles; roles were honored as passed.`,
+      );
+    }
+  }
+  // Native WarnUnlinkedMount parity.
+  if (!mountToken.actorLink && riderToken.actorLink) {
+    warnings.push('UNLINKED_MOUNT: mount token is unlinked while rider is linked — the mount linkage is scoped to this scene\'s token (wfrp4e WarnUnlinkedMount).');
+  }
+  if (riderActor.isMounted) {
+    warnings.push(`ALREADY_MOUNTED: rider was already mounted (mount id "${riderActor.system?.status?.mount?.id ?? '?'}") — linkage overwritten.`);
+  }
+  if ((mountActor.system?.status?.wounds?.value ?? 1) === 0) {
+    warnings.push('MOUNT_AT_ZERO_WOUNDS: mount is at 0 wounds — wfrp4e computeMount() will treat the rider as dismounted until the mount is healed.');
+  }
+
+  const isToken = !mountToken.actorLink;
+  const tokenData = isToken ? { scene: scene.id as string, token: mountToken.id as string } : undefined;
+  const mountData: Record<string, unknown> = {
+    'system.status.mount.id': mountActorId,
+    'system.status.mount.mounted': true,
+    'system.status.mount.isToken': isToken,
+    ...(tokenData ? { 'system.status.mount.tokenData': tokenData } : {}),
+  };
+  const mountX = (mountToken._source?.x ?? mountToken.x) as number;
+  const mountY = (mountToken._source?.y ?? mountToken.y) as number;
+
+  const baseResponse = {
+    sceneId: input.sceneId,
+    riderTokenId: input.riderTokenId,
+    mountTokenId: input.mountTokenId,
+    riderName: (riderToken.name as string) ?? '',
+    mountName: (mountToken.name as string) ?? '',
+    mountData,
+    warnings,
+  };
+
+  // dryRun gate — plan only, ZERO writes.
+  if (input.dryRun) {
+    return {
+      success: true,
+      data: { ...baseResponse, dryRun: true } satisfies TokenMountResponse,
+    };
+  }
+
+  return wrappedWrite('token.mount', async () => {
+    // Pass a copy — Foundry's update() expands dot-paths IN PLACE and injects _id/type,
+    // which would corrupt the mountData echo in the response (observed live 2026-07-08).
+    await riderActor.update({ ...mountData });
+    await riderToken.update({ 'flags.wfrp4e.mount': mountToken.id, x: mountX, y: mountY });
+
+    // DP-16 — verify BOTH documents from _source (prepared data is unreliable here:
+    // computeMount() flips mounted:false when the mount is at 0 wounds).
+    const freshToken = getEmbeddedOrThrow<any>(scene, 'tokens', input.riderTokenId, 'Token');
+    const flagPersisted = (freshToken._source?.flags as any)?.wfrp4e?.mount ?? null;
+    if (flagPersisted !== mountToken.id) {
+      throw new Error(
+        `${ErrorTokens.TOKEN_WRITE_NOT_PERSISTED}: flags.wfrp4e.mount expected "${mountToken.id}" but post-update _source value is ${JSON.stringify(flagPersisted)}`,
+      );
+    }
+    const freshActorSource = freshToken.actor?._source;
+    const persistedMount = (freshActorSource as any)?.system?.status?.mount;
+    if (!persistedMount || persistedMount.id !== mountActorId || persistedMount.mounted !== true) {
+      throw new Error(
+        `${ErrorTokens.TOKEN_WRITE_NOT_PERSISTED}: system.status.mount expected {id:"${mountActorId}", mounted:true} ` +
+          `but post-update _source value is ${JSON.stringify(persistedMount ?? null)}`,
+      );
+    }
+
+    notify.updated('token', (riderToken.name as string) ?? `Token ${input.riderTokenId}`, {
+      summary: `mounted on ${(mountToken.name as string) ?? input.mountTokenId}`,
+    });
+
+    return {
+      success: true as const,
+      data: {
+        ...baseResponse,
+        dryRun: false,
+        ...buildOperationReceipt({
+          updated: [riderActor.id as string, input.riderTokenId],
+          warnings,
+        }),
+      } satisfies TokenMountResponse,
+    };
+  }, { sceneId: input.sceneId });
+}
+
+// ── 9. dismountToken (BUG-190) ───────────────────────────────────────────────
+//
+// Full mount-data clear (the sheet's remove-mount contract, wfrp4e.js:4269) plus
+// flags.wfrp4e.mount removal on the rider token. ADR-10.1: DIALOG_FREE.
+
+export async function dismountToken(data: unknown): Promise<Envelope<TokenDismountResponse>> {
+  const gate = validateGMAccess();
+  if (!gate.allowed) return { success: false, error: 'Access denied: token.dismount requires GM' };
+
+  const input: TokenDismountInputType = TokenDismountInput.parse(data ?? {});
+  const scene = getSceneOrThrow(input.sceneId);
+  const riderToken = getEmbeddedOrThrow<any>(scene, 'tokens', input.riderTokenId, 'Token');
+
+  const riderActor = riderToken.actor;
+  if (!riderActor) {
+    return { success: false, error: `TOKEN_MOUNT_NO_ACTOR: rider token "${input.riderTokenId}" has no actor` };
+  }
+
+  const previousMountTokenId = ((riderToken._source?.flags as any)?.wfrp4e?.mount ?? null) as string | null;
+  const sourceMounted = Boolean((riderActor._source as any)?.system?.status?.mount?.mounted);
+  if (!sourceMounted && !previousMountTokenId) {
+    return { success: false, error: `TOKEN_DISMOUNT_NOT_MOUNTED: rider token "${input.riderTokenId}" has no mount linkage (system.status.mount.mounted is false and flags.wfrp4e.mount is unset)` };
+  }
+
+  const warnings: string[] = [];
+  const baseResponse = {
+    sceneId: input.sceneId,
+    riderTokenId: input.riderTokenId,
+    riderName: (riderToken.name as string) ?? '',
+    previousMountTokenId,
+    warnings,
+  };
+
+  if (input.dryRun) {
+    return {
+      success: true,
+      data: { ...baseResponse, dryRun: true } satisfies TokenDismountResponse,
+    };
+  }
+
+  return wrappedWrite('token.dismount', async () => {
+    await riderActor.update({
+      'system.status.mount.id': '',
+      'system.status.mount.mounted': false,
+      'system.status.mount.isToken': false,
+      'system.status.mount.tokenData': { scene: '', token: '' },
+    });
+    if (previousMountTokenId !== null) {
+      await riderToken.update({ 'flags.wfrp4e.-=mount': null });
+    }
+
+    // DP-16 — verify from _source.
+    const freshToken = getEmbeddedOrThrow<any>(scene, 'tokens', input.riderTokenId, 'Token');
+    const flagAfter = (freshToken._source?.flags as any)?.wfrp4e?.mount;
+    if (flagAfter !== undefined) {
+      throw new Error(
+        `${ErrorTokens.TOKEN_WRITE_NOT_PERSISTED}: flags.wfrp4e.mount still present after dismount (${JSON.stringify(flagAfter)})`,
+      );
+    }
+    const persistedMount = (freshToken.actor?._source as any)?.system?.status?.mount;
+    if (persistedMount?.mounted !== false) {
+      throw new Error(
+        `${ErrorTokens.TOKEN_WRITE_NOT_PERSISTED}: system.status.mount.mounted expected false but post-update _source value is ${JSON.stringify(persistedMount?.mounted)}`,
+      );
+    }
+
+    notify.updated('token', (riderToken.name as string) ?? `Token ${input.riderTokenId}`, {
+      summary: 'dismounted',
+    });
+
+    return {
+      success: true as const,
+      data: {
+        ...baseResponse,
+        dryRun: false,
+        ...buildOperationReceipt({
+          updated: [riderActor.id as string, input.riderTokenId],
+          warnings,
+        }),
+      } satisfies TokenDismountResponse,
+    };
+  }, { sceneId: input.sceneId });
+}
+
 // ── Dispatcher ──────────────────────────────────────────────────────────────
 
 export async function dispatchToken(
@@ -589,6 +851,10 @@ export async function dispatchToken(
       return addTokens(input, dataAccess);
     case 'delete-token':
       return deleteTokenAction(input, dataAccess);
+    case 'mount':
+      return mountToken(input);
+    case 'dismount':
+      return dismountToken(input);
   }
 }
 

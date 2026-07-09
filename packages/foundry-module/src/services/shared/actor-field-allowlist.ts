@@ -192,11 +192,14 @@ export function assertAllowedActorFields(updateData: Record<string, unknown> | u
   const flat = (foundry.utils as any).flattenObject(updateData ?? {}) as Record<string, unknown>;
   const disallowed = Object.keys(flat).filter((key) => !allowed.has(key));
   if (disallowed.length > 0) {
+    const prototypeTokenHint = disallowed.some((key) => key.startsWith('prototypeToken.'))
+      ? ' Prototype-token fields are owned by the actor-config tool (action: update-prototype-token).'
+      : '';
     throw new Error(
       `${ErrorTokens.FIELD_NOT_ALLOWED}: update-actor rejected field(s) not in the allow-list for actor.type ` +
       `"${actorType ?? 'unknown'}": ${disallowed.join(', ')}. update-actor accepts only the union of fields ` +
       `observed across the WFRP skill+tool corpus; auto-derived sinks (e.g. *.max, characteristics.*.value/` +
-      `.bonus, experience.total/current) are intentionally excluded.`,
+      `.bonus, experience.total/current) are intentionally excluded.${prototypeTokenHint}`,
     );
   }
 }

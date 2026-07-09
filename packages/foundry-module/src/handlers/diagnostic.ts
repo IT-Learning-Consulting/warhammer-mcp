@@ -587,6 +587,24 @@ async function handleValidateAeScripts(
   const validTriggers = new Set<string>(
     triggers && typeof triggers === 'object' ? Object.keys(triggers) : [],
   );
+  // BUG-156 fix: triggers NOT in syncTriggers run as async functions at
+  // runtime (warhammer-lib Script constructor: `this.async = this.trigger
+  // ? !syncTriggers.includes(this.trigger) : (data.async || false)`).
+  // `new Function` can never accept top-level `await`, so checking an
+  // async-eligible script with it always false-positives.
+  const syncTriggers = new Set<string>(
+    (game as any).wfrp4e?.config?.syncTriggers ?? [],
+  );
+  const effectScripts: Record<string, string> =
+    (game as any).wfrp4e?.config?.effectScripts ?? {};
+  const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor as new (
+    ...args: string[]
+  ) => unknown;
+  // wfrp4e dedupes common dialog-modifier scripts behind a
+  // `[Script.<16-char-id>]` reference, resolved via effectScripts at
+  // runtime (warhammer-lib _handleScriptId). Resolve before syntax-checking
+  // or every shared script false-positives as "Invalid or unexpected token".
+  const scriptRefPattern = /^\[Script\.([a-zA-Z0-9]{16})\]$/;
 
   let checked = 0;
   let invalid = 0;
@@ -626,13 +644,41 @@ async function handleValidateAeScripts(
       }
 
       for (const entry of scriptData) {
-        const script: string = typeof entry?.script === 'string' ? entry.script : '';
+        const rawScript: string = typeof entry?.script === 'string' ? entry.script : '';
         const trigger: string = typeof entry?.trigger === 'string' ? entry.trigger : '';
+
+        const refMatch = rawScript.match(scriptRefPattern);
+        const refId = refMatch?.[1];
+        let script = rawScript;
+        if (refId) {
+          const resolved = effectScripts[refId];
+          if (typeof resolved !== 'string') {
+            invalid++;
+            if (!countsOnly) {
+              details.push({
+                docId: String(src.id ?? ''),
+                docName: String(src.name ?? ''),
+                aeId: String(effect.id ?? ''),
+                aeName: String(effect.name ?? ''),
+                issue: 'unresolved-script-reference',
+                error: `Script ID ${refId} not found in effectScripts registry`,
+                trigger,
+              });
+            }
+            continue;
+          }
+          script = resolved;
+        }
 
         // SyntaxError parse — HC4 carve-out: parse only, never execute.
         if (script) {
+          const useAsync = trigger ? !syncTriggers.has(trigger) : Boolean(entry?.async);
           try {
-            new Function(script);
+            if (useAsync) {
+              new AsyncFunction(script);
+            } else {
+              new Function(script);
+            }
           } catch (e) {
             invalid++;
             if (!countsOnly) {

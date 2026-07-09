@@ -74,7 +74,7 @@ export class DiagnosticTool extends BaseTool {
 - **validate-wfrp-config**: Assert CONFIG.WFRP4E surface keys exist with expected shape (xpCost.characteristic/skill arrays length>=10; syncTriggers/corruptionTables/magicLores/scriptTriggers populated objects; species/speciesSkills/speciesTalents non-empty records). Returns {ok, failures: [{key, expected, actual}]}. No scope — operates on the live CONFIG surface.
 - **scan-broken-uuids**: Walk doc descriptions for @UUID[...]{...} links that no longer resolve. Requires scope. world-scope without confirmExpensive:true returns counts-only (details omitted). Returns {checked, broken, uuidsBroken, elapsedMs, details?}.
 - **scan-career-refs**: Walk actor careers for skill/talent name references that don't resolve via exact-name lookup in world items. Read-only fallback — does NOT call WFRP_Utility.findSkill (which may rename-mutate the source). Returns {checked, unresolved, elapsedMs, details?}. NOTE: only skills/talents in game.items (world sidebar) resolve; compendium-only items (never dragged to the world sidebar) appear as unresolved false-positives — run a world scan once to establish the empirical baseline.
-- **validate-ae-scripts**: Parse Active Effect script bodies via new Function() (parse-only; never executed) — surfaces SyntaxError, unknown-trigger (not in CONFIG.WFRP4E.scriptTriggers), and schema-drift (pre-v11 non-array scriptData). Returns {checked, invalid, schemaDrift, elapsedMs, details?}.
+- **validate-ae-scripts**: Parse Active Effect script bodies (parse-only; never executed). Resolves wfrp4e [Script.<id>] references against CONFIG effectScripts before parsing, and uses AsyncFunction for async-eligible triggers (any trigger not in syncTriggers — top-level await is valid there). Surfaces SyntaxError, unresolved-script-reference (dangling [Script.<id>]), unknown-trigger (not in CONFIG.WFRP4E.scriptTriggers), and schema-drift (pre-v11 non-array scriptData). Returns {checked, invalid, schemaDrift, elapsedMs, details?}.
 
 **Scope discipline** (scan-broken-uuids / scan-career-refs / validate-ae-scripts): scope.type=actor|item|compendium requires scope.id; scope.type=world returns counts-only unless scope.confirmExpensive:true.
 
@@ -448,11 +448,20 @@ export class DiagnosticTool extends BaseTool {
           lines.push(``, `All Active Effect scripts parse and reference known triggers.`);
         } else {
           const syntax = data.details.filter((d) => d.issue === 'syntax-error');
+          const unresolved = data.details.filter((d) => d.issue === 'unresolved-script-reference');
           const trig = data.details.filter((d) => d.issue === 'unknown-trigger');
           const drift = data.details.filter((d) => d.issue === 'schema-drift');
           if (syntax.length) {
             lines.push(``, `**Syntax errors (${syntax.length}):**`);
             for (const d of syntax.slice(0, 25)) {
+              lines.push(
+                `- ${d.docName} → AE ${d.aeName}${d.trigger ? ` [${d.trigger}]` : ''}: ${d.error ?? ''}`,
+              );
+            }
+          }
+          if (unresolved.length) {
+            lines.push(``, `**Unresolved script references (${unresolved.length} — dangling [Script.<id>]):**`);
+            for (const d of unresolved.slice(0, 25)) {
               lines.push(
                 `- ${d.docName} → AE ${d.aeName}${d.trigger ? ` [${d.trigger}]` : ''}: ${d.error ?? ''}`,
               );

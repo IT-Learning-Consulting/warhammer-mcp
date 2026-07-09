@@ -277,7 +277,7 @@ export interface InvalidAeScript {
   docName: string;
   aeId: string;
   aeName: string;
-  issue: 'syntax-error' | 'unknown-trigger' | 'schema-drift';
+  issue: 'syntax-error' | 'unknown-trigger' | 'schema-drift' | 'unresolved-script-reference';
   trigger?: string;
   error?: string;     // syntax-error message body
   expected?: string;  // shape note (schema-drift)
