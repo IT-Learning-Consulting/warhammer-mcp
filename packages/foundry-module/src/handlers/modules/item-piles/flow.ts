@@ -10,6 +10,7 @@ import { settlePoll } from '../_shared/settle-poll.js';
 import { normalizeItemsArray, validateCurrencyString } from './catalog.js';
 import { getItemPilesAPI, notPersisted, gmRequired, activeGmRequired } from './helpers.js';
 import { totalQuantity } from './verify-quantity.js';
+import { recordEconomyTransaction } from '../wfrp-economy/ledger.js';
 
 // ── 3A: Item mutations ────────────────────────────────────────────────────────
 
@@ -236,7 +237,7 @@ export async function handleTransferItems(input: TransferItemsInput): Promise<En
 const CURRENCY_EPSILON = 1e-6;
 
 /** Total value of parsed currency entries in primary-currency units (quantity × exchangeRate). */
-function currencyTotal(entries: unknown): number {
+export function currencyTotal(entries: unknown): number {
   return (Array.isArray(entries) ? entries : [])
     .reduce((acc: number, c: any) => acc + (Number(c?.quantity) || 0) * (Number(c?.exchangeRate) || 0), 0);
 }
@@ -373,6 +374,13 @@ export async function handleAddCurrency(input: AddCurrencyInput): Promise<Envelo
     }
     const currentCurrencies = API.getActorCurrencies(input.actorUuid);
     notify.updated('item-piles', `Added currencies "${input.currencies}" to ${input.actorUuid}`, {});
+    await recordEconomyTransaction({
+      actorId: input.actorUuid,
+      amount: currencyTotal(API.getCurrenciesFromString(input.currencies)),
+      type: 'currency-add',
+      source: 'itempiles',
+      description: `Item Piles: added "${input.currencies}"`,
+    });
     return { success: true, data: { actorUuid: input.actorUuid, currenciesAdded: input.currencies, currentCurrencies } };
   } catch (e) {
     return { success: false, error: `ADD_CURRENCY_ERROR: ${e instanceof Error ? e.message : String(e)}` };
@@ -443,6 +451,13 @@ export async function handleRemoveCurrency(input: RemoveCurrencyInput): Promise<
     }
     const afterCurrencies = API.getActorCurrencies(input.actorUuid);
     notify.updated('item-piles', `Removed currencies "${input.currencies}" from ${input.actorUuid}`, {});
+    await recordEconomyTransaction({
+      actorId: input.actorUuid,
+      amount: removeTotal,
+      type: 'currency-remove',
+      source: 'itempiles',
+      description: `Item Piles: removed "${input.currencies}"`,
+    });
     return { success: true, data: { actorUuid: input.actorUuid, currenciesRemoved: input.currencies, previousBalance, currentCurrencies: afterCurrencies } };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -548,6 +563,16 @@ export async function handleTransferCurrency(input: TransferCurrencyInput): Prom
       const sourceAfter = API.getActorCurrencies(input.sourceUuid);
       const targetAfter = API.getActorCurrencies(input.targetUuid);
       notify.updated('item-piles', `Transferred currencies (mode: ${mode}) from ${input.sourceUuid} to ${input.targetUuid}`, {});
+      // ONE record covers the whole transfer (source→target), not two — targetActorId carries
+      // the destination.
+      await recordEconomyTransaction({
+        actorId: input.sourceUuid,
+        targetActorId: input.targetUuid,
+        amount: transferTotal,
+        type: 'currency-transfer',
+        source: 'itempiles',
+        description: `Item Piles: transferred "${input.currencies}"`,
+      });
       return { success: true, data: { mode, sourceUuid: input.sourceUuid, targetUuid: input.targetUuid, sourceCurrencies: sourceAfter, targetCurrencies: targetAfter, result: dtoT } };
     }
 
@@ -583,6 +608,21 @@ export async function handleTransferCurrency(input: TransferCurrencyInput): Prom
     const sourceCurrencies = API.getActorCurrencies(input.sourceUuid);
     const targetCurrencies = API.getActorCurrencies(input.targetUuid);
     notify.updated('item-piles', `Transferred currencies (mode: ${mode}) from ${input.sourceUuid} to ${input.targetUuid}`, {});
+    if (dto.ok) {
+      // mode:"all" has no single currency string to re-derive a total from — sum itemDeltas
+      // against each denomination's exchangeRate (same formula as currencyTotal, best-effort
+      // per memo's "no uniform delta exists" note).
+      const rateByAbbr = new Map<string, number>((API.CURRENCIES ?? []).map((c: any) => [String(c?.abbreviation ?? ''), Number(c?.exchangeRate) || 0]));
+      const allModeTotal = dto.itemDeltas.reduce((sum: number, d: any) => sum + Math.abs(Number(d?.quantity) || 0) * (rateByAbbr.get(String(d?.abbreviation ?? '')) ?? 0), 0);
+      await recordEconomyTransaction({
+        actorId: input.sourceUuid,
+        targetActorId: input.targetUuid,
+        amount: allModeTotal,
+        type: 'currency-transfer',
+        source: 'itempiles',
+        description: `Item Piles: transferred all currencies (mode: ${mode})`,
+      });
+    }
     return { success: true, data: { mode, sourceUuid: input.sourceUuid, targetUuid: input.targetUuid, sourceCurrencies, targetCurrencies, result: dto } };
   } catch (e) {
     return { success: false, error: `TRANSFER_CURRENCY_ERROR: ${e instanceof Error ? e.message : String(e)}` };

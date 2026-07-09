@@ -4,8 +4,9 @@
 // Always-registered umbrella. requireModuleActive('wfrp4e-economy') is the FIRST active-state check —
 // RETURNS the MODULE_NOT_ACTIVE envelope, never throws (v1 Phase 1 contract).
 //
-// 25 actions across 8 idioms (capability_audit/wfrp4e-economy.md + phase6_pre_plan.md §Action surface).
-// ALL financial state lives in world-scoped game settings (economies / bankers / bankAccounts /
+// 27 actions across 9 idioms (capability_audit/wfrp4e-economy.md + phase6_pre_plan.md §Action surface;
+// unified-ledger idiom — record-transaction / delete-account — added Phase 2, wfrp_economy_system_v1_prd.md
+// §10). ALL financial state lives in world-scoped game settings (economies / bankers / bankAccounts /
 // stockPortfolios / transactionLogs). The 9 transactional writes are driven by runtime-importing the
 // module's SocketHandler and calling its AWAITED process method DIRECTLY:
 //
@@ -59,6 +60,8 @@ const WRITE_ACTIONS = new Set([
   'set-rented',
   'wallet-add',
   'wallet-remove',
+  'record-transaction',
+  'delete-account',
 ]);
 
 // ── Local helpers ──────────────────────────────────────────────────────────────
@@ -224,6 +227,11 @@ export async function dispatchModuleWfrpEconomy(data: unknown): Promise<Envelope
         return await handleActorSummary(input);
       case 'bank-transaction-summary':
         return await handleBankSummary(input);
+      // ── unified-ledger (Phase 2) ──
+      case 'record-transaction':
+        return await handleRecordTransaction(input);
+      case 'delete-account':
+        return await handleDeleteAccount(input);
       default: {
         const _exhaustive: never = input;
         return { success: false, error: `WFRP_ECONOMY_UNKNOWN_ACTION: ${String((_exhaustive as any)?.action)}` };
@@ -801,7 +809,10 @@ async function handleSellProperty(input: SellPropertyInput): Promise<Envelope<un
   const property = economy.properties?.find((p: any) => p?.id === input.propertyId);
   if (!property) return targetNotFound(`property "${input.propertyId}" not in economy "${input.economyId}"`);
   if (property.owner !== account.actorId) return notPersisted(`property "${input.propertyId}" not owned by account holder ${account.actorId} (owner=${property.owner ?? 'null'})`);
-  const saleValue = Number(property.value ?? 0);
+  // GM-configurable rate (Phase 2, default 0.8) — matches the module UI's sell path, which reads the
+  // same setting (bank-property-manager.js). Was previously the full property value (parity gap).
+  const propertySaleRate = Number(getGame()?.settings?.get?.(SETTING_SCOPE, 'propertySaleRate') ?? 0.8);
+  const saleValue = Math.round(Number(property.value ?? 0) * propertySaleRate);
   const bank = resolveBank(economy, account.bankId);
 
   const SocketHandler = await importSocketHandler();
@@ -897,10 +908,12 @@ async function handleListTransactions(input: ListTxInput): Promise<Envelope<unkn
   if (input.economyId) filters.economyId = input.economyId;
   if (input.type) filters.type = input.type;
   if (input.bankId) filters.bankId = input.bankId;
+  if (input.source) filters.source = input.source;
   const logs = TransactionLogger.getTransactionLogs(filters) ?? [];
   const list = logs.map((l: any) => ({
     id: l?.id,
     type: l?.type,
+    source: l?.source ?? null,
     actorId: l?.actorId ?? null,
     actorName: l?.actorName ?? null,
     economyId: l?.economyId ?? null,
@@ -965,4 +978,63 @@ async function handleBankSummary(input: BankSummaryInput): Promise<Envelope<unkn
     rebucketEconomySummary(summary, logs, {});
   } catch { /* module-shape drift — return the module summary unmodified */ }
   return { success: true, data: { action: 'bank-transaction-summary', bankId: input.bankId, economyId: input.economyId, summary } };
+}
+
+// ── unified-ledger (Phase 2, wfrp_economy_system) ───────────────────────────────
+//
+// Hybrid MCP-layer seam (Option D, phase2_pre_plan.md §Recommended approach): record-transaction is the
+// arbitrary-append entry point for callers OUTSIDE this module's own 9 tracked ops (status earnings,
+// /wfrp-trade, item-piles, future levies). The module's own 9 handlers above (deposit/withdraw/transfer/
+// loan/stock/property) do NOT call this — they already log via TransactionLogger internally (R2.2, no
+// double-log). delete-account mirrors delete-economy's confirm idiom exactly (generic confirmRequired/
+// notPersisted/targetNotFound helpers, NOT bespoke per-action error tokens — matches every other action
+// in this file; Rule 11 codebase-convention match over the plan's literal "WFRP_ECONOMY_DELETE_*" token
+// wording).
+
+type RecordTransactionInput = Extract<WfrpEconomyInputType, { action: 'record-transaction' }>;
+async function handleRecordTransaction(input: RecordTransactionInput): Promise<Envelope<unknown>> {
+  const actor = getGame()?.actors?.get?.(input.actorId);
+  if (!actor) return targetNotFound(`actor "${input.actorId}" not found`);
+
+  const TransactionLogger = await importTransactionLogger();
+  const transactionId: string = await TransactionLogger.logTransaction({
+    type: input.type,
+    source: input.source,
+    actorId: input.actorId,
+    actorName: actor.name,
+    economyId: input.economyId,
+    bankId: input.bankId,
+    amount: input.amountBp,
+    currency: input.currency,
+    description: input.description,
+    targetActorId: input.targetActorId,
+    targetActorName: actorName(input.targetActorId),
+  });
+
+  const verifyLogs: any[] = TransactionLogger.getTransactionLogs?.({ source: input.source }) ?? [];
+  if (!verifyLogs.some((l: any) => l?.id === transactionId)) {
+    return notPersisted(`transaction "${transactionId}" not found in ledger after record-transaction`);
+  }
+  notify.created('wfrp-economy', actor.name, { summary: `${input.source}/${input.type} ${input.amountBp} BP logged (${transactionId})` });
+  return {
+    success: true,
+    data: { action: 'record-transaction', actorId: input.actorId, amountBp: input.amountBp, source: input.source, type: input.type, transactionId },
+  };
+}
+
+type DeleteAccountInput = Extract<WfrpEconomyInputType, { action: 'delete-account' }>;
+async function handleDeleteAccount(input: DeleteAccountInput): Promise<Envelope<unknown>> {
+  if (input.confirm !== true) {
+    return confirmRequired(`delete-account "${input.accountId}" removes the account record (transaction history is kept). Re-call with confirm:true.`);
+  }
+  const bankAccounts = readBankAccounts();
+  const account = bankAccounts[input.accountId];
+  if (!account) return targetNotFound(`bank account "${input.accountId}" not found`);
+
+  const SocketHandler = await importSocketHandler();
+  await SocketHandler.processDeleteAccount({ accountId: input.accountId, bankAccounts });
+
+  if (readBankAccounts()[input.accountId]) return notPersisted(`bank account "${input.accountId}" still present after delete-account`);
+  notify.deleted('wfrp-economy', actorName(account.actorId) ?? input.accountId, { summary: `account ${input.accountId} deleted` });
+  return { success: true, data: { action: 'delete-account', accountId: input.accountId, deleted: true } };
 }

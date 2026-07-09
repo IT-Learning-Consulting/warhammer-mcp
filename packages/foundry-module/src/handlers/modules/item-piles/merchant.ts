@@ -10,6 +10,8 @@ import { settlePoll } from '../_shared/settle-poll.js';
 import { getActionCatalog, validateRelativeModifier } from './catalog.js';
 import { getItemPilesAPI, notPersisted, gmRequired, activeGmRequired } from './helpers.js';
 import { totalQuantity } from './verify-quantity.js';
+import { currencyTotal } from './flow.js';
+import { recordEconomyTransaction } from '../wfrp-economy/ledger.js';
 
 // ── 3B: Vault info ────────────────────────────────────────────────────────────
 
@@ -239,6 +241,10 @@ export async function handleTradeItems(input: TradeItemsInput): Promise<Envelope
         .map((it: any) => String(it?.name ?? '')),
     );
     const beforeBuyerQty = totalQuantity(API, input.buyerUuid, { names: tradedNames });
+    // Net currency delta for the ledger append below: before/after snapshot of the buyer's
+    // currency, NOT itemDeltas (shape unverified for a mixed merchandise+payment trade — memo
+    // flags this; the snapshot approach sidesteps it entirely).
+    const beforeBuyerCurrencyTotal = currencyTotal(API.getActorCurrencies(input.buyerUuid));
 
     const result = await API.tradeItems(input.merchantUuid, input.buyerUuid, items);
     // M-2: socket returns false when GM disconnects mid-call
@@ -277,6 +283,16 @@ export async function handleTradeItems(input: TradeItemsInput): Promise<Envelope
     const buyerItemCount = Array.isArray(buyerItems) ? buyerItems.length : 0;
 
     notify.updated('item-piles', `Traded ${input.items.length} item(s) from ${input.merchantUuid} to ${input.buyerUuid}`, {});
+    const afterBuyerCurrencyTotal = currencyTotal(buyerCurrencies);
+    const paidAmount = Math.max(0, beforeBuyerCurrencyTotal - afterBuyerCurrencyTotal);
+    await recordEconomyTransaction({
+      actorId: input.buyerUuid,
+      targetActorId: input.merchantUuid,
+      amount: paidAmount,
+      type: 'trade-items',
+      source: 'itempiles',
+      description: `Item Piles: bought ${input.items.length} item(s) from merchant`,
+    });
     return {
       success: true,
       data: {

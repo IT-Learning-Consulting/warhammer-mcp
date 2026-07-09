@@ -20,6 +20,9 @@
 //   data-access.ts `applyDamage`'s hook-wait+timeout pattern).
 
 import { notify } from '../notify.js';
+import { recordEconomyTransaction } from '../handlers/modules/wfrp-economy/ledger.js';
+
+const BP_PER_TYPE: Record<string, number> = { b: 1, s: 12, g: 240 };
 
 function moneyItems(actor: any): any[] {
   return actor.itemTags?.['money'] ?? [];
@@ -100,6 +103,14 @@ export class MarketService {
       uuid: actor.uuid,
     });
 
+    await recordEconomyTransaction({
+      actorId: actor.id,
+      amount: Math.round(numericPart * BP_PER_TYPE[typeChar]!),
+      type: 'add-money',
+      source: 'trade',
+      description: `Market: +${data.amountString} added`,
+    });
+
     return {
       actorId: actor.id,
       amountString: data.amountString,
@@ -170,6 +181,14 @@ export class MarketService {
     notify.updated('item', 'coin purse', {
       summary: `-${data.amountString} paid by ${actor.name}`,
       uuid: actor.uuid,
+    });
+
+    await recordEconomyTransaction({
+      actorId: actor.id,
+      amount: actualDeduction,
+      type: 'pay',
+      source: 'trade',
+      description: `Market: paid ${data.amountString}`,
     });
 
     return {

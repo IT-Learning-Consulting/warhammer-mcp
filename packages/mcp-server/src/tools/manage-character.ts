@@ -1021,6 +1021,22 @@ Use for quick stat changes, character creation, testing, or corrections where yo
             summary: `income (${args.outcome}) written via warhammer-mcp.manage-character`,
         });
 
+        // Unified-ledger append (Phase 2, wfrp_economy_system) — earn-tagged, fail-open: a
+        // logging failure must never fail an already-persisted-and-verified roll-income.
+        const BP_PER_TIER: Record<string, number> = { b: 1, s: 12, g: 240 };
+        try {
+            await this.query<unknown>('module-wfrp-economy', {
+                action: 'record-transaction',
+                actorId: character.id,
+                amountBp: earnedAmount * (BP_PER_TIER[tierKey] ?? 1),
+                source: 'earn',
+                type: 'income',
+                description: `Earning Dramatic Test (${args.outcome}, tier ${tier}, standing ${standing})`,
+            });
+        } catch (e) {
+            this.logger.warn("record-transaction ledger append failed for roll-income (fail-open, coin write unaffected)", { error: e instanceof Error ? e.message : String(e) });
+        }
+
         return `💰 ${character.name}: Earning Dramatic Test ${args.outcome} → +${earnedAmount} ${moneyName} ` +
             `(${currentQty} → ${newQty})`;
     }

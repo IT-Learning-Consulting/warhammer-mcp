@@ -7,7 +7,9 @@
 // `.strict()` ZodObject (NO `.refine`/`.transform` — a ZodEffects breaks the discriminatedUnion);
 // cross-field rules (confirm-gate, large-transfer threshold, target resolution) live in the handler.
 //
-// 25 actions across 8 idioms (capability_audit/wfrp4e-economy.md + phase6_pre_plan.md §Action surface):
+// 27 actions across 9 idioms (capability_audit/wfrp4e-economy.md + phase6_pre_plan.md §Action surface;
+// record-transaction + delete-account added Phase 2, wfrp_economy_system_v1_prd.md §10, HC8-compliant —
+// action count grows, tool count stays 1):
 //   stand-up-an-economy (6): list-economies / get-economy / list-bankers / create-economy /
 //     update-economy / delete-economy
 //   open-a-bank-account (2): create-account / list-accounts
@@ -17,6 +19,7 @@
 //   property-management (3): buy-property / sell-property / set-rented
 //   wallet-quick-adjust (3): get-wallet-balance / wallet-add / wallet-remove
 //   audit-the-ledger (3): list-transactions / actor-transaction-summary / bank-transaction-summary
+//   unified-ledger (2): record-transaction / delete-account
 //
 // All monetary amounts are integer Brass Pennies (BP); 1 GC = 240 BP, 1 SS = 12 BP.
 //
@@ -142,10 +145,30 @@ export const WfrpEconomyInput = z.discriminatedUnion('action', [
       economyId: economyId.optional(),
       type: z.string().min(1).optional(),
       bankId: bankId.optional(),
+      source: z.string().min(1).optional(),
     })
     .strict(),
   z.object({ action: z.literal('actor-transaction-summary'), actorId: ActorId, economyId: economyId }).strict(),
   z.object({ action: z.literal('bank-transaction-summary'), bankId: bankId, economyId: economyId }).strict(),
+
+  // ── unified-ledger idiom (Phase 2, wfrp_economy_system) ─────────────────────────
+  z
+    .object({
+      action: z.literal('record-transaction'),
+      actorId: ActorId,
+      amountBp,
+      source: z.enum(['earn', 'trade', 'itempiles', 'levy', 'economy']),
+      type: z.string().min(1),
+      description: z.string().min(1),
+      economyId: economyId.optional(),
+      bankId: bankId.optional(),
+      targetActorId: ActorId.optional(),
+      currency: z.string().min(1).optional(),
+    })
+    .strict(),
+  z
+    .object({ action: z.literal('delete-account'), accountId: accountId, economyId: economyId.optional(), confirm: z.boolean().optional() })
+    .strict(),
 ]);
 
 export type WfrpEconomyInputType = z.infer<typeof WfrpEconomyInput>;

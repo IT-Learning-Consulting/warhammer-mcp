@@ -3,8 +3,9 @@
 // CCR-5: Zod input validation lives package-local on the foundry-module side. The mcp-server tool layer
 // only needs typed response shapes for this.query<T> (DP-15 — never <any>).
 //
-// Warhammer Economy v1.0.0. 25 actions across 8 idioms. Each handler return carries `action` as a
-// discriminant; WfrpEconomyResult is their union so the tool stays typed without <any>.
+// Warhammer Economy v1.0.0. 27 actions across 9 idioms (unified-ledger: record-transaction /
+// delete-account added Phase 2, wfrp_economy_system_v1_prd.md §10). Each handler return carries
+// `action` as a discriminant; WfrpEconomyResult is their union so the tool stays typed without <any>.
 
 export interface WfrpEconomySummary {
   id: string;
@@ -182,6 +183,7 @@ export interface WfrpEconomyWalletAdjustResult {
 export interface WfrpEconomyTransactionEntry {
   id: string;
   type: string;
+  source: string | null;
   actorId: string | null;
   actorName: string | null;
   economyId: string | null;
@@ -212,6 +214,21 @@ export interface WfrpEconomyBankSummaryResult {
   summary: Record<string, unknown>;
 }
 
+export interface WfrpEconomyRecordTransactionResult {
+  action: 'record-transaction';
+  actorId: string;
+  amountBp: number;
+  source: string;
+  type: string;
+  transactionId: string;
+}
+
+export interface WfrpEconomyDeleteAccountResult {
+  action: 'delete-account';
+  accountId: string;
+  deleted: boolean;
+}
+
 export type WfrpEconomyResult =
   | WfrpEconomyListEconomiesResult
   | WfrpEconomyGetEconomyResult
@@ -233,7 +250,9 @@ export type WfrpEconomyResult =
   | WfrpEconomyWalletAdjustResult
   | WfrpEconomyListTransactionsResult
   | WfrpEconomyActorSummaryResult
-  | WfrpEconomyBankSummaryResult;
+  | WfrpEconomyBankSummaryResult
+  | WfrpEconomyRecordTransactionResult
+  | WfrpEconomyDeleteAccountResult;
 
 // ── The action enum (mirrors the foundry-module discriminatedUnion literals; 25 actions) ──
 
@@ -263,6 +282,8 @@ export const WFRP_ECONOMY_ACTIONS = [
   'list-transactions',
   'actor-transaction-summary',
   'bank-transaction-summary',
+  'record-transaction',
+  'delete-account',
 ] as const;
 
 export type WfrpEconomyAction = (typeof WFRP_ECONOMY_ACTIONS)[number];
