@@ -103,6 +103,7 @@ import { ModuleBackpackTool } from '../modules/backpack/backpack.js';
 import { ModulePuzzleLocksTool } from '../modules/puzzle-locks/puzzle-locks.js';
 import { ModuleSyrinscapeTool } from '../modules/syrinscape/syrinscape.js';
 import { ModulePortalTool } from '../modules/portal/portal.js';
+import { ModuleTradingPlacesTool } from '../modules/trading-places/trading-places.js';
 
 export function buildTools(deps: BaseToolOptions): BaseTool[] {
   return [
@@ -205,5 +206,6 @@ export function buildTools(deps: BaseToolOptions): BaseTool[] {
     new ModulePuzzleLocksTool(deps),
     new ModuleSyrinscapeTool(deps),
     new ModulePortalTool(deps),
+    new ModuleTradingPlacesTool(deps),
   ];
 }

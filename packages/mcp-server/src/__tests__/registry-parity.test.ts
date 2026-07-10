@@ -51,8 +51,10 @@ describe('declarative tool registry parity (R8.1/R8.2)', () => {
     // module_integration_v2 Phase 13 (FINAL — closes the PRD): 110 → 113 with three umbrellas:
     // module-puzzle-locks (13B), module-syrinscape (13C), module-portal (13A). 13D (journal-info trio)
     // adds none — zero new code (see phase13_pre_plan.md §13D.5).
-    expect(names.length).toBe(113);
-    expect(new Set(names).size).toBe(113); // no duplicate registrations (Risk 8.A)
+    // wfrp_economy_system Phase 3: 113 → 114 with the module-trading-places umbrella (HC8 — the
+    // PRD's single allowed new tool; 16 actions over Trading Places v0.3.0).
+    expect(names.length).toBe(114);
+    expect(new Set(names).size).toBe(114); // no duplicate registrations (Risk 8.A)
   });
 
   it('every registration carries a callable handler', () => {

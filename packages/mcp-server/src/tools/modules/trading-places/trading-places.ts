@@ -1,0 +1,177 @@
+// wfrp_economy_system Phase 3 — module-trading-places MCP tool (Trading Places v0.3.0, WFRP4e
+// bulk-cargo trading — the Death on the Reik buying/selling algorithm).
+//
+// Always-registered umbrella. The foundry-module handler guards on trading-places being active; when
+// inactive it returns MODULE_NOT_ACTIVE which BaseTool.query() converts to a throw → moduleNotActiveContent().
+// Pre-flight with module-probe.is-active trading-places.
+//
+// 16 actions across 7 idioms (reference-data, season, market-math, tests, cargo-hold, bookkeeping,
+// currency). Anchors: DP-15 (concrete this.query<TradingPlacesResult> — never <any>); R2.4 (errors via
+// errorResponse); HC1 (money in text output renders the full tri-currency triple, zeros never hidden).
+// Currency writes are REAL wfrp4e actor money-item writes done by the handler itself (coinValue-keyed)
+// and ledgered via the wfrp-economy unified ledger with source:'trade' — the module's own SystemAdapter
+// money model targets a legacy data model and is never delegated to (ADR-015 / PRD Risk 3.A).
+
+import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
+import { ErrorTokens } from '@foundry-mcp/shared';
+import { moduleNotActiveContent } from '../_shared/module-guard.js';
+import { TRADING_PLACES_ACTIONS, type TradingPlacesResult } from './schemas.js';
+import { z } from 'zod';
+import { TradingPlacesInput } from '@foundry-mcp/shared';
+
+type TradingPlacesArgs = z.infer<typeof TradingPlacesInput>;
+
+// ── HC1 tri-currency display: ALWAYS the full triple, zeros shown (300 BP → "1gc 5ss 0bp") ──
+
+function bp(totalBp: number): string {
+  const sign = totalBp < 0 ? '-' : '';
+  const abs = Math.abs(Math.round(totalBp));
+  const gc = Math.floor(abs / 240);
+  const ss = Math.floor((abs % 240) / 12);
+  const b = abs % 12;
+  return `${sign}${gc}gc ${ss}ss ${b}bp`;
+}
+
+// ── Single discriminated formatter (one text line per action) ──────────────────
+
+function formatResult(d: TradingPlacesResult): string {
+  const p = 'module-trading-places';
+  switch (d.action) {
+    case 'list-settlements':
+      return `${p}.list-settlements: ${d.count} settlement(s)${d.region ? ` in ${d.region}` : ''}${d.count ? ` — ${d.settlements.map((s) => s.name).join(', ')}` : ''}.`;
+    case 'list-cargo-types':
+      return `${p}.list-cargo-types: ${d.count} cargo type(s)${d.count ? ` — ${d.cargoTypes.map((c) => c.name).join(', ')}` : ''}.`;
+    case 'get-season':
+      return `${p}.get-season: ${d.season} (seasonSource: ${d.seasonSource}).`;
+    case 'set-season':
+      return `${p}.set-season: ${d.previousSeason ?? 'none'} → ${d.season} (persisted).`;
+    case 'check-availability':
+      return `${p}.check-availability: ${d.settlement} in ${d.season} (${d.seasonSource}) — ${d.available ? 'CARGO AVAILABLE' : 'no cargo'} (roll ${d.roll ?? 'module-internal'} vs ${d.chance}%)${d.available ? `; types: ${d.cargoTypes.join(', ') || '—'}; size ${d.cargoSizeEp ?? '?'} EP` : ''}.`;
+    case 'calc-purchase-price':
+    case 'calc-sale-price':
+      return `${p}.${d.action}: ${d.quantity} EP of ${d.cargoName}${d.settlement ? ` @ ${d.settlement}` : ''} (${d.season}, ${d.quality}) — total ${bp(d.totalBp)} (${bp(d.pricePerEpBp)}/EP, ${d.pricePerEpBp} BP).`;
+    case 'haggle-test':
+      return `${p}.haggle-test: ${d.playerWins ? 'PLAYER WINS' : 'MERCHANT WINS / NO CHANGE'} — ${d.resultDescription}`;
+    case 'gossip-test':
+      return `${p}.gossip-test: ${d.testSucceeded ? 'SUCCESS' : 'FAILURE'} (roll ${d.roll} vs ${d.modifiedSkill}, ${d.degrees} degree(s)) — ${d.resultDescription}`;
+    case 'add-cargo':
+      return `${p}.add-cargo: ${d.quantity} EP of ${d.cargoName} for ${bp(d.totalCostBp)}${d.merged ? ' (merged into existing lot)' : ''} — hold ${d.holdUsedEp}/${d.holdCapacityEp} EP (id ${d.cargoId}).`;
+    case 'remove-cargo':
+      return `${p}.remove-cargo: ${d.removedQuantity} EP of ${d.cargoName} removed (${d.remainingQuantity} EP of that lot left) — hold ${d.holdUsedEp} EP used (id ${d.cargoId}).`;
+    case 'get-current-cargo':
+      return `${p}.get-current-cargo: ${d.count} lot(s), ${d.holdUsedEp}/${d.holdCapacityEp} EP${d.count ? ` — ${d.cargo.map((c) => `${c.quantity} EP ${c.cargo}`).join(', ')}` : ''}.`;
+    case 'get-transaction-history':
+      return `${p}.get-transaction-history: ${d.count} transaction(s).`;
+    case 'get-currency':
+      return `${p}.get-currency: ${d.actorName ?? d.actorId} holds ${bp(d.totalBp)} (${d.totalBp} BP).`;
+    case 'deduct-currency':
+    case 'add-currency':
+      return `${p}.${d.action}: ${bp(d.amountBp)} ${d.action === 'deduct-currency' ? 'deducted from' : 'added to'} ${d.actorName ?? d.actorId} — ${bp(d.previousTotalBp)} → ${bp(d.newTotalBp)}${d.ledgered ? ' (ledgered source:trade)' : ' (ledger row NOT appended — wfrp4e-economy inactive?)'}.`;
+    default: {
+      const _exhaustive: never = d;
+      return `${p}: ${JSON.stringify(_exhaustive)}`;
+    }
+  }
+}
+
+export interface ModuleTradingPlacesToolOptions extends BaseToolOptions {}
+
+export class ModuleTradingPlacesTool extends BaseTool {
+  constructor(options: ModuleTradingPlacesToolOptions) {
+    super(options);
+  }
+
+  getRegistration(): Array<{ name: string; handler: (args: any) => Promise<any> }> {
+    return [{ name: 'module-trading-places', handler: (args: any) => this.execute(args) }];
+  }
+
+  getToolDefinitions() {
+    return [
+      {
+        name: 'module-trading-places',
+        title: 'Trading Places integration — WFRP4e bulk-cargo trading (Death on the Reik algorithm)',
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: true,
+          idempotentHint: false,
+          openWorldHint: false,
+        },
+        description: `Drive the Trading Places module (trading-places) — settlement/cargo reference data, seasonal availability checks, purchase/sale price calculation, haggle/gossip test resolution, the shared cargo hold, and REAL actor coin movement. Bulk-EP cargo economy (Death on the Reik companion algorithm) — complements /module-itempiles (item-level shops) and availability-test (Core-RAW single-item market availability).
+Conditional: returns MODULE_NOT_ACTIVE when trading-places is absent/inactive. Pre-flight: module-probe.is-active trading-places. All amounts are integer Brass Pennies (BP); 1 GC = 240 BP, 1 SS = 12 BP.
+
+DATASET LIMIT (R7.3): the bundled dataset is Empire-only — 14 provinces/regions of Reikland-and-neighbours settlements. Settlements outside the Empire are not in the data and will TARGET_NOT_FOUND.
+
+ROLL DELEGATION: haggle-test and gossip-test REQUIRE pre-rolled d100 totals (playerRoll, merchantRoll) — the sheet/GM rolls; this tool never rolls. check-availability likewise REQUIRES a pre-rolled availabilityRoll (the module's internal chat-invisible roll never fires).
+
+CARGO SEMANTICS: add-cargo/remove-cargo/get-current-cargo operate on the module's shared 'currentCargo' world-setting hold (one party hold, capacity 400 EP default, enforced on add) — NOT on actor inventories. Coin is NOT moved by cargo actions; move it explicitly with deduct-currency/add-currency (buy = deduct + add-cargo; sell = remove-cargo + add-currency).
+
+CURRENCY: get/deduct/add-currency read/write the actor's wfrp4e money Items keyed by coinValue (240/12/1) with change-making; deduct halts loud on insufficient funds (no partial writes). Writes >= 4800 BP (20 GC) require confirm:true. Every currency write appends a wfrp-economy unified-ledger row (source:'trade' — audit via module-wfrp-economy list-transactions).
+
+SEASON (CCR-CALENDAR): get-season derives from the Foundry world calendar when the calendar exposes a season index, else falls back to the module's manual currentSeason setting — the response's seasonSource field discloses which ('calendar' | 'module-setting'; 'explicit' when you passed season). Availability/price actions resolve season the same way unless an explicit season is passed.
+
+EXCLUDED BY DESIGN: UI opens (dialog-deadlock class), merchant generation (deferred to a later phase of this umbrella), and the module's compound buy path (validatePurchase/performPurchase — unreachable dead code, disposed 2026-07-10; orchestrate buys with the actions above instead).
+
+16 actions:
+reference-data: list-settlements { region? } · list-cargo-types {}.
+season: get-season {} · set-season { season: spring|summer|autumn|winter }.
+market-math: check-availability { settlement, availabilityRoll, season? } · calc-purchase-price { cargoName, quantity, quality?, season?, isPartialPurchase?, haggleSuccess?, hasDealmakerTalent? } · calc-sale-price { cargoName, quantity, settlement, quality?, season?, haggleSuccess?, hasDealmakerTalent? }.
+tests: haggle-test { playerSkill, merchantSkill, playerRoll, merchantRoll, hasDealmakerTalent? } · gossip-test { playerSkill, playerRoll, difficulty? }.
+cargo-hold: add-cargo { cargoName, quantity, totalCostBp, settlement, category?, season?, contraband? } · remove-cargo { cargoId? | cargoName?, quantity? } · get-current-cargo {}.
+bookkeeping: get-transaction-history { limit? }.
+currency: get-currency { actorId } · deduct-currency { actorId, amountBp, description?, confirm? } · add-currency { actorId, amountBp, description?, confirm? }.
+
+Example: { action: "check-availability", settlement: "Altdorf", availabilityRoll: 42 }`,
+        inputSchema: {
+          type: 'object',
+          properties: {
+            action: { type: 'string', enum: [...TRADING_PLACES_ACTIONS], description: 'Trading Places action to perform.' },
+            region: { type: 'string', description: 'list-settlements: optional region filter (e.g. "Reikland").' },
+            season: { type: 'string', enum: ['spring', 'summer', 'autumn', 'winter'], description: 'set-season (required) / availability + price actions (optional override; default = calendar-derived season).' },
+            settlement: { type: 'string', description: 'Settlement name (check-availability / calc-sale-price required; add-cargo required — the purchase location).' },
+            availabilityRoll: { type: 'number', description: 'check-availability: pre-rolled 1d100 total (required — this tool never rolls).' },
+            cargoName: { type: 'string', description: 'Cargo type name (price calcs / add-cargo required; remove-cargo alternative to cargoId).' },
+            quantity: { type: 'number', description: 'Quantity in Encumbrance Points (price calcs / add-cargo required; remove-cargo optional partial removal).' },
+            quality: { type: 'string', enum: ['poor', 'average', 'good', 'excellent'], description: 'Price calcs: wine/brandy quality tier (default average).' },
+            isPartialPurchase: { type: 'boolean', description: 'calc-purchase-price: apply the +10% partial-purchase penalty.' },
+            haggleSuccess: { type: 'boolean', description: 'Price calcs: outcome of a prior haggle-test to fold into the price.' },
+            hasDealmakerTalent: { type: 'boolean', description: 'haggle-test / price calcs: the buyer has the Dealmaker talent.' },
+            playerSkill: { type: 'number', description: 'haggle-test / gossip-test: player skill target (0-100).' },
+            merchantSkill: { type: 'number', description: 'haggle-test: merchant skill target (0-100).' },
+            playerRoll: { type: 'number', description: 'haggle-test / gossip-test: pre-rolled 1d100 total for the player (REQUIRED — sheet/GM rolls).' },
+            merchantRoll: { type: 'number', description: 'haggle-test: pre-rolled 1d100 total for the merchant (REQUIRED).' },
+            difficulty: { type: 'number', description: 'gossip-test: modifier (module default -10).' },
+            totalCostBp: { type: 'number', description: 'add-cargo: total cost of the lot in integer BP (recorded on the hold entry; coin moves only via deduct-currency).' },
+            category: { type: 'string', description: 'add-cargo: cargo category; resolved from the cargo dataset when omitted.' },
+            contraband: { type: 'boolean', description: 'add-cargo: mark the lot contraband.' },
+            cargoId: { type: 'string', description: 'remove-cargo: hold entry id (from get-current-cargo); alternative to cargoName.' },
+            limit: { type: 'number', description: 'get-transaction-history: max rows returned (default all, cap 200).' },
+            actorId: { type: 'string', description: 'Actor id (get-currency / deduct-currency / add-currency).' },
+            amountBp: { type: 'number', description: 'Currency writes: amount in integer Brass Pennies (> 0).' },
+            description: { type: 'string', description: 'Currency writes: ledger row description (default auto-generated).' },
+            confirm: { type: 'boolean', description: 'Currency writes >= 4800 BP (20 GC): must be true to execute.' },
+          },
+          required: ['action'],
+        },
+      },
+    ];
+  }
+
+  async execute(rawArgs: TradingPlacesArgs) {
+    const action = String((rawArgs as any)?.action ?? 'unknown');
+    this.logger.info('Executing module-trading-places action', { action });
+    if (!(TRADING_PLACES_ACTIONS as readonly string[]).includes(action)) {
+      return this.errorResponse(action, `unknown action: ${action}`);
+    }
+    try {
+      const data = await this.query<TradingPlacesResult>('module-trading-places', rawArgs);
+      return {
+        content: [{ type: 'text' as const, text: formatResult(data) }],
+        structuredContent: data as unknown as Record<string, unknown>,
+      };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.includes(ErrorTokens.MODULE_NOT_ACTIVE)) return moduleNotActiveContent('module-trading-places', msg);
+      return this.errorResponse(action, msg);
+    }
+  }
+}

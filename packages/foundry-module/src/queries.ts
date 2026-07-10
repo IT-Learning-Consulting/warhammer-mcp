@@ -162,6 +162,8 @@ import { dispatchModulePuzzleLocks as dispatchModulePuzzleLocksHandler } from '.
 import { dispatchModuleSyrinscape as dispatchModuleSyrinscapeHandler } from './handlers/modules/syrinscape/syrinscape.js';
 // Phase 13A module_integration_v2 — module-portal (headless prototype-preserving token spawn, conditional).
 import { dispatchModulePortal as dispatchModulePortalHandler } from './handlers/modules/portal/portal.js';
+// Phase 3 wfrp_economy_system — module-trading-places (bulk-cargo trading, conditional).
+import { dispatchModuleTradingPlaces as dispatchModuleTradingPlacesHandler } from './handlers/modules/trading-places/trading-places.js';
 import { dispatchModulePatrol as dispatchModulePatrolHandler } from './handlers/modules/patrol/patrol.js';
 import { dispatchModuleGatherer as dispatchModuleGathererHandler } from './handlers/modules/gatherer/gatherer.js';
 import { dispatchModuleMastercrafted as dispatchModuleMastercraftedHandler } from './handlers/modules/mastercrafted/mastercrafted.js';
@@ -532,6 +534,7 @@ export class QueryHandlers {
       'module-puzzle-locks': this.handleModulePuzzleLocks.bind(this),
       'module-syrinscape': this.handleModuleSyrinscape.bind(this),
       'module-portal': this.handleModulePortal.bind(this),
+      'module-trading-places': this.handleModuleTradingPlaces.bind(this),
       'applyFear': this.handleApplyFear.bind(this),
       'checkReload': this.handleCheckReload.bind(this),
       'addMoney': this.handleAddMoney.bind(this),
@@ -952,6 +955,14 @@ export class QueryHandlers {
   private async handleModulePortal(data: unknown): Promise<any> {
     return wrapQuery('Failed to dispatch module-portal action', async () => {
       return await dispatchModulePortalHandler(data);
+    });
+  }
+
+  // Phase 3 wfrp_economy_system — module-trading-places dispatcher.
+  // requireModuleActive('trading-places') guard runs inside dispatchModuleTradingPlaces.
+  private async handleModuleTradingPlaces(data: unknown): Promise<any> {
+    return wrapQuery('Failed to dispatch module-trading-places action', async () => {
+      return await dispatchModuleTradingPlacesHandler(data);
     });
   }
 

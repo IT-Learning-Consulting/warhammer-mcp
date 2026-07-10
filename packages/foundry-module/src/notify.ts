@@ -115,7 +115,8 @@ export type NotifyKind =
   | 'polyglot'
   | 'narrator'
   | 'macro-trigger'
-  | 'backpack';
+  | 'backpack'
+  | 'trading-places';
 
 export type NotifySeverity =
   | 'created'
