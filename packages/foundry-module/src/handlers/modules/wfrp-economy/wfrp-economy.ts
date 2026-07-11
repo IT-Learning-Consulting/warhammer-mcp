@@ -4,11 +4,12 @@
 // Always-registered umbrella. requireModuleActive('wfrp4e-economy') is the FIRST active-state check —
 // RETURNS the MODULE_NOT_ACTIVE envelope, never throws (v1 Phase 1 contract).
 //
-// 27 actions across 9 idioms (capability_audit/wfrp4e-economy.md + phase6_pre_plan.md §Action surface;
+// 29 actions across 10 idioms (capability_audit/wfrp4e-economy.md + phase6_pre_plan.md §Action surface;
 // unified-ledger idiom — record-transaction / delete-account — added Phase 2, wfrp_economy_system_v1_prd.md
-// §10). ALL financial state lives in world-scoped game settings (economies / bankers / bankAccounts /
-// stockPortfolios / transactionLogs). The 9 transactional writes are driven by runtime-importing the
-// module's SocketHandler and calling its AWAITED process method DIRECTLY:
+// §10; levy-and-burn idiom — apply-levies / money-to-burn — added Phase 4, same PRD §10). ALL financial
+// state lives in world-scoped game settings (economies / bankers / bankAccounts / stockPortfolios /
+// transactionLogs / levies / recordedStashes). The 9 transactional writes are driven by runtime-importing
+// the module's SocketHandler and calling its AWAITED process method DIRECTLY:
 //
 //   ⚠ ROUTING DEVIATIONS (phase6_pre_plan §Write access — verified against socket-handler.js):
 //     • loan      → SocketHandler._handleLoanProcess(...)  NOT processLoan (non-async, drops await).
@@ -28,7 +29,29 @@
 // confirm:z.boolean().optional() + a handler `!== true` reject (NOT z.literal(true)).
 //
 // Source of truth: .agents/research/module_integration/phase6_pre_plan.md +
-// capability_audit/wfrp4e-economy.md.
+// capability_audit/wfrp4e-economy.md + .agents/plans/features/wfrp-economy-phase4-levies-costofliving-
+// moneytoburn.md (Phase 4 — levy-and-burn idiom).
+//
+// levy-and-burn (apply-levies / money-to-burn) delegates to the fork's OWN headless, dialog-free engine
+// (src/levies/levy-engine.js — Phase 1 of the same plan) via the same runtimeImport idiom used for
+// SocketHandler/TransactionLogger above. DIALOG-PATH: the engine is contractually dialog-free (Phase 1
+// task 1.3 acceptance: zero Dialog/prompt control flow) — this handler never awaits a path that could
+// open a Foundry dialog ([[feedback_module_api_dialog_deadlock]]).
+//
+// Engine contract (fixed here at MCP-authoring time; Phase 1 implements TO this shape):
+//   applyLevies({ levyIds?, actorIds, excludeActorIds?, dryRun }) => Promise<{
+//     elapsedWeeks: number; weekIndex: number | null;
+//     verdicts: Array<{ actorId, actorName, levyId, chargedBp, paid, declined, modifierDelta,
+//                        persistedCheckFailed?, detail? }>;
+//     refused: Array<{ actorId, reason }>; // e.g. non-character actor
+//   }>
+//   moneyToBurn({ actorIds, dryRun }) => Promise<{
+//     verdicts: Array<{ actorId, actorName, wipedBp, protectedBp, persistedCheckFailed?, detail? }>;
+//     refused: Array<{ actorId, reason }>;
+//   }>
+// Both functions apply their own writes (native money-item debits + fork transaction-log append) and are
+// expected to have ALREADY verified persistence internally; `persistedCheckFailed` on a verdict entry
+// lets this handler surface a DP-16-equivalent NOT_PERSISTED without re-deriving the check.
 
 import { requireModuleActive } from '../_shared/require-module-active.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
@@ -62,6 +85,8 @@ const WRITE_ACTIONS = new Set([
   'wallet-remove',
   'record-transaction',
   'delete-account',
+  'apply-levies',
+  'money-to-burn',
 ]);
 
 // ── Local helpers ──────────────────────────────────────────────────────────────
@@ -147,6 +172,8 @@ const importSocketHandler = (): Promise<any> =>
   runtimeImport(`/modules/${MODULE_ID}/src/utils/socket-handler.js`).then((m) => m.SocketHandler);
 const importTransactionLogger = (): Promise<any> =>
   runtimeImport(`/modules/${MODULE_ID}/src/utils/transaction-logger.js`).then((m) => m.TransactionLogger);
+const importLevyEngine = (): Promise<any> =>
+  runtimeImport(`/modules/${MODULE_ID}/src/levies/levy-engine.js`);
 
 function walletBalance(actorId: string, economyId: string | undefined): number {
   return Number(getGame()?.financial?.wallet?.getBalance?.(actorId, economyId ?? '') ?? 0);
@@ -232,6 +259,11 @@ export async function dispatchModuleWfrpEconomy(data: unknown): Promise<Envelope
         return await handleRecordTransaction(input);
       case 'delete-account':
         return await handleDeleteAccount(input);
+      // ── levy-and-burn (Phase 4) ──
+      case 'apply-levies':
+        return await handleApplyLevies(input);
+      case 'money-to-burn':
+        return await handleMoneyToBurn(input);
       default: {
         const _exhaustive: never = input;
         return { success: false, error: `WFRP_ECONOMY_UNKNOWN_ACTION: ${String((_exhaustive as any)?.action)}` };
@@ -920,6 +952,10 @@ async function handleListTransactions(input: ListTxInput): Promise<Envelope<unkn
     bankId: l?.bankId ?? null,
     amount: Number(l?.amount ?? 0),
     amountDisplay: l?.amountDisplay ?? null,
+    // Phase4 validate F12: rows STORE targetActorId/Name (ledger.ts resolves them) but the
+    // projection dropped both — the item-ops-money-transfer eval pair asserts the target.
+    targetActorId: l?.targetActorId ?? null,
+    targetActorName: l?.targetActorName ?? null,
     description: l?.description ?? '',
     date: l?.date ?? null,
   }));
@@ -1037,4 +1073,94 @@ async function handleDeleteAccount(input: DeleteAccountInput): Promise<Envelope<
   if (readBankAccounts()[input.accountId]) return notPersisted(`bank account "${input.accountId}" still present after delete-account`);
   notify.deleted('wfrp-economy', actorName(account.actorId) ?? input.accountId, { summary: `account ${input.accountId} deleted` });
   return { success: true, data: { action: 'delete-account', accountId: input.accountId, deleted: true } };
+}
+
+// ── levy-and-burn (Phase 4, wfrp_economy_system) ────────────────────────────────
+//
+// Both actions DELEGATE to the fork's own headless levy-engine.js (see the engine-contract comment at the
+// top of this file). The engine owns arithmetic, sequencing, and its own DP-16-equivalent persistence
+// checks per verdict; this handler validates actor existence up front, surfaces any `persistedCheckFailed`
+// verdict as WFRP_ECONOMY_NOT_PERSISTED, and never re-derives the engine's internal math.
+
+function missingActor(actorIds: readonly string[]): string | null {
+  for (const id of actorIds) {
+    if (!getGame()?.actors?.get?.(id)) return id;
+  }
+  return null;
+}
+
+function firstPersistFailure(verdicts: unknown): { actorId: string; detail: string } | null {
+  if (!Array.isArray(verdicts)) return null;
+  for (const v of verdicts as any[]) {
+    if (v?.persistedCheckFailed) return { actorId: String(v?.actorId ?? 'unknown'), detail: String(v?.detail ?? 'unknown') };
+  }
+  return null;
+}
+
+type ApplyLeviesInput = Extract<WfrpEconomyInputType, { action: 'apply-levies' }>;
+async function handleApplyLevies(input: ApplyLeviesInput): Promise<Envelope<unknown>> {
+  const missing = missingActor(input.actorIds);
+  if (missing) return targetNotFound(`actor "${missing}" not found`);
+
+  const LevyEngine = await importLevyEngine();
+  const dryRun = input.dryRun === true;
+  const result = await LevyEngine.applyLevies({
+    levyIds: input.levyIds,
+    actorIds: input.actorIds,
+    excludeActorIds: input.excludeActorIds,
+    dryRun,
+  });
+
+  if (!dryRun) {
+    const failure = firstPersistFailure(result?.verdicts);
+    if (failure) return notPersisted(`levy verdict for actor "${failure.actorId}" failed persistence check: ${failure.detail}`);
+  }
+
+  const elapsedWeeks = Number(result?.elapsedWeeks ?? 0);
+  const verdicts = Array.isArray(result?.verdicts) ? result.verdicts : [];
+  const refused = Array.isArray(result?.refused) ? result.refused : [];
+  notify.updated('wfrp-economy', 'levies', {
+    summary: `${dryRun ? '[dry-run] ' : ''}apply-levies: elapsedWeeks=${elapsedWeeks}, ${verdicts.length} verdict(s), ${refused.length} refused`,
+  });
+  return {
+    success: true,
+    data: {
+      action: 'apply-levies',
+      dryRun,
+      elapsedWeeks,
+      weekIndex: result?.weekIndex ?? null,
+      verdicts,
+      refused,
+    },
+  };
+}
+
+type MoneyToBurnInput = Extract<WfrpEconomyInputType, { action: 'money-to-burn' }>;
+async function handleMoneyToBurn(input: MoneyToBurnInput): Promise<Envelope<unknown>> {
+  const dryRun = input.dryRun === true;
+  if (!dryRun && input.confirm !== true) {
+    return confirmRequired(
+      `money-to-burn wipes unprotected carried coin for ${input.actorIds.length} actor(s) (bank-account + recorded-stash balances survive; items are never deleted). Re-call with confirm:true, or dryRun:true to preview first.`,
+    );
+  }
+  const missing = missingActor(input.actorIds);
+  if (missing) return targetNotFound(`actor "${missing}" not found`);
+
+  const LevyEngine = await importLevyEngine();
+  const result = await LevyEngine.moneyToBurn({ actorIds: input.actorIds, dryRun });
+
+  if (!dryRun) {
+    const failure = firstPersistFailure(result?.verdicts);
+    if (failure) return notPersisted(`money-to-burn verdict for actor "${failure.actorId}" failed persistence check: ${failure.detail}`);
+  }
+
+  const verdicts = Array.isArray(result?.verdicts) ? result.verdicts : [];
+  const refused = Array.isArray(result?.refused) ? result.refused : [];
+  notify.updated('wfrp-economy', 'money-to-burn', {
+    summary: `${dryRun ? '[dry-run] ' : ''}money-to-burn: ${verdicts.length} actor(s) processed, ${refused.length} refused`,
+  });
+  return {
+    success: true,
+    data: { action: 'money-to-burn', dryRun, verdicts, refused },
+  };
 }

@@ -4,8 +4,9 @@
 // inactive it returns MODULE_NOT_ACTIVE which BaseTool.query() converts to a throw → moduleNotActiveContent().
 // Pre-flight with module-probe.is-active wfrp4e-economy.
 //
-// 27 actions across 9 idioms (stand-up-an-economy, open-a-bank-account, run-a-transaction, loan-cycle,
-// investment-cycle, property-management, wallet-quick-adjust, audit-the-ledger, unified-ledger). Anchors:
+// 29 actions across 10 idioms (stand-up-an-economy, open-a-bank-account, run-a-transaction, loan-cycle,
+// investment-cycle, property-management, wallet-quick-adjust, audit-the-ledger, unified-ledger,
+// levy-and-burn). Anchors:
 // DP-15 (concrete this.query<WfrpEconomyResult> — never <any>); R2.4 (errors via errorResponse). The
 // transactional writes + property/stock ops are LIVE-SMOKE-ONLY (need a configured economy; the
 // smoke-runbook self-bootstraps one).
@@ -20,6 +21,13 @@ import { WfrpEconomyInput } from '@foundry-mcp/shared';
 type WfrpEconomyArgs = z.infer<typeof WfrpEconomyInput>;
 
 // ── Single discriminated formatter (one text line per action) ──────────────────
+
+// HC1 full-triple display (validate F02): 240/12/1 decomposition, zeros always shown
+// (mirrors the fork's WFRP4eCurrency.bpToString default).
+function bpToTriple(bp: number): string {
+  const total = Math.max(0, Math.floor(bp));
+  return `${Math.floor(total / 240)}gc ${Math.floor((total % 240) / 12)}ss ${total % 12}bp`;
+}
 
 function formatResult(d: WfrpEconomyResult): string {
   const p = 'module-wfrp-economy';
@@ -74,6 +82,18 @@ function formatResult(d: WfrpEconomyResult): string {
       return `${p}.record-transaction: ${d.amountBp} BP (${d.source}/${d.type}) logged for actor ${d.actorId} — id ${d.transactionId}.`;
     case 'delete-account':
       return `${p}.delete-account: account ${d.accountId} ${d.deleted ? 'deleted' : 'not deleted'}.`;
+    case 'apply-levies': {
+      const lines = d.verdicts.map((v) =>
+        `\n  - ${v.actorName ?? v.actorId}: ${bpToTriple(v.chargedBp)} — ${v.paid ? 'paid' : v.declined ? 'declined' : 'no charge'}${v.modifierDelta !== 0 ? ` (modifier ${v.modifierDelta > 0 ? '+' : ''}${v.modifierDelta})` : ''}`);
+      const refusals = d.refused.map((r) => `\n  - refused ${r.actorId}: ${r.reason}`);
+      return `${p}.apply-levies: ${d.dryRun ? '[dry-run] ' : ''}elapsedWeeks=${d.elapsedWeeks}${d.weekIndex !== null ? ` (weekIndex ${d.weekIndex})` : ''} — ${d.verdicts.length} verdict(s), ${d.refused.length} refused.${lines.join('')}${refusals.join('')}`;
+    }
+    case 'money-to-burn': {
+      const lines = d.verdicts.map((v) =>
+        `\n  - ${v.actorName ?? v.actorId}: wiped ${bpToTriple(v.wipedBp)} (protected ${bpToTriple(v.protectedBp)})`);
+      const refusals = d.refused.map((r) => `\n  - refused ${r.actorId}: ${r.reason}`);
+      return `${p}.money-to-burn: ${d.dryRun ? '[dry-run] ' : ''}${d.verdicts.length} actor(s) processed, ${d.refused.length} refused.${lines.join('')}${refusals.join('')}`;
+    }
     default: {
       const _exhaustive: never = d;
       return `${p}: ${JSON.stringify(_exhaustive)}`;
@@ -106,9 +126,9 @@ export class ModuleWfrpEconomyTool extends BaseTool {
         description: `Drive the Warhammer Economy module (wfrp4e-economy) — named bank economies with interest-bearing accounts, loans, an account-to-account transfer rail, a stock market with portfolios, property ownership/rent, and an immutable transaction ledger. All state persists in world settings (economies / bankers / bankAccounts / stockPortfolios / transactionLogs — server-verifiable). Wallet ops read/write the actor's WFRP4e money items (GC/SS/BP at 240/12/1 BP). Additive to /module-itempiles (physical loot) and /wfrp-status (weekly earnings).
 Conditional: returns MODULE_NOT_ACTIVE when wfrp4e-economy is absent/inactive. Pre-flight: module-probe.is-active wfrp4e-economy. All amounts are integer Brass Pennies (BP).
 
-CONFIRM-GATED (CCR-4): delete-economy (purges the economy + its accounts/bankers/portfolios/logs), delete-account (removes the account record; transaction history is kept), and transfer >= 4800 BP (20 GC) require confirm:true. EXCLUDED (HC-v2-6 dialog-deadlock): advance-day, clearAllFinancialData, and every UI-open — not exposed.
+CONFIRM-GATED (CCR-4): delete-economy (purges the economy + its accounts/bankers/portfolios/logs), delete-account (removes the account record; transaction history is kept), money-to-burn (unless dryRun:true), and transfer >= 4800 BP (20 GC) require confirm:true. EXCLUDED (HC-v2-6 dialog-deadlock): advance-day, clearAllFinancialData, and every UI-open — not exposed.
 
-27 actions:
+29 actions:
 stand-up-an-economy: list-economies {} · get-economy { economyId } · list-bankers { economyId? } · create-economy { name, currency?, currencySystem?, banks?, properties?, stocks? } · update-economy { economyId, name?, currency?, banks?, properties?, stocks? } · delete-economy { economyId, confirm }.
 open-a-bank-account: create-account { economyId, bankId, actorId } · list-accounts { economyId?, actorId? }.
 run-a-transaction: deposit { economyId, accountId, amountBp } · withdraw { economyId, accountId, amountBp } · transfer { economyId, sourceAccountId, destinationAccountId, amountBp, confirm? }.
@@ -118,6 +138,7 @@ property-management: buy-property { economyId, accountId, propertyId } · sell-p
 wallet-quick-adjust: get-wallet-balance { actorId, economyId? } · wallet-add { actorId, amountBp, economyId? } · wallet-remove { actorId, amountBp, economyId? }.
 audit-the-ledger: list-transactions { actorId?, economyId?, type?, bankId?, source? } · actor-transaction-summary { actorId, economyId } · bank-transaction-summary { bankId, economyId }.
 unified-ledger: record-transaction { actorId, amountBp, source, type, description, economyId?, bankId?, targetActorId?, currency? } — append an arbitrary ledger row (source: earn/trade/itempiles/levy/economy); use for skill/levy callers that write coins outside this module's own 9 tracked ops · delete-account { accountId, economyId?, confirm } — remove a stale/orphaned account record (does NOT cascade-delete ledger history).
+levy-and-burn: apply-levies { actorIds, levyIds?, excludeActorIds?, dryRun? } — cadence-gated levy tick (weekly cost-of-living is seeded built-in; monthly/per-travel/one-off levies apply only when named in levyIds). Auto payment model: can-pay → pays; insufficient → declines (status modifier -1, no partial deduction; a paid-while-declined actor recovers +1, floored at 0). Charges exactly ONE elapsed week per call — call again to catch up further weeks; the response reports elapsedWeeks so a caller can loop. Character-only (npc/creature actors are refused — the source macro's uncascaded NPC writes were a bug, not RAW). dryRun:true previews with zero writes and no confirm required. Delegates to the wfrp4e-economy fork's own levy engine — the SAME engine the Economy Manager's Levies tab buttons call · money-to-burn { actorIds, dryRun?, confirm } — RAW Money-to-Burn: zeroes every unprotected carried money item's quantity at downtime's end (items are never deleted). Bank-account balances and recorded stashes are protected and survive. Requires confirm:true to execute; dryRun:true previews without confirm. Both actions render all amounts full-triple (e.g. "0gc 6ss 0bp", including the zero-case).
 
 For create-economy, embed a stock to enable the buy/sell round-trip: stocks:[{ name, symbol, currentPrice, availableShares }]. Example: { action: "deposit", economyId: "abc", accountId: "def", amountBp: 240 }`,
         inputSchema: {
@@ -146,7 +167,11 @@ For create-economy, embed a stock to enable the buy/sell round-trip: stocks:[{ n
             source: { type: 'string', enum: ['earn', 'trade', 'itempiles', 'levy', 'economy'], description: 'record-transaction (required): who originated this row. list-transactions: optional source filter.' },
             description: { type: 'string', description: 'record-transaction (required): human-readable ledger description.' },
             targetActorId: { type: 'string', description: 'record-transaction: optional second actor (e.g. transfer counterparty).' },
-            confirm: { type: 'boolean', description: 'delete-economy / delete-account / large transfer: must be true to execute the gated op.' },
+            confirm: { type: 'boolean', description: 'delete-economy / delete-account / large transfer / money-to-burn (unless dryRun:true): must be true to execute the gated op.' },
+            actorIds: { type: 'array', items: { type: 'string' }, description: 'apply-levies / money-to-burn (required): actor ids to process.' },
+            levyIds: { type: 'array', items: { type: 'string' }, description: 'apply-levies: optional explicit levy ids to apply (omit = all cadence-eligible levies, e.g. the weekly cost-of-living levy).' },
+            excludeActorIds: { type: 'array', items: { type: 'string' }, description: 'apply-levies: optional actor ids to skip this run.' },
+            dryRun: { type: 'boolean', description: 'apply-levies / money-to-burn: preview the outcome with zero writes; does not require confirm.' },
           },
           required: ['action'],
         },

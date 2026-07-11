@@ -12,6 +12,34 @@ import { getItemPilesAPI, notPersisted, gmRequired, activeGmRequired } from './h
 import { totalQuantity } from './verify-quantity.js';
 import { recordEconomyTransaction } from '../wfrp-economy/ledger.js';
 
+// ── Phase 4 (wfrp_economy_system) money-leak closure ────────────────────────────
+//
+// add-items/remove-items/transfer-items/split-loot move generic `type:'money'` items without ever
+// touching wfrp-economy's ledger (unlike add-currency/remove-currency/transfer-currency above, which
+// already call recordEconomyTransaction). Detection is DELTA-BASED — measure an actor's total money-BP
+// before/after the write settles — rather than parsing per-entry item shapes: add/remove/transfer's
+// `items` payloads are shape-flexible (full item data for add, bare {_id,quantity} refs for
+// remove/transfer), so a delta on the actor's OWN post-write state is simpler and cannot drift from
+// whatever shape the caller passed in. Post-write detection ONLY — never gates or filters the op itself
+// (fail-open, mirrors recordEconomyTransaction's own contract).
+// ⚠ Do NOT read money via API.getActorItems — Item Piles EXCLUDES currency-registered items from
+// it (the wfrp4e bridge registers money items as item-type currencies) and applies its physical-item
+// filters, so money is structurally invisible through that API and the delta reads 0 forever.
+// Live-falsified 2026-07-10 (Phase 4 validate smoke: 240 BP transfer produced no ledger row).
+// Read the actor document's own embedded items instead.
+function actorMoneyBp(_API: any, actorUuid: string): number {
+  const resolved = (globalThis as any).fromUuidSync?.(actorUuid);
+  const doc = resolved?.documentName === 'Token' ? resolved?.actor : resolved;
+  const items = doc?.items ?? [];
+  let sum = 0;
+  for (const it of items) {
+    if (it?.type === 'money') {
+      sum += Number(it?.system?.quantity?.value ?? 0) * Number(it?.system?.coinValue?.value ?? 0);
+    }
+  }
+  return sum;
+}
+
 // ── 3A: Item mutations ────────────────────────────────────────────────────────
 
 type AddItemsInput = Extract<ModuleItempilesInputType, { action: 'add-items' }>;
@@ -45,6 +73,7 @@ export async function handleAddItems(input: AddItemsInput): Promise<Envelope<unk
       ? { ids: addedIds, names: addedNames }
       : undefined;
     const beforeQty = totalQuantity(API, input.actorUuid, family);
+    const beforeMoneyBp = actorMoneyBp(API, input.actorUuid);
 
     // L-1: mergeSimilarItems/respectItemIds removed — not real addItems options (item-piles.js:98428)
     const options: Record<string, unknown> = {
@@ -68,6 +97,18 @@ export async function handleAddItems(input: AddItemsInput): Promise<Envelope<unk
     }
     const afterItems = API.getActorItems(input.actorUuid);
     const count = Array.isArray(afterItems) ? afterItems.length : 0;
+    // Money-leak closure (Phase 4): a generic add-items call can add type:'money' items, which never
+    // touches the wfrp-economy ledger otherwise. Post-write delta, fail-open, never gates the op.
+    const moneyDelta = actorMoneyBp(API, input.actorUuid) - beforeMoneyBp;
+    if (moneyDelta > 0) {
+      await recordEconomyTransaction({
+        actorId: input.actorUuid,
+        amount: moneyDelta,
+        type: 'item-ops-money-add',
+        source: 'itempiles',
+        description: `Item Piles: money item(s) added via add-items (+${moneyDelta} BP)`,
+      });
+    }
     notify.updated('item-piles', `Added ${items.length} item(s) to ${input.actorUuid}`, {});
     return { success: true, data: { actorUuid: input.actorUuid, itemsAdded: items.length, totalItems: count } };
   } catch (e) {
@@ -104,6 +145,7 @@ export async function handleRemoveItems(input: RemoveItemsInput): Promise<Envelo
       ? { ids: removedIds, names: removedNames }
       : undefined;
     const beforeQty = totalQuantity(API, input.actorUuid, family);
+    const beforeMoneyBp = actorMoneyBp(API, input.actorUuid);
 
     const removeResult = await API.removeItems(input.actorUuid, items);
     // M-2: socket returns false when GM disconnects mid-call
@@ -122,6 +164,17 @@ export async function handleRemoveItems(input: RemoveItemsInput): Promise<Envelo
     }
     const afterItems = API.getActorItems(input.actorUuid);
     const count = Array.isArray(afterItems) ? afterItems.length : 0;
+    // Money-leak closure (Phase 4): mirrors add-items above.
+    const moneyDelta = beforeMoneyBp - actorMoneyBp(API, input.actorUuid);
+    if (moneyDelta > 0) {
+      await recordEconomyTransaction({
+        actorId: input.actorUuid,
+        amount: moneyDelta,
+        type: 'item-ops-money-remove',
+        source: 'itempiles',
+        description: `Item Piles: money item(s) removed via remove-items (-${moneyDelta} BP)`,
+      });
+    }
     notify.updated('item-piles', `Removed ${items.length} item(s) from ${input.actorUuid}`, {});
     return { success: true, data: { actorUuid: input.actorUuid, itemsRemoved: items.length, totalItems: count } };
   } catch (e) {
@@ -172,6 +225,7 @@ export async function handleTransferItems(input: TransferItemsInput): Promise<En
     );
     const targetFamily = transferredNames.size > 0 ? { names: transferredNames } : undefined;
     const beforeTargetQty = totalQuantity(API, input.targetUuid, targetFamily);
+    const beforeTargetMoneyBp = actorMoneyBp(API, input.targetUuid);
     let result: unknown;
 
     if (mode === 'all') {
@@ -203,6 +257,29 @@ export async function handleTransferItems(input: TransferItemsInput): Promise<En
     const targetCount = Array.isArray(targetItems) ? targetItems.length : 0;
     if (dto.itemsTransferred.length > 0 && afterTargetQty < beforeTargetQty) {
       return notPersisted(ErrorTokens.ITEM_PILES_TRANSFER_ITEMS_NOT_PERSISTED, `transfer-items to ${input.targetUuid} target total quantity dropped (before: ${beforeTargetQty}, after: ${afterTargetQty})`);
+    }
+    // Money-leak closure (Phase 4): covers all 3 modes (transfer/all/combine) uniformly since the
+    // before-snapshot is taken pre-branch. ONE row, mirrors transfer-currency's targetActorId convention.
+    // Validate F10: settle-poll before the delta read — a later-tick settle would read delta 0 and
+    // silently skip the row (fail-open). Polled ONLY when the moved set can contain money items, so
+    // ordinary non-money transfers never pay the poll-to-timeout penalty.
+    const preItems = Array.isArray(sourceItemsPre) ? sourceItemsPre : [];
+    const moneyMayMove = mode === 'transfer' && transferredIds.size > 0
+      ? preItems.some((it: any) => transferredIds.has(String(it?.id ?? it?._id ?? '')) && it?.type === 'money')
+      : preItems.some((it: any) => it?.type === 'money' && Number(it?.system?.quantity?.value ?? 0) > 0);
+    if (moneyMayMove && dto.itemsTransferred.length > 0) {
+      await settlePoll(() => actorMoneyBp(API, input.targetUuid) > beforeTargetMoneyBp, 1000);
+    }
+    const targetMoneyDelta = actorMoneyBp(API, input.targetUuid) - beforeTargetMoneyBp;
+    if (targetMoneyDelta > 0) {
+      await recordEconomyTransaction({
+        actorId: input.sourceUuid,
+        targetActorId: input.targetUuid,
+        amount: targetMoneyDelta,
+        type: 'item-ops-money-transfer',
+        source: 'itempiles',
+        description: `Item Piles: money item(s) transferred (mode: ${mode}) — +${targetMoneyDelta} BP to ${input.targetUuid}`,
+      });
     }
     notify.updated('item-piles', `Transferred items (mode: ${mode}) from ${input.sourceUuid} to ${input.targetUuid}`, {});
     return { success: true, data: { mode, sourceUuid: input.sourceUuid, targetUuid: input.targetUuid, targetItemCount: targetCount, result: dto } };
@@ -675,6 +752,9 @@ export async function handleSplitLoot(input: SplitLootInput): Promise<Envelope<u
       return doc;
     });
 
+    // Money-leak closure (Phase 4): per-recipient before-snapshot for the delta-based detection below.
+    const beforeTargetMoneyBp = new Map<string, number>(input.targets.map((uuid: string) => [uuid, actorMoneyBp(API, uuid)]));
+
     const options: Record<string, unknown> = {
       targets: resolvedTargets,
     };
@@ -699,6 +779,21 @@ export async function handleSplitLoot(input: SplitLootInput): Promise<Envelope<u
     const remaining = readRemaining();
     if (!persisted && remaining > 0) {
       return notPersisted(ErrorTokens.ITEM_PILES_SPLIT_LOOT_NOT_PERSISTED, `split-loot on ${input.actorUuid} left ${remaining} item(s) in the pile — expected empty`);
+    }
+    // Money-leak closure (Phase 4): ONE ledger row PER RECIPIENT (design decision — per-recipient rows
+    // preserve who-got-what auditability), fail-open, post-write only.
+    for (const uuid of input.targets) {
+      const before = beforeTargetMoneyBp.get(uuid) ?? 0;
+      const delta = actorMoneyBp(API, uuid) - before;
+      if (delta > 0) {
+        await recordEconomyTransaction({
+          actorId: uuid,
+          amount: delta,
+          type: 'item-ops-money-split-loot',
+          source: 'itempiles',
+          description: `Item Piles: received ${delta} BP in money items via split-loot from ${input.actorUuid}`,
+        });
+      }
     }
     notify.updated('item-piles', `Split loot from ${input.actorUuid} among ${input.targets.length} actors`, {});
     return { success: true, data: { actorUuid: input.actorUuid, targets: input.targets, itemsRemaining: remaining } };

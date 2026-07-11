@@ -376,18 +376,56 @@ async function handleCheckAvailability(input: CheckAvailabilityInput): Promise<E
   const result = await engine.performCompleteAvailabilityCheck(settlement, resolved.season, rollFunction);
 
   const check = result?.availabilityCheck ?? {};
-  const cargoTypes: string[] = Array.isArray(result?.cargoTypes)
-    ? result.cargoTypes.map((c: any) => String(c?.name ?? c ?? ''))
-    : [];
+  // Engine cargoTypes are plain name strings, but its pipeline branch reads slot.cargoType||slot.label —
+  // keys the pipeline never sets (slots carry cargo.name, cargo-availability-pipeline.js:347-357) — so it
+  // degrades to the legacy category map and returns [] for retired-'Trade' settlements (BUG-535). Recover
+  // the names from the plan the availabilityCheck carries (trading-engine.js:485).
+  const engineNames: string[] = (Array.isArray(result?.cargoTypes) ? result.cargoTypes : [])
+    .map((c: any) => String(c?.name ?? c ?? ''))
+    .filter(Boolean);
+  const slotNames: string[] = (Array.isArray(check?.plan?.slots) ? check.plan.slots : [])
+    .map((s: any) => String(s?.cargo?.name ?? ''))
+    .filter((n: string) => n && n !== 'Unavailable');
+  let cargoTypes = [...new Set(engineNames.length > 0 ? engineNames : slotNames)];
+
+  // Live config constructs the engine WITHOUT a pipeline (main.js:1167), so the legacy
+  // determineCargoTypes path runs — and returns [] on this dataset (lowercase settlement flags
+  // never match the legacy category map). The module's own UI gets cargo names from the
+  // DataManager pipeline instead (BuyingFlow.js:105); do the same when the engine gave none.
+  if (cargoTypes.length === 0 && Boolean(result?.available) && typeof dm.getCargoAvailabilityPipeline === 'function') {
+    try {
+      // Deterministic sub-roll sequence seeded by the caller's availabilityRoll — the pipeline's
+      // internal enrichment rolls (selection/amount/quality/contraband) must never post to chat
+      // or float free of the tool's roll-delegation contract.
+      let n = input.availabilityRoll;
+      const nextRoll = () => {
+        n = (n * 73 + 41) % 100;
+        return n + 1;
+      };
+      const pipeline = dm.getCargoAvailabilityPipeline();
+      const plan = await pipeline?.run?.({ settlement, season: resolved.season, rollPercentile: nextRoll });
+      const names: string[] = (Array.isArray(plan?.slots) ? plan.slots : [])
+        .map((s: any) => String(s?.cargo?.name ?? ''))
+        .filter((nm: string) => nm && nm !== 'Unavailable');
+      cargoTypes = [...new Set(names)];
+    } catch {
+      // Enrichment only — available/chance/roll above stay authoritative; empty cargoTypes is
+      // the honest degraded answer if the pipeline throws.
+    }
+  }
   const sizeRaw = result?.cargoSize;
+  // totalSize is the engine's actual key in BOTH the legacy and plan paths (trading-engine.js:774/851);
+  // totalEP/size never existed on live returns (BUG-535).
   const cargoSizeEp =
     typeof sizeRaw === 'number'
       ? sizeRaw
-      : typeof sizeRaw?.totalEP === 'number'
-        ? sizeRaw.totalEP
-        : typeof sizeRaw?.size === 'number'
-          ? sizeRaw.size
-          : null;
+      : typeof sizeRaw?.totalSize === 'number'
+        ? sizeRaw.totalSize
+        : typeof sizeRaw?.totalEP === 'number'
+          ? sizeRaw.totalEP
+          : typeof sizeRaw?.size === 'number'
+            ? sizeRaw.size
+            : null;
 
   return {
     success: true,
@@ -431,6 +469,19 @@ function calcToBp(calc: any, quantityEp: number): { pricePerEpBp: number; totalB
   return { pricePerEpBp, totalBp: Math.round(pricePerEpBp * quantityEp) };
 }
 
+// Resolve a user-supplied cargo name against the dataset the engine itself searches
+// (exact, then case-insensitive) and return the dataset's own name string. The engine's
+// calculators THROW on unknown cargo (purchase-price-calculator.js:69) instead of returning
+// null, which would bypass the handlers' targetNotFound() branch and surface
+// TRADING_PLACES_HANDLER_ERROR — pre-resolving keeps the promised TARGET_NOT_FOUND token
+// and tolerates caller casing (BUG-533).
+function resolveCargoName(cargoName: string): string | null {
+  const cargoTypes: any[] = getDataManager()?.getCargoTypes?.() ?? [];
+  const exact = cargoTypes.find((c: any) => String(c?.name ?? '') === cargoName);
+  const match = exact ?? cargoTypes.find((c: any) => String(c?.name ?? '').toLowerCase() === cargoName.toLowerCase());
+  return match ? String(match.name) : null;
+}
+
 type CalcPurchasePriceInput = Extract<TradingPlacesInputType, { action: 'calc-purchase-price' }>;
 
 function handleCalcPurchasePrice(input: CalcPurchasePriceInput): Envelope<unknown> {
@@ -440,7 +491,10 @@ function handleCalcPurchasePrice(input: CalcPurchasePriceInput): Envelope<unknow
   const resolved = resolveSeason(input.season);
   if (!resolved) return seasonUnresolved('season unresolvable — pass season explicitly or set-season first');
 
-  const calc = engine.calculatePurchasePrice(input.cargoName, input.quantity, {
+  const cargoName = resolveCargoName(input.cargoName);
+  if (!cargoName) return targetNotFound(`cargo type "${input.cargoName}" not in the dataset — resolve via list-cargo-types`);
+
+  const calc = engine.calculatePurchasePrice(cargoName, input.quantity, {
     season: resolved.season, // explicit (CCR-CALENDAR)
     quality: input.quality ?? 'average',
     isPartialPurchase: input.isPartialPurchase ?? false,
@@ -454,7 +508,7 @@ function handleCalcPurchasePrice(input: CalcPurchasePriceInput): Envelope<unknow
     success: true,
     data: {
       action: 'calc-purchase-price',
-      cargoName: input.cargoName,
+      cargoName,
       quantity: input.quantity,
       settlement: null,
       season: resolved.season,
@@ -480,7 +534,10 @@ function handleCalcSalePrice(input: CalcSalePriceInput): Envelope<unknown> {
   const resolved = resolveSeason(input.season);
   if (!resolved) return seasonUnresolved('season unresolvable — pass season explicitly or set-season first');
 
-  const calc = engine.calculateSalePrice(input.cargoName, input.quantity, settlement, {
+  const cargoName = resolveCargoName(input.cargoName);
+  if (!cargoName) return targetNotFound(`cargo type "${input.cargoName}" not in the dataset — resolve via list-cargo-types`);
+
+  const calc = engine.calculateSalePrice(cargoName, input.quantity, settlement, {
     season: resolved.season, // explicit (CCR-CALENDAR)
     quality: input.quality ?? 'average',
     haggleResult: buildHaggleResultOption(input),
@@ -493,7 +550,7 @@ function handleCalcSalePrice(input: CalcSalePriceInput): Envelope<unknown> {
     success: true,
     data: {
       action: 'calc-sale-price',
-      cargoName: input.cargoName,
+      cargoName,
       quantity: input.quantity,
       settlement: String(settlement.name ?? input.settlement),
       season: resolved.season,
@@ -527,14 +584,36 @@ async function handleHaggleTest(input: HaggleTestInput): Promise<Envelope<unknow
     rollFunction,
   );
 
+  const player = (result?.player ?? {}) as Record<string, unknown>;
+  const merchant = (result?.merchant ?? {}) as Record<string, unknown>;
+
+  // BUG-534: the engine's trailing tie-check (haggling-mechanics.js:146) compares UNSIGNED
+  // degrees, so success-by-N vs failure-by-N comes back "Tie - no price change". When the
+  // per-side success flags differ, the successful side wins regardless of the engine verdict;
+  // only trust the engine when both sides succeeded or both failed.
+  let playerWins = Boolean(result?.success);
+  let resultDescription = String(result?.resultDescription ?? '');
+  if (typeof player.success === 'boolean' && typeof merchant.success === 'boolean'
+      && player.success !== merchant.success) {
+    const derivedWins = player.success;
+    const engineAgrees = playerWins === derivedWins && !resultDescription.startsWith('Tie');
+    playerWins = derivedWins;
+    if (!engineAgrees) {
+      const corrected = derivedWins
+        ? 'Player wins - merchant failed their test'
+        : 'Merchant wins - player failed their test';
+      resultDescription = `${corrected} [engine reported: ${resultDescription}]`;
+    }
+  }
+
   return {
     success: true,
     data: {
       action: 'haggle-test',
-      playerWins: Boolean(result?.success),
-      resultDescription: String(result?.resultDescription ?? ''),
-      player: (result?.player ?? {}) as Record<string, unknown>,
-      merchant: (result?.merchant ?? {}) as Record<string, unknown>,
+      playerWins,
+      resultDescription,
+      player,
+      merchant,
     },
   };
 }

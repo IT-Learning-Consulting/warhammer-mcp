@@ -3,9 +3,10 @@
 // CCR-5: Zod input validation lives package-local on the foundry-module side. The mcp-server tool layer
 // only needs typed response shapes for this.query<T> (DP-15 — never <any>).
 //
-// Warhammer Economy v1.0.0. 27 actions across 9 idioms (unified-ledger: record-transaction /
-// delete-account added Phase 2, wfrp_economy_system_v1_prd.md §10). Each handler return carries
-// `action` as a discriminant; WfrpEconomyResult is their union so the tool stays typed without <any>.
+// Warhammer Economy v1.0.0. 29 actions across 10 idioms (unified-ledger: record-transaction /
+// delete-account added Phase 2; levy-and-burn: apply-levies / money-to-burn added Phase 4,
+// wfrp_economy_system_v1_prd.md §10). Each handler return carries `action` as a discriminant;
+// WfrpEconomyResult is their union so the tool stays typed without <any>.
 
 export interface WfrpEconomySummary {
   id: string;
@@ -229,6 +230,46 @@ export interface WfrpEconomyDeleteAccountResult {
   deleted: boolean;
 }
 
+// ── levy-and-burn idiom (Phase 4, wfrp_economy_system) ──────────────────────────
+
+export interface WfrpEconomyLevyVerdict {
+  actorId: string;
+  actorName: string | null;
+  levyId: string;
+  chargedBp: number;
+  paid: boolean;
+  declined: boolean;
+  modifierDelta: number;
+}
+
+export interface WfrpEconomyRefusal {
+  actorId: string;
+  reason: string;
+}
+
+export interface WfrpEconomyApplyLeviesResult {
+  action: 'apply-levies';
+  dryRun: boolean;
+  elapsedWeeks: number;
+  weekIndex: number | null;
+  verdicts: WfrpEconomyLevyVerdict[];
+  refused: WfrpEconomyRefusal[];
+}
+
+export interface WfrpEconomyMoneyToBurnVerdict {
+  actorId: string;
+  actorName: string | null;
+  wipedBp: number;
+  protectedBp: number;
+}
+
+export interface WfrpEconomyMoneyToBurnResult {
+  action: 'money-to-burn';
+  dryRun: boolean;
+  verdicts: WfrpEconomyMoneyToBurnVerdict[];
+  refused: WfrpEconomyRefusal[];
+}
+
 export type WfrpEconomyResult =
   | WfrpEconomyListEconomiesResult
   | WfrpEconomyGetEconomyResult
@@ -252,9 +293,11 @@ export type WfrpEconomyResult =
   | WfrpEconomyActorSummaryResult
   | WfrpEconomyBankSummaryResult
   | WfrpEconomyRecordTransactionResult
-  | WfrpEconomyDeleteAccountResult;
+  | WfrpEconomyDeleteAccountResult
+  | WfrpEconomyApplyLeviesResult
+  | WfrpEconomyMoneyToBurnResult;
 
-// ── The action enum (mirrors the foundry-module discriminatedUnion literals; 25 actions) ──
+// ── The action enum (mirrors the foundry-module discriminatedUnion literals; 29 actions) ──
 
 export const WFRP_ECONOMY_ACTIONS = [
   'list-economies',
@@ -284,6 +327,8 @@ export const WFRP_ECONOMY_ACTIONS = [
   'bank-transaction-summary',
   'record-transaction',
   'delete-account',
+  'apply-levies',
+  'money-to-burn',
 ] as const;
 
 export type WfrpEconomyAction = (typeof WFRP_ECONOMY_ACTIONS)[number];

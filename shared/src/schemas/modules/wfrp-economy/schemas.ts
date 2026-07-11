@@ -7,9 +7,9 @@
 // `.strict()` ZodObject (NO `.refine`/`.transform` — a ZodEffects breaks the discriminatedUnion);
 // cross-field rules (confirm-gate, large-transfer threshold, target resolution) live in the handler.
 //
-// 27 actions across 9 idioms (capability_audit/wfrp4e-economy.md + phase6_pre_plan.md §Action surface;
-// record-transaction + delete-account added Phase 2, wfrp_economy_system_v1_prd.md §10, HC8-compliant —
-// action count grows, tool count stays 1):
+// 29 actions across 10 idioms (capability_audit/wfrp4e-economy.md + phase6_pre_plan.md §Action surface;
+// record-transaction + delete-account added Phase 2, wfrp_economy_system_v1_prd.md §10; apply-levies +
+// money-to-burn added Phase 4, same PRD §10 — HC8-compliant, action count grows, tool count stays 1):
 //   stand-up-an-economy (6): list-economies / get-economy / list-bankers / create-economy /
 //     update-economy / delete-economy
 //   open-a-bank-account (2): create-account / list-accounts
@@ -20,6 +20,9 @@
 //   wallet-quick-adjust (3): get-wallet-balance / wallet-add / wallet-remove
 //   audit-the-ledger (3): list-transactions / actor-transaction-summary / bank-transaction-summary
 //   unified-ledger (2): record-transaction / delete-account
+//   levy-and-burn (2): apply-levies / money-to-burn — DELEGATE to the wfrp4e-economy fork's own
+//     src/levies/levy-engine.js (headless, dialog-free); the same engine powers the Economy Manager's
+//     Levies tab buttons. Character-only (npc/creature refuse — engine-side guard).
 //
 // All monetary amounts are integer Brass Pennies (BP); 1 GC = 240 BP, 1 SS = 12 BP.
 //
@@ -168,6 +171,25 @@ export const WfrpEconomyInput = z.discriminatedUnion('action', [
     .strict(),
   z
     .object({ action: z.literal('delete-account'), accountId: accountId, economyId: economyId.optional(), confirm: z.boolean().optional() })
+    .strict(),
+
+  // ── levy-and-burn idiom (Phase 4, wfrp_economy_system) ──────────────────────────
+  z
+    .object({
+      action: z.literal('apply-levies'),
+      actorIds: z.array(ActorId).min(1),
+      levyIds: z.array(z.string().min(1)).optional(), // omit = all cadence-eligible levies (e.g. weekly cost-of-living)
+      excludeActorIds: z.array(ActorId).optional(),
+      dryRun: z.boolean().optional(), // preview only, zero writes — no confirm required
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal('money-to-burn'),
+      actorIds: z.array(ActorId).min(1),
+      dryRun: z.boolean().optional(), // preview only, zero writes — no confirm required
+      confirm: z.boolean().optional(), // required to execute (dryRun:false/undefined) — mirrors delete-economy
+    })
     .strict(),
 ]);
 

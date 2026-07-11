@@ -107,11 +107,13 @@ function makeGame(opts: {
 function makeEngine(overrides: Record<string, any> = {}) {
   return {
     setCurrentSeason: vi.fn(async () => 'spring'),
+    // Live engine shape (BUG-535): cargoTypes are plain name strings and cargoSize carries
+    // totalSize — trading-engine.js:774 (legacy) / :851 (plan path); totalEP/size never existed.
     performCompleteAvailabilityCheck: vi.fn(async () => ({
       available: true,
       availabilityCheck: { chance: 70, roll: 42 },
       cargoTypes: ['Grain'],
-      cargoSize: { totalEP: 80 },
+      cargoSize: { totalSize: 80, baseMultiplier: 8, sizeMultiplier: 10 },
     })),
     // Live-captured calculator shape (2026-07-10, Grain/spring on the wfrp4e dataset): per-UNIT keys,
     // plain fields in canonical BP, unit = encumbrancePerUnit EP. The ...Canonical/formatted fields
@@ -481,6 +483,59 @@ describe('haggle/gossip pre-rolled injection', () => {
   });
 });
 
+// ── 10b. Haggle verdict derivation (BUG-534 regression — live smoke 2026-07-10) ──────────
+// The module engine's trailing tie-check (haggling-mechanics.js:146) compares UNSIGNED degrees,
+// so success-by-N vs failure-by-N returns success:false + "Tie - no price change". The handler
+// derives the winner from the per-side success flags when they differ. Mocked engine returns
+// mirror the live shape: performSkillTest (haggling-mechanics.js:74-84) yields
+// { testName, baseSkill, modifiers, totalModifier, modifiedSkill, roll, success, degrees,
+//   resultDescription }; performHaggleTest (:151-157) wraps them as { success, player,
+//   merchant, resultDescription } — including the buggy tie override on equal degrees.
+describe('haggle-test verdict derivation (BUG-534)', () => {
+  const skillTest = (name: string, skill: number, roll: number) => {
+    const success = roll <= skill;
+    const degrees = success ? Math.floor((skill - roll) / 10) + 1 : Math.floor((roll - skill - 1) / 10) + 1;
+    return { testName: name, baseSkill: skill, modifiers: [], totalModifier: 0, modifiedSkill: skill, roll, success, degrees, resultDescription: `${name} ${success ? 'Success' : 'Failure'} (${degrees} degrees)` };
+  };
+  const install = (engineResult: any) => {
+    const { settings } = makeSettings();
+    (globalThis as any).game = makeGame({ settings });
+    installModuleApi({ engine: makeEngine({ performHaggleTest: vi.fn(async () => engineResult) }) });
+  };
+  const fire = (input: Partial<{ playerSkill: number; merchantSkill: number; playerRoll: number; merchantRoll: number }>) =>
+    dispatchModuleTradingPlaces({ action: 'haggle-test', playerSkill: 90, merchantSkill: 10, playerRoll: 5, merchantRoll: 95, ...input });
+
+  it('player success vs merchant failure with equal unsigned degrees overrides the engine "Tie" to a player win', async () => {
+    // live 2026-07-10 repro: 90/10 + rolls 5/95 → success-by-9 vs failure-by-9 → engine "Tie"
+    install({ success: false, player: skillTest('Player Haggle', 90, 5), merchant: skillTest('Merchant Haggle', 10, 95), resultDescription: 'Tie - no price change' });
+    const res: any = await fire({});
+    expect(res.success).toBe(true);
+    expect(res.data.playerWins).toBe(true);
+    expect(res.data.resultDescription).toMatch(/^Player wins - merchant failed their test/);
+  });
+
+  it('player failure vs merchant success with equal unsigned degrees corrects the "Tie" description to a merchant win', async () => {
+    install({ success: false, player: skillTest('Player Haggle', 10, 95), merchant: skillTest('Merchant Haggle', 90, 5), resultDescription: 'Tie - no price change' });
+    const res: any = await fire({ playerSkill: 10, merchantSkill: 90, playerRoll: 95, merchantRoll: 5 });
+    expect(res.data.playerWins).toBe(false);
+    expect(res.data.resultDescription).toMatch(/^Merchant wins - player failed their test/);
+  });
+
+  it('both succeed with distinct degrees passes the engine verdict through verbatim', async () => {
+    install({ success: true, player: skillTest('Player Haggle', 90, 1), merchant: skillTest('Merchant Haggle', 90, 85), resultDescription: 'Player wins - 9 vs 1 degrees of success' });
+    const res: any = await fire({ merchantSkill: 90, playerRoll: 1, merchantRoll: 85 });
+    expect(res.data.playerWins).toBe(true);
+    expect(res.data.resultDescription).toBe('Player wins - 9 vs 1 degrees of success');
+  });
+
+  it('both fail with equal degrees is a genuine tie and stays untouched', async () => {
+    install({ success: false, player: skillTest('Player Haggle', 10, 95), merchant: skillTest('Merchant Haggle', 10, 95), resultDescription: 'Tie - no price change' });
+    const res: any = await fire({ playerSkill: 10, merchantSkill: 10, playerRoll: 95, merchantRoll: 95 });
+    expect(res.data.playerWins).toBe(false);
+    expect(res.data.resultDescription).toBe('Tie - no price change');
+  });
+});
+
 // ── 9. Price-calc BP mapping (F08 regression — live smoke 2026-07-10) ────────────
 // The calculators return per-UNIT keys (finalPricePerUnit/totalPrice), NOT the availability
 // pipeline's per-EP keys (finalPricePerEP/totalValue) the handler originally read — which made
@@ -517,5 +572,144 @@ describe('price-calc BP mapping (F08 regression)', () => {
     const res: any = await dispatchModuleTradingPlaces({ action: 'calc-purchase-price', cargoName: 'Grain', quantity: 10 });
     expect(res.data.totalBp).not.toBe(576000);
     expect(res.data.pricePerEpBp).not.toBe(5760);
+  });
+});
+
+// ── 11. Cargo-name pre-resolution (BUG-533) ───────────────────────────────────────
+// The engine's calculators THROW on unknown cargo (purchase-price-calculator.js:69, read
+// 2026-07-10) instead of returning null, so an unresolved name would bypass targetNotFound()
+// and surface TRADING_PLACES_HANDLER_ERROR (live-reproduced 2026-07-10). The handlers must
+// resolve against dm.getCargoTypes() — the very array the engine searches (live-captured
+// 2026-07-10 probe macro: [{name:'Wine/Brandy', category:'Luxury Goods'}, ...]) — BEFORE the
+// engine call, so unknown cargo keeps the promised TARGET_NOT_FOUND token and casing variants
+// still price.
+
+describe('cargo-name pre-resolution (BUG-533)', () => {
+  it('unknown cargo → TRADING_PLACES_TARGET_NOT_FOUND and the throwing engine is never reached', async () => {
+    const { settings } = makeSettings();
+    const engine = makeEngine();
+    (globalThis as any).game = makeGame({ settings, seasonIndex: 0 });
+    installModuleApi({ engine, dataManager: makeDataManager() });
+
+    const res: any = await dispatchModuleTradingPlaces({ action: 'calc-purchase-price', cargoName: 'Warpstone', quantity: 10 });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('TRADING_PLACES_TARGET_NOT_FOUND');
+    expect(engine.calculatePurchasePrice).not.toHaveBeenCalled();
+  });
+
+  it('calc-sale-price with unknown cargo → TRADING_PLACES_TARGET_NOT_FOUND, engine never reached', async () => {
+    const { settings } = makeSettings();
+    const engine = makeEngine();
+    (globalThis as any).game = makeGame({ settings, seasonIndex: 0 });
+    installModuleApi({ engine, dataManager: makeDataManager() });
+
+    const res: any = await dispatchModuleTradingPlaces({ action: 'calc-sale-price', cargoName: 'Warpstone', quantity: 10, settlement: 'Altdorf' });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('TRADING_PLACES_TARGET_NOT_FOUND');
+    expect(engine.calculateSalePrice).not.toHaveBeenCalled();
+  });
+
+  it('case-insensitive match resolves to the dataset\'s own name and passes THAT to the engine', async () => {
+    const { settings } = makeSettings();
+    const engine = makeEngine();
+    (globalThis as any).game = makeGame({ settings, seasonIndex: 0 });
+    installModuleApi({ engine, dataManager: makeDataManager() });
+
+    const res: any = await dispatchModuleTradingPlaces({ action: 'calc-purchase-price', cargoName: 'grain', quantity: 10 });
+    expect(res.success).toBe(true);
+    expect(res.data.cargoName).toBe('Grain'); // dataset casing echoed, not caller casing
+    expect(engine.calculatePurchasePrice.mock.calls[0]![0]).toBe('Grain');
+  });
+});
+
+// ── 12. check-availability enrichment mapping (BUG-535) ──────────────────────────
+// The handler originally read cargoSize.totalEP/.size — keys that never existed on live
+// returns (the engine returns totalSize in BOTH the legacy and plan paths,
+// trading-engine.js:774/851) — and trusted engine cargoTypes, whose pipeline branch reads
+// slot.cargoType||slot.label while the pipeline actually emits slot.cargo.name
+// (cargo-availability-pipeline.js:347-357), degrading to [] on retired-'Trade' settlements.
+// Live-reproduced 2026-07-10 (ALTDORF available:true, cargoTypes:[], cargoSizeEp:null).
+// These pin: totalSize is read, and cargo names are recovered from availabilityCheck.plan.slots
+// when the engine's own cargoTypes come back empty.
+
+describe('check-availability enrichment (BUG-535)', () => {
+  it('available result populates cargoTypes from engine strings and cargoSizeEp from totalSize', async () => {
+    const { settings } = makeSettings();
+    (globalThis as any).game = makeGame({ settings, seasonIndex: 0 });
+    installModuleApi({ engine: makeEngine(), dataManager: makeDataManager() });
+
+    const res: any = await dispatchModuleTradingPlaces({ action: 'check-availability', settlement: 'Altdorf', availabilityRoll: 42 });
+    expect(res.success).toBe(true);
+    expect(res.data.available).toBe(true);
+    expect(res.data.cargoTypes).toEqual(['Grain']);
+    expect(res.data.cargoSizeEp).toBe(80);
+  });
+
+  it('empty engine cargoTypes recovers deduped names from plan slots, dropping Unavailable placeholders', async () => {
+    const { settings } = makeSettings();
+    (globalThis as any).game = makeGame({ settings, seasonIndex: 0 });
+    const engine = makeEngine({
+      performCompleteAvailabilityCheck: vi.fn(async () => ({
+        available: true,
+        availabilityCheck: {
+          chance: 100,
+          roll: 1,
+          // Pipeline-path check shape: _processAvailabilityPlan attaches the full plan
+          // (trading-engine.js:477-486); slots carry cargo.name (cargo-availability-pipeline.js:347-357).
+          plan: {
+            slots: [
+              { slotNumber: 1, cargo: { name: 'Wine/Brandy' } },
+              { slotNumber: 2, cargo: { name: 'Grain' } },
+              { slotNumber: 3, cargo: { name: 'Grain' } },
+              { slotNumber: 4, cargo: { name: 'Unavailable' } },
+            ],
+          },
+        },
+        cargoTypes: [], // engine's slot.cargoType||slot.label misread → always empty on the pipeline path
+        cargoSize: { totalSize: 640, baseMultiplier: 8, sizeMultiplier: 80 },
+      })),
+    });
+    installModuleApi({ engine, dataManager: makeDataManager() });
+
+    const res: any = await dispatchModuleTradingPlaces({ action: 'check-availability', settlement: 'Altdorf', availabilityRoll: 1 });
+    expect(res.success).toBe(true);
+    expect(res.data.cargoTypes).toEqual(['Wine/Brandy', 'Grain']);
+    expect(res.data.cargoSizeEp).toBe(640);
+  });
+
+  it('LIVE path (engine has no pipeline → legacy [] cargoTypes, no plan): names come from dm.getCargoAvailabilityPipeline().run', async () => {
+    // Live config: new TradingEngine(dataManager) with no options (main.js:1167) → legacy path,
+    // no plan on the check, cargoTypes [] (lowercase dataset flags never match the legacy map).
+    // The UI's canonical source is dm.getCargoAvailabilityPipeline().run({settlement, season,
+    // rollPercentile}) → { settlement, slotPlan, candidateTable, slots } with slots[].cargo.name
+    // (BuyingFlow.js:105 + cargo-availability-pipeline.js:107-113, read 2026-07-11).
+    const { settings } = makeSettings();
+    (globalThis as any).game = makeGame({ settings, seasonIndex: 0 });
+    const engine = makeEngine({
+      performCompleteAvailabilityCheck: vi.fn(async () => ({
+        available: true,
+        availabilityCheck: { chance: 100, roll: 1 },
+        cargoTypes: [],
+        cargoSize: { totalSize: 100, baseMultiplier: 10, sizeMultiplier: 10 },
+      })),
+    });
+    const pipelineRun = vi.fn(async () => ({
+      settlement: { name: 'ALTDORF' },
+      slotPlan: {},
+      candidateTable: {},
+      slots: [{ slotNumber: 1, cargo: { name: 'Luxury Goods' } }, { slotNumber: 2, cargo: { name: 'Grain' } }],
+    }));
+    installModuleApi({
+      engine,
+      dataManager: makeDataManager({ getCargoAvailabilityPipeline: () => ({ run: pipelineRun }) }),
+    });
+
+    const res: any = await dispatchModuleTradingPlaces({ action: 'check-availability', settlement: 'Altdorf', availabilityRoll: 1 });
+    expect(res.success).toBe(true);
+    expect(res.data.cargoTypes).toEqual(['Luxury Goods', 'Grain']);
+    expect(res.data.cargoSizeEp).toBe(100);
+    // The pipeline was driven with a deterministic rollPercentile, never Foundry chat rolls.
+    expect(pipelineRun).toHaveBeenCalledTimes(1);
+    expect(typeof pipelineRun.mock.calls[0]![0].rollPercentile).toBe('function');
   });
 });
