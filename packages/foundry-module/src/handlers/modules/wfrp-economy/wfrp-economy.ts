@@ -4,11 +4,13 @@
 // Always-registered umbrella. requireModuleActive('wfrp4e-economy') is the FIRST active-state check —
 // RETURNS the MODULE_NOT_ACTIVE envelope, never throws (v1 Phase 1 contract).
 //
-// 29 actions across 10 idioms (capability_audit/wfrp4e-economy.md + phase6_pre_plan.md §Action surface;
+// 35 actions across 11 idioms (capability_audit/wfrp4e-economy.md + phase6_pre_plan.md §Action surface;
 // unified-ledger idiom — record-transaction / delete-account — added Phase 2, wfrp_economy_system_v1_prd.md
-// §10; levy-and-burn idiom — apply-levies / money-to-burn — added Phase 4, same PRD §10). ALL financial
-// state lives in world-scoped game settings (economies / bankers / bankAccounts / stockPortfolios /
-// transactionLogs / levies / recordedStashes). The 9 transactional writes are driven by runtime-importing
+// §10; levy-and-burn idiom — apply-levies / money-to-burn — added Phase 4, same PRD §10; banking-and-income
+// idiom — invest / resolve-investment / list-investments / stash-deposit / stash-withdraw / accrue-interest
+// — added Phase 5, same PRD §10). ALL financial state lives in world-scoped game settings (economies /
+// bankers / bankAccounts / stockPortfolios / transactionLogs / levies / recordedStashes /
+// endeavourInvestments). The 9 transactional writes are driven by runtime-importing
 // the module's SocketHandler and calling its AWAITED process method DIRECTLY:
 //
 //   ⚠ ROUTING DEVIATIONS (phase6_pre_plan §Write access — verified against socket-handler.js):
@@ -52,6 +54,49 @@
 // Both functions apply their own writes (native money-item debits + fork transaction-log append) and are
 // expected to have ALREADY verified persistence internally; `persistedCheckFailed` on a verdict entry
 // lets this handler surface a DP-16-equivalent NOT_PERSISTED without re-deriving the check.
+//
+// banking-and-income (invest / resolve-investment / list-investments / stash-deposit / stash-withdraw /
+// accrue-interest) delegates to the fork's OWN headless, dialog-free banking engine
+// (src/banking/banking-engine.js — Phase 1 of the same plan) via the same runtimeImport idiom. Investments
+// live in a standalone `endeavourInvestments` world setting (accounts carry no per-account rate — Phase 5's
+// falsified PRD premise, see the plan's Design Decision D2). DIALOG-PATH: the engine is contractually
+// dialog-free (Phase 1 acceptance: zero Dialog/prompt control flow) — this handler never awaits a path
+// that could open a Foundry dialog.
+//
+// Engine contract (fixed here at MCP-authoring time; Phase 1 implements TO this shape):
+//   investDeposit({ actorId, rate, amountBp, economyId?, bankId? }) => Promise<{
+//     investmentId: string; principalBp: number; walletBalanceBp: number;
+//     persistedCheckFailed?: boolean; detail?: string;
+//   }>
+//   resolveInvestment({ investmentId, d100Roll }) => Promise<{
+//     notFound?: true;
+//     actorId: string; actorName: string | null; bankrupt: boolean; payoutBp: number;
+//     principalBp: number; accruedBp: number; walletBalanceBp: number;
+//     persistedCheckFailed?: boolean; detail?: string;
+//   }>
+//   listInvestments({ actorId?, activeOnly? }) => Promise<Array<{
+//     investmentId, actorId, actorName, rate, principalBp, accruedBp, economyId, bankId, active
+//   }>>
+//   stashDeposit({ actorId, amountBp }) => Promise<{
+//     stashBalanceBp: number; walletBalanceBp: number; persistedCheckFailed?: boolean; detail?: string;
+//   }>
+//   stashWithdraw({ actorId, d100Roll }) => Promise<{
+//     notFound?: true;
+//     lost: boolean; amountBp: number; walletBalanceBp: number;
+//     persistedCheckFailed?: boolean; detail?: string;
+//   }>
+//   accrueInterest({ economyId?, dryRun }) => Promise<{
+//     cycleApplied: true; lastCycleAt: string;
+//     investmentVerdicts: Array<{ investmentId, actorId, actorName, accruedDeltaBp, accruedBp, persistedCheckFailed?, detail? }>;
+//     accountVerdicts: Array<{ accountId, actorId, actorName, economyId, bankId, accruedDeltaBp, newBalanceBp, persistedCheckFailed?, detail? }>;
+//     loanReminders: Array<{ accountId, actorId, actorName, totalOwedBp }>;
+//   }>
+// CYCLE SEMANTICS (Phase 5b, ADR-U3, plan D1/D7): NOT worldTime-elapsed-month gated. Every call accrues one
+// abstract GM-declared cycle to every eligible entity — there is no "caught up" no-op shape. `cycleApplied`
+// is always `true`; `lastCycleAt` is a display-only ISO stamp, never a gate. A second immediate call pays
+// again. `runEconomicCycle` (rentals + stock fluctuation, duties d/e) stays module-UI-only this phase — NOT
+// exposed via MCP (D7 revisit if a headless composer needs it).
+// Same firstPersistFailure/notPersisted surfacing convention as levy-and-burn above.
 
 import { requireModuleActive } from '../_shared/require-module-active.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
@@ -87,6 +132,11 @@ const WRITE_ACTIONS = new Set([
   'delete-account',
   'apply-levies',
   'money-to-burn',
+  'invest',
+  'resolve-investment',
+  'stash-deposit',
+  'stash-withdraw',
+  'accrue-interest',
 ]);
 
 // ── Local helpers ──────────────────────────────────────────────────────────────
@@ -174,6 +224,8 @@ const importTransactionLogger = (): Promise<any> =>
   runtimeImport(`/modules/${MODULE_ID}/src/utils/transaction-logger.js`).then((m) => m.TransactionLogger);
 const importLevyEngine = (): Promise<any> =>
   runtimeImport(`/modules/${MODULE_ID}/src/levies/levy-engine.js`);
+const importBankingEngine = (): Promise<any> =>
+  runtimeImport(`/modules/${MODULE_ID}/src/banking/banking-engine.js`);
 
 function walletBalance(actorId: string, economyId: string | undefined): number {
   return Number(getGame()?.financial?.wallet?.getBalance?.(actorId, economyId ?? '') ?? 0);
@@ -264,6 +316,19 @@ export async function dispatchModuleWfrpEconomy(data: unknown): Promise<Envelope
         return await handleApplyLevies(input);
       case 'money-to-burn':
         return await handleMoneyToBurn(input);
+      // ── banking-and-income (Phase 5) ──
+      case 'invest':
+        return await handleInvest(input);
+      case 'resolve-investment':
+        return await handleResolveInvestment(input);
+      case 'list-investments':
+        return await handleListInvestments(input);
+      case 'stash-deposit':
+        return await handleStashDeposit(input);
+      case 'stash-withdraw':
+        return await handleStashWithdraw(input);
+      case 'accrue-interest':
+        return await handleAccrueInterest(input);
       default: {
         const _exhaustive: never = input;
         return { success: false, error: `WFRP_ECONOMY_UNKNOWN_ACTION: ${String((_exhaustive as any)?.action)}` };
@@ -598,7 +663,9 @@ async function handleRequestLoan(input: RequestLoanInput): Promise<Envelope<unkn
     currency: economy.currency,
     banker,
     amount: input.amountBp,
-    interestRate: input.interestRate,
+    // Published contract takes interestRate as a PERCENT (e.g. 5 = 5%); the module stores loan.interest
+    // as a FRACTION (socket-handler.js:780-781). Convert here; undefined falls through to bank.loanRate.
+    interestRate: input.interestRate != null ? input.interestRate / 100 : undefined,
     loanAction: 'request',
   });
 
@@ -606,7 +673,7 @@ async function handleRequestLoan(input: RequestLoanInput): Promise<Envelope<unkn
   if (!after?.loan?.active || Number(after.loan.amount) !== input.amountBp) {
     return notPersisted(`loan not active/wrong amount after request (loan=${JSON.stringify(after?.loan ?? null)})`);
   }
-  notify.updated('wfrp-economy', actorName(account.actorId) ?? account.actorId, { summary: `loan ${input.amountBp} BP @ ${after.loan.interest}% on ${input.accountId}` });
+  notify.updated('wfrp-economy', actorName(account.actorId) ?? account.actorId, { summary: `loan ${input.amountBp} BP @ ${(Number(after.loan.interest) * 100).toFixed(2)}% on ${input.accountId}` });
   return {
     success: true,
     data: { action: 'request-loan', accountId: input.accountId, amountBp: input.amountBp, loanAmount: Number(after.loan.amount), loanActive: true, accountBalance: Number(after.balance ?? 0) },
@@ -625,16 +692,20 @@ async function handleRepayLoan(input: RepayLoanInput): Promise<Envelope<unknown>
   // false WFRP_ECONOMY_NOT_PERSISTED on a repay that actually succeeded.
   const beforeBalance = Number(account.balance ?? 0);
   const beforeLoanAmount = Number(account.loan.amount ?? 0);
+  // account.loan.interest is a FRACTION (0.1 = 10%), per the module's own storage convention
+  // (socket-handler.js:780-781 explicit comment, consistent with bank.loanRate). BUG-542: the old
+  // formula divided by 100 as if it were a percent → ~100x undercharge vs the module's math.
   const interest = Number(account.loan.interest ?? 0);
-  // The module is interest-bearing: a full payoff costs principal × (1 + interest/100). A repay below that
-  // is a valid PARTIAL repayment (reduces principal, loan stays active) — not a failure.
-  const totalOwed = beforeLoanAmount + (beforeLoanAmount * interest) / 100;
+  // The module is interest-bearing: a full payoff costs round(principal × (1 + interest)) — mirror of
+  // socket-handler.js:817. A repay below that is a valid PARTIAL repayment (reduces principal, loan
+  // stays active) — not a failure.
+  const totalOwed = Math.round(beforeLoanAmount * (1 + interest));
   if (input.amountBp > beforeBalance) {
     return notPersisted(`repay of ${input.amountBp} BP exceeds account balance ${beforeBalance} BP`);
   }
   if (input.amountBp > totalOwed) {
     return notPersisted(
-      `repay of ${input.amountBp} BP exceeds total owed ${totalOwed.toFixed(2)} BP (principal ${beforeLoanAmount} + ${interest}% interest); the module rejects over-repayment`,
+      `repay of ${input.amountBp} BP exceeds total owed ${totalOwed} BP (principal ${beforeLoanAmount} + ${(interest * 100).toFixed(2)}% interest); the module rejects over-repayment`,
     );
   }
   const economy = findEconomy(input.economyId);
@@ -950,6 +1021,9 @@ async function handleListTransactions(input: ListTxInput): Promise<Envelope<unkn
     actorName: l?.actorName ?? null,
     economyId: l?.economyId ?? null,
     bankId: l?.bankId ?? null,
+    // Phase5b validate: rows STORE bankName (engine G4 resolves it via findBank) but the
+    // projection dropped it — task 1.2's probe asserts non-null bankName on engine rows here.
+    bankName: l?.bankName ?? null,
     amount: Number(l?.amount ?? 0),
     amountDisplay: l?.amountDisplay ?? null,
     // Phase4 validate F12: rows STORE targetActorId/Name (ledger.ts resolves them) but the
@@ -1162,5 +1236,211 @@ async function handleMoneyToBurn(input: MoneyToBurnInput): Promise<Envelope<unkn
   return {
     success: true,
     data: { action: 'money-to-burn', dryRun, verdicts, refused },
+  };
+}
+
+// ── banking-and-income (Phase 5, wfrp_economy_system) ───────────────────────────
+//
+// All six DELEGATE to the fork's own headless banking-engine.js (engine-contract comment at the top of
+// this file). The engine owns arithmetic, endeavourInvestments/recordedStashes persistence, and its own
+// DP-16-equivalent checks; this handler validates actor/wallet pre-conditions up front (mirroring the
+// deposit/withdraw pre-validation above — the module returns silently on shortfall, so we reject early
+// with a readable message instead), confirm-gates the two roll-resolved ops (D11: they can total-loss a
+// holding), and surfaces `persistedCheckFailed` as WFRP_ECONOMY_NOT_PERSISTED without re-deriving the
+// engine's internal math.
+
+type InvestInput = Extract<WfrpEconomyInputType, { action: 'invest' }>;
+async function handleInvest(input: InvestInput): Promise<Envelope<unknown>> {
+  if (!getGame()?.actors?.get?.(input.actorId)) return targetNotFound(`actor "${input.actorId}" not found`);
+  const wb = walletBalance(input.actorId, input.economyId);
+  if (input.amountBp > wb) return notPersisted(`invest of ${input.amountBp} BP exceeds wallet balance ${wb} BP (actor ${input.actorId})`);
+
+  const BankingEngine = await importBankingEngine();
+  const result = await BankingEngine.investDeposit({
+    actorId: input.actorId,
+    rate: input.rate,
+    amountBp: input.amountBp,
+    economyId: input.economyId,
+    bankId: input.bankId,
+  });
+
+  if (result?.insufficientFunds) {
+    // G1 — defensive: the pre-check above already guards this path; kept in sync with the engine
+    // contract in case that guard is ever loosened.
+    return notPersisted(`invest of ${input.amountBp} BP exceeds wallet balance ${result.walletBalanceBp} BP (actor ${input.actorId})`);
+  }
+  if (result?.persistedCheckFailed) {
+    return notPersisted(`invest for actor "${input.actorId}" failed persistence check: ${result?.detail ?? 'unknown'}`);
+  }
+  notify.created('wfrp-economy', actorName(input.actorId) ?? input.actorId, {
+    summary: `invested ${input.amountBp} BP @ rate ${input.rate}% (${result.investmentId})`,
+  });
+  return {
+    success: true,
+    data: {
+      action: 'invest',
+      investmentId: result.investmentId,
+      actorId: input.actorId,
+      rate: input.rate,
+      principalBp: Number(result.principalBp ?? input.amountBp),
+      economyId: input.economyId ?? null,
+      bankId: input.bankId ?? null,
+      walletBalanceBp: Number(result.walletBalanceBp ?? walletBalance(input.actorId, input.economyId)),
+    },
+  };
+}
+
+type ResolveInvestmentInput = Extract<WfrpEconomyInputType, { action: 'resolve-investment' }>;
+async function handleResolveInvestment(input: ResolveInvestmentInput): Promise<Envelope<unknown>> {
+  if (input.confirm !== true) {
+    return confirmRequired(
+      `resolve-investment "${input.investmentId}" can total-loss the investment (RAW d100Roll <= rate = bankrupt, no payout). Re-call with confirm:true.`,
+    );
+  }
+  const BankingEngine = await importBankingEngine();
+  const result = await BankingEngine.resolveInvestment({ investmentId: input.investmentId, d100Roll: input.d100Roll });
+
+  if (result?.notFound) return targetNotFound(`investment "${input.investmentId}" not found or already resolved`);
+  if (result?.invalidRoll) {
+    // G2 — defensive: the shared Zod schema already constrains d100Roll to an integer 1-100.
+    return notPersisted(`resolve-investment "${input.investmentId}" received an invalid d100Roll (${result.d100Roll})`);
+  }
+  if (result?.persistedCheckFailed) {
+    return notPersisted(`resolve-investment "${input.investmentId}" failed persistence check: ${result?.detail ?? 'unknown'}`);
+  }
+  notify.updated('wfrp-economy', result.actorName ?? result.actorId, {
+    summary: result.bankrupt
+      ? `investment ${input.investmentId} bankrupt (d100=${input.d100Roll} <= rate) — total loss`
+      : `investment ${input.investmentId} paid out ${result.payoutBp} BP`,
+  });
+  return {
+    success: true,
+    data: {
+      action: 'resolve-investment',
+      investmentId: input.investmentId,
+      actorId: result.actorId,
+      bankrupt: Boolean(result.bankrupt),
+      payoutBp: Number(result.payoutBp ?? 0),
+      principalBp: Number(result.principalBp ?? 0),
+      accruedBp: Number(result.accruedBp ?? 0),
+      walletBalanceBp: Number(result.walletBalanceBp ?? 0),
+    },
+  };
+}
+
+type ListInvestmentsInput = Extract<WfrpEconomyInputType, { action: 'list-investments' }>;
+async function handleListInvestments(input: ListInvestmentsInput): Promise<Envelope<unknown>> {
+  const BankingEngine = await importBankingEngine();
+  const raw = await BankingEngine.listInvestments({ actorId: input.actorId, activeOnly: input.activeOnly });
+  const list = (Array.isArray(raw) ? raw : []).map((i: any) => ({
+    investmentId: i?.investmentId,
+    actorId: i?.actorId,
+    actorName: i?.actorName ?? actorName(i?.actorId),
+    rate: Number(i?.rate ?? 0),
+    principalBp: Number(i?.principalBp ?? 0),
+    accruedBp: Number(i?.accruedBp ?? 0),
+    economyId: i?.economyId ?? null,
+    bankId: i?.bankId ?? null,
+    active: Boolean(i?.active),
+    lastCycleAt: i?.lastCycleAt ?? null, // Phase 5b, D9 — display-only ISO stamp, never a gate.
+  }));
+  return { success: true, data: { action: 'list-investments', count: list.length, investments: list } };
+}
+
+type StashDepositInput = Extract<WfrpEconomyInputType, { action: 'stash-deposit' }>;
+async function handleStashDeposit(input: StashDepositInput): Promise<Envelope<unknown>> {
+  if (!getGame()?.actors?.get?.(input.actorId)) return targetNotFound(`actor "${input.actorId}" not found`);
+  const wb = walletBalance(input.actorId, undefined);
+  if (input.amountBp > wb) return notPersisted(`stash-deposit of ${input.amountBp} BP exceeds wallet balance ${wb} BP (actor ${input.actorId})`);
+
+  const BankingEngine = await importBankingEngine();
+  const result = await BankingEngine.stashDeposit({ actorId: input.actorId, amountBp: input.amountBp });
+
+  if (result?.insufficientFunds) {
+    // G1 — defensive: the pre-check above already guards this path.
+    return notPersisted(`stash-deposit of ${input.amountBp} BP exceeds wallet balance ${result.walletBalanceBp} BP (actor ${input.actorId})`);
+  }
+  if (result?.persistedCheckFailed) {
+    return notPersisted(`stash-deposit for actor "${input.actorId}" failed persistence check: ${result?.detail ?? 'unknown'}`);
+  }
+  notify.updated('wfrp-economy', actorName(input.actorId) ?? input.actorId, {
+    summary: `stashed ${input.amountBp} BP (total ${result.stashBalanceBp} BP)`,
+  });
+  return {
+    success: true,
+    data: {
+      action: 'stash-deposit',
+      actorId: input.actorId,
+      amountBp: input.amountBp,
+      stashBalanceBp: Number(result.stashBalanceBp ?? 0),
+      walletBalanceBp: Number(result.walletBalanceBp ?? walletBalance(input.actorId, undefined)),
+    },
+  };
+}
+
+type StashWithdrawInput = Extract<WfrpEconomyInputType, { action: 'stash-withdraw' }>;
+async function handleStashWithdraw(input: StashWithdrawInput): Promise<Envelope<unknown>> {
+  if (input.confirm !== true) {
+    return confirmRequired(
+      `stash-withdraw for actor "${input.actorId}" is WHOLE-STASH (no partial) and can total-loss on a bad roll (RAW d100Roll <= 10). Re-call with confirm:true.`,
+    );
+  }
+  if (!getGame()?.actors?.get?.(input.actorId)) return targetNotFound(`actor "${input.actorId}" not found`);
+
+  const BankingEngine = await importBankingEngine();
+  const result = await BankingEngine.stashWithdraw({ actorId: input.actorId, d100Roll: input.d100Roll });
+
+  if (result?.notFound) return targetNotFound(`actor "${input.actorId}" has no recorded stash`);
+  if (result?.invalidRoll) {
+    // G2 — defensive: the shared Zod schema already constrains d100Roll to an integer 1-100.
+    return notPersisted(`stash-withdraw for actor "${input.actorId}" received an invalid d100Roll (${result.d100Roll})`);
+  }
+  if (result?.persistedCheckFailed) {
+    return notPersisted(`stash-withdraw for actor "${input.actorId}" failed persistence check: ${result?.detail ?? 'unknown'}`);
+  }
+  notify.updated('wfrp-economy', actorName(input.actorId) ?? input.actorId, {
+    summary: result.lost ? `stash LOST (d100=${input.d100Roll} <= 10)` : `withdrew stash ${result.amountBp} BP`,
+  });
+  return {
+    success: true,
+    data: {
+      action: 'stash-withdraw',
+      actorId: input.actorId,
+      lost: Boolean(result.lost),
+      amountBp: Number(result.amountBp ?? 0),
+      walletBalanceBp: Number(result.walletBalanceBp ?? 0),
+    },
+  };
+}
+
+type AccrueInterestInput = Extract<WfrpEconomyInputType, { action: 'accrue-interest' }>;
+async function handleAccrueInterest(input: AccrueInterestInput): Promise<Envelope<unknown>> {
+  const BankingEngine = await importBankingEngine();
+  const dryRun = input.dryRun === true;
+  const result = await BankingEngine.accrueInterest({ economyId: input.economyId, dryRun });
+
+  const investmentVerdicts = Array.isArray(result?.investmentVerdicts) ? result.investmentVerdicts : [];
+  const accountVerdicts = Array.isArray(result?.accountVerdicts) ? result.accountVerdicts : [];
+  const loanReminders = Array.isArray(result?.loanReminders) ? result.loanReminders : [];
+
+  if (!dryRun) {
+    const failure = firstPersistFailure(investmentVerdicts) ?? firstPersistFailure(accountVerdicts);
+    if (failure) return notPersisted(`accrue-interest verdict for actor "${failure.actorId}" failed persistence check: ${failure.detail}`);
+  }
+
+  notify.updated('wfrp-economy', 'interest', {
+    summary: `${dryRun ? '[dry-run] ' : ''}accrue-interest: cycleApplied=${result?.cycleApplied === true}, ${investmentVerdicts.length} investment(s), ${accountVerdicts.length} account(s), ${loanReminders.length} loan reminder(s)`,
+  });
+  return {
+    success: true,
+    data: {
+      action: 'accrue-interest',
+      dryRun,
+      cycleApplied: result?.cycleApplied === true,
+      lastCycleAt: result?.lastCycleAt ?? null,
+      investmentVerdicts,
+      accountVerdicts,
+      loanReminders,
+    },
   };
 }

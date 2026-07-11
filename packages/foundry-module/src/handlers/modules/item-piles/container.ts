@@ -171,12 +171,35 @@ export async function handleUpdatePile(input: UpdatePileInput): Promise<Envelope
     // BUG-448#6(c): non-scalar fields (tablesForPopulate, openTimes, merchantColumns,
     // vaultAccess, overheadCost) String()-compare as "[object Object]" and always match —
     // JSON.stringify-compare objects/arrays instead.
-    const flagData: any = API.getActorFlagData(pileUuid);
+    let flagData: any = API.getActorFlagData(pileUuid);
     const sameValue = (a: unknown, b: unknown): boolean =>
       (typeof b === 'object' && b !== null) ? JSON.stringify(a) === JSON.stringify(b) : String(a) === String(b);
-    const drift = Object.keys(updateData)
+    const computeDrift = (flags: any): string[] => Object.keys(updateData)
       .filter((k) => k !== '_simpleCalendarWarning')
-      .filter((k) => !sameValue(flagData?.[k], updateData[k]));
+      .filter((k) => !sameValue(flags?.[k], updateData[k]));
+    let drift = computeDrift(flagData);
+    // BUG-539: upstream updateItemPileData writes token-level pile flags only via
+    // Actor#getActiveTokens(), which is viewed-canvas-scene-only — for a token-pile on a
+    // non-viewed scene the token write silently no-ops (the actor-level write still lands,
+    // which is what polluted the shared Default Item Pile actor). getActorFlagData reads
+    // the TokenDocument's flags for token targets, so on drift write the merged flag data
+    // onto the TokenDocument directly (canvas-render-independent, same treatment as
+    // BUG-444's delete path) and re-verify.
+    if (drift.length > 0 && tokenMatch) {
+      const tokenDoc: any = await (globalThis as any).fromUuid(pileUuid);
+      if (tokenDoc?.documentName === 'Token') {
+        const requested: Record<string, unknown> = {};
+        for (const k of Object.keys(updateData)) {
+          if (k !== '_simpleCalendarWarning') requested[k] = updateData[k];
+        }
+        const merged = { ...(flagData ?? {}), ...requested };
+        const write: Record<string, unknown> = { 'flags.item-piles.data': merged };
+        if (!tokenDoc.actorLink) write.delta = { 'flags.item-piles.data': merged };
+        await tokenDoc.update(write);
+        flagData = API.getActorFlagData(pileUuid);
+        drift = computeDrift(flagData);
+      }
+    }
     if (drift.length > 0) {
       return notPersisted(ErrorTokens.ITEM_PILES_UPDATE_NOT_PERSISTED, `pile ${pileUuid} field(s) did not persist: ${drift.join(', ')}`);
     }

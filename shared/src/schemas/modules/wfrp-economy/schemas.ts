@@ -7,9 +7,11 @@
 // `.strict()` ZodObject (NO `.refine`/`.transform` — a ZodEffects breaks the discriminatedUnion);
 // cross-field rules (confirm-gate, large-transfer threshold, target resolution) live in the handler.
 //
-// 29 actions across 10 idioms (capability_audit/wfrp4e-economy.md + phase6_pre_plan.md §Action surface;
+// 35 actions across 11 idioms (capability_audit/wfrp4e-economy.md + phase6_pre_plan.md §Action surface;
 // record-transaction + delete-account added Phase 2, wfrp_economy_system_v1_prd.md §10; apply-levies +
-// money-to-burn added Phase 4, same PRD §10 — HC8-compliant, action count grows, tool count stays 1):
+// money-to-burn added Phase 4, same PRD §10; invest/resolve-investment/list-investments/stash-deposit/
+// stash-withdraw/accrue-interest added Phase 5, same PRD §10 — HC8-compliant, action count grows, tool
+// count stays 1):
 //   stand-up-an-economy (6): list-economies / get-economy / list-bankers / create-economy /
 //     update-economy / delete-economy
 //   open-a-bank-account (2): create-account / list-accounts
@@ -23,6 +25,11 @@
 //   levy-and-burn (2): apply-levies / money-to-burn — DELEGATE to the wfrp4e-economy fork's own
 //     src/levies/levy-engine.js (headless, dialog-free); the same engine powers the Economy Manager's
 //     Levies tab buttons. Character-only (npc/creature refuse — engine-side guard).
+//   banking-and-income (6): invest / resolve-investment / list-investments / stash-deposit /
+//     stash-withdraw / accrue-interest — DELEGATE to the wfrp4e-economy fork's own
+//     src/banking/banking-engine.js (headless, dialog-free), Phase 5 of wfrp_economy_system_v1_prd.md §10.
+//     Investments are a standalone `endeavourInvestments` world setting (accounts carry no per-account
+//     rate); rolls (rate/d100) are pre-computed by the caller and passed in, never rolled by this layer.
 //
 // All monetary amounts are integer Brass Pennies (BP); 1 GC = 240 BP, 1 SS = 12 BP.
 //
@@ -39,6 +46,7 @@ const sourceAccountId = z.string().min(1); // BRANDED-ID-EXEMPT:sourceAccountId 
 const destinationAccountId = z.string().min(1); // BRANDED-ID-EXEMPT:destinationAccountId — module-internal id, not a Foundry document id
 const stockId = z.string().min(1); // BRANDED-ID-EXEMPT:stockId — module-internal id, not a Foundry document id
 const propertyId = z.string().min(1); // BRANDED-ID-EXEMPT:propertyId — module-internal id, not a Foundry document id
+const investmentId = z.string().min(1); // BRANDED-ID-EXEMPT:investmentId — module-internal id, not a Foundry document id
 
 const amountBp = z.number().int().positive(); // integer Brass Pennies, > 0
 const quantity = z.number().int().positive();
@@ -189,6 +197,45 @@ export const WfrpEconomyInput = z.discriminatedUnion('action', [
       actorIds: z.array(ActorId).min(1),
       dryRun: z.boolean().optional(), // preview only, zero writes — no confirm required
       confirm: z.boolean().optional(), // required to execute (dryRun:false/undefined) — mirrors delete-economy
+    })
+    .strict(),
+
+  // ── banking-and-income idiom (Phase 5, wfrp_economy_system) ─────────────────────
+  z
+    .object({
+      action: z.literal('invest'),
+      actorId: ActorId,
+      rate: z.number().int().min(1).max(10), // RAW Banking endeavour interest rate, percent per elapsed Imperial month
+      amountBp,
+      economyId: economyId.optional(), // omit = a stash-like "reputable institution" abstraction (world-global rows)
+      bankId: bankId.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal('resolve-investment'),
+      investmentId: investmentId,
+      d100Roll: z.number().int().min(1).max(100), // pre-rolled by the caller; <= rate = RAW bankruptcy (total loss)
+      confirm: z.boolean().optional(), // required — can total-loss the investment
+    })
+    .strict(),
+  z
+    .object({ action: z.literal('list-investments'), actorId: ActorId.optional(), activeOnly: z.boolean().optional() })
+    .strict(),
+  z.object({ action: z.literal('stash-deposit'), actorId: ActorId, amountBp }).strict(),
+  z
+    .object({
+      action: z.literal('stash-withdraw'),
+      actorId: ActorId,
+      d100Roll: z.number().int().min(1).max(100), // pre-rolled by the caller; <= 10 = RAW total stash loss
+      confirm: z.boolean().optional(), // required — whole-stash withdrawal, can total-loss
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal('accrue-interest'),
+      economyId: economyId.optional(), // omit = process all economies' bank accounts + every endeavour investment
+      dryRun: z.boolean().optional(), // preview only, zero writes — no confirm required
     })
     .strict(),
 ]);

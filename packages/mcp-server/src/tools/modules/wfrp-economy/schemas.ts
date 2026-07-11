@@ -3,10 +3,11 @@
 // CCR-5: Zod input validation lives package-local on the foundry-module side. The mcp-server tool layer
 // only needs typed response shapes for this.query<T> (DP-15 — never <any>).
 //
-// Warhammer Economy v1.0.0. 29 actions across 10 idioms (unified-ledger: record-transaction /
-// delete-account added Phase 2; levy-and-burn: apply-levies / money-to-burn added Phase 4,
-// wfrp_economy_system_v1_prd.md §10). Each handler return carries `action` as a discriminant;
-// WfrpEconomyResult is their union so the tool stays typed without <any>.
+// Warhammer Economy v1.0.0. 35 actions across 11 idioms (unified-ledger: record-transaction /
+// delete-account added Phase 2; levy-and-burn: apply-levies / money-to-burn added Phase 4;
+// banking-and-income: invest / resolve-investment / list-investments / stash-deposit / stash-withdraw /
+// accrue-interest added Phase 5, wfrp_economy_system_v1_prd.md §10). Each handler return carries `action`
+// as a discriminant; WfrpEconomyResult is their union so the tool stays typed without <any>.
 
 export interface WfrpEconomySummary {
   id: string;
@@ -270,6 +271,102 @@ export interface WfrpEconomyMoneyToBurnResult {
   refused: WfrpEconomyRefusal[];
 }
 
+// ── banking-and-income idiom (Phase 5, wfrp_economy_system) ──────────────────────
+
+export interface WfrpEconomyInvestResult {
+  action: 'invest';
+  investmentId: string;
+  actorId: string;
+  rate: number;
+  principalBp: number;
+  economyId: string | null;
+  bankId: string | null;
+  walletBalanceBp: number;
+}
+
+export interface WfrpEconomyResolveInvestmentResult {
+  action: 'resolve-investment';
+  investmentId: string;
+  actorId: string;
+  bankrupt: boolean;
+  payoutBp: number;
+  principalBp: number;
+  accruedBp: number;
+  walletBalanceBp: number;
+}
+
+export interface WfrpEconomyInvestmentEntry {
+  investmentId: string;
+  actorId: string;
+  actorName: string | null;
+  rate: number;
+  principalBp: number;
+  accruedBp: number;
+  economyId: string | null;
+  bankId: string | null;
+  active: boolean;
+  lastCycleAt: string | null; // Phase 5b, D9 — display-only ISO stamp, never a gate.
+}
+
+export interface WfrpEconomyListInvestmentsResult {
+  action: 'list-investments';
+  count: number;
+  investments: WfrpEconomyInvestmentEntry[];
+}
+
+export interface WfrpEconomyStashDepositResult {
+  action: 'stash-deposit';
+  actorId: string;
+  amountBp: number;
+  stashBalanceBp: number;
+  walletBalanceBp: number;
+}
+
+export interface WfrpEconomyStashWithdrawResult {
+  action: 'stash-withdraw';
+  actorId: string;
+  lost: boolean;
+  amountBp: number;
+  walletBalanceBp: number;
+}
+
+export interface WfrpEconomyInvestmentAccrualVerdict {
+  investmentId: string;
+  actorId: string;
+  actorName: string | null;
+  accruedDeltaBp: number;
+  accruedBp: number;
+}
+
+export interface WfrpEconomyAccountAccrualVerdict {
+  accountId: string;
+  actorId: string;
+  actorName: string | null;
+  economyId: string | null;
+  bankId: string | null;
+  accruedDeltaBp: number;
+  newBalanceBp: number;
+}
+
+export interface WfrpEconomyLoanReminder {
+  accountId: string;
+  actorId: string;
+  actorName: string | null;
+  totalOwedBp: number;
+}
+
+export interface WfrpEconomyAccrueInterestResult {
+  action: 'accrue-interest';
+  dryRun: boolean;
+  // CYCLE SEMANTICS (Phase 5b, ADR-U3): cycleApplied is always true — there is no worldTime-elapsed-month
+  // gate, so calling this action twice in a row accrues twice. lastCycleAt is a display-only ISO stamp.
+  cycleApplied: true;
+  lastCycleAt: string | null;
+  investmentVerdicts: WfrpEconomyInvestmentAccrualVerdict[];
+  accountVerdicts: WfrpEconomyAccountAccrualVerdict[];
+  loanReminders: WfrpEconomyLoanReminder[];
+}
+
 export type WfrpEconomyResult =
   | WfrpEconomyListEconomiesResult
   | WfrpEconomyGetEconomyResult
@@ -295,9 +392,15 @@ export type WfrpEconomyResult =
   | WfrpEconomyRecordTransactionResult
   | WfrpEconomyDeleteAccountResult
   | WfrpEconomyApplyLeviesResult
-  | WfrpEconomyMoneyToBurnResult;
+  | WfrpEconomyMoneyToBurnResult
+  | WfrpEconomyInvestResult
+  | WfrpEconomyResolveInvestmentResult
+  | WfrpEconomyListInvestmentsResult
+  | WfrpEconomyStashDepositResult
+  | WfrpEconomyStashWithdrawResult
+  | WfrpEconomyAccrueInterestResult;
 
-// ── The action enum (mirrors the foundry-module discriminatedUnion literals; 29 actions) ──
+// ── The action enum (mirrors the foundry-module discriminatedUnion literals; 35 actions) ──
 
 export const WFRP_ECONOMY_ACTIONS = [
   'list-economies',
@@ -329,6 +432,12 @@ export const WFRP_ECONOMY_ACTIONS = [
   'delete-account',
   'apply-levies',
   'money-to-burn',
+  'invest',
+  'resolve-investment',
+  'list-investments',
+  'stash-deposit',
+  'stash-withdraw',
+  'accrue-interest',
 ] as const;
 
 export type WfrpEconomyAction = (typeof WFRP_ECONOMY_ACTIONS)[number];

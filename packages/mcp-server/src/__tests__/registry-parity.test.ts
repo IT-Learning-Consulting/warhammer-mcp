@@ -36,8 +36,10 @@ function snapshotNames(): string[] {
 }
 
 describe('declarative tool registry parity (R8.1/R8.2)', () => {
-  it('getRegistration() union has exactly 110 names with no duplicates', () => {
+  it('getRegistration() union has exactly 114 names with no duplicates', () => {
     const names = instances().flatMap((t) => t.getRegistration().map((r) => r.name));
+    // wfrp_economy_system Phase 5: 114 → 114 (HC8 — 6 new actions on the existing module-wfrp-economy
+    // umbrella; zero new tools, count unchanged).
     // wfrp_layer_expansion_v1 Phase 6 (P-10): 100 → 101 with the availability-test primitive.
     // wfrp_layer_expansion_v1 Phase 7 (P-11): 101 → 102 with the travel-distance primitive.
     // module_integration_v2 Phase 4: 102 → 103 with the module-perceptive umbrella.
