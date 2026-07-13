@@ -208,6 +208,7 @@ describe('GM gate', () => {
     { action: 'remove-cargo', cargoId: 'c1' },
     { action: 'deduct-currency', actorId: 'a1', amountBp: 100 },
     { action: 'add-currency', actorId: 'a1', amountBp: 100 },
+    { action: 'set-price-modifiers', global: 1.5 },
   ];
 
   for (const call of writeCalls) {
@@ -711,5 +712,239 @@ describe('check-availability enrichment (BUG-535)', () => {
     // The pipeline was driven with a deterministic rollPercentile, never Foundry chat rolls.
     expect(pipelineRun).toHaveBeenCalledTimes(1);
     expect(typeof pipelineRun.mock.calls[0]![0].rollPercentile).toBe('function');
+  });
+});
+
+// ── 13. merchant-generation (wfrp_economy_system Phase 7) ────────────────────────
+// Mock-shape citation: generateMerchant()'s return object — merchant-generator.js:209-244 (id, type,
+// settlement, cargoType, skill/hagglingSkill/baseSkill/skillDescription, quantity, basePrice/finalPrice,
+// equilibrium{supply,demand,ratio}, specialBehaviors, metadata) — read 2026-07-13. The live dataset
+// (trading-config.json) carries skillDistribution but NO specialSourceBehaviors key; getSpecialBehaviors()
+// (merchant-generator.js:369-381) throws on `this.config.specialSourceBehaviors[flag]` when that key is
+// entirely absent AND the settlement has non-empty flags — the handler's defensive merge
+// (`{specialSourceBehaviors: {}, ...liveConfig}`) is what this suite pins.
+
+class FakeMerchantGenerator {
+  constructor(
+    public dm: any,
+    public config: any,
+  ) {}
+  generateMerchant(settlement: any, cargoName: string, merchantType: string, equilibrium: any) {
+    // Exercises the exact defensive-merge trap: throws if config.specialSourceBehaviors is missing
+    // and the settlement carries flags (live Altdorf-shaped fixture below has flags:['Trade']).
+    if (settlement.flags?.length) {
+      for (const flag of settlement.flags) {
+        void this.config.specialSourceBehaviors[flag]; // TypeError if specialSourceBehaviors is undefined
+      }
+    }
+    return {
+      id: 'altdorf-grain-producer-1',
+      type: merchantType,
+      settlement: { name: settlement.name, region: settlement.region, size: settlement.size, wealth: settlement.wealth },
+      cargoType: cargoName,
+      skill: 55,
+      hagglingSkill: 55,
+      baseSkill: 55,
+      skillDescription: 'Competent (solid trading experience)',
+      quantity: 12,
+      basePrice: 10,
+      finalPrice: 11.5,
+      equilibrium: { supply: equilibrium.supply, demand: equilibrium.demand, ratio: equilibrium.supply / equilibrium.demand },
+      specialBehaviors: [],
+      metadata: { generated: '2026-07-13T00:00:00.000Z', generatorVersion: '3.0.0' },
+    };
+  }
+  generateMerchantSkill(_settlement: any, percentile: number) {
+    return percentile >= 90 ? 82 : 38;
+  }
+  getMerchantSkillDescription(skill: number) {
+    return skill >= 80 ? 'Expert (master of the trade)' : 'Apprentice (basic bargaining skills)';
+  }
+}
+
+describe('merchant-generation (narrative-only prices)', () => {
+  afterEach(() => {
+    delete (globalThis as any).MerchantGenerator;
+  });
+
+  it('happy path: returns narrative-only prices, no unflagged price field, defensive specialSourceBehaviors merge survives a flagged settlement', async () => {
+    const { settings } = makeSettings();
+    (globalThis as any).game = makeGame({ settings });
+    (globalThis as any).MerchantGenerator = FakeMerchantGenerator;
+    installModuleApi({
+      dataManager: makeDataManager({
+        getAllSettlements: () => [{ name: 'Altdorf', region: 'Reikland', size: 'City', wealth: 5, flags: ['Trade'] }],
+        getTradingConfig: () => ({ skillDistribution: { baseSkill: 25 } }), // live shape: no specialSourceBehaviors key
+      }),
+    });
+
+    const res: any = await dispatchModuleTradingPlaces({
+      action: 'merchant-generation',
+      settlement: 'Altdorf',
+      cargoType: 'Grain',
+      merchantType: 'producer',
+    });
+
+    expect(res.success).toBe(true);
+    expect(res.data.pricesAreNarrativeOnly).toBe(true);
+    expect(res.data.narrativePriceHintBase).toBe(10);
+    expect(res.data.narrativePriceHintFinal).toBe(11.5);
+    expect(res.data).not.toHaveProperty('basePrice');
+    expect(res.data).not.toHaveProperty('finalPrice');
+    expect(res.data.skill).toBe(55);
+    expect(res.data.quantity).toBe(12);
+    expect(res.data.settlement.name).toBe('Altdorf');
+  });
+
+  it('unknown settlement → TRADING_PLACES_TARGET_NOT_FOUND, generator never constructed', async () => {
+    const { settings } = makeSettings();
+    (globalThis as any).game = makeGame({ settings });
+    (globalThis as any).MerchantGenerator = FakeMerchantGenerator;
+    installModuleApi({ dataManager: makeDataManager({ getAllSettlements: () => [] }) });
+
+    const res: any = await dispatchModuleTradingPlaces({
+      action: 'merchant-generation',
+      settlement: 'Nowhereton',
+      cargoType: 'Grain',
+      merchantType: 'producer',
+    });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('TRADING_PLACES_TARGET_NOT_FOUND');
+  });
+
+  it('unknown cargo type → TRADING_PLACES_TARGET_NOT_FOUND', async () => {
+    const { settings } = makeSettings();
+    (globalThis as any).game = makeGame({ settings });
+    (globalThis as any).MerchantGenerator = FakeMerchantGenerator;
+    installModuleApi({
+      dataManager: makeDataManager({ getAllSettlements: () => [{ name: 'Altdorf', region: 'Reikland', size: 'City', wealth: 5 }] }),
+    });
+
+    const res: any = await dispatchModuleTradingPlaces({
+      action: 'merchant-generation',
+      settlement: 'Altdorf',
+      cargoType: 'Warpstone',
+      merchantType: 'seeker',
+    });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('TRADING_PLACES_TARGET_NOT_FOUND');
+  });
+
+  it('percentile override changes the generated skill (percentile:95 beats percentile:10)', async () => {
+    const { settings } = makeSettings();
+    (globalThis as any).game = makeGame({ settings });
+    (globalThis as any).MerchantGenerator = FakeMerchantGenerator;
+    installModuleApi({
+      dataManager: makeDataManager({
+        getAllSettlements: () => [{ name: 'Altdorf', region: 'Reikland', size: 'City', wealth: 5 }],
+      }),
+    });
+
+    const high: any = await dispatchModuleTradingPlaces({
+      action: 'merchant-generation',
+      settlement: 'Altdorf',
+      cargoType: 'Grain',
+      merchantType: 'producer',
+      percentile: 95,
+    });
+    const low: any = await dispatchModuleTradingPlaces({
+      action: 'merchant-generation',
+      settlement: 'Altdorf',
+      cargoType: 'Grain',
+      merchantType: 'producer',
+      percentile: 10,
+    });
+    expect(high.data.skill).toBe(82);
+    expect(low.data.skill).toBe(38);
+  });
+
+  it('window.MerchantGenerator missing → TRADING_PLACES_MODULE_API_UNAVAILABLE (module not loaded)', async () => {
+    const { settings } = makeSettings();
+    (globalThis as any).game = makeGame({ settings });
+    installModuleApi({ dataManager: makeDataManager() });
+
+    const res: any = await dispatchModuleTradingPlaces({
+      action: 'merchant-generation',
+      settlement: 'Altdorf',
+      cargoType: 'Grain',
+      merchantType: 'producer',
+    });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('TRADING_PLACES_MODULE_API_UNAVAILABLE');
+  });
+});
+
+// ── 14. price dial (get/set-price-modifiers) ─────────────────────────────────────
+
+describe('price dial (get/set-price-modifiers)', () => {
+  it('default identity: unset setting → {global:1, perCargo:{}}', async () => {
+    const { settings } = makeSettings();
+    (globalThis as any).game = makeGame({ settings });
+
+    const res: any = await dispatchModuleTradingPlaces({ action: 'get-price-modifiers' });
+    expect(res.success).toBe(true);
+    expect(res.data.global).toBe(1);
+    expect(res.data.perCargo).toEqual({});
+  });
+
+  it('set global:1.5 round-trips through get-price-modifiers', async () => {
+    const { settings } = makeSettings();
+    (globalThis as any).game = makeGame({ settings });
+
+    const setRes: any = await dispatchModuleTradingPlaces({ action: 'set-price-modifiers', global: 1.5 });
+    expect(setRes.success).toBe(true);
+    expect(setRes.data.previous.global).toBe(1);
+    expect(setRes.data.current.global).toBe(1.5);
+
+    const getRes: any = await dispatchModuleTradingPlaces({ action: 'get-price-modifiers' });
+    expect(getRes.data.global).toBe(1.5);
+  });
+
+  it('perCargo overrides MERGE into the existing map across successive calls (never replace wholesale)', async () => {
+    const { settings } = makeSettings();
+    (globalThis as any).game = makeGame({ settings });
+
+    await dispatchModuleTradingPlaces({ action: 'set-price-modifiers', perCargo: { Grain: 1.2 } });
+    const res: any = await dispatchModuleTradingPlaces({ action: 'set-price-modifiers', perCargo: { Wine: 0.9 } });
+    expect(res.data.current.perCargo).toEqual({ Grain: 1.2, Wine: 0.9 });
+  });
+
+  it('reset:true restores the default, ignoring global/perCargo on the same call', async () => {
+    const { settings } = makeSettings({ tradingPriceModifiers: { global: 2, perCargo: { Grain: 1.5 } } });
+    (globalThis as any).game = makeGame({ settings });
+
+    const res: any = await dispatchModuleTradingPlaces({ action: 'set-price-modifiers', reset: true, global: 3 });
+    expect(res.success).toBe(true);
+    expect(res.data.current).toEqual({ global: 1, perCargo: {} });
+  });
+
+  it('global <= 0 → rejected at the Zod layer (TRADING_PLACES_INVALID_INPUT), zero writes', async () => {
+    const { settings } = makeSettings();
+    (globalThis as any).game = makeGame({ settings });
+
+    const res: any = await dispatchModuleTradingPlaces({ action: 'set-price-modifiers', global: -1 });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('TRADING_PLACES_INVALID_INPUT');
+    expect(settings.set).not.toHaveBeenCalled();
+  });
+
+  it('calc-purchase-price scales ×1.5 with global:1.5 set, and discloses priceModifierApplied', async () => {
+    const { settings } = makeSettings();
+    (globalThis as any).game = makeGame({ settings, seasonIndex: 0 });
+    installModuleApi({ engine: makeEngine(), dataManager: makeDataManager() });
+
+    const baseline: any = await dispatchModuleTradingPlaces({ action: 'calc-purchase-price', cargoName: 'Grain', quantity: 10 });
+    expect(baseline.data.totalBp).toBe(240);
+    expect(baseline.data).not.toHaveProperty('priceModifierApplied');
+
+    await dispatchModuleTradingPlaces({ action: 'set-price-modifiers', global: 1.5 });
+    const scaled: any = await dispatchModuleTradingPlaces({ action: 'calc-purchase-price', cargoName: 'Grain', quantity: 10 });
+    expect(scaled.data.totalBp).toBe(360); // 240 × 1.5
+    expect(scaled.data.priceModifierApplied).toEqual({ global: 1.5 });
+
+    await dispatchModuleTradingPlaces({ action: 'set-price-modifiers', reset: true });
+    const backToBaseline: any = await dispatchModuleTradingPlaces({ action: 'calc-purchase-price', cargoName: 'Grain', quantity: 10 });
+    expect(backToBaseline.data.totalBp).toBe(240);
+    expect(backToBaseline.data).not.toHaveProperty('priceModifierApplied');
   });
 });

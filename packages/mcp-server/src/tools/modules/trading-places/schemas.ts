@@ -3,7 +3,7 @@
 // CCR-5: Zod input validation lives in @foundry-mcp/shared (TradingPlacesInput). The mcp-server tool
 // layer only needs typed response shapes for this.query<T> (DP-15 — never <any>).
 //
-// Trading Places v0.3.0. 16 actions (PRD R3.2's 11 + 5 extras, Q&A 2026-07-10). Each handler return
+// Trading Places v0.3.0. 19 actions (PRD R3.2's 11 + 5 extras, Q&A 2026-07-10; +3 Phase 7). Each handler return
 // carries `action` as a discriminant; TradingPlacesResult is their union so the tool stays typed.
 // All monetary amounts are integer Brass Pennies (BP); 1 GC = 240 BP, 1 SS = 12 BP.
 
@@ -64,6 +64,12 @@ export interface TradingPlacesCheckAvailabilityResult {
   cargoSizeEp: number | null;
 }
 
+/** GM-tunable price-dial multiplier applied post-calcToBp; omitted from calc results when neutral (both 1). */
+export interface TradingPlacesPriceModifierApplied {
+  global: number;
+  perCargo?: number;
+}
+
 export interface TradingPlacesPriceResult {
   action: 'calc-purchase-price' | 'calc-sale-price';
   cargoName: string;
@@ -74,6 +80,8 @@ export interface TradingPlacesPriceResult {
   quality: string;
   pricePerEpBp: number;
   totalBp: number;
+  /** Disclosed only when the price dial (global × perCargo) is non-neutral for this cargo. */
+  priceModifierApplied?: TradingPlacesPriceModifierApplied;
   /** The engine's full calculation object, passed through for breakdown/audit. */
   calculation: Record<string, unknown>;
 }
@@ -168,6 +176,43 @@ export interface TradingPlacesCurrencyWriteResult {
   ledgered: boolean;
 }
 
+/**
+ * Merchant object returned by the module's own MerchantGenerator, minus its price fields — those are
+ * NEVER coin-accurate (stale fallback table, non-calcToBp unit convention) and are surfaced only as
+ * narrativePriceHint* with pricesAreNarrativeOnly:true. Real coin always via calc-purchase-price/
+ * calc-sale-price + deduct/add-currency.
+ */
+export interface TradingPlacesMerchantGenerationResult {
+  action: 'merchant-generation';
+  id: string;
+  type: 'producer' | 'seeker';
+  settlement: { name: string; region: string | null; size: string | number | null; wealth: number | null };
+  cargoType: string;
+  skill: number;
+  hagglingSkill: number;
+  baseSkill: number;
+  skillDescription: string;
+  quantity: number;
+  narrativePriceHintBase: number;
+  narrativePriceHintFinal: number;
+  pricesAreNarrativeOnly: true;
+  equilibrium: { supply: number; demand: number; ratio: number };
+  specialBehaviors: string[];
+  metadata: Record<string, unknown>;
+}
+
+export interface TradingPlacesPriceModifiersResult {
+  action: 'get-price-modifiers';
+  global: number;
+  perCargo: Record<string, number>;
+}
+
+export interface TradingPlacesSetPriceModifiersResult {
+  action: 'set-price-modifiers';
+  previous: { global: number; perCargo: Record<string, number> };
+  current: { global: number; perCargo: Record<string, number> };
+}
+
 export type TradingPlacesResult =
   | TradingPlacesListSettlementsResult
   | TradingPlacesListCargoTypesResult
@@ -182,9 +227,12 @@ export type TradingPlacesResult =
   | TradingPlacesGetCurrentCargoResult
   | TradingPlacesGetTransactionHistoryResult
   | TradingPlacesGetCurrencyResult
-  | TradingPlacesCurrencyWriteResult;
+  | TradingPlacesCurrencyWriteResult
+  | TradingPlacesMerchantGenerationResult
+  | TradingPlacesPriceModifiersResult
+  | TradingPlacesSetPriceModifiersResult;
 
-// ── The action enum (mirrors the shared discriminatedUnion literals; 16 actions) ──
+// ── The action enum (mirrors the shared discriminatedUnion literals; 19 actions) ──
 
 export const TRADING_PLACES_ACTIONS = [
   'list-settlements',
@@ -203,6 +251,9 @@ export const TRADING_PLACES_ACTIONS = [
   'get-currency',
   'deduct-currency',
   'add-currency',
+  'merchant-generation',
+  'get-price-modifiers',
+  'set-price-modifiers',
 ] as const;
 
 export type TradingPlacesAction = (typeof TRADING_PLACES_ACTIONS)[number];

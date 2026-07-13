@@ -6,7 +6,7 @@
 // `.transform` — a ZodEffects breaks the discriminatedUnion); cross-field rules (remove-cargo's
 // id-or-name requirement, the >= 4800 BP confirm-gate on currency writes) live in the handler.
 //
-// 16 actions (PRD R3.2's 11 + 5 cheap extras, Q&A 2026-07-10):
+// 19 actions (PRD R3.2's 11 + 5 cheap extras, Q&A 2026-07-10; +3 wfrp_economy_system Phase 7):
 //   reference-data (2): list-settlements / list-cargo-types
 //   season (2): get-season / set-season
 //   market-math (3): check-availability / calc-purchase-price / calc-sale-price
@@ -17,6 +17,10 @@
 //   bookkeeping (1): get-transaction-history
 //   currency (3): get-currency / deduct-currency / add-currency — REAL wfrp4e actor money-item
 //     writes (coinValue-keyed), ledgered via wfrp-economy `source:'trade'`
+//   merchant-generation (1): merchant-generation — narrative-only prices (pricesAreNarrativeOnly);
+//     real coin always via calc-purchase-price/calc-sale-price + deduct/add-currency.
+//   price-dial (2): get-price-modifiers / set-price-modifiers — GM-tunable multiplier applied
+//     post-calcToBp in the two calc actions; stored under the warhammer-mcp namespace (ADR-U10).
 //
 // All monetary amounts are integer Brass Pennies (BP); 1 GC = 240 BP, 1 SS = 12 BP. The module's
 // own cargo store also uses canonical BP (currency-display.js:45-53 identity conversion).
@@ -33,6 +37,8 @@ const d100Roll = z.number().int().min(1).max(100); // pre-rolled 1d100 total
 const skillValue = z.number().int().min(0).max(100); // WFRP skill target number
 const epQuantity = z.number().int().positive(); // Encumbrance Points
 const amountBp = z.number().int().positive(); // integer Brass Pennies, > 0
+const percentileOverride = z.number().min(1).max(100); // merchant-generation skill-roll override
+const priceMultiplier = z.number().positive(); // price-dial multiplier, > 0 (1 = neutral)
 
 export const TradingPlacesInput = z.discriminatedUnion('action', [
   // ── reference data ──────────────────────────────────────────────────────────────
@@ -143,6 +149,30 @@ export const TradingPlacesInput = z.discriminatedUnion('action', [
       amountBp,
       description: z.string().min(1).optional(),
       confirm: z.boolean().optional(),
+    })
+    .strict(),
+
+  // ── merchant generation (wfrp_economy_system Phase 7) — narrative-only prices; real coin ──
+  // always routes through calc-purchase-price/calc-sale-price + deduct/add-currency, never this. ──
+  z
+    .object({
+      action: z.literal('merchant-generation'),
+      settlement: z.string().min(1),
+      cargoType: z.string().min(1),
+      merchantType: z.enum(['producer', 'seeker']),
+      percentile: percentileOverride.optional(), // overrides the skill roll; omitted → module's own Math.random()
+    })
+    .strict(),
+
+  // ── price dial (wfrp_economy_system Phase 7) — GM-tunable multiplier applied post-calcToBp; ──
+  // stored under the warhammer-mcp namespace (ADR-U10 portability), NOT a trading-places setting. ──
+  z.object({ action: z.literal('get-price-modifiers') }).strict(),
+  z
+    .object({
+      action: z.literal('set-price-modifiers'),
+      global: priceMultiplier.optional(),
+      perCargo: z.record(z.string().min(1), priceMultiplier).optional(),
+      reset: z.boolean().optional(), // true restores {global:1, perCargo:{}}, ignoring global/perCargo
     })
     .strict(),
 ]);

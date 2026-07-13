@@ -55,6 +55,9 @@ describe('declarative tool registry parity (R8.1/R8.2)', () => {
     // adds none — zero new code (see phase13_pre_plan.md §13D.5).
     // wfrp_economy_system Phase 3: 113 → 114 with the module-trading-places umbrella (HC8 — the
     // PRD's single allowed new tool; 16 actions over Trading Places v0.3.0).
+    // wfrp_economy_system Phase 6: 114 → 114 (HC8 — 9 new actions [legitimate-business-enterprises
+    // idiom] + a declared flag on apply-levies, on the existing module-wfrp-economy umbrella;
+    // zero new tools, count unchanged — action count 35 → 44).
     expect(names.length).toBe(114);
     expect(new Set(names).size).toBe(114); // no duplicate registrations (Risk 8.A)
   });

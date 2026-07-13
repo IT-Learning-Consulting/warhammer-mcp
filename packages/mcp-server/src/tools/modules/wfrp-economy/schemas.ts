@@ -3,11 +3,14 @@
 // CCR-5: Zod input validation lives package-local on the foundry-module side. The mcp-server tool layer
 // only needs typed response shapes for this.query<T> (DP-15 — never <any>).
 //
-// Warhammer Economy v1.0.0. 35 actions across 11 idioms (unified-ledger: record-transaction /
+// Warhammer Economy v1.0.0. 44 actions across 12 idioms (unified-ledger: record-transaction /
 // delete-account added Phase 2; levy-and-burn: apply-levies / money-to-burn added Phase 4;
 // banking-and-income: invest / resolve-investment / list-investments / stash-deposit / stash-withdraw /
-// accrue-interest added Phase 5, wfrp_economy_system_v1_prd.md §10). Each handler return carries `action`
-// as a discriminant; WfrpEconomyResult is their union so the tool stays typed without <any>.
+// accrue-interest added Phase 5; legitimate-business-enterprises: list-enterprises / get-enterprise /
+// create-enterprise / connect-enterprise-actor / enterprise-income / enterprise-event /
+// enterprise-pay-interest / enterprise-repay-debt / enterprise-upgrade added Phase 6,
+// wfrp_economy_system_v1_prd.md §10). Each handler return carries `action` as a discriminant;
+// WfrpEconomyResult is their union so the tool stays typed without <any>.
 
 export interface WfrpEconomySummary {
   id: string;
@@ -192,6 +195,7 @@ export interface WfrpEconomyTransactionEntry {
   bankId: string | null;
   amount: number;
   amountDisplay: string | number | null;
+  enterpriseId: string | null;
   description: string;
   date: string | null;
 }
@@ -251,6 +255,9 @@ export interface WfrpEconomyRefusal {
 export interface WfrpEconomyApplyLeviesResult {
   action: 'apply-levies';
   dryRun: boolean;
+  // ADR-U3 extension: true when the caller passed declared:true (GM-declared apply — no elapsed-time
+  // gate, charges once per call, stamps state to the CURRENT levy index).
+  declared: boolean;
   elapsedWeeks: number;
   weekIndex: number | null;
   verdicts: WfrpEconomyLevyVerdict[];
@@ -367,6 +374,126 @@ export interface WfrpEconomyAccrueInterestResult {
   loanReminders: WfrpEconomyLoanReminder[];
 }
 
+// ── legitimate-business-enterprises idiom (Phase 6, wfrp_economy_system) ─────────
+
+export interface WfrpEconomyEnterpriseSummary {
+  instanceId: string;
+  name: string;
+  profileId: string | null;
+  backing: 'create' | 'link' | 'data-only';
+  actorUuid: string | null;
+  ownerActorId: string | null;
+  ownerActorName: string | null;
+  level: number;
+  upkeep: number;
+  debtPrincipalBp: number;
+  escalationTier: number;
+}
+
+export interface WfrpEconomyUnconnectedActor {
+  actorId: string;
+  actorUuid: string;
+  name: string;
+}
+
+export interface WfrpEconomyListEnterprisesResult {
+  action: 'list-enterprises';
+  unconnectedActors: boolean;
+  count: number;
+  enterprises: WfrpEconomyEnterpriseSummary[];
+  actors: WfrpEconomyUnconnectedActor[];
+}
+
+export interface WfrpEconomyIncomeModifier {
+  label: string;
+  skill: string;
+  tier: 'b' | 's' | 'g';
+  standing: number;
+}
+
+export interface WfrpEconomyEventTable {
+  uuid: string | null;
+  overrides: Array<{ band: [number, number]; text: string }>;
+}
+
+export interface WfrpEconomyGetEnterpriseResult {
+  action: 'get-enterprise';
+  instanceId: string;
+  name: string;
+  profileId: string | null;
+  backing: 'create' | 'link' | 'data-only';
+  actorUuid: string | null;
+  ownerActorId: string | null;
+  ownerActorName: string | null;
+  level: number;
+  upkeep: number;
+  incomeModifiers: WfrpEconomyIncomeModifier[];
+  eventTable: WfrpEconomyEventTable;
+  debt: { principalBp: number; escalationTier: number };
+  createdAt: string | null;
+}
+
+export interface WfrpEconomyCreateEnterpriseResult {
+  action: 'create-enterprise';
+  instanceId: string | null;
+  actorUuid: string | null;
+  backing: 'create' | 'link' | 'data-only';
+  debtPrincipalBp: number;
+  walletBalanceBp: number;
+}
+
+export interface WfrpEconomyConnectEnterpriseActorResult {
+  action: 'connect-enterprise-actor';
+  instanceId: string;
+  actorUuid: string | null;
+  alreadyConnected: boolean;
+}
+
+export interface WfrpEconomyEnterpriseIncomeResult {
+  action: 'enterprise-income';
+  enterpriseId: string;
+  payoutBp: number;
+  walletBalanceBp: number;
+}
+
+export interface WfrpEconomyEnterpriseEventResult {
+  action: 'enterprise-event';
+  enterpriseId: string;
+  text: string;
+  matchedOverride: boolean;
+}
+
+export interface WfrpEconomyEnterprisePayInterestResult {
+  action: 'enterprise-pay-interest';
+  enterpriseId: string;
+  paid: boolean;
+  escalationTier: number | null;
+  walletBalanceBp: number | null;
+}
+
+export interface WfrpEconomyEnterpriseRepayDebtResult {
+  action: 'enterprise-repay-debt';
+  enterpriseId: string;
+  principalBp: number;
+  walletBalanceBp: number;
+}
+
+export interface WfrpEconomyEnterpriseUpgradeResult {
+  action: 'enterprise-upgrade';
+  enterpriseId: string;
+  level: number;
+  newUpkeep: number;
+  debtPrincipalBp: number;
+  walletBalanceBp: number;
+}
+
+export interface WfrpEconomyDeleteEnterpriseResult {
+  action: 'delete-enterprise';
+  enterpriseId: string;
+  deleted: true;
+  name: string;
+}
+
 export type WfrpEconomyResult =
   | WfrpEconomyListEconomiesResult
   | WfrpEconomyGetEconomyResult
@@ -398,9 +525,19 @@ export type WfrpEconomyResult =
   | WfrpEconomyListInvestmentsResult
   | WfrpEconomyStashDepositResult
   | WfrpEconomyStashWithdrawResult
-  | WfrpEconomyAccrueInterestResult;
+  | WfrpEconomyAccrueInterestResult
+  | WfrpEconomyListEnterprisesResult
+  | WfrpEconomyGetEnterpriseResult
+  | WfrpEconomyCreateEnterpriseResult
+  | WfrpEconomyConnectEnterpriseActorResult
+  | WfrpEconomyEnterpriseIncomeResult
+  | WfrpEconomyEnterpriseEventResult
+  | WfrpEconomyEnterprisePayInterestResult
+  | WfrpEconomyEnterpriseRepayDebtResult
+  | WfrpEconomyEnterpriseUpgradeResult
+  | WfrpEconomyDeleteEnterpriseResult;
 
-// ── The action enum (mirrors the foundry-module discriminatedUnion literals; 35 actions) ──
+// ── The action enum (mirrors the foundry-module discriminatedUnion literals; 44 actions) ──
 
 export const WFRP_ECONOMY_ACTIONS = [
   'list-economies',
@@ -438,6 +575,16 @@ export const WFRP_ECONOMY_ACTIONS = [
   'stash-deposit',
   'stash-withdraw',
   'accrue-interest',
+  'list-enterprises',
+  'get-enterprise',
+  'create-enterprise',
+  'connect-enterprise-actor',
+  'enterprise-income',
+  'enterprise-event',
+  'enterprise-pay-interest',
+  'enterprise-repay-debt',
+  'enterprise-upgrade',
+  'delete-enterprise',
 ] as const;
 
 export type WfrpEconomyAction = (typeof WFRP_ECONOMY_ACTIONS)[number];

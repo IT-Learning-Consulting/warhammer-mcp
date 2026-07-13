@@ -5,8 +5,9 @@
 // inactive it returns MODULE_NOT_ACTIVE which BaseTool.query() converts to a throw → moduleNotActiveContent().
 // Pre-flight with module-probe.is-active trading-places.
 //
-// 16 actions across 7 idioms (reference-data, season, market-math, tests, cargo-hold, bookkeeping,
-// currency). Anchors: DP-15 (concrete this.query<TradingPlacesResult> — never <any>); R2.4 (errors via
+// 19 actions across 9 idioms (reference-data, season, market-math, tests, cargo-hold, bookkeeping,
+// currency, merchant-generation, price-dial — the last two added wfrp_economy_system Phase 7).
+// Anchors: DP-15 (concrete this.query<TradingPlacesResult> — never <any>); R2.4 (errors via
 // errorResponse); HC1 (money in text output renders the full tri-currency triple, zeros never hidden).
 // Currency writes are REAL wfrp4e actor money-item writes done by the handler itself (coinValue-keyed)
 // and ledgered via the wfrp-economy unified ledger with source:'trade' — the module's own SystemAdapter
@@ -49,7 +50,7 @@ function formatResult(d: TradingPlacesResult): string {
       return `${p}.check-availability: ${d.settlement} in ${d.season} (${d.seasonSource}) — ${d.available ? 'CARGO AVAILABLE' : 'no cargo'} (roll ${d.roll ?? 'module-internal'} vs ${d.chance}%)${d.available ? `; types: ${d.cargoTypes.join(', ') || '—'}; size ${d.cargoSizeEp ?? '?'} EP` : ''}.`;
     case 'calc-purchase-price':
     case 'calc-sale-price':
-      return `${p}.${d.action}: ${d.quantity} EP of ${d.cargoName}${d.settlement ? ` @ ${d.settlement}` : ''} (${d.season}, ${d.quality}) — total ${bp(d.totalBp)} (${bp(d.pricePerEpBp)}/EP, ${d.pricePerEpBp} BP).`;
+      return `${p}.${d.action}: ${d.quantity} EP of ${d.cargoName}${d.settlement ? ` @ ${d.settlement}` : ''} (${d.season}, ${d.quality}) — total ${bp(d.totalBp)} (${bp(d.pricePerEpBp)}/EP, ${d.pricePerEpBp} BP)${d.priceModifierApplied ? ` [price dial: global×${d.priceModifierApplied.global}${d.priceModifierApplied.perCargo ? ` × perCargo×${d.priceModifierApplied.perCargo}` : ''}]` : ''}.`;
     case 'haggle-test':
       return `${p}.haggle-test: ${d.playerWins ? 'PLAYER WINS' : 'MERCHANT WINS / NO CHANGE'} — ${d.resultDescription}`;
     case 'gossip-test':
@@ -67,6 +68,12 @@ function formatResult(d: TradingPlacesResult): string {
     case 'deduct-currency':
     case 'add-currency':
       return `${p}.${d.action}: ${bp(d.amountBp)} ${d.action === 'deduct-currency' ? 'deducted from' : 'added to'} ${d.actorName ?? d.actorId} — ${bp(d.previousTotalBp)} → ${bp(d.newTotalBp)}${d.ledgered ? ' (ledgered source:trade)' : ' (ledger row NOT appended — wfrp4e-economy inactive?)'}.`;
+    case 'merchant-generation':
+      return `${p}.merchant-generation: ${d.type} merchant at ${d.settlement.name} for ${d.cargoType} — skill ${d.skill} (${d.skillDescription}), quantity ${d.quantity} EP (prices are narrative-only, id ${d.id}).`;
+    case 'get-price-modifiers':
+      return `${p}.get-price-modifiers: global×${d.global}${Object.keys(d.perCargo).length ? `, perCargo: ${Object.entries(d.perCargo).map(([k, v]) => `${k}×${v}`).join(', ')}` : ' (no perCargo overrides)'}.`;
+    case 'set-price-modifiers':
+      return `${p}.set-price-modifiers: global ${d.previous.global} → ${d.current.global}; perCargo now ${Object.keys(d.current.perCargo).length} override(s) (persisted).`;
     default: {
       const _exhaustive: never = d;
       return `${p}: ${JSON.stringify(_exhaustive)}`;
@@ -109,9 +116,13 @@ CURRENCY: get/deduct/add-currency read/write the actor's wfrp4e money Items keye
 
 SEASON (CCR-CALENDAR): get-season derives from the Foundry world calendar when the calendar exposes a season index, else falls back to the module's manual currentSeason setting — the response's seasonSource field discloses which ('calendar' | 'module-setting'; 'explicit' when you passed season). Availability/price actions resolve season the same way unless an explicit season is passed.
 
-EXCLUDED BY DESIGN: UI opens (dialog-deadlock class), merchant generation (deferred to a later phase of this umbrella), and the module's compound buy path (validatePurchase/performPurchase — unreachable dead code, disposed 2026-07-10; orchestrate buys with the actions above instead).
+MERCHANT GENERATION: merchant-generation returns a narrative merchant (skill/quantity/personality flavor) from the module's own generator — its price fields are ALWAYS narrative-only (pricesAreNarrativeOnly:true, narrativePriceHintBase/Final) because the generator's price math predates the 20-cargo catalog and isn't calcToBp-compatible. Real coin for any merchant interaction still comes from calc-purchase-price/calc-sale-price + deduct/add-currency. percentile (1-100) optionally overrides the skill roll; equilibrium is a neutral {supply:1,demand:1} stub in v1.
 
-16 actions:
+PRICE DIAL: get-price-modifiers / set-price-modifiers manage a GM-tunable multiplier {global, perCargo} applied to calc-purchase-price/calc-sale-price AFTER calcToBp (default {global:1, perCargo:{}} — neutral, disclosed via priceModifierApplied only when non-neutral). set-price-modifiers is GM-gated, validates values > 0, merges perCargo keys into the existing map (global replaces), and reset:true restores the default.
+
+EXCLUDED BY DESIGN: UI opens (dialog-deadlock class), and the module's compound buy path (validatePurchase/performPurchase — unreachable dead code, disposed 2026-07-10; orchestrate buys with the actions above instead).
+
+19 actions:
 reference-data: list-settlements { region? } · list-cargo-types {}.
 season: get-season {} · set-season { season: spring|summer|autumn|winter }.
 market-math: check-availability { settlement, availabilityRoll, season? } · calc-purchase-price { cargoName, quantity, quality?, season?, isPartialPurchase?, haggleSuccess?, hasDealmakerTalent? } · calc-sale-price { cargoName, quantity, settlement, quality?, season?, haggleSuccess?, hasDealmakerTalent? }.
@@ -119,6 +130,8 @@ tests: haggle-test { playerSkill, merchantSkill, playerRoll, merchantRoll, hasDe
 cargo-hold: add-cargo { cargoName, quantity, totalCostBp, settlement, category?, season?, contraband? } · remove-cargo { cargoId? | cargoName?, quantity? } · get-current-cargo {}.
 bookkeeping: get-transaction-history { limit? }.
 currency: get-currency { actorId } · deduct-currency { actorId, amountBp, description?, confirm? } · add-currency { actorId, amountBp, description?, confirm? }.
+merchant-generation: merchant-generation { settlement, cargoType, merchantType: producer|seeker, percentile? }.
+price-dial: get-price-modifiers {} · set-price-modifiers { global?, perCargo?, reset? }.
 
 Example: { action: "check-availability", settlement: "Altdorf", availabilityRoll: 42 }`,
         inputSchema: {
@@ -149,6 +162,11 @@ Example: { action: "check-availability", settlement: "Altdorf", availabilityRoll
             amountBp: { type: 'number', description: 'Currency writes: amount in integer Brass Pennies (> 0).' },
             description: { type: 'string', description: 'Currency writes: ledger row description (default auto-generated).' },
             confirm: { type: 'boolean', description: 'Currency writes >= 4800 BP (20 GC): must be true to execute.' },
+            merchantType: { type: 'string', enum: ['producer', 'seeker'], description: 'merchant-generation (required): whether the merchant buys (seeker) or sells (producer) the cargo.' },
+            percentile: { type: 'number', description: 'merchant-generation: optional 1-100 override for the skill-roll percentile (omitted → the generator rolls its own).' },
+            global: { type: 'number', description: 'set-price-modifiers: global price multiplier (> 0; 1 = neutral). Omitted leaves the existing global unchanged.' },
+            perCargo: { type: 'object', description: 'set-price-modifiers: per-cargo-name multiplier overrides (> 0 each), merged into the existing map by key.' },
+            reset: { type: 'boolean', description: 'set-price-modifiers: true restores the default {global:1, perCargo:{}}, ignoring global/perCargo on the same call.' },
           },
           required: ['action'],
         },

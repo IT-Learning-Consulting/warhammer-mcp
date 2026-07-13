@@ -290,6 +290,17 @@ export class ModuleSettings {
       default: {},
     });
 
+    // wfrp_economy_system Phase 7 — GM-tunable price dial for module-trading-places
+    // calc-purchase-price/calc-sale-price (applied post-calcToBp). Lives under this module's own
+    // namespace (ADR-U10 portability), NOT a trading-places setting — trading-places renders no UI
+    // for it. {global, perCargo} both default to neutral (1 / {}).
+    game.settings.register(this.moduleId, 'tradingPriceModifiers', {
+      scope: 'world',
+      config: false,
+      type: Object,
+      default: { global: 1, perCargo: {} },
+    });
+
     // ============================================================================
     // SECTION: DIALOG CHIME — audible alert for MCP-triggered blocking dialogs
     // ============================================================================

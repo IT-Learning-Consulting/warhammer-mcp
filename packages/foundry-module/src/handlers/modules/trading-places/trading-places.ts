@@ -4,12 +4,13 @@
 // classes (TradingPlacesApplication and friends), none of which this handler imports or invokes.
 //
 // wfrp_economy_system Phase 3 — module-trading-places handler (Trading Places v0.3.0, WFRP4e
-// bulk-cargo trading — Death on the Reik algorithm).
+// bulk-cargo trading — Death on the Reik algorithm). wfrp_economy_system Phase 7 adds
+// merchant-generation + the price dial (get/set-price-modifiers); 16→19 actions.
 //
 // Always-registered umbrella. requireModuleActive('trading-places') is the FIRST active-state check —
 // RETURNS the MODULE_NOT_ACTIVE envelope, never throws (v1 Phase 1 contract).
 //
-// 16 actions across 7 idioms (phase3_pre_plan.md §Working primitives; PRD R3.1-R3.3):
+// 19 actions across 9 idioms (phase3_pre_plan.md §Working primitives; PRD R3.1-R3.3):
 //
 //   ⚠ ROUTING DEVIATIONS (phase3_pre_plan §Module defects — verified against module source):
 //     • Module singletons are reached ONLY via window.TradingPlaces.getDataManager()/getTradingEngine()
@@ -28,6 +29,13 @@
 //     • Season resolves calendar-first (CCR-CALENDAR): game.time.components.season is a NUMERIC INDEX
 //       into game.time.calendar.seasons.values (Imperial preset: 0=spring..3=winter); fall back to the
 //       module's currentSeason setting, disclosing the source via seasonSource.
+//     • merchant-generation (Phase 7): live-verified against merchant-generator.js — generateMerchant()
+//       reads ONLY config.skillDistribution (present in the live dataset) and config.specialSourceBehaviors
+//       (ABSENT live; getSpecialBehaviors() throws on a settlement with non-empty flags if that key is
+//       missing entirely). It does NOT read config.merchantCount or config.merchantPersonalities — those
+//       back a different method (calculateMerchantSlots) this handler never calls. The tradingConfig
+//       passed to `new MerchantGenerator()` is therefore defensively merged with a `specialSourceBehaviors:
+//       {}` fallback here, independent of whatever the trading-config.json dataset patch (task 1.4) adds.
 //
 // Ledger (CCR-LEDGER/HC5): every currency write appends a wfrp-economy unified-ledger row with
 // source:'trade' via recordEconomyTransaction (fail-open, append-after-verify, NO economyId — trade
@@ -45,12 +53,23 @@ import { recordEconomyTransaction } from '../wfrp-economy/ledger.js';
 
 const MODULE_ID = 'trading-places';
 const SETTING_SCOPE = 'trading-places';
+// The price dial lives under OUR OWN namespace (ADR-U10 portability), not a trading-places setting —
+// trading-places renders no UI for it and never reads it.
+const WARHAMMER_MCP_SCOPE = 'warhammer-mcp';
+const PRICE_MODIFIERS_SETTING = 'tradingPriceModifiers';
 const LARGE_TRANSFER_THRESHOLD = 4800; // 20 GC — currency writes at/above require confirm:true (CCR-4)
 const VALID_SEASONS = ['spring', 'summer', 'autumn', 'winter'] as const;
 
 // Write actions are GM-gated (warhammer-mcp runs as GM; world-setting + actor-item writes would fail or
 // silently no-op for a non-GM, which the post-write verify would surface as NOT_PERSISTED — reject early).
-const WRITE_ACTIONS = new Set(['set-season', 'add-cargo', 'remove-cargo', 'deduct-currency', 'add-currency']);
+const WRITE_ACTIONS = new Set([
+  'set-season',
+  'add-cargo',
+  'remove-cargo',
+  'deduct-currency',
+  'add-currency',
+  'set-price-modifiers',
+]);
 
 // ── Local error-token helpers (pre-write rejections carry no _NOT_PERSISTED suffix) ──
 
@@ -97,6 +116,49 @@ function getSetting(key: string): any {
 
 async function setSetting(key: string, value: unknown): Promise<void> {
   await getGame().settings.set(SETTING_SCOPE, key, value);
+}
+
+// ── Price dial (warhammer-mcp namespace, ADR-U10) ─────────────────────────────────
+
+type PriceModifiers = { global: number; perCargo: Record<string, number> };
+
+function getPriceModifiers(): PriceModifiers {
+  const stored = getGame()?.settings?.get?.(WARHAMMER_MCP_SCOPE, PRICE_MODIFIERS_SETTING);
+  const global = typeof stored?.global === 'number' && stored.global > 0 ? stored.global : 1;
+  const perCargo = stored?.perCargo && typeof stored.perCargo === 'object' ? stored.perCargo : {};
+  return { global, perCargo };
+}
+
+async function setPriceModifiersSetting(value: PriceModifiers): Promise<void> {
+  await getGame().settings.set(WARHAMMER_MCP_SCOPE, PRICE_MODIFIERS_SETTING, value);
+}
+
+/**
+ * Post-calcToBp price-dial application (global × perCargo[cargoName]); returns the fields untouched
+ * plus NO priceModifierApplied key when the effective multiplier is neutral (1) — disclosure is
+ * omitted, never shown as 1, when nothing was actually applied.
+ */
+function applyPriceModifier(
+  cargoName: string,
+  pricePerEpBp: number,
+  totalBpValue: number,
+  quantityEp: number,
+): { pricePerEpBp: number; totalBp: number; priceModifierApplied?: { global: number; perCargo?: number } } {
+  const modifiers = getPriceModifiers();
+  const perCargoMultiplier = modifiers.perCargo[cargoName];
+  const multiplier = modifiers.global * (perCargoMultiplier ?? 1);
+  if (multiplier === 1) return { pricePerEpBp, totalBp: totalBpValue };
+
+  const scaledTotal = Math.round(totalBpValue * multiplier);
+  const scaledPerEp = quantityEp > 0 ? scaledTotal / quantityEp : pricePerEpBp * multiplier;
+  return {
+    pricePerEpBp: scaledPerEp,
+    totalBp: scaledTotal,
+    priceModifierApplied:
+      perCargoMultiplier !== undefined
+        ? { global: modifiers.global, perCargo: perCargoMultiplier }
+        : { global: modifiers.global },
+  };
 }
 
 function readCurrentCargo(): any[] {
@@ -274,6 +336,13 @@ export async function dispatchModuleTradingPlaces(data: unknown): Promise<Envelo
       case 'deduct-currency':
       case 'add-currency':
         return await handleCurrencyWrite(input);
+      // ── merchant generation + price dial (wfrp_economy_system Phase 7) ──
+      case 'merchant-generation':
+        return handleMerchantGeneration(input);
+      case 'get-price-modifiers':
+        return handleGetPriceModifiers();
+      case 'set-price-modifiers':
+        return await handleSetPriceModifiers(input);
       default: {
         const _exhaustive: never = input;
         return { success: false, error: `TRADING_PLACES_UNKNOWN_ACTION: ${String((_exhaustive as any)?.action)}` };
@@ -503,6 +572,7 @@ function handleCalcPurchasePrice(input: CalcPurchasePriceInput): Envelope<unknow
   if (!calc || typeof calc !== 'object') return targetNotFound(`cargo type "${input.cargoName}" not in the dataset`);
 
   const { pricePerEpBp, totalBp: totalBpValue } = calcToBp(calc, input.quantity);
+  const modified = applyPriceModifier(cargoName, pricePerEpBp, totalBpValue, input.quantity);
 
   return {
     success: true,
@@ -514,8 +584,9 @@ function handleCalcPurchasePrice(input: CalcPurchasePriceInput): Envelope<unknow
       season: resolved.season,
       seasonSource: resolved.seasonSource,
       quality: input.quality ?? 'average',
-      pricePerEpBp,
-      totalBp: totalBpValue,
+      pricePerEpBp: modified.pricePerEpBp,
+      totalBp: modified.totalBp,
+      ...(modified.priceModifierApplied ? { priceModifierApplied: modified.priceModifierApplied } : {}),
       calculation: calc as Record<string, unknown>,
     },
   };
@@ -545,6 +616,7 @@ function handleCalcSalePrice(input: CalcSalePriceInput): Envelope<unknown> {
   if (!calc || typeof calc !== 'object') return targetNotFound(`cargo type "${input.cargoName}" not in the dataset`);
 
   const { pricePerEpBp, totalBp: totalBpValue } = calcToBp(calc, input.quantity);
+  const modified = applyPriceModifier(cargoName, pricePerEpBp, totalBpValue, input.quantity);
 
   return {
     success: true,
@@ -556,8 +628,9 @@ function handleCalcSalePrice(input: CalcSalePriceInput): Envelope<unknown> {
       season: resolved.season,
       seasonSource: resolved.seasonSource,
       quality: input.quality ?? 'average',
-      pricePerEpBp,
-      totalBp: totalBpValue,
+      pricePerEpBp: modified.pricePerEpBp,
+      totalBp: modified.totalBp,
+      ...(modified.priceModifierApplied ? { priceModifierApplied: modified.priceModifierApplied } : {}),
       calculation: calc as Record<string, unknown>,
     },
   };
@@ -965,4 +1038,127 @@ async function handleCurrencyWrite(input: CurrencyWriteInput): Promise<Envelope<
       ledgered: economyModuleActive,
     },
   };
+}
+
+// ── merchant generation (narrative-only; wfrp_economy_system Phase 7) ────────────
+
+function getMerchantGeneratorClass(): any | null {
+  return (globalThis as any).window?.MerchantGenerator ?? (globalThis as any).MerchantGenerator ?? null;
+}
+
+function resolveSettlementRecord(name: string): any | null {
+  const settlements: any[] = getDataManager()?.getAllSettlements?.() ?? [];
+  const exact = settlements.find((s: any) => String(s?.name ?? '') === name);
+  return exact ?? settlements.find((s: any) => String(s?.name ?? '').toLowerCase() === name.toLowerCase()) ?? null;
+}
+
+type MerchantGenerationInput = Extract<TradingPlacesInputType, { action: 'merchant-generation' }>;
+
+function handleMerchantGeneration(input: MerchantGenerationInput): Envelope<unknown> {
+  const dm = getDataManager();
+  if (!dm) return apiUnavailable('window.TradingPlaces.getDataManager() returned null — module not initialized yet (reload the world?)');
+
+  const GeneratorClass = getMerchantGeneratorClass();
+  if (!GeneratorClass) {
+    return apiUnavailable('window.MerchantGenerator class not found — trading-places merchant-generator.js not loaded (reload the world?)');
+  }
+
+  const settlement = resolveSettlementRecord(input.settlement);
+  if (!settlement) return targetNotFound(`settlement "${input.settlement}" not in the dataset (Empire-only, 14 provinces)`);
+
+  const cargoName = resolveCargoName(input.cargoType);
+  if (!cargoName) return targetNotFound(`cargo type "${input.cargoType}" not in the dataset — resolve via list-cargo-types`);
+
+  // Defensive merge: generateMerchant() reads config.skillDistribution (present live) AND
+  // config.specialSourceBehaviors (ABSENT live — getSpecialBehaviors() throws on any settlement with
+  // non-empty flags without this key). It never reads merchantCount/merchantPersonalities — see the
+  // ROUTING DEVIATIONS note at the top of this file.
+  const liveConfig = dm.getTradingConfig?.() ?? {};
+  const tradingConfig = { specialSourceBehaviors: {}, ...liveConfig };
+  const generator = new GeneratorClass(dm, tradingConfig);
+
+  // v1 minimal surface: equilibrium is a neutral stub (the balance-shape residual is unverified —
+  // memo §residual unknowns). percentile, when supplied, overrides the skill roll after generation.
+  const equilibrium = { supply: 1, demand: 1 };
+  const merchant = generator.generateMerchant(settlement, cargoName, input.merchantType, equilibrium);
+
+  if (typeof input.percentile === 'number') {
+    const overriddenSkill = generator.generateMerchantSkill(settlement, input.percentile);
+    const hagglingSkill = Math.max(5, Math.min(95, overriddenSkill));
+    merchant.skill = hagglingSkill;
+    merchant.hagglingSkill = hagglingSkill;
+    merchant.baseSkill = overriddenSkill;
+    merchant.skillDescription = generator.getMerchantSkillDescription(hagglingSkill);
+  }
+
+  return {
+    success: true,
+    data: {
+      action: 'merchant-generation',
+      id: String(merchant.id ?? ''),
+      type: input.merchantType,
+      settlement: {
+        name: String(merchant.settlement?.name ?? settlement.name ?? ''),
+        region: merchant.settlement?.region ?? null,
+        size: merchant.settlement?.size ?? null,
+        wealth: typeof merchant.settlement?.wealth === 'number' ? merchant.settlement.wealth : null,
+      },
+      cargoType: cargoName,
+      skill: Number(merchant.skill ?? 0),
+      hagglingSkill: Number(merchant.hagglingSkill ?? 0),
+      baseSkill: Number(merchant.baseSkill ?? 0),
+      skillDescription: String(merchant.skillDescription ?? ''),
+      quantity: Number(merchant.quantity ?? 0),
+      // Renamed + flagged (non-negotiable, Design Decisions): the generator's price math predates
+      // the 20-cargo catalog and is NOT calcToBp-compatible — never coin-accurate.
+      narrativePriceHintBase: Number(merchant.basePrice ?? 0),
+      narrativePriceHintFinal: Number(merchant.finalPrice ?? 0),
+      pricesAreNarrativeOnly: true as const,
+      equilibrium: {
+        supply: Number(merchant.equilibrium?.supply ?? equilibrium.supply),
+        demand: Number(merchant.equilibrium?.demand ?? equilibrium.demand),
+        ratio: Number(merchant.equilibrium?.ratio ?? 1),
+      },
+      specialBehaviors: Array.isArray(merchant.specialBehaviors) ? merchant.specialBehaviors : [],
+      metadata: (merchant.metadata ?? {}) as Record<string, unknown>,
+    },
+  };
+}
+
+// ── price dial (GM-tunable multiplier, warhammer-mcp namespace, ADR-U10) ─────────
+
+function handleGetPriceModifiers(): Envelope<unknown> {
+  const modifiers = getPriceModifiers();
+  return { success: true, data: { action: 'get-price-modifiers', ...modifiers } };
+}
+
+type SetPriceModifiersInput = Extract<TradingPlacesInputType, { action: 'set-price-modifiers' }>;
+
+async function handleSetPriceModifiers(input: SetPriceModifiersInput): Promise<Envelope<unknown>> {
+  const previous = getPriceModifiers();
+
+  // global/perCargo values are already constrained > 0 by the shared Zod schema (priceMultiplier) —
+  // an invalid number rejects earlier as TRADING_PLACES_INVALID_INPUT, before this handler runs.
+  const next: PriceModifiers = input.reset
+    ? { global: 1, perCargo: {} }
+    : {
+        global: input.global ?? previous.global,
+        perCargo: { ...previous.perCargo, ...(input.perCargo ?? {}) }, // merged, not replaced
+      };
+
+  await setPriceModifiersSetting(next);
+
+  // DP-16 post-write verify — re-read the persisted setting.
+  const persisted = getPriceModifiers();
+  const roundTripOk =
+    persisted.global === next.global && JSON.stringify(persisted.perCargo) === JSON.stringify(next.perCargo);
+  if (!roundTripOk) {
+    return notPersisted('set-price-modifiers wrote a value that did not round-trip through the tradingPriceModifiers setting');
+  }
+
+  notify.updated('trading-places', 'price-modifiers', {
+    summary: `global ${previous.global} → ${next.global}${Object.keys(next.perCargo).length ? `, ${Object.keys(next.perCargo).length} perCargo override(s)` : ''}`,
+  });
+
+  return { success: true, data: { action: 'set-price-modifiers', previous, current: next } };
 }

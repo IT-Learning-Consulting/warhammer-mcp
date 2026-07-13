@@ -4,13 +4,16 @@
 // Always-registered umbrella. requireModuleActive('wfrp4e-economy') is the FIRST active-state check —
 // RETURNS the MODULE_NOT_ACTIVE envelope, never throws (v1 Phase 1 contract).
 //
-// 35 actions across 11 idioms (capability_audit/wfrp4e-economy.md + phase6_pre_plan.md §Action surface;
+// 44 actions across 12 idioms (capability_audit/wfrp4e-economy.md + phase6_pre_plan.md §Action surface;
 // unified-ledger idiom — record-transaction / delete-account — added Phase 2, wfrp_economy_system_v1_prd.md
 // §10; levy-and-burn idiom — apply-levies / money-to-burn — added Phase 4, same PRD §10; banking-and-income
 // idiom — invest / resolve-investment / list-investments / stash-deposit / stash-withdraw / accrue-interest
-// — added Phase 5, same PRD §10). ALL financial state lives in world-scoped game settings (economies /
-// bankers / bankAccounts / stockPortfolios / transactionLogs / levies / recordedStashes /
-// endeavourInvestments). The 9 transactional writes are driven by runtime-importing
+// — added Phase 5, same PRD §10; legitimate-business-enterprises idiom — list-enterprises / get-enterprise /
+// create-enterprise / connect-enterprise-actor / enterprise-income / enterprise-event /
+// enterprise-pay-interest / enterprise-repay-debt / enterprise-upgrade — added Phase 6, same PRD §10). ALL
+// financial state lives in world-scoped game settings (economies / bankers / bankAccounts /
+// stockPortfolios / transactionLogs / levies / recordedStashes / endeavourInvestments / enterprises). The
+// 9 transactional writes are driven by runtime-importing
 // the module's SocketHandler and calling its AWAITED process method DIRECTLY:
 //
 //   ⚠ ROUTING DEVIATIONS (phase6_pre_plan §Write access — verified against socket-handler.js):
@@ -97,6 +100,62 @@
 // again. `runEconomicCycle` (rentals + stock fluctuation, duties d/e) stays module-UI-only this phase — NOT
 // exposed via MCP (D7 revisit if a headless composer needs it).
 // Same firstPersistFailure/notPersisted surfacing convention as levy-and-burn above.
+//
+// legitimate-business-enterprises (list-enterprises / get-enterprise / create-enterprise /
+// connect-enterprise-actor / enterprise-income / enterprise-event / enterprise-pay-interest /
+// enterprise-repay-debt / enterprise-upgrade) delegates to the fork's OWN headless, roll-free/dialog-free
+// enterprises engine (src/enterprises/enterprise-engine.js — Phase 1 of the same plan) via the same
+// runtimeImport idiom. Enterprises live in a standalone `enterprises` world setting ({ profiles,
+// instances }); an instance's `backing` mode is 'create' (embeds a NEW wfrp4e-archives3.enterprise actor —
+// gated on requireModuleActive('wfrp4e-archives3')) | 'link' (an EXISTING archives3 actor) | 'data-only'
+// (no actor at all — pure ledger row). `list-enterprises`(default)/`get-enterprise` are PURE READS over the
+// `enterprises` setting store, NOT engine delegations — the engine exposes no `listInstances`/`getEnterprise`.
+//
+// Engine contract (verified against E:\foundry_v13\data\Data\modules\wfrp4e-economy\src\enterprises\
+// enterprise-engine.js — the 8 real exports):
+//   createEnterprise({ presetKey?, profile?, backing, ownerActorId, actorId?, financedPortion? }) => Promise<
+//     { profileNotFound: true }
+//     | { moduleInactive: true }
+//     | { insufficientFunds: true; walletBalanceBp: number; requiredBp: number }
+//     | { instanceId: string | null; actorUuid: string | null; debtPrincipalBp: number; walletBalanceBp: number;
+//         persistedCheckFailed?: boolean; detail?: string }
+//   >
+//   discoverEnterpriseActors() => Promise<Array<{ actorId: string; actorUuid: string; name: string }>>
+//   connectActor({ actorId, ownerActorId? }) => Promise<
+//     { notFound: true } | { alreadyConnected: true; instanceId: string }
+//     | { instanceId: string; actorUuid: string; persistedCheckFailed?: boolean; detail?: string }
+//   >
+//   income(id, { rolledTotal, outcome }) => Promise<
+//     { notFound: true } | { invalidRoll: true }
+//     | { payoutBp: number; walletBalanceBp: number; persistedCheckFailed?: boolean; detail?: string }
+//   >
+//   drawEvent(id, { d100Roll }) => Promise<
+//     { notFound: true } | { invalidRoll: true } | { text: string; matchedOverride: boolean }
+//   >
+//     ⚠ drawEvent is the ONE duty with NO persistedCheckFailed self-verify branch (it never writes the
+//     enterprises STORE — event text is a pure lookup; it only appends a zero-amount ledger row and
+//     posts chat/Chronicle via enterprise-journal.js) — this handler must NOT check for it.
+//   payInterest(id, { declineToPay? }) => Promise<
+//     { notFound: true } | { insufficientFunds: true; walletBalanceBp: number; requiredBp: number }
+//     | { paid: boolean; escalationTier?: number; walletBalanceBp?: number; persistedCheckFailed?: boolean; detail?: string }
+//   >
+//   repayDebt(id, { amountBp }) => Promise<
+//     { notFound: true } | { insufficientFunds: true; walletBalanceBp: number; requiredBp: number }
+//     | { principalBp: number; walletBalanceBp: number; persistedCheckFailed?: boolean; detail?: string }
+//   >
+//   upgrade(id, { level, financedPortion? }) => Promise<
+//     { notFound: true } | { upgradeBlocked: true } | { invalidLevel: true }
+//     | { insufficientFunds: true; walletBalanceBp: number; requiredBp: number }
+//     | { level: number; newUpkeep: number; debtPrincipalBp: number; walletBalanceBp: number;
+//         persistedCheckFailed?: boolean; detail?: string }
+//   >
+//   deleteEnterprise(id) => Promise<
+//     { notFound: true } | { deleted: true; name: string; persistedCheckFailed?: boolean; detail?: string }
+//   >
+//     Untrack only: removes the store instance; the backing Actor is never deleted, no coin moves,
+//     logs an enterprise-delete ledger row. (Added post-Phase-6 L4a, user directive 2026-07-12.)
+// Same firstPersistFailure/notPersisted surfacing convention as levy-and-burn/banking-and-income above;
+// the schema's `financedPortionBp` maps to the engine's `financedPortion` param name.
 
 import { requireModuleActive } from '../_shared/require-module-active.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
@@ -137,6 +196,14 @@ const WRITE_ACTIONS = new Set([
   'stash-deposit',
   'stash-withdraw',
   'accrue-interest',
+  'create-enterprise',
+  'connect-enterprise-actor',
+  'enterprise-income',
+  'enterprise-event',
+  'enterprise-pay-interest',
+  'enterprise-repay-debt',
+  'enterprise-upgrade',
+  'delete-enterprise',
 ]);
 
 // ── Local helpers ──────────────────────────────────────────────────────────────
@@ -160,6 +227,9 @@ function readBankers(): Record<string, any> {
 }
 function readPortfolios(): Record<string, any> {
   return getSetting('stockPortfolios') ?? {};
+}
+function readEnterprises(): { profiles: Record<string, any>; instances: Record<string, any> } {
+  return getSetting('enterprises') ?? { profiles: {}, instances: {} };
 }
 
 function randomId(): string {
@@ -226,6 +296,8 @@ const importLevyEngine = (): Promise<any> =>
   runtimeImport(`/modules/${MODULE_ID}/src/levies/levy-engine.js`);
 const importBankingEngine = (): Promise<any> =>
   runtimeImport(`/modules/${MODULE_ID}/src/banking/banking-engine.js`);
+const importEnterpriseEngine = (): Promise<any> =>
+  runtimeImport(`/modules/${MODULE_ID}/src/enterprises/enterprise-engine.js`);
 
 function walletBalance(actorId: string, economyId: string | undefined): number {
   return Number(getGame()?.financial?.wallet?.getBalance?.(actorId, economyId ?? '') ?? 0);
@@ -329,6 +401,27 @@ export async function dispatchModuleWfrpEconomy(data: unknown): Promise<Envelope
         return await handleStashWithdraw(input);
       case 'accrue-interest':
         return await handleAccrueInterest(input);
+      // ── legitimate-business-enterprises (Phase 6) ──
+      case 'list-enterprises':
+        return await handleListEnterprises(input);
+      case 'get-enterprise':
+        return handleGetEnterprise(input);
+      case 'create-enterprise':
+        return await handleCreateEnterprise(input);
+      case 'connect-enterprise-actor':
+        return await handleConnectEnterpriseActor(input);
+      case 'enterprise-income':
+        return await handleEnterpriseIncome(input);
+      case 'enterprise-event':
+        return await handleEnterpriseEvent(input);
+      case 'enterprise-pay-interest':
+        return await handleEnterprisePayInterest(input);
+      case 'enterprise-repay-debt':
+        return await handleEnterpriseRepayDebt(input);
+      case 'enterprise-upgrade':
+        return await handleEnterpriseUpgrade(input);
+      case 'delete-enterprise':
+        return await handleDeleteEnterprise(input);
       default: {
         const _exhaustive: never = input;
         return { success: false, error: `WFRP_ECONOMY_UNKNOWN_ACTION: ${String((_exhaustive as any)?.action)}` };
@@ -1030,6 +1123,10 @@ async function handleListTransactions(input: ListTxInput): Promise<Envelope<unkn
     // projection dropped both — the item-ops-money-transfer eval pair asserts the target.
     targetActorId: l?.targetActorId ?? null,
     targetActorName: l?.targetActorName ?? null,
+    // Phase 6 (legitimate-business-enterprises): enterprise-* rows carry an enterpriseId naming the
+    // instance (enterprise-engine.js TransactionLogger.logTransaction calls) — surface it same as
+    // bankName/targetActorId above rather than silently dropping it.
+    enterpriseId: l?.enterpriseId ?? null,
     description: l?.description ?? '',
     date: l?.date ?? null,
   }));
@@ -1183,6 +1280,7 @@ async function handleApplyLevies(input: ApplyLeviesInput): Promise<Envelope<unkn
     actorIds: input.actorIds,
     excludeActorIds: input.excludeActorIds,
     dryRun,
+    declared: input.declared,
   });
 
   if (!dryRun) {
@@ -1201,6 +1299,7 @@ async function handleApplyLevies(input: ApplyLeviesInput): Promise<Envelope<unkn
     data: {
       action: 'apply-levies',
       dryRun,
+      declared: input.declared === true,
       elapsedWeeks,
       weekIndex: result?.weekIndex ?? null,
       verdicts,
@@ -1441,6 +1540,336 @@ async function handleAccrueInterest(input: AccrueInterestInput): Promise<Envelop
       investmentVerdicts,
       accountVerdicts,
       loanReminders,
+    },
+  };
+}
+
+// ── legitimate-business-enterprises (Phase 6, wfrp_economy_system) ─────────────
+//
+// list-enterprises(default)/get-enterprise are PURE READS over the `enterprises` setting store (see the
+// engine-contract comment atop this file — no listInstances/getEnterprise engine export exists). The other
+// 7 actions DELEGATE to the fork's own headless enterprise-engine.js.
+
+type ListEnterprisesInput = Extract<WfrpEconomyInputType, { action: 'list-enterprises' }>;
+async function handleListEnterprises(input: ListEnterprisesInput): Promise<Envelope<unknown>> {
+  const store = readEnterprises();
+  const enterprises = Object.values(store.instances ?? {}).map((i: any) => ({
+    instanceId: i?.id,
+    name: i?.name,
+    profileId: i?.profileId ?? null,
+    backing: i?.backing,
+    actorUuid: i?.actorUuid ?? null,
+    ownerActorId: i?.ownerActorId ?? null,
+    ownerActorName: actorName(i?.ownerActorId),
+    level: Number(i?.level ?? 0),
+    upkeep: Number(i?.upkeep ?? 0),
+    debtPrincipalBp: Number(i?.debt?.principal ?? 0),
+    escalationTier: Number(i?.debt?.escalationTier ?? 0),
+  }));
+
+  let actors: Array<{ actorId: string; actorUuid: string; name: string }> = [];
+  if (input.unconnectedActors) {
+    const EnterpriseEngine = await importEnterpriseEngine();
+    const raw = await EnterpriseEngine.discoverEnterpriseActors();
+    actors = (Array.isArray(raw) ? raw : []).map((a: any) => ({ actorId: a?.actorId, actorUuid: a?.actorUuid, name: a?.name }));
+  }
+
+  return {
+    success: true,
+    data: {
+      action: 'list-enterprises',
+      unconnectedActors: input.unconnectedActors === true,
+      count: enterprises.length,
+      enterprises,
+      actors,
+    },
+  };
+}
+
+type GetEnterpriseInput = Extract<WfrpEconomyInputType, { action: 'get-enterprise' }>;
+function handleGetEnterprise(input: GetEnterpriseInput): Envelope<unknown> {
+  const store = readEnterprises();
+  const inst = store.instances?.[input.enterpriseId];
+  if (!inst) return targetNotFound(`enterprise "${input.enterpriseId}" not found`);
+  return {
+    success: true,
+    data: {
+      action: 'get-enterprise',
+      instanceId: inst.id,
+      name: inst.name,
+      profileId: inst.profileId ?? null,
+      backing: inst.backing,
+      actorUuid: inst.actorUuid ?? null,
+      ownerActorId: inst.ownerActorId ?? null,
+      ownerActorName: actorName(inst.ownerActorId),
+      level: Number(inst.level ?? 0),
+      upkeep: Number(inst.upkeep ?? 0),
+      incomeModifiers: inst.incomeModifiers ?? [],
+      eventTable: inst.eventTable ?? { uuid: null, overrides: [] },
+      debt: { principalBp: Number(inst.debt?.principal ?? 0), escalationTier: Number(inst.debt?.escalationTier ?? 0) },
+      createdAt: inst.createdAt ?? null,
+    },
+  };
+}
+
+type CreateEnterpriseInput = Extract<WfrpEconomyInputType, { action: 'create-enterprise' }>;
+async function handleCreateEnterprise(input: CreateEnterpriseInput): Promise<Envelope<unknown>> {
+  if (input.confirm !== true) {
+    return confirmRequired(
+      `create-enterprise debits the owner actor's wallet for the start-up cost (self-funded portion after financedPortionBp) and, for backing:"create", embeds a NEW wfrp4e-archives3 enterprise actor. Re-call with confirm:true.`,
+    );
+  }
+  if (!input.presetKey && !input.profile) {
+    return targetNotFound('create-enterprise requires either presetKey or profile');
+  }
+  if (input.backing === 'link' && !input.actorId) {
+    return targetNotFound('create-enterprise backing:"link" requires actorId');
+  }
+  if (!getGame()?.actors?.get?.(input.ownerActorId)) return targetNotFound(`actor "${input.ownerActorId}" not found`);
+  if (input.backing === 'create') {
+    // Fail-soft BEFORE calling the engine: backing:'create' embeds a wfrp4e-archives3.enterprise actor.
+    const guard = requireModuleActive('wfrp4e-archives3');
+    if (guard) return guard;
+  }
+
+  const EnterpriseEngine = await importEnterpriseEngine();
+  const result = await EnterpriseEngine.createEnterprise({
+    presetKey: input.presetKey,
+    profile: input.profile,
+    backing: input.backing,
+    ownerActorId: input.ownerActorId,
+    actorId: input.actorId,
+    financedPortion: input.financedPortionBp,
+  });
+
+  if (result?.profileNotFound) {
+    return targetNotFound(`enterprise profile not found (presetKey="${input.presetKey ?? 'null'}")${result?.detail ? `: ${result.detail}` : ''}`);
+  }
+  if (result?.moduleInactive) {
+    // Defensive: the pre-guard above already covers backing:'create' — only reachable on a race where
+    // wfrp4e-archives3 was deactivated between the guard check and this call.
+    return requireModuleActive('wfrp4e-archives3') ?? notPersisted('wfrp4e-archives3 became inactive during create-enterprise');
+  }
+  if (result?.insufficientFunds) {
+    return notPersisted(`create-enterprise start-up cost exceeds wallet balance ${result.walletBalanceBp} BP (required ${result.requiredBp} BP)`);
+  }
+  if (result?.persistedCheckFailed) {
+    return notPersisted(`create-enterprise for owner "${input.ownerActorId}" failed persistence check: ${result?.detail ?? 'unknown'}`);
+  }
+  notify.created('wfrp-economy', actorName(input.ownerActorId) ?? input.ownerActorId, {
+    summary: `enterprise ${result.instanceId} created (${input.backing}) — debt ${result.debtPrincipalBp} BP`,
+  });
+  return {
+    success: true,
+    data: {
+      action: 'create-enterprise',
+      instanceId: result.instanceId ?? null,
+      actorUuid: result.actorUuid ?? null,
+      backing: input.backing,
+      debtPrincipalBp: Number(result.debtPrincipalBp ?? 0),
+      walletBalanceBp: Number(result.walletBalanceBp ?? 0),
+    },
+  };
+}
+
+type ConnectEnterpriseActorInput = Extract<WfrpEconomyInputType, { action: 'connect-enterprise-actor' }>;
+async function handleConnectEnterpriseActor(input: ConnectEnterpriseActorInput): Promise<Envelope<unknown>> {
+  if (!getGame()?.actors?.get?.(input.actorId)) return targetNotFound(`actor "${input.actorId}" not found`);
+
+  const EnterpriseEngine = await importEnterpriseEngine();
+  const result = await EnterpriseEngine.connectActor({ actorId: input.actorId, ownerActorId: input.ownerActorId });
+
+  if (result?.notFound) return targetNotFound(`actor "${input.actorId}" is not a wfrp4e-archives3 enterprise actor`);
+  if (result?.alreadyConnected) {
+    const store = readEnterprises();
+    const existingUuid = store.instances?.[result.instanceId]?.actorUuid ?? null;
+    return {
+      success: true,
+      data: { action: 'connect-enterprise-actor', instanceId: result.instanceId, actorUuid: existingUuid, alreadyConnected: true },
+    };
+  }
+  if (result?.persistedCheckFailed) {
+    return notPersisted(`connect-enterprise-actor for actor "${input.actorId}" failed persistence check: ${result?.detail ?? 'unknown'}`);
+  }
+  notify.created('wfrp-economy', actorName(input.actorId) ?? input.actorId, { summary: `enterprise ${result.instanceId} connected` });
+  return {
+    success: true,
+    data: { action: 'connect-enterprise-actor', instanceId: result.instanceId, actorUuid: result.actorUuid ?? null, alreadyConnected: false },
+  };
+}
+
+type EnterpriseIncomeInput = Extract<WfrpEconomyInputType, { action: 'enterprise-income' }>;
+async function handleEnterpriseIncome(input: EnterpriseIncomeInput): Promise<Envelope<unknown>> {
+  const EnterpriseEngine = await importEnterpriseEngine();
+  const result = await EnterpriseEngine.income(input.enterpriseId, { rolledTotal: input.rolledTotal, outcome: input.outcome });
+
+  if (result?.notFound) return targetNotFound(`enterprise "${input.enterpriseId}" not found`);
+  if (result?.invalidRoll) {
+    // Defensive: the shared Zod schema already constrains rolledTotal/outcome.
+    return notPersisted(`enterprise-income for "${input.enterpriseId}" received an invalid roll (rolledTotal=${result.rolledTotal}, outcome=${result.outcome})`);
+  }
+  if (result?.persistedCheckFailed) {
+    return notPersisted(`enterprise-income for "${input.enterpriseId}" failed persistence check: ${result?.detail ?? 'unknown'}`);
+  }
+  notify.updated('wfrp-economy', `enterprise ${input.enterpriseId}`, {
+    summary: `income ${input.outcome} (rolled ${input.rolledTotal}) — paid ${result.payoutBp} BP`,
+  });
+  return {
+    success: true,
+    data: {
+      action: 'enterprise-income',
+      enterpriseId: input.enterpriseId,
+      payoutBp: Number(result.payoutBp ?? 0),
+      walletBalanceBp: Number(result.walletBalanceBp ?? 0),
+    },
+  };
+}
+
+type EnterpriseEventInput = Extract<WfrpEconomyInputType, { action: 'enterprise-event' }>;
+async function handleEnterpriseEvent(input: EnterpriseEventInput): Promise<Envelope<unknown>> {
+  const EnterpriseEngine = await importEnterpriseEngine();
+  const result = await EnterpriseEngine.drawEvent(input.enterpriseId, { d100Roll: input.d100Roll });
+
+  if (result?.notFound) return targetNotFound(`enterprise "${input.enterpriseId}" not found`);
+  if (result?.invalidRoll) {
+    // Defensive: the shared Zod schema already constrains d100Roll to an integer 1-100.
+    return notPersisted(`enterprise-event for "${input.enterpriseId}" received an invalid d100Roll (${result.d100Roll})`);
+  }
+  // drawEvent NEVER writes the enterprises store (pure table lookup; it only appends a zero-amount
+  // ledger row + chat/Chronicle post) — the ONE enterprise duty with no persistedCheckFailed
+  // self-verify branch (see the engine-contract comment atop this file). Do NOT check for it here.
+  notify.updated('wfrp-economy', `enterprise ${input.enterpriseId}`, { summary: `event drawn (d100=${input.d100Roll})` });
+  return {
+    success: true,
+    data: {
+      action: 'enterprise-event',
+      enterpriseId: input.enterpriseId,
+      text: String(result?.text ?? ''),
+      matchedOverride: Boolean(result?.matchedOverride),
+    },
+  };
+}
+
+type EnterprisePayInterestInput = Extract<WfrpEconomyInputType, { action: 'enterprise-pay-interest' }>;
+async function handleEnterprisePayInterest(input: EnterprisePayInterestInput): Promise<Envelope<unknown>> {
+  const EnterpriseEngine = await importEnterpriseEngine();
+  const result = await EnterpriseEngine.payInterest(input.enterpriseId, { declineToPay: input.declineToPay });
+
+  if (result?.notFound) return targetNotFound(`enterprise "${input.enterpriseId}" not found`);
+  if (result?.insufficientFunds) {
+    return notPersisted(`enterprise-pay-interest for "${input.enterpriseId}" exceeds wallet balance ${result.walletBalanceBp} BP (required ${result.requiredBp} BP)`);
+  }
+  if (result?.persistedCheckFailed) {
+    return notPersisted(`enterprise-pay-interest for "${input.enterpriseId}" failed persistence check: ${result?.detail ?? 'unknown'}`);
+  }
+  notify.updated('wfrp-economy', `enterprise ${input.enterpriseId}`, {
+    summary: result.paid ? `interest paid — wallet ${result.walletBalanceBp} BP` : `interest DECLINED — Creditor escalation now tier ${result.escalationTier}`,
+  });
+  return {
+    success: true,
+    data: {
+      action: 'enterprise-pay-interest',
+      enterpriseId: input.enterpriseId,
+      paid: Boolean(result.paid),
+      escalationTier: result.escalationTier ?? null,
+      walletBalanceBp: result.walletBalanceBp ?? null,
+    },
+  };
+}
+
+type EnterpriseRepayDebtInput = Extract<WfrpEconomyInputType, { action: 'enterprise-repay-debt' }>;
+async function handleEnterpriseRepayDebt(input: EnterpriseRepayDebtInput): Promise<Envelope<unknown>> {
+  if (input.confirm !== true) {
+    return confirmRequired(
+      `enterprise-repay-debt "${input.enterpriseId}" debits the owner actor's wallet ${input.amountBp} BP against the Creditor principal. Re-call with confirm:true.`,
+    );
+  }
+  const EnterpriseEngine = await importEnterpriseEngine();
+  const result = await EnterpriseEngine.repayDebt(input.enterpriseId, { amountBp: input.amountBp });
+
+  if (result?.notFound) return targetNotFound(`enterprise "${input.enterpriseId}" not found`);
+  if (result?.insufficientFunds) {
+    return notPersisted(`enterprise-repay-debt of ${input.amountBp} BP exceeds wallet balance ${result.walletBalanceBp} BP (required ${result.requiredBp} BP)`);
+  }
+  if (result?.persistedCheckFailed) {
+    return notPersisted(`enterprise-repay-debt for "${input.enterpriseId}" failed persistence check: ${result?.detail ?? 'unknown'}`);
+  }
+  notify.updated('wfrp-economy', `enterprise ${input.enterpriseId}`, {
+    summary: `debt repaid ${input.amountBp} BP — principal now ${result.principalBp} BP`,
+  });
+  return {
+    success: true,
+    data: {
+      action: 'enterprise-repay-debt',
+      enterpriseId: input.enterpriseId,
+      principalBp: Number(result.principalBp ?? 0),
+      walletBalanceBp: Number(result.walletBalanceBp ?? 0),
+    },
+  };
+}
+
+type EnterpriseUpgradeInput = Extract<WfrpEconomyInputType, { action: 'enterprise-upgrade' }>;
+async function handleEnterpriseUpgrade(input: EnterpriseUpgradeInput): Promise<Envelope<unknown>> {
+  if (input.confirm !== true) {
+    return confirmRequired(
+      `enterprise-upgrade "${input.enterpriseId}" to level ${input.level} debits the owner actor's wallet for the self-funded portion of the upgrade cost. Re-call with confirm:true.`,
+    );
+  }
+  const EnterpriseEngine = await importEnterpriseEngine();
+  const result = await EnterpriseEngine.upgrade(input.enterpriseId, { level: input.level, financedPortion: input.financedPortionBp });
+
+  if (result?.notFound) return targetNotFound(`enterprise "${input.enterpriseId}" not found`);
+  if (result?.upgradeBlocked) {
+    // RAW refusal, zero writes: an enterprise cannot Expand while it carries active Creditor debt.
+    return notPersisted(`enterprise "${input.enterpriseId}" cannot upgrade while in debt (RAW: Expand is blocked with an active Creditor principal)`);
+  }
+  if (result?.invalidLevel) return targetNotFound(`enterprise "${input.enterpriseId}" has no upgrade path for level ${input.level}`);
+  if (result?.insufficientFunds) {
+    return notPersisted(`enterprise-upgrade for "${input.enterpriseId}" exceeds wallet balance ${result.walletBalanceBp} BP (required ${result.requiredBp} BP)`);
+  }
+  if (result?.persistedCheckFailed) {
+    return notPersisted(`enterprise-upgrade for "${input.enterpriseId}" failed persistence check: ${result?.detail ?? 'unknown'}`);
+  }
+  notify.updated('wfrp-economy', `enterprise ${input.enterpriseId}`, {
+    summary: `upgraded to level ${result.level} — upkeep now ${result.newUpkeep} BP, debt ${result.debtPrincipalBp} BP`,
+  });
+  return {
+    success: true,
+    data: {
+      action: 'enterprise-upgrade',
+      enterpriseId: input.enterpriseId,
+      level: Number(result.level ?? input.level),
+      newUpkeep: Number(result.newUpkeep ?? 0),
+      debtPrincipalBp: Number(result.debtPrincipalBp ?? 0),
+      walletBalanceBp: Number(result.walletBalanceBp ?? 0),
+    },
+  };
+}
+
+type DeleteEnterpriseInput = Extract<WfrpEconomyInputType, { action: 'delete-enterprise' }>;
+async function handleDeleteEnterprise(input: DeleteEnterpriseInput): Promise<Envelope<unknown>> {
+  if (input.confirm !== true) {
+    return confirmRequired(
+      `delete-enterprise removes "${input.enterpriseId}" from the enterprises store (the backing Actor is NOT deleted and no coin moves). Re-call with confirm:true.`,
+    );
+  }
+  const EnterpriseEngine = await importEnterpriseEngine();
+  const result = await EnterpriseEngine.deleteEnterprise(input.enterpriseId);
+
+  if (result?.notFound) return targetNotFound(`enterprise "${input.enterpriseId}" not found`);
+  if (result?.persistedCheckFailed) {
+    return notPersisted(`delete-enterprise for "${input.enterpriseId}" failed persistence check: ${result?.detail ?? 'unknown'}`);
+  }
+  notify.deleted('wfrp-economy', String(result.name ?? input.enterpriseId), {
+    summary: `enterprise ${input.enterpriseId} untracked (actor untouched, no coin moved)`,
+  });
+  return {
+    success: true,
+    data: {
+      action: 'delete-enterprise',
+      enterpriseId: input.enterpriseId,
+      deleted: true,
+      name: String(result.name ?? ''),
     },
   };
 }
