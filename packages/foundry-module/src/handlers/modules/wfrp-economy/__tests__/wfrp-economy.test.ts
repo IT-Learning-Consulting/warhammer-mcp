@@ -706,10 +706,10 @@ describe('legitimate-business-enterprises — list-enterprises / get-enterprise 
         instances: {
           ent1: {
             id: 'ent1', name: 'The Salty Dog', profileId: 'tavern', backing: 'data-only', actorUuid: null,
-            ownerActorId: 'a1', level: 1, upkeep: 240,
+            ownerActorId: 'a1', owners: [{ actorId: 'a1', sharePct: 100 }], level: 1, upkeep: 240,
             incomeModifiers: [{ label: 'Trade', skill: 'Trade (Tavernkeeping)', tier: 'b', standing: 2 }],
             eventTable: { uuid: null, overrides: [] },
-            debt: { principal: 480, escalationTier: 1 },
+            debt: { principal: 480, escalationTier: 1, creditor: { name: 'Baron von Debt', notes: '' } },
             createdAt: '2026-07-01T00:00:00.000Z',
           },
         },
@@ -720,7 +720,11 @@ describe('legitimate-business-enterprises — list-enterprises / get-enterprise 
     expect(res.success).toBe(true);
     expect(res.data.name).toBe('The Salty Dog');
     expect(res.data.ownerActorName).toBe('Owner');
-    expect(res.data.debt).toEqual({ principalBp: 480, escalationTier: 1 });
+    // Phase 7c ADDITIVE: owners[] + debt.creditor now ride alongside the pre-existing scalar fields
+    // (D3 back-compat) — delta-based assertion, not the old exact-equality (would break on every
+    // future additive field, per the eval-pair lesson in the plan's §Validation).
+    expect(res.data.debt).toEqual({ principalBp: 480, escalationTier: 1, creditor: { name: 'Baron von Debt', notes: '' } });
+    expect(res.data.owners).toEqual([{ actorId: 'a1', sharePct: 100, actorName: 'Owner' }]);
     expect(res.data.incomeModifiers).toHaveLength(1);
   });
 
@@ -1013,5 +1017,216 @@ describe('legitimate-business-enterprises — delete-enterprise', () => {
     const res: any = await dispatchModuleWfrpEconomy({ action: 'delete-enterprise', enterpriseId: 'ent1', confirm: true });
     expect(res.success).toBe(false);
     expect(res.error).toContain('WFRP_ECONOMY_NOT_PERSISTED');
+  });
+});
+
+// ── Phase 7c — enterprise-ownership-and-debt (R7c.1/R7c.2) ──────────────────────
+//
+// Mock provenance: enterprise-engine.js setOwners(id, {ownerShares}) →
+//   {notFound:true} | {ventureSlotsNotSupported:true} | {invalidShares:true, shareSum} |
+//   {owners, ownerActorId, persistedCheckFailed?, detail?}   (enterprise-engine.js, added Phase 7c task 1.2)
+// addDebt(id, {amountBp, creditor, recipientActorId}) →
+//   {notFound:true} | {principalBp, recipientActorId, walletBalanceBp, persistedCheckFailed?, detail?}
+// forgiveDebt(id, {amountBp?}) → {notFound:true} | {principalBp, persistedCheckFailed?, detail?}
+
+describe('enterprise-ownership-and-debt — set-enterprise-owners', () => {
+  it('WITHOUT confirm → WFRP_ECONOMY_CONFIRM_REQUIRED, engine never called', async () => {
+    const { settings } = makeSettings();
+    const setOwners = vi.fn();
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ setOwners });
+    (globalThis as any).game = makeGame({ active: true, settings, actors: { a1: { name: 'Owner A' }, a2: { name: 'Owner B' } } });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'set-enterprise-owners', enterpriseId: 'ent1', ownerShares: [{ actorId: 'a1', sharePct: 60 }, { actorId: 'a2', sharePct: 40 }] });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_CONFIRM_REQUIRED');
+    expect(setOwners).not.toHaveBeenCalled();
+  });
+
+  it('WITH confirm:true delegates and returns the widened owners + primary alias', async () => {
+    const { settings } = makeSettings();
+    const setOwners = vi.fn(async () => ({ owners: [{ actorId: 'a1', sharePct: 60 }, { actorId: 'a2', sharePct: 40 }], ownerActorId: 'a1' }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ setOwners });
+    (globalThis as any).game = makeGame({ active: true, settings, actors: { a1: { name: 'Owner A' }, a2: { name: 'Owner B' } } });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'set-enterprise-owners', enterpriseId: 'ent1', ownerShares: [{ actorId: 'a1', sharePct: 60 }, { actorId: 'a2', sharePct: 40 }], confirm: true });
+    expect(res.success).toBe(true);
+    expect(res.data.ownerActorId).toBe('a1');
+    expect(res.data.owners).toHaveLength(2);
+    expect(res.data.owners[0].actorName).toBe('Owner A');
+  });
+
+  it('engine invalidShares (Σ≠100) verdict → WFRP_ECONOMY_INVALID_SHARES', async () => {
+    const { settings } = makeSettings();
+    const setOwners = vi.fn(async () => ({ invalidShares: true, shareSum: 90 }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ setOwners });
+    (globalThis as any).game = makeGame({ active: true, settings, actors: { a1: { name: 'Owner A' } } });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'set-enterprise-owners', enterpriseId: 'ent1', ownerShares: [{ actorId: 'a1', sharePct: 90 }], confirm: true });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_INVALID_SHARES');
+    expect(res.error).toContain('90');
+  });
+});
+
+describe('enterprise-ownership-and-debt — add-enterprise-debt', () => {
+  it('WITHOUT confirm → WFRP_ECONOMY_CONFIRM_REQUIRED, engine never called', async () => {
+    const { settings } = makeSettings();
+    const addDebt = vi.fn();
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ addDebt });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'add-enterprise-debt', enterpriseId: 'ent1', amountBp: 240 });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_CONFIRM_REQUIRED');
+    expect(addDebt).not.toHaveBeenCalled();
+  });
+
+  it('WITH confirm:true delegates and returns the recipient credit + new principal', async () => {
+    const { settings } = makeSettings();
+    const addDebt = vi.fn(async () => ({ principalBp: 720, recipientActorId: 'a1', walletBalanceBp: 1000 }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ addDebt });
+    (globalThis as any).game = makeGame({ active: true, settings, actors: { a1: { name: 'Owner A' } } });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'add-enterprise-debt', enterpriseId: 'ent1', amountBp: 240, creditor: { name: 'Baron von Debt' }, recipientActorId: 'a1', confirm: true });
+    expect(res.success).toBe(true);
+    expect(addDebt).toHaveBeenCalledWith('ent1', { amountBp: 240, creditor: { name: 'Baron von Debt' }, recipientActorId: 'a1' });
+    expect(res.data.principalBp).toBe(720);
+    expect(res.data.recipientActorId).toBe('a1');
+    expect(res.data.amountBp).toBe(240);
+    expect(res.data.recipientActorName).toBe('Owner A');
+  });
+
+  it('unknown recipientActorId → WFRP_ECONOMY_TARGET_NOT_FOUND, engine never called', async () => {
+    const { settings } = makeSettings();
+    const addDebt = vi.fn();
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ addDebt });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'add-enterprise-debt', enterpriseId: 'ent1', amountBp: 240, recipientActorId: 'ghost', confirm: true });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_TARGET_NOT_FOUND');
+    expect(addDebt).not.toHaveBeenCalled();
+  });
+});
+
+describe('enterprise-ownership-and-debt — forgive-enterprise-debt', () => {
+  it('WITHOUT confirm → WFRP_ECONOMY_CONFIRM_REQUIRED, engine never called', async () => {
+    const { settings } = makeSettings();
+    const forgiveDebt = vi.fn();
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ forgiveDebt });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'forgive-enterprise-debt', enterpriseId: 'ent1' });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_CONFIRM_REQUIRED');
+    expect(forgiveDebt).not.toHaveBeenCalled();
+  });
+
+  it('WITH confirm:true and no amountBp forgives the entire remaining principal (zero wallet write)', async () => {
+    const { settings } = makeSettings();
+    const forgiveDebt = vi.fn(async () => ({ principalBp: 0 }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ forgiveDebt });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'forgive-enterprise-debt', enterpriseId: 'ent1', confirm: true });
+    expect(res.success).toBe(true);
+    expect(forgiveDebt).toHaveBeenCalledWith('ent1', { amountBp: undefined });
+    expect(res.data.principalBp).toBe(0);
+  });
+});
+
+// ── Phase 7c — levy-groups (R7c.4/R7c.5) ─────────────────────────────────────────
+//
+// list-levies is a PURE READ over the `levies` setting (no engine import — mirrors list-enterprises).
+// save-levy-group/delete-levy-group write the standalone `levyGroups` setting DIRECTLY (register.js
+// pattern) — no engine export exists for this simple CRUD, so these tests seed/assert the settings
+// store directly rather than mocking a runtime import.
+
+describe('levy-groups — list-levies (direct settings read)', () => {
+  it('projects the levies store directly, defaulting type to custom/builtin, no engine import needed', async () => {
+    const { settings } = makeSettings({
+      levies: [
+        { id: 'l1', name: 'Cost of Living', cadence: 'weekly', active: true, amount: { kind: 'standing-scaled', multiplier: 1.5 }, target: 'party', builtin: true, state: {} },
+        { id: 'l2', name: 'River Toll', cadence: 'per-travel', active: true, amount: { kind: 'fixed-bp', value: 120 }, target: 'group:g1', type: 'toll', builtin: false, state: {} },
+      ],
+    });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'list-levies' });
+    expect(res.success).toBe(true);
+    expect(res.data.count).toBe(2);
+    expect(res.data.levies[0].type).toBe('builtin');
+    expect(res.data.levies[1].type).toBe('toll');
+    expect(res.data.levies[1].groupId).toBe('g1');
+  });
+});
+
+describe('levy-groups — save-levy-group (direct settings write)', () => {
+  it('WITHOUT confirm → WFRP_ECONOMY_CONFIRM_REQUIRED, settings never written', async () => {
+    const { settings, store } = makeSettings({ levyGroups: [] });
+    (globalThis as any).game = makeGame({ active: true, settings, actors: { a1: { name: 'A' } } });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'save-levy-group', name: 'River Party', actorIds: ['a1'] });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_CONFIRM_REQUIRED');
+    expect(store.levyGroups).toEqual([]);
+  });
+
+  it('WITH confirm:true and no groupId creates a new group, persisted read-back confirms it', async () => {
+    const { settings, store } = makeSettings({ levyGroups: [] });
+    (globalThis as any).game = makeGame({ active: true, settings, actors: { a1: { name: 'A' } } });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'save-levy-group', name: 'River Party', actorIds: ['a1'], confirm: true });
+    expect(res.success).toBe(true);
+    expect(res.data.name).toBe('River Party');
+    expect(store.levyGroups).toHaveLength(1);
+    expect(store.levyGroups[0].actorIds).toEqual(['a1']);
+  });
+
+  it('WITH confirm:true and an existing groupId renames/re-members in place (no duplicate row)', async () => {
+    const { settings, store } = makeSettings({ levyGroups: [{ id: 'g1', name: 'Old Name', actorIds: ['a1'] }] });
+    (globalThis as any).game = makeGame({ active: true, settings, actors: { a1: { name: 'A' }, a2: { name: 'B' } } });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'save-levy-group', groupId: 'g1', name: 'New Name', actorIds: ['a1', 'a2'], confirm: true });
+    expect(res.success).toBe(true);
+    expect(store.levyGroups).toHaveLength(1);
+    expect(store.levyGroups[0].name).toBe('New Name');
+    expect(store.levyGroups[0].actorIds).toEqual(['a1', 'a2']);
+  });
+
+  it('unknown member actorId → WFRP_ECONOMY_TARGET_NOT_FOUND, settings never written', async () => {
+    const { settings, store } = makeSettings({ levyGroups: [] });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'save-levy-group', name: 'Ghost Party', actorIds: ['ghost'], confirm: true });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_TARGET_NOT_FOUND');
+    expect(store.levyGroups).toEqual([]);
+  });
+});
+
+describe('levy-groups — list-levy-groups (direct settings read)', () => {
+  it('projects the levyGroups store directly', async () => {
+    const { settings } = makeSettings({ levyGroups: [{ id: 'g1', name: 'River Party', actorIds: ['a1', 'a2'] }] });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'list-levy-groups' });
+    expect(res.success).toBe(true);
+    expect(res.data.count).toBe(1);
+    expect(res.data.groups[0].memberCount).toBe(2);
+  });
+});
+
+describe('levy-groups — delete-levy-group', () => {
+  it('WITHOUT confirm → WFRP_ECONOMY_CONFIRM_REQUIRED, settings never written', async () => {
+    const { settings, store } = makeSettings({ levyGroups: [{ id: 'g1', name: 'River Party', actorIds: ['a1'] }] });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'delete-levy-group', groupId: 'g1' });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_CONFIRM_REQUIRED');
+    expect(store.levyGroups).toHaveLength(1);
+  });
+
+  it('unknown groupId → WFRP_ECONOMY_TARGET_NOT_FOUND', async () => {
+    const { settings } = makeSettings({ levyGroups: [] });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'delete-levy-group', groupId: 'gone', confirm: true });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_TARGET_NOT_FOUND');
+  });
+
+  it('WITH confirm:true removes the group, persisted read-back confirms removal', async () => {
+    const { settings, store } = makeSettings({ levyGroups: [{ id: 'g1', name: 'River Party', actorIds: ['a1'] }] });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'delete-levy-group', groupId: 'g1', confirm: true });
+    expect(res.success).toBe(true);
+    expect(res.data.deleted).toBe(true);
+    expect(store.levyGroups).toEqual([]);
   });
 });

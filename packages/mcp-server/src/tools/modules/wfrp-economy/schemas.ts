@@ -3,12 +3,14 @@
 // CCR-5: Zod input validation lives package-local on the foundry-module side. The mcp-server tool layer
 // only needs typed response shapes for this.query<T> (DP-15 — never <any>).
 //
-// Warhammer Economy v1.0.0. 44 actions across 12 idioms (unified-ledger: record-transaction /
+// Warhammer Economy v1.0.0. 52 actions across 13 idioms (unified-ledger: record-transaction /
 // delete-account added Phase 2; levy-and-burn: apply-levies / money-to-burn added Phase 4;
 // banking-and-income: invest / resolve-investment / list-investments / stash-deposit / stash-withdraw /
 // accrue-interest added Phase 5; legitimate-business-enterprises: list-enterprises / get-enterprise /
 // create-enterprise / connect-enterprise-actor / enterprise-income / enterprise-event /
-// enterprise-pay-interest / enterprise-repay-debt / enterprise-upgrade added Phase 6,
+// enterprise-pay-interest / enterprise-repay-debt / enterprise-upgrade / delete-enterprise added Phase 6;
+// enterprise-ownership-and-debt: set-enterprise-owners / add-enterprise-debt / forgive-enterprise-debt +
+// levy-groups: list-levies / save-levy-group / list-levy-groups / delete-levy-group added Phase 7c,
 // wfrp_economy_system_v1_prd.md §10). Each handler return carries `action` as a discriminant;
 // WfrpEconomyResult is their union so the tool stays typed without <any>.
 
@@ -258,6 +260,8 @@ export interface WfrpEconomyApplyLeviesResult {
   // ADR-U3 extension: true when the caller passed declared:true (GM-declared apply — no elapsed-time
   // gate, charges once per call, stamps state to the CURRENT levy index).
   declared: boolean;
+  // Phase 7c ADDITIVE (R7c.5) — echoes the resolved groupId when the caller targeted a named group.
+  groupId: string | null;
   elapsedWeeks: number;
   weekIndex: number | null;
   verdicts: WfrpEconomyLevyVerdict[];
@@ -274,6 +278,8 @@ export interface WfrpEconomyMoneyToBurnVerdict {
 export interface WfrpEconomyMoneyToBurnResult {
   action: 'money-to-burn';
   dryRun: boolean;
+  // Phase 7c ADDITIVE (Q&A fold-in) — echoes the resolved groupId when the caller targeted a named group.
+  groupId: string | null;
   verdicts: WfrpEconomyMoneyToBurnVerdict[];
   refused: WfrpEconomyRefusal[];
 }
@@ -376,14 +382,24 @@ export interface WfrpEconomyAccrueInterestResult {
 
 // ── legitimate-business-enterprises idiom (Phase 6, wfrp_economy_system) ─────────
 
+// Phase 7c (D2/D3): weighted ownership share. actorName is a display convenience the handler resolves.
+export interface WfrpEconomyOwnerEntry {
+  actorId: string;
+  sharePct: number;
+  actorName: string | null;
+}
+
 export interface WfrpEconomyEnterpriseSummary {
   instanceId: string;
   name: string;
   profileId: string | null;
   backing: 'create' | 'link' | 'data-only';
   actorUuid: string | null;
+  // ownerActorId/ownerActorName stay for back-compat — D3: maintained as a deprecated alias, always the
+  // largest-share owner. owners[] is the Phase 7c ADDITIVE widened shape (never remove the scalar pair).
   ownerActorId: string | null;
   ownerActorName: string | null;
+  owners: WfrpEconomyOwnerEntry[];
   level: number;
   upkeep: number;
   debtPrincipalBp: number;
@@ -425,11 +441,13 @@ export interface WfrpEconomyGetEnterpriseResult {
   actorUuid: string | null;
   ownerActorId: string | null;
   ownerActorName: string | null;
+  owners: WfrpEconomyOwnerEntry[];
   level: number;
   upkeep: number;
   incomeModifiers: WfrpEconomyIncomeModifier[];
   eventTable: WfrpEconomyEventTable;
-  debt: { principalBp: number; escalationTier: number };
+  // creditor is Phase 7c ADDITIVE (D1/D6 — RAW Archives III Creditors identity).
+  debt: { principalBp: number; escalationTier: number; creditor: { name: string; notes: string } };
   createdAt: string | null;
 }
 
@@ -494,6 +512,78 @@ export interface WfrpEconomyDeleteEnterpriseResult {
   name: string;
 }
 
+// ── enterprise-ownership-and-debt idiom (Phase 7c, R7c.1/R7c.2) ─────────────────
+
+export interface WfrpEconomySetEnterpriseOwnersResult {
+  action: 'set-enterprise-owners';
+  enterpriseId: string;
+  owners: WfrpEconomyOwnerEntry[];
+  ownerActorId: string; // the newly-resolved primary (largest-share) owner — D3 alias.
+}
+
+export interface WfrpEconomyAddEnterpriseDebtResult {
+  action: 'add-enterprise-debt';
+  enterpriseId: string;
+  amountBp: number; // echo of the BP the Creditor advanced (F03 polish, 2026-07-13)
+  principalBp: number;
+  recipientActorId: string;
+  recipientActorName: string | null; // resolved recipient name, null when the actor is gone
+  walletBalanceBp: number;
+}
+
+export interface WfrpEconomyForgiveEnterpriseDebtResult {
+  action: 'forgive-enterprise-debt';
+  enterpriseId: string;
+  principalBp: number;
+}
+
+// ── levy-groups idiom (Phase 7c, R7c.4/R7c.5) ───────────────────────────────────
+
+export interface WfrpEconomyLevyEntry {
+  levyId: string;
+  name: string;
+  type: string; // 'tax' | 'toll' | 'due' | 'tithe' | 'custom' | 'builtin' — D9, UI/read-filter concern only.
+  cadence: string;
+  active: boolean;
+  amount: Record<string, unknown>; // {kind:'fixed-bp', value} | {kind:'standing-scaled', multiplier}
+  target: string | null;
+  groupId: string | null;
+  builtin: boolean;
+  state: Record<string, unknown>;
+}
+
+export interface WfrpEconomyListLeviesResult {
+  action: 'list-levies';
+  count: number;
+  levies: WfrpEconomyLevyEntry[];
+}
+
+export interface WfrpEconomyLevyGroupEntry {
+  groupId: string;
+  name: string;
+  actorIds: string[];
+  memberCount: number;
+}
+
+export interface WfrpEconomySaveLevyGroupResult {
+  action: 'save-levy-group';
+  groupId: string;
+  name: string;
+  actorIds: string[];
+}
+
+export interface WfrpEconomyListLevyGroupsResult {
+  action: 'list-levy-groups';
+  count: number;
+  groups: WfrpEconomyLevyGroupEntry[];
+}
+
+export interface WfrpEconomyDeleteLevyGroupResult {
+  action: 'delete-levy-group';
+  groupId: string;
+  deleted: boolean;
+}
+
 export type WfrpEconomyResult =
   | WfrpEconomyListEconomiesResult
   | WfrpEconomyGetEconomyResult
@@ -535,9 +625,16 @@ export type WfrpEconomyResult =
   | WfrpEconomyEnterprisePayInterestResult
   | WfrpEconomyEnterpriseRepayDebtResult
   | WfrpEconomyEnterpriseUpgradeResult
-  | WfrpEconomyDeleteEnterpriseResult;
+  | WfrpEconomyDeleteEnterpriseResult
+  | WfrpEconomySetEnterpriseOwnersResult
+  | WfrpEconomyAddEnterpriseDebtResult
+  | WfrpEconomyForgiveEnterpriseDebtResult
+  | WfrpEconomyListLeviesResult
+  | WfrpEconomySaveLevyGroupResult
+  | WfrpEconomyListLevyGroupsResult
+  | WfrpEconomyDeleteLevyGroupResult;
 
-// ── The action enum (mirrors the foundry-module discriminatedUnion literals; 44 actions) ──
+// ── The action enum (mirrors the foundry-module discriminatedUnion literals; 52 actions) ──
 
 export const WFRP_ECONOMY_ACTIONS = [
   'list-economies',
@@ -585,6 +682,13 @@ export const WFRP_ECONOMY_ACTIONS = [
   'enterprise-repay-debt',
   'enterprise-upgrade',
   'delete-enterprise',
+  'set-enterprise-owners',
+  'add-enterprise-debt',
+  'forgive-enterprise-debt',
+  'list-levies',
+  'save-levy-group',
+  'list-levy-groups',
+  'delete-levy-group',
 ] as const;
 
 export type WfrpEconomyAction = (typeof WFRP_ECONOMY_ACTIONS)[number];

@@ -4,13 +4,16 @@
 // Always-registered umbrella. requireModuleActive('wfrp4e-economy') is the FIRST active-state check —
 // RETURNS the MODULE_NOT_ACTIVE envelope, never throws (v1 Phase 1 contract).
 //
-// 44 actions across 12 idioms (capability_audit/wfrp4e-economy.md + phase6_pre_plan.md §Action surface;
+// 52 actions across 14 idioms (capability_audit/wfrp4e-economy.md + phase6_pre_plan.md §Action surface;
 // unified-ledger idiom — record-transaction / delete-account — added Phase 2, wfrp_economy_system_v1_prd.md
 // §10; levy-and-burn idiom — apply-levies / money-to-burn — added Phase 4, same PRD §10; banking-and-income
 // idiom — invest / resolve-investment / list-investments / stash-deposit / stash-withdraw / accrue-interest
 // — added Phase 5, same PRD §10; legitimate-business-enterprises idiom — list-enterprises / get-enterprise /
 // create-enterprise / connect-enterprise-actor / enterprise-income / enterprise-event /
-// enterprise-pay-interest / enterprise-repay-debt / enterprise-upgrade — added Phase 6, same PRD §10). ALL
+// enterprise-pay-interest / enterprise-repay-debt / enterprise-upgrade / delete-enterprise — added Phase 6,
+// same PRD §10; enterprise-ownership-and-debt idiom — set-enterprise-owners / add-enterprise-debt /
+// forgive-enterprise-debt — + levy-groups idiom — list-levies / save-levy-group / list-levy-groups /
+// delete-levy-group — both added Phase 7c, same PRD §10). ALL
 // financial state lives in world-scoped game settings (economies / bankers / bankAccounts /
 // stockPortfolios / transactionLogs / levies / recordedStashes / endeavourInvestments / enterprises). The
 // 9 transactional writes are driven by runtime-importing
@@ -204,6 +207,11 @@ const WRITE_ACTIONS = new Set([
   'enterprise-repay-debt',
   'enterprise-upgrade',
   'delete-enterprise',
+  'set-enterprise-owners',
+  'add-enterprise-debt',
+  'forgive-enterprise-debt',
+  'save-levy-group',
+  'delete-levy-group',
 ]);
 
 // ── Local helpers ──────────────────────────────────────────────────────────────
@@ -230,6 +238,12 @@ function readPortfolios(): Record<string, any> {
 }
 function readEnterprises(): { profiles: Record<string, any>; instances: Record<string, any> } {
   return getSetting('enterprises') ?? { profiles: {}, instances: {} };
+}
+function readLevies(): any[] {
+  return getSetting('levies') ?? [];
+}
+function readLevyGroups(): any[] {
+  return getSetting('levyGroups') ?? [];
 }
 
 function randomId(): string {
@@ -422,6 +436,22 @@ export async function dispatchModuleWfrpEconomy(data: unknown): Promise<Envelope
         return await handleEnterpriseUpgrade(input);
       case 'delete-enterprise':
         return await handleDeleteEnterprise(input);
+      // ── enterprise-ownership-and-debt (Phase 7c) ──
+      case 'set-enterprise-owners':
+        return await handleSetEnterpriseOwners(input);
+      case 'add-enterprise-debt':
+        return await handleAddEnterpriseDebt(input);
+      case 'forgive-enterprise-debt':
+        return await handleForgiveEnterpriseDebt(input);
+      // ── levy-groups (Phase 7c) ──
+      case 'list-levies':
+        return handleListLevies();
+      case 'save-levy-group':
+        return await handleSaveLevyGroup(input);
+      case 'list-levy-groups':
+        return handleListLevyGroups();
+      case 'delete-levy-group':
+        return await handleDeleteLevyGroup(input);
       default: {
         const _exhaustive: never = input;
         return { success: false, error: `WFRP_ECONOMY_UNKNOWN_ACTION: ${String((_exhaustive as any)?.action)}` };
@@ -1270,14 +1300,21 @@ function firstPersistFailure(verdicts: unknown): { actorId: string; detail: stri
 
 type ApplyLeviesInput = Extract<WfrpEconomyInputType, { action: 'apply-levies' }>;
 async function handleApplyLevies(input: ApplyLeviesInput): Promise<Envelope<unknown>> {
-  const missing = missingActor(input.actorIds);
-  if (missing) return targetNotFound(`actor "${missing}" not found`);
+  // Phase 7c (R7c.5): explicit actorIds still validates up front (back-compat); target/groupId are
+  // resolved ENGINE-SIDE by resolveTargets() — an unknown groupId resolves to an empty roster there
+  // (zero verdicts, zero refused), not a handler-side error.
+  if (input.actorIds) {
+    const missing = missingActor(input.actorIds);
+    if (missing) return targetNotFound(`actor "${missing}" not found`);
+  }
 
   const LevyEngine = await importLevyEngine();
   const dryRun = input.dryRun === true;
   const result = await LevyEngine.applyLevies({
     levyIds: input.levyIds,
     actorIds: input.actorIds,
+    target: input.target,
+    groupId: input.groupId,
     excludeActorIds: input.excludeActorIds,
     dryRun,
     declared: input.declared,
@@ -1300,6 +1337,7 @@ async function handleApplyLevies(input: ApplyLeviesInput): Promise<Envelope<unkn
       action: 'apply-levies',
       dryRun,
       declared: input.declared === true,
+      groupId: input.groupId ?? null,
       elapsedWeeks,
       weekIndex: result?.weekIndex ?? null,
       verdicts,
@@ -1313,14 +1351,17 @@ async function handleMoneyToBurn(input: MoneyToBurnInput): Promise<Envelope<unkn
   const dryRun = input.dryRun === true;
   if (!dryRun && input.confirm !== true) {
     return confirmRequired(
-      `money-to-burn wipes unprotected carried coin for ${input.actorIds.length} actor(s) (bank-account + recorded-stash balances survive; items are never deleted). Re-call with confirm:true, or dryRun:true to preview first.`,
+      `money-to-burn wipes unprotected carried coin for the resolved roster (bank-account + recorded-stash balances survive; items are never deleted). Re-call with confirm:true, or dryRun:true to preview first.`,
     );
   }
-  const missing = missingActor(input.actorIds);
-  if (missing) return targetNotFound(`actor "${missing}" not found`);
+  // Phase 7c (Q&A fold-in): same actorIds/target/groupId resolution contract as apply-levies above.
+  if (input.actorIds) {
+    const missing = missingActor(input.actorIds);
+    if (missing) return targetNotFound(`actor "${missing}" not found`);
+  }
 
   const LevyEngine = await importLevyEngine();
-  const result = await LevyEngine.moneyToBurn({ actorIds: input.actorIds, dryRun });
+  const result = await LevyEngine.moneyToBurn({ actorIds: input.actorIds, target: input.target, groupId: input.groupId, dryRun });
 
   if (!dryRun) {
     const failure = firstPersistFailure(result?.verdicts);
@@ -1334,7 +1375,7 @@ async function handleMoneyToBurn(input: MoneyToBurnInput): Promise<Envelope<unkn
   });
   return {
     success: true,
-    data: { action: 'money-to-burn', dryRun, verdicts, refused },
+    data: { action: 'money-to-burn', dryRun, groupId: input.groupId ?? null, verdicts, refused },
   };
 }
 
@@ -1550,6 +1591,13 @@ async function handleAccrueInterest(input: AccrueInterestInput): Promise<Envelop
 // engine-contract comment atop this file — no listInstances/getEnterprise engine export exists). The other
 // 7 actions DELEGATE to the fork's own headless enterprise-engine.js.
 
+// Phase 7c (D2/D3): weighted owners[], falling back to the legacy scalar for pre-migration instances
+// (main.js's ready-hook migration backfills owners[] on every instance, but this stays defensive).
+function mapOwners(inst: any): Array<{ actorId: string; sharePct: number; actorName: string | null }> {
+  const owners = Array.isArray(inst?.owners) && inst.owners.length ? inst.owners : (inst?.ownerActorId ? [{ actorId: inst.ownerActorId, sharePct: 100 }] : []);
+  return owners.map((o: any) => ({ actorId: o.actorId, sharePct: Number(o.sharePct ?? 0), actorName: actorName(o.actorId) }));
+}
+
 type ListEnterprisesInput = Extract<WfrpEconomyInputType, { action: 'list-enterprises' }>;
 async function handleListEnterprises(input: ListEnterprisesInput): Promise<Envelope<unknown>> {
   const store = readEnterprises();
@@ -1561,6 +1609,7 @@ async function handleListEnterprises(input: ListEnterprisesInput): Promise<Envel
     actorUuid: i?.actorUuid ?? null,
     ownerActorId: i?.ownerActorId ?? null,
     ownerActorName: actorName(i?.ownerActorId),
+    owners: mapOwners(i),
     level: Number(i?.level ?? 0),
     upkeep: Number(i?.upkeep ?? 0),
     debtPrincipalBp: Number(i?.debt?.principal ?? 0),
@@ -1602,11 +1651,16 @@ function handleGetEnterprise(input: GetEnterpriseInput): Envelope<unknown> {
       actorUuid: inst.actorUuid ?? null,
       ownerActorId: inst.ownerActorId ?? null,
       ownerActorName: actorName(inst.ownerActorId),
+      owners: mapOwners(inst),
       level: Number(inst.level ?? 0),
       upkeep: Number(inst.upkeep ?? 0),
       incomeModifiers: inst.incomeModifiers ?? [],
       eventTable: inst.eventTable ?? { uuid: null, overrides: [] },
-      debt: { principalBp: Number(inst.debt?.principal ?? 0), escalationTier: Number(inst.debt?.escalationTier ?? 0) },
+      debt: {
+        principalBp: Number(inst.debt?.principal ?? 0),
+        escalationTier: Number(inst.debt?.escalationTier ?? 0),
+        creditor: { name: inst.debt?.creditor?.name ?? '', notes: inst.debt?.creditor?.notes ?? '' },
+      },
       createdAt: inst.createdAt ?? null,
     },
   };
@@ -1640,6 +1694,7 @@ async function handleCreateEnterprise(input: CreateEnterpriseInput): Promise<Env
     ownerActorId: input.ownerActorId,
     actorId: input.actorId,
     financedPortion: input.financedPortionBp,
+    creditor: input.creditor,
   });
 
   if (result?.profileNotFound) {
@@ -1816,7 +1871,7 @@ async function handleEnterpriseUpgrade(input: EnterpriseUpgradeInput): Promise<E
     );
   }
   const EnterpriseEngine = await importEnterpriseEngine();
-  const result = await EnterpriseEngine.upgrade(input.enterpriseId, { level: input.level, financedPortion: input.financedPortionBp });
+  const result = await EnterpriseEngine.upgrade(input.enterpriseId, { level: input.level, financedPortion: input.financedPortionBp, creditor: input.creditor });
 
   if (result?.notFound) return targetNotFound(`enterprise "${input.enterpriseId}" not found`);
   if (result?.upgradeBlocked) {
@@ -1872,4 +1927,193 @@ async function handleDeleteEnterprise(input: DeleteEnterpriseInput): Promise<Env
       name: String(result.name ?? ''),
     },
   };
+}
+
+// ── enterprise-ownership-and-debt (Phase 7c, R7c.1/R7c.2) ───────────────────────
+//
+// All three DELEGATE to enterprise-engine.js's setOwners/addDebt/forgiveDebt exports (Phase 1 of the
+// same plan). DIALOG-PATH: the engine is contractually dialog-free (same file-header contract as every
+// other enterprise-engine.js export) — this handler never awaits a path that could open a Foundry dialog.
+
+type SetEnterpriseOwnersInput = Extract<WfrpEconomyInputType, { action: 'set-enterprise-owners' }>;
+async function handleSetEnterpriseOwners(input: SetEnterpriseOwnersInput): Promise<Envelope<unknown>> {
+  if (input.confirm !== true) {
+    return confirmRequired(
+      `set-enterprise-owners replaces the owners list for "${input.enterpriseId}" (${input.ownerShares.length} owner(s)) and re-derives the ownerActorId alias. Re-call with confirm:true.`,
+    );
+  }
+  const missing = missingActor(input.ownerShares.map((o) => o.actorId));
+  if (missing) return targetNotFound(`actor "${missing}" not found`);
+
+  const EnterpriseEngine = await importEnterpriseEngine();
+  const result = await EnterpriseEngine.setOwners(input.enterpriseId, { ownerShares: input.ownerShares });
+
+  if (result?.notFound) return targetNotFound(`enterprise "${input.enterpriseId}" not found`);
+  if (result?.ventureSlotsNotSupported) {
+    return { success: false, error: `WFRP_ECONOMY_VENTURE_SLOTS_NOT_SUPPORTED: ownerShares contains a {ventureId} slot — not supported until a ventures store exists (7d)` };
+  }
+  if (result?.invalidShares) {
+    return { success: false, error: `WFRP_ECONOMY_INVALID_SHARES: owner sharePct must sum to exactly 100 (got ${result.shareSum})` };
+  }
+  if (result?.persistedCheckFailed) {
+    return notPersisted(`set-enterprise-owners for "${input.enterpriseId}" failed persistence check: ${result?.detail ?? 'unknown'}`);
+  }
+  const owners = (Array.isArray(result.owners) ? result.owners : []).map((o: any) => ({ actorId: o.actorId, sharePct: Number(o.sharePct ?? 0), actorName: actorName(o.actorId) }));
+  notify.updated('wfrp-economy', `enterprise ${input.enterpriseId}`, {
+    summary: `owners set: ${owners.map((o: any) => `${o.actorName ?? o.actorId} (${o.sharePct}%)`).join(', ')}`,
+  });
+  return {
+    success: true,
+    data: {
+      action: 'set-enterprise-owners',
+      enterpriseId: input.enterpriseId,
+      owners,
+      ownerActorId: String(result.ownerActorId ?? ''),
+    },
+  };
+}
+
+type AddEnterpriseDebtInput = Extract<WfrpEconomyInputType, { action: 'add-enterprise-debt' }>;
+async function handleAddEnterpriseDebt(input: AddEnterpriseDebtInput): Promise<Envelope<unknown>> {
+  if (input.confirm !== true) {
+    return confirmRequired(
+      `add-enterprise-debt credits ${input.amountBp} BP to a recipient owner of "${input.enterpriseId}" and adds the same amount to debt.principal. Re-call with confirm:true.`,
+    );
+  }
+  if (input.recipientActorId && !getGame()?.actors?.get?.(input.recipientActorId)) {
+    return targetNotFound(`actor "${input.recipientActorId}" not found`);
+  }
+
+  const EnterpriseEngine = await importEnterpriseEngine();
+  const result = await EnterpriseEngine.addDebt(input.enterpriseId, {
+    amountBp: input.amountBp,
+    creditor: input.creditor,
+    recipientActorId: input.recipientActorId,
+  });
+
+  if (result?.notFound) return targetNotFound(`enterprise "${input.enterpriseId}" not found`);
+  if (result?.persistedCheckFailed) {
+    return notPersisted(`add-enterprise-debt for "${input.enterpriseId}" failed persistence check: ${result?.detail ?? 'unknown'}`);
+  }
+  notify.updated('wfrp-economy', `enterprise ${input.enterpriseId}`, {
+    summary: `Creditor advanced ${input.amountBp} BP — principal now ${result.principalBp} BP`,
+  });
+  const recipientActorName = result.recipientActorId
+    ? (getGame()?.actors?.get?.(String(result.recipientActorId))?.name ?? null)
+    : null;
+  return {
+    success: true,
+    data: {
+      action: 'add-enterprise-debt',
+      enterpriseId: input.enterpriseId,
+      amountBp: Number(input.amountBp),
+      principalBp: Number(result.principalBp ?? 0),
+      recipientActorId: String(result.recipientActorId ?? ''),
+      recipientActorName,
+      walletBalanceBp: Number(result.walletBalanceBp ?? 0),
+    },
+  };
+}
+
+type ForgiveEnterpriseDebtInput = Extract<WfrpEconomyInputType, { action: 'forgive-enterprise-debt' }>;
+async function handleForgiveEnterpriseDebt(input: ForgiveEnterpriseDebtInput): Promise<Envelope<unknown>> {
+  if (input.confirm !== true) {
+    return confirmRequired(
+      `forgive-enterprise-debt reduces "${input.enterpriseId}"'s Creditor principal${input.amountBp ? ` by ${input.amountBp} BP` : ' to ZERO (the entire remaining principal)'}. Zero wallet writes. Re-call with confirm:true.`,
+    );
+  }
+  const EnterpriseEngine = await importEnterpriseEngine();
+  const result = await EnterpriseEngine.forgiveDebt(input.enterpriseId, { amountBp: input.amountBp });
+
+  if (result?.notFound) return targetNotFound(`enterprise "${input.enterpriseId}" not found`);
+  if (result?.persistedCheckFailed) {
+    return notPersisted(`forgive-enterprise-debt for "${input.enterpriseId}" failed persistence check: ${result?.detail ?? 'unknown'}`);
+  }
+  notify.updated('wfrp-economy', `enterprise ${input.enterpriseId}`, {
+    summary: `Creditor debt forgiven — principal now ${result.principalBp} BP`,
+  });
+  return {
+    success: true,
+    data: {
+      action: 'forgive-enterprise-debt',
+      enterpriseId: input.enterpriseId,
+      principalBp: Number(result.principalBp ?? 0),
+    },
+  };
+}
+
+// ── levy-groups (Phase 7c, R7c.4/R7c.5) ──────────────────────────────────────────
+//
+// list-levies is a PURE READ over the `levies` world setting (mirrors list-enterprises' pure-read
+// precedent — no engine delegation for reads). save-levy-group/delete-levy-group write the standalone
+// `levyGroups` world setting DIRECTLY (register.js pattern — no engine export needed for simple CRUD
+// over a flat array setting; mirrors how levyExcludedActorIds is written today).
+
+function handleListLevies(): Envelope<unknown> {
+  const levies = readLevies().map((l: any) => ({
+    levyId: l?.id,
+    name: l?.name,
+    type: l?.builtin ? 'builtin' : (l?.type ?? 'custom'),
+    cadence: l?.cadence,
+    active: l?.active === true,
+    amount: l?.amount ?? {},
+    target: l?.target ?? null,
+    groupId: typeof l?.target === 'string' && l.target.startsWith('group:') ? l.target.slice('group:'.length) : null,
+    builtin: l?.builtin === true,
+    state: l?.state ?? {},
+  }));
+  return { success: true, data: { action: 'list-levies', count: levies.length, levies } };
+}
+
+type SaveLevyGroupInput = Extract<WfrpEconomyInputType, { action: 'save-levy-group' }>;
+async function handleSaveLevyGroup(input: SaveLevyGroupInput): Promise<Envelope<unknown>> {
+  if (input.confirm !== true) {
+    return confirmRequired(`save-levy-group ${input.groupId ? `updates group "${input.groupId}"` : 'creates a new group'} ("${input.name}", ${input.actorIds.length} member(s)). Re-call with confirm:true.`);
+  }
+  const missing = missingActor(input.actorIds);
+  if (missing) return targetNotFound(`actor "${missing}" not found`);
+
+  const groups = readLevyGroups();
+  const groupId = input.groupId ?? randomId();
+  const idx = groups.findIndex((g: any) => g?.id === groupId);
+  const entry = { id: groupId, name: input.name, actorIds: [...input.actorIds] };
+  if (idx >= 0) groups[idx] = entry;
+  else groups.push(entry);
+  await setSetting('levyGroups', groups);
+
+  const fresh = readLevyGroups().find((g: any) => g?.id === groupId);
+  if (!fresh) return notPersisted(`levy group "${groupId}" absent from levyGroups setting after write`);
+
+  notify.updated('wfrp-economy', `levy group "${input.name}"`, { summary: `${input.actorIds.length} member(s)` });
+  return {
+    success: true,
+    data: { action: 'save-levy-group', groupId, name: input.name, actorIds: input.actorIds },
+  };
+}
+
+function handleListLevyGroups(): Envelope<unknown> {
+  const groups = readLevyGroups().map((g: any) => ({
+    groupId: g?.id,
+    name: g?.name,
+    actorIds: Array.isArray(g?.actorIds) ? g.actorIds : [],
+    memberCount: Array.isArray(g?.actorIds) ? g.actorIds.length : 0,
+  }));
+  return { success: true, data: { action: 'list-levy-groups', count: groups.length, groups } };
+}
+
+type DeleteLevyGroupInput = Extract<WfrpEconomyInputType, { action: 'delete-levy-group' }>;
+async function handleDeleteLevyGroup(input: DeleteLevyGroupInput): Promise<Envelope<unknown>> {
+  if (input.confirm !== true) {
+    return confirmRequired(`delete-levy-group removes group "${input.groupId}" (levies still targeting it resolve to an empty roster afterward — no cascade rewrite). Re-call with confirm:true.`);
+  }
+  const groups = readLevyGroups();
+  const existing = groups.find((g: any) => g?.id === input.groupId);
+  if (!existing) return targetNotFound(`levy group "${input.groupId}" not found`);
+
+  await setSetting('levyGroups', groups.filter((g: any) => g?.id !== input.groupId));
+  const stillThere = readLevyGroups().some((g: any) => g?.id === input.groupId);
+  if (stillThere) return notPersisted(`levy group "${input.groupId}" still present in levyGroups setting after delete`);
+
+  notify.deleted('wfrp-economy', String(existing.name ?? input.groupId), { summary: `levy group ${input.groupId} removed` });
+  return { success: true, data: { action: 'delete-levy-group', groupId: input.groupId, deleted: true } };
 }

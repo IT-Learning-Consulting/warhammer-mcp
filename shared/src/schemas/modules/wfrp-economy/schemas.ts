@@ -7,13 +7,15 @@
 // `.strict()` ZodObject (NO `.refine`/`.transform` — a ZodEffects breaks the discriminatedUnion);
 // cross-field rules (confirm-gate, large-transfer threshold, target resolution) live in the handler.
 //
-// 44 actions across 12 idioms (capability_audit/wfrp4e-economy.md + phase6_pre_plan.md §Action surface;
+// 52 actions across 13 idioms (capability_audit/wfrp4e-economy.md + phase6_pre_plan.md §Action surface;
 // record-transaction + delete-account added Phase 2, wfrp_economy_system_v1_prd.md §10; apply-levies +
 // money-to-burn added Phase 4, same PRD §10; invest/resolve-investment/list-investments/stash-deposit/
 // stash-withdraw/accrue-interest added Phase 5, same PRD §10; list-enterprises/get-enterprise/
 // create-enterprise/connect-enterprise-actor/enterprise-income/enterprise-event/enterprise-pay-interest/
-// enterprise-repay-debt/enterprise-upgrade added Phase 6, same PRD §10 — HC8-compliant, action count
-// grows, tool count stays 1):
+// enterprise-repay-debt/enterprise-upgrade added Phase 6, same PRD §10; set-enterprise-owners/
+// add-enterprise-debt/forgive-enterprise-debt/list-levies/save-levy-group/list-levy-groups/
+// delete-levy-group added Phase 7c (§10 same PRD) — HC8-compliant, action count grows, tool count
+// stays 1):
 //   stand-up-an-economy (6): list-economies / get-economy / list-bankers / create-economy /
 //     update-economy / delete-economy
 //   open-a-bank-account (2): create-account / list-accounts
@@ -32,15 +34,24 @@
 //     src/banking/banking-engine.js (headless, dialog-free), Phase 5 of wfrp_economy_system_v1_prd.md §10.
 //     Investments are a standalone `endeavourInvestments` world setting (accounts carry no per-account
 //     rate); rolls (rate/d100) are pre-computed by the caller and passed in, never rolled by this layer.
-//   legitimate-business-enterprises (9): list-enterprises / get-enterprise / create-enterprise /
+//   legitimate-business-enterprises (10): list-enterprises / get-enterprise / create-enterprise /
 //     connect-enterprise-actor / enterprise-income / enterprise-event / enterprise-pay-interest /
-//     enterprise-repay-debt / enterprise-upgrade — DELEGATE to the wfrp4e-economy fork's own
-//     src/enterprises/enterprise-engine.js (headless, roll-free/dialog-free), Phase 6 of
+//     enterprise-repay-debt / enterprise-upgrade / delete-enterprise — DELEGATE to the wfrp4e-economy
+//     fork's own src/enterprises/enterprise-engine.js (headless, roll-free/dialog-free), Phase 6 of
 //     wfrp_economy_system_v1_prd.md §10. Enterprises live in a standalone `enterprises` world setting
 //     ({ profiles, instances }); list-enterprises(default)/get-enterprise are pure reads over that
 //     store (NOT engine delegations). backing is 'create' (embeds an archives3 enterprise actor, gated
 //     on wfrp4e-archives3) | 'link' (an existing archives3 actor) | 'data-only' (no actor). Rolls
 //     (rolledTotal/d100Roll) are pre-computed by the caller, never rolled by this layer.
+//   enterprise-ownership-and-debt (3, Phase 7c): set-enterprise-owners / add-enterprise-debt /
+//     forgive-enterprise-debt — DELEGATE to the same enterprise-engine.js (setOwners/addDebt/
+//     forgiveDebt exports). owners[] widens the single ownerActorId scalar to weighted shares;
+//     ownerActorId stays as a deprecated alias (= largest-share owner). RAW Archives III Creditors
+//     debt model: principal never auto-derives a tier, escalation derives from missed payments.
+//   levy-groups (4, Phase 7c): list-levies / save-levy-group / list-levy-groups / delete-levy-group —
+//     list-levies is a pure read over the `levies` world setting; the group actions DELEGATE to the
+//     `levyGroups` world setting (named actor rosters a levy's `target`/`groupId` can point at,
+//     resolved engine-side by levy-engine.js's resolveTargets()).
 //
 // All monetary amounts are integer Brass Pennies (BP); 1 GC = 240 BP, 1 SS = 12 BP.
 //
@@ -59,10 +70,16 @@ const stockId = z.string().min(1); // BRANDED-ID-EXEMPT:stockId — module-inter
 const propertyId = z.string().min(1); // BRANDED-ID-EXEMPT:propertyId — module-internal id, not a Foundry document id
 const investmentId = z.string().min(1); // BRANDED-ID-EXEMPT:investmentId — module-internal id, not a Foundry document id
 const enterpriseId = z.string().min(1); // BRANDED-ID-EXEMPT:enterpriseId — module-internal id (actor UUID when actor-backed, generated id when data-only)
+const levyGroupId = z.string().min(1); // BRANDED-ID-EXEMPT:levyGroupId — module-internal id (levyGroups setting entry), not a Foundry document id
 
 const amountBp = z.number().int().positive(); // integer Brass Pennies, > 0
 const quantity = z.number().int().positive();
 const financedPortionBp = z.number().int().nonnegative(); // BP covered by a Creditor (becomes/adds to debt.principal)
+
+// Phase 7c: RAW Archives III Creditors identity — name/notes, both optional (blank until a GM sets them).
+const creditorInput = z.object({ name: z.string().optional(), notes: z.string().optional() }).strict();
+// Phase 7c: weighted ownership share — integer percent; the handler asserts Σ(sharePct) === 100.
+const ownerShareInput = z.object({ actorId: ActorId, sharePct: z.number().int().min(0).max(100) }).strict();
 
 // Loose embedded-document arrays for economy create/update. The module owns the canonical shape; the
 // handler fills missing ids with foundry.utils.randomID. NOT `.strict()` (nested inside a strict variant).
@@ -194,11 +211,15 @@ export const WfrpEconomyInput = z.discriminatedUnion('action', [
     .object({ action: z.literal('delete-account'), accountId: accountId, economyId: economyId.optional(), confirm: z.boolean().optional() })
     .strict(),
 
-  // ── levy-and-burn idiom (Phase 4, wfrp_economy_system) ──────────────────────────
+  // ── levy-and-burn idiom (Phase 4, wfrp_economy_system; groupId/target additive Phase 7c) ────
   z
     .object({
       action: z.literal('apply-levies'),
-      actorIds: z.array(ActorId).min(1),
+      // Phase 7c (R7c.5): actorIds is now OPTIONAL — when omitted, the engine's resolveTargets()
+      // resolves `target`/`groupId` instead (explicit actorIds still WINS when provided, back-compat).
+      actorIds: z.array(ActorId).min(1).optional(),
+      target: z.enum(['party']).optional(), // 'party' is the only literal target; group targeting goes via groupId
+      groupId: levyGroupId.optional(),
       levyIds: z.array(z.string().min(1)).optional(), // omit = all cadence-eligible levies (e.g. weekly cost-of-living)
       excludeActorIds: z.array(ActorId).optional(),
       dryRun: z.boolean().optional(), // preview only, zero writes — no confirm required
@@ -210,10 +231,32 @@ export const WfrpEconomyInput = z.discriminatedUnion('action', [
   z
     .object({
       action: z.literal('money-to-burn'),
-      actorIds: z.array(ActorId).min(1),
+      // Phase 7c (Q&A fold-in): actorIds is now OPTIONAL, same resolveTargets()/groupId back-compat
+      // contract as apply-levies above.
+      actorIds: z.array(ActorId).min(1).optional(),
+      target: z.enum(['party']).optional(),
+      groupId: levyGroupId.optional(),
       dryRun: z.boolean().optional(), // preview only, zero writes — no confirm required
       confirm: z.boolean().optional(), // required to execute (dryRun:false/undefined) — mirrors delete-economy
     })
+    .strict(),
+
+  // ── levy-groups idiom (Phase 7c, R7c.4/R7c.5) ───────────────────────────────────
+  // list-levies is a pure read over the `levies` world setting (not an engine delegation — mirrors
+  // list-enterprises/get-enterprise's read-only precedent).
+  z.object({ action: z.literal('list-levies') }).strict(),
+  z
+    .object({
+      action: z.literal('save-levy-group'),
+      groupId: levyGroupId.optional(), // omit = create new
+      name: z.string().min(1),
+      actorIds: z.array(ActorId).min(1),
+      confirm: z.boolean().optional(),
+    })
+    .strict(),
+  z.object({ action: z.literal('list-levy-groups') }).strict(),
+  z
+    .object({ action: z.literal('delete-levy-group'), groupId: levyGroupId, confirm: z.boolean().optional() })
     .strict(),
 
   // ── banking-and-income idiom (Phase 5, wfrp_economy_system) ─────────────────────
@@ -269,6 +312,7 @@ export const WfrpEconomyInput = z.discriminatedUnion('action', [
       ownerActorId: ActorId,
       actorId: ActorId.optional(),
       financedPortionBp: financedPortionBp.optional(),
+      creditor: creditorInput.optional(),
       confirm: z.boolean().optional(),
     })
     .strict(),
@@ -298,6 +342,7 @@ export const WfrpEconomyInput = z.discriminatedUnion('action', [
       enterpriseId,
       level: z.number().int().min(1),
       financedPortionBp: financedPortionBp.optional(),
+      creditor: creditorInput.optional(),
       confirm: z.boolean().optional(),
     })
     .strict(),
@@ -305,6 +350,34 @@ export const WfrpEconomyInput = z.discriminatedUnion('action', [
   // Actor is never deleted and no coin moves. Confirm-gated (CCR-4, destructive store write).
   z
     .object({ action: z.literal('delete-enterprise'), enterpriseId, confirm: z.boolean().optional() })
+    .strict(),
+
+  // ── enterprise-ownership-and-debt idiom (Phase 7c, R7c.1/R7c.2) ─────────────────
+  z
+    .object({
+      action: z.literal('set-enterprise-owners'),
+      enterpriseId,
+      ownerShares: z.array(ownerShareInput).min(1), // handler asserts Σ(sharePct) === 100
+      confirm: z.boolean().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal('add-enterprise-debt'),
+      enterpriseId,
+      amountBp,
+      creditor: creditorInput.optional(),
+      recipientActorId: ActorId.optional(), // omit = the primary (largest-share) owner
+      confirm: z.boolean().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal('forgive-enterprise-debt'),
+      enterpriseId,
+      amountBp: amountBp.optional(), // omit = forgive the entire remaining principal
+      confirm: z.boolean().optional(),
+    })
     .strict(),
 ]);
 
