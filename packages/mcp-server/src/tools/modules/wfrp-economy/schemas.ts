@@ -3,16 +3,22 @@
 // CCR-5: Zod input validation lives package-local on the foundry-module side. The mcp-server tool layer
 // only needs typed response shapes for this.query<T> (DP-15 — never <any>).
 //
-// Warhammer Economy v1.0.0. 52 actions across 13 idioms (unified-ledger: record-transaction /
+// Warhammer Economy v1.0.0. 64 actions across 14 idioms (unified-ledger: record-transaction /
 // delete-account added Phase 2; levy-and-burn: apply-levies / money-to-burn added Phase 4;
 // banking-and-income: invest / resolve-investment / list-investments / stash-deposit / stash-withdraw /
 // accrue-interest added Phase 5; legitimate-business-enterprises: list-enterprises / get-enterprise /
 // create-enterprise / connect-enterprise-actor / enterprise-income / enterprise-event /
 // enterprise-pay-interest / enterprise-repay-debt / enterprise-upgrade / delete-enterprise added Phase 6;
 // enterprise-ownership-and-debt: set-enterprise-owners / add-enterprise-debt / forgive-enterprise-debt +
-// levy-groups: list-levies / save-levy-group / list-levy-groups / delete-levy-group added Phase 7c,
-// wfrp_economy_system_v1_prd.md §10). Each handler return carries `action` as a discriminant;
-// WfrpEconomyResult is their union so the tool stays typed without <any>.
+// levy-groups: list-levies / save-levy-group / list-levy-groups / delete-levy-group added Phase 7c;
+// venture-ledger: create-venture / get-venture / list-ventures / subscribe-venture /
+// transfer-venture-parts / settle-venture / distribute-venture / venture-event added Phase 7d (the
+// investment-cycle idiom's buy-stock/sell-stock/get-portfolio are RETIRED the same phase — enum literals
+// preserved, WFRP_ECONOMY_ACTION_RETIRED short-circuit); +toggle-venture-badge / issue-parts /
+// set-venture-status / set-venture-standing added Phase 7d2 (Venture Events v2), wfrp_economy_system_v1_prd.md
+// §10). Each handler
+// return carries `action` as a discriminant; WfrpEconomyResult is their union so the tool stays typed
+// without <any>.
 
 export interface WfrpEconomySummary {
   id: string;
@@ -20,7 +26,8 @@ export interface WfrpEconomySummary {
   currency: string;
   bankCount: number;
   propertyCount: number;
-  stockCount: number;
+  stockCount: number; // frozen — R7d.7, stock fields never removed
+  ventureCount: number; // ADDITIVE, Phase 7d
 }
 
 export interface WfrpEconomyListEconomiesResult {
@@ -36,7 +43,8 @@ export interface WfrpEconomyGetEconomyResult {
   currency: string;
   banks: Array<Record<string, unknown>>;
   properties: Array<Record<string, unknown>>;
-  stocks: Array<Record<string, unknown>>;
+  stocks: Array<Record<string, unknown>>; // frozen — R7d.7
+  ventureCount: number; // ADDITIVE, Phase 7d — count of live venture-ledger deeds (world-scoped, not per-economy)
 }
 
 export interface WfrpEconomyBankerEntry {
@@ -57,8 +65,9 @@ export interface WfrpEconomyCreateEconomyResult {
   economyId: string;
   name: string;
   bankCount: number;
-  stockCount: number;
+  stockCount: number; // frozen — R7d.7
   propertyCount: number;
+  ventureCount: number; // ADDITIVE, Phase 7d — world-scoped venture count (ventures aren't per-economy)
 }
 
 export interface WfrpEconomyUpdateEconomyResult {
@@ -125,33 +134,6 @@ export interface WfrpEconomyLoanResult {
   accountBalance: number;
 }
 
-export interface WfrpEconomyStockTradeResult {
-  action: 'buy-stock' | 'sell-stock';
-  accountId: string;
-  stockId: string;
-  quantity: number;
-  totalBp: number;
-  holding: number;
-  accountBalance: number;
-}
-
-export interface WfrpEconomyPortfolioHolding {
-  stockId: string;
-  stockName: string | null;
-  symbol: string | null;
-  quantity: number;
-  currentPrice: number | null;
-  valueBp: number | null;
-}
-
-export interface WfrpEconomyPortfolioResult {
-  action: 'get-portfolio';
-  actorId: string;
-  economyId: string;
-  holdingCount: number;
-  holdings: WfrpEconomyPortfolioHolding[];
-}
-
 export interface WfrpEconomyBuyPropertyResult {
   action: 'buy-property';
   propertyId: string;
@@ -198,6 +180,7 @@ export interface WfrpEconomyTransactionEntry {
   amount: number;
   amountDisplay: string | number | null;
   enterpriseId: string | null;
+  ventureId: string | null; // ADDITIVE, Phase 7d — venture-* rows carry the deed's instanceId (D16)
   description: string;
   date: string | null;
 }
@@ -383,8 +366,10 @@ export interface WfrpEconomyAccrueInterestResult {
 // ── legitimate-business-enterprises idiom (Phase 6, wfrp_economy_system) ─────────
 
 // Phase 7c (D2/D3): weighted ownership share. actorName is a display convenience the handler resolves.
+// Phase 7d: a slot may be venture-held instead of actor-held (ventureId set, actorId/actorName null).
 export interface WfrpEconomyOwnerEntry {
-  actorId: string;
+  actorId: string | null;
+  ventureId: string | null;
   sharePct: number;
   actorName: string | null;
 }
@@ -584,6 +569,139 @@ export interface WfrpEconomyDeleteLevyGroupResult {
   deleted: boolean;
 }
 
+// ── venture-ledger idiom (Phase 7d, wfrp_economy_system) ────────────────────────
+
+export interface WfrpEconomyVentureHolder {
+  actorId: string | null;
+  externalName: string | null;
+  actorName: string | null; // resolved display name (actor.name or externalName)
+  parts: number;
+}
+
+export interface WfrpEconomyVentureQueuedTransfer {
+  offerId: string;
+  sellerActorId: string | null;
+  sellerExternalName: string | null;
+  sellerName: string | null;
+  parts: number;
+  askingPriceBp: number;
+}
+
+export interface WfrpEconomyVentureSummary {
+  ventureId: string;
+  name: string;
+  type: string;
+  status: string;
+  standing: string;
+  partsTotal: number;
+  partsSubscribed: number;
+  priceBp: number;
+  escrowBp: number;
+  badges: string[];
+}
+
+export interface WfrpEconomyCreateVentureResult {
+  action: 'create-venture';
+  ventureId: string;
+  name: string;
+  type: string;
+  status: string;
+  standing: string;
+  escrowBp: number;
+}
+
+export interface WfrpEconomyGetVentureResult {
+  action: 'get-venture';
+  ventureId: string;
+  name: string;
+  type: string;
+  status: string;
+  standing: string;
+  partsTotal: number;
+  partsSubscribed: number;
+  priceBp: number;
+  escrowBp: number;
+  holders: WfrpEconomyVentureHolder[];
+  queuedTransfers: WfrpEconomyVentureQueuedTransfer[];
+  badges: string[];
+  notices: string[];
+  deedDateText: string | null;
+}
+
+export interface WfrpEconomyListVenturesResult {
+  action: 'list-ventures';
+  count: number;
+  ventures: WfrpEconomyVentureSummary[];
+}
+
+export interface WfrpEconomySubscribeVentureResult {
+  action: 'subscribe-venture';
+  ventureId: string;
+  subscribedParts: number;
+  escrowBp: number;
+  walletBalanceBp: number | null; // null for externalName subscribers (no actor wallet)
+}
+
+export interface WfrpEconomyTransferVentureResult {
+  action: 'transfer-venture-parts';
+  ventureId: string;
+  offerId: string;
+  queued: true; // resolves only at the next Run Economic Cycle — never instant (ADR-U11)
+}
+
+export interface WfrpEconomySettleVentureResult {
+  action: 'settle-venture';
+  ventureId: string;
+  status: string;
+  distributedBp: number;
+}
+
+export interface WfrpEconomyDistributeVentureResult {
+  action: 'distribute-venture';
+  ventureId: string;
+  distributedBp: number;
+  escrowBp: number; // remaining after distribution (external-holder shares that stayed in escrow)
+  splitCount: number;
+}
+
+export interface WfrpEconomyVentureEventResult {
+  action: 'venture-event';
+  ventureId: string;
+  text: string;
+  standing: string;
+  // Phase 7d2 (Venture Events v2) — additive fields, existing 3 pins stay green.
+  naturalRoll: number;
+  modifiedRoll: number;
+  standingModifier: number;
+  critical: 'boon' | 'disaster' | null;
+  effectsApplied: string[];
+}
+
+export interface WfrpEconomyToggleVentureBadgeResult {
+  action: 'toggle-venture-badge';
+  ventureId: string;
+  badges: string[];
+}
+
+export interface WfrpEconomyIssuePartsResult {
+  action: 'issue-parts';
+  ventureId: string;
+  partsTotal: number;
+  priceBp: number;
+}
+
+export interface WfrpEconomySetVentureStatusResult {
+  action: 'set-venture-status';
+  ventureId: string;
+  status: string;
+}
+
+export interface WfrpEconomySetVentureStandingResult {
+  action: 'set-venture-standing';
+  ventureId: string;
+  standing: string;
+}
+
 export type WfrpEconomyResult =
   | WfrpEconomyListEconomiesResult
   | WfrpEconomyGetEconomyResult
@@ -596,8 +714,6 @@ export type WfrpEconomyResult =
   | WfrpEconomyTransactionResult
   | WfrpEconomyTransferResult
   | WfrpEconomyLoanResult
-  | WfrpEconomyStockTradeResult
-  | WfrpEconomyPortfolioResult
   | WfrpEconomyBuyPropertyResult
   | WfrpEconomySellPropertyResult
   | WfrpEconomySetRentedResult
@@ -632,9 +748,21 @@ export type WfrpEconomyResult =
   | WfrpEconomyListLeviesResult
   | WfrpEconomySaveLevyGroupResult
   | WfrpEconomyListLevyGroupsResult
-  | WfrpEconomyDeleteLevyGroupResult;
+  | WfrpEconomyDeleteLevyGroupResult
+  | WfrpEconomyCreateVentureResult
+  | WfrpEconomyGetVentureResult
+  | WfrpEconomyListVenturesResult
+  | WfrpEconomySubscribeVentureResult
+  | WfrpEconomyTransferVentureResult
+  | WfrpEconomySettleVentureResult
+  | WfrpEconomyDistributeVentureResult
+  | WfrpEconomyVentureEventResult
+  | WfrpEconomyToggleVentureBadgeResult
+  | WfrpEconomyIssuePartsResult
+  | WfrpEconomySetVentureStatusResult
+  | WfrpEconomySetVentureStandingResult;
 
-// ── The action enum (mirrors the foundry-module discriminatedUnion literals; 52 actions) ──
+// ── The action enum (mirrors the foundry-module discriminatedUnion literals; 64 actions) ──
 
 export const WFRP_ECONOMY_ACTIONS = [
   'list-economies',
@@ -689,6 +817,18 @@ export const WFRP_ECONOMY_ACTIONS = [
   'save-levy-group',
   'list-levy-groups',
   'delete-levy-group',
+  'create-venture',
+  'get-venture',
+  'list-ventures',
+  'subscribe-venture',
+  'transfer-venture-parts',
+  'settle-venture',
+  'distribute-venture',
+  'venture-event',
+  'toggle-venture-badge',
+  'issue-parts',
+  'set-venture-status',
+  'set-venture-standing',
 ] as const;
 
 export type WfrpEconomyAction = (typeof WFRP_ECONOMY_ACTIONS)[number];

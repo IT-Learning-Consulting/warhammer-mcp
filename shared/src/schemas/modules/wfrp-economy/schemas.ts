@@ -7,7 +7,7 @@
 // `.strict()` ZodObject (NO `.refine`/`.transform` — a ZodEffects breaks the discriminatedUnion);
 // cross-field rules (confirm-gate, large-transfer threshold, target resolution) live in the handler.
 //
-// 52 actions across 13 idioms (capability_audit/wfrp4e-economy.md + phase6_pre_plan.md §Action surface;
+// 64 actions across 14 idioms (capability_audit/wfrp4e-economy.md + phase6_pre_plan.md §Action surface;
 // record-transaction + delete-account added Phase 2, wfrp_economy_system_v1_prd.md §10; apply-levies +
 // money-to-burn added Phase 4, same PRD §10; invest/resolve-investment/list-investments/stash-deposit/
 // stash-withdraw/accrue-interest added Phase 5, same PRD §10; list-enterprises/get-enterprise/
@@ -21,7 +21,9 @@
 //   open-a-bank-account (2): create-account / list-accounts
 //   run-a-transaction (3): deposit / withdraw / transfer
 //   loan-cycle (2): request-loan / repay-loan
-//   investment-cycle (3): buy-stock / sell-stock / get-portfolio
+//   investment-cycle (3, RETIRED Phase 7d — D2): buy-stock / sell-stock / get-portfolio — enum literals
+//     preserved (HC8), variants relaxed to action-only; the dispatcher short-circuits to
+//     WFRP_ECONOMY_ACTION_RETIRED naming the venture-ledger successors below.
 //   property-management (3): buy-property / sell-property / set-rented
 //   wallet-quick-adjust (3): get-wallet-balance / wallet-add / wallet-remove
 //   audit-the-ledger (3): list-transactions / actor-transaction-summary / bank-transaction-summary
@@ -52,6 +54,13 @@
 //     list-levies is a pure read over the `levies` world setting; the group actions DELEGATE to the
 //     `levyGroups` world setting (named actor rosters a levy's `target`/`groupId` can point at,
 //     resolved engine-side by levy-engine.js's resolveTargets()).
+//   venture-ledger (8, Phase 7d): create-venture / get-venture / list-ventures / subscribe-venture /
+//     transfer-venture-parts / settle-venture / distribute-venture / venture-event — DELEGATE to the
+//     wfrp4e-economy fork's own headless ventures engine (src/ventures/venture-engine.js). Deeds are a
+//     standalone `ventures` world setting ({instances}); a deed carries Parts (total/subscribed/priceBp),
+//     holders[] (actorId or externalName), an escrowBp coin pool, a status/standing pair, and
+//     queuedTransfers[]. transfer-venture-parts QUEUES an offer — resolution happens only at the fork's
+//     Run Economic Cycle button, never instantly. get-venture/list-ventures are pure reads.
 //
 // All monetary amounts are integer Brass Pennies (BP); 1 GC = 240 BP, 1 SS = 12 BP.
 //
@@ -66,20 +75,34 @@ const bankId = z.string().min(1); // BRANDED-ID-EXEMPT:bankId — module-interna
 const accountId = z.string().min(1); // BRANDED-ID-EXEMPT:accountId — module-internal id, not a Foundry document id
 const sourceAccountId = z.string().min(1); // BRANDED-ID-EXEMPT:sourceAccountId — module-internal id, not a Foundry document id
 const destinationAccountId = z.string().min(1); // BRANDED-ID-EXEMPT:destinationAccountId — module-internal id, not a Foundry document id
-const stockId = z.string().min(1); // BRANDED-ID-EXEMPT:stockId — module-internal id, not a Foundry document id
 const propertyId = z.string().min(1); // BRANDED-ID-EXEMPT:propertyId — module-internal id, not a Foundry document id
 const investmentId = z.string().min(1); // BRANDED-ID-EXEMPT:investmentId — module-internal id, not a Foundry document id
 const enterpriseId = z.string().min(1); // BRANDED-ID-EXEMPT:enterpriseId — module-internal id (actor UUID when actor-backed, generated id when data-only)
 const levyGroupId = z.string().min(1); // BRANDED-ID-EXEMPT:levyGroupId — module-internal id (levyGroups setting entry), not a Foundry document id
+const ventureId = z.string().min(1); // BRANDED-ID-EXEMPT:ventureId — module-internal id (venture-engine.js randomID), not a Foundry document id
 
 const amountBp = z.number().int().positive(); // integer Brass Pennies, > 0
-const quantity = z.number().int().positive();
 const financedPortionBp = z.number().int().nonnegative(); // BP covered by a Creditor (becomes/adds to debt.principal)
 
 // Phase 7c: RAW Archives III Creditors identity — name/notes, both optional (blank until a GM sets them).
 const creditorInput = z.object({ name: z.string().optional(), notes: z.string().optional() }).strict();
 // Phase 7c: weighted ownership share — integer percent; the handler asserts Σ(sharePct) === 100.
-const ownerShareInput = z.object({ actorId: ActorId, sharePct: z.number().int().min(0).max(100) }).strict();
+// Phase 7d: a slot may target a venture's escrow instead of an actor's wallet (ventureId variant) —
+// the lifted ventureId-slot rejection (D2/task 1.7); a venture can never hold another venture (D19,
+// enforced venture-side).
+const ownerShareInput = z.union([
+  z.object({ actorId: ActorId, sharePct: z.number().int().min(0).max(100) }).strict(),
+  z.object({ ventureId: ventureId, sharePct: z.number().int().min(0).max(100) }).strict(),
+]);
+
+// Phase 7d: venture deed type enum (fixed 4-value, venture-types.js VENTURE_TYPES — D1, no `profiles` bucket).
+const ventureType = z.enum(['expedition', 'partnership', 'project', 'concern']);
+const ventureStatus = z.enum(['open', 'funded', 'underway', 'settling', 'completed', 'defaulted']);
+// Phase 7d2: 6-band standing ladder (venture-types.js VENTURE_STANDINGS).
+const ventureStanding = z.enum(['celebrated', 'esteemed', 'reputable', 'uncertain', 'troubled', 'ruinous']);
+// Phase 7d2 (D8): only Disputed/Seized are MANUALLY toggleable — Delayed is DERIVED from delayCycles and
+// cannot be set via this action (venture-form.js's badgeToggles carries the same restriction).
+const ventureToggleableBadge = z.enum(['disputed', 'seized']);
 
 // Loose embedded-document arrays for economy create/update. The module owns the canonical shape; the
 // handler fills missing ids with foundry.utils.randomID. NOT `.strict()` (nested inside a strict variant).
@@ -153,14 +176,15 @@ export const WfrpEconomyInput = z.discriminatedUnion('action', [
     .strict(),
   z.object({ action: z.literal('repay-loan'), economyId: economyId, accountId: accountId, amountBp }).strict(),
 
-  // ── investment-cycle idiom ──────────────────────────────────────────────────────
-  z
-    .object({ action: z.literal('buy-stock'), economyId: economyId, accountId: accountId, stockId: stockId, quantity })
-    .strict(),
-  z
-    .object({ action: z.literal('sell-stock'), economyId: economyId, accountId: accountId, stockId: stockId, quantity })
-    .strict(),
-  z.object({ action: z.literal('get-portfolio'), actorId: ActorId, economyId: economyId }).strict(),
+  // ── investment-cycle idiom — RETIRED Phase 7d (D2), variants relaxed to action-only ────────────
+  // The Venture Ledger (venture-ledger idiom below) replaces stock trading. Enum literals are PRESERVED
+  // (HC8-as-amended: enum VALUES are never removed) so the dispatcher's typed retirement short-circuit
+  // is reachable with minimal input; the old required fields (economyId/accountId/stockId/quantity) are
+  // dropped from these 3 variants — first typed action retirement in the codebase (memo §MCP, grep = 0
+  // precedent).
+  z.object({ action: z.literal('buy-stock') }).strict(),
+  z.object({ action: z.literal('sell-stock') }).strict(),
+  z.object({ action: z.literal('get-portfolio') }).strict(),
 
   // ── property-management idiom ───────────────────────────────────────────────────
   z
@@ -376,6 +400,98 @@ export const WfrpEconomyInput = z.discriminatedUnion('action', [
       action: z.literal('forgive-enterprise-debt'),
       enterpriseId,
       amountBp: amountBp.optional(), // omit = forgive the entire remaining principal
+      confirm: z.boolean().optional(),
+    })
+    .strict(),
+
+  // ── venture-ledger idiom (Phase 7d, wfrp_economy_system, R7d.1-R7d.8) ───────────
+  // DELEGATE to the wfrp4e-economy fork's own headless, roll-free/dialog-free ventures engine
+  // (src/ventures/venture-engine.js, Phase 7d task 1.4) via the same runtimeImport idiom as
+  // enterprise-engine.js above. Ventures are a standalone `ventures` world setting ({ instances }) — NO
+  // `profiles` bucket (D1, the 4 deed types are a fixed enum). transfer-venture-parts QUEUES a secondary-
+  // market offer (venture-engine's queueTransfer) — resolution happens ONLY at the fork's own Run
+  // Economic Cycle button (duty f), never instantly; this action never resolves a sale itself.
+  z
+    .object({
+      action: z.literal('create-venture'),
+      name: z.string().min(1),
+      type: ventureType,
+      parts: z.object({ total: z.number().int().positive(), priceBp: amountBp }).strict(),
+      terms: z.object({ managerActorId: ActorId.optional(), managerPortionPct: z.number().int().min(0).max(100).optional() }).strict().optional(),
+      handledBy: z.array(z.object({ role: z.string().min(1), name: z.string().optional() }).strict()).optional(),
+      linkedEnterpriseId: z.string().min(1).optional(), // BRANDED-ID-EXEMPT:linkedEnterpriseId — module-internal id (enterprise instance id, actor UUID or generated), not a Foundry document id
+
+      exposureTags: z.array(z.string().min(1)).optional(),
+      confirm: z.boolean().optional(),
+    })
+    .strict(),
+  z.object({ action: z.literal('get-venture'), ventureId }).strict(),
+  z.object({ action: z.literal('list-ventures'), type: ventureType.optional(), status: ventureStatus.optional() }).strict(),
+  z
+    .object({
+      action: z.literal('subscribe-venture'),
+      ventureId,
+      actorId: ActorId.optional(),
+      externalName: z.string().min(1).optional(),
+      // NOT `parts` — create-venture's `parts` is an object ({total,priceBp}); a scalar under the same
+      // key would collide in the flattened mcp-server inputSchema (one JSON-schema type per property name).
+      partsCount: z.number().int().positive(),
+      confirm: z.boolean().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal('transfer-venture-parts'),
+      ventureId,
+      sellerActorId: ActorId.optional(),
+      sellerExternalName: z.string().min(1).optional(),
+      partsCount: z.number().int().positive(),
+      askingPriceBp: amountBp,
+      confirm: z.boolean().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal('settle-venture'),
+      ventureId,
+      netBp: z.number().int().nonnegative().optional(),
+      confirm: z.boolean().optional(),
+    })
+    .strict(),
+  z.object({ action: z.literal('distribute-venture'), ventureId, confirm: z.boolean().optional() }).strict(),
+  z.object({ action: z.literal('venture-event'), ventureId, d100Roll: z.number().int().min(1).max(100) }).strict(),
+
+  // ── Phase 7d2 (Venture Events v2, D13) — 4 new GM actions ───────────────────────
+  z
+    .object({
+      action: z.literal('toggle-venture-badge'),
+      ventureId,
+      badge: ventureToggleableBadge,
+      confirm: z.boolean().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal('issue-parts'),
+      ventureId,
+      count: z.number().int().positive(),
+      priceModPct: z.number().int().optional(), // signed % applied to parts.priceBp in the same call
+      confirm: z.boolean().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal('set-venture-status'),
+      ventureId,
+      status: ventureStatus,
+      confirm: z.boolean().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal('set-venture-standing'),
+      ventureId,
+      standing: ventureStanding,
       confirm: z.boolean().optional(),
     })
     .strict(),

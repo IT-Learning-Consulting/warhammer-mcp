@@ -57,6 +57,22 @@ export const ErrorTokens = {
   // `_NOT_PERSISTED` suffix on these two (nothing written yet → nothing to roll back).
   WFRP_ECONOMY_CONFIRM_REQUIRED: 'WFRP_ECONOMY_CONFIRM_REQUIRED',
   WFRP_ECONOMY_TARGET_NOT_FOUND: 'WFRP_ECONOMY_TARGET_NOT_FOUND',
+  // Phase 7d — first typed action retirement in the codebase (D2): buy-stock/sell-stock/get-portfolio
+  // are retired by the Venture Ledger. Enum literals stay (HC8-as-amended); the dispatcher short-circuits
+  // BEFORE any engine work, message names the venture-ledger successor action(s).
+  WFRP_ECONOMY_ACTION_RETIRED: 'WFRP_ECONOMY_ACTION_RETIRED',
+  // Phase 7d — set-enterprise-owners' ventureId-slot lift: the referenced venture doesn't exist in the
+  // live ventures store. No `_NOT_PERSISTED` suffix (nothing written yet).
+  WFRP_ECONOMY_VENTURE_NOT_FOUND: 'WFRP_ECONOMY_VENTURE_NOT_FOUND',
+  // Phase 7d2 (D7/D13) — badge-gate refusals: subscribe/transfer-resolution refused while Disputed;
+  // distribute/settle refused while Seized. No `_NOT_PERSISTED` suffix (nothing written yet — the badge
+  // gate refuses BEFORE any coin or Parts move).
+  WFRP_ECONOMY_VENTURE_DISPUTED: 'WFRP_ECONOMY_VENTURE_DISPUTED',
+  WFRP_ECONOMY_VENTURE_SEIZED: 'WFRP_ECONOMY_VENTURE_SEIZED',
+  // Phase 7d2 (B2 fix) — settle-venture on a deed with delayCycles > 0 previously false-succeeded
+  // (status:undefined, distributedBp:0, a "settled" toast for a settlement that never happened). No
+  // `_NOT_PERSISTED` suffix (nothing written yet — the delay gate refuses BEFORE any escrow write).
+  WFRP_ECONOMY_VENTURE_SETTLE_DELAYED: 'WFRP_ECONOMY_VENTURE_SETTLE_DELAYED',
   // module_integration_v2 Phase 8 (module-mortal-needs) — pre-write rejections (no rollback).
   // CONFIRM_REQUIRED: reset-all / untrack-actor / party-wide long-rest / unregister-custom-need fired
   // without confirm:true. TARGET_NOT_FOUND: actor/need/need-config could not be resolved. No

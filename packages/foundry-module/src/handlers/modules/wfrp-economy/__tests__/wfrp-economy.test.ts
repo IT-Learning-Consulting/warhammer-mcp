@@ -146,25 +146,10 @@ describe('confirm gates (CCR-4)', () => {
 // ── 5. Routing deviations (the HC-v2-7 thesis) ────────────────────────────────────
 
 describe('routing deviations — direct awaited methods, never the broken wrappers', () => {
-  it('sell-stock calls processStockSale and NOT broadcastStockSale (BUG-A bypass)', async () => {
-    const { settings, store } = makeSettings({
-      economies: [{ id: ECO, name: 'Reikland', currency: 'Gold Crowns', banks: [{ id: 'b1', name: 'Reik Bank' }], properties: [], stocks: [{ id: 'stk1', name: 'Reik Salt', symbol: 'SALT', currentPrice: 12, availableShares: 100 }] }],
-      bankAccounts: { acc1: { id: 'acc1', actorId: 'a1', bankId: 'b1', economyId: ECO, balance: 1000 } },
-      stockPortfolios: { 'a1-eco1': { stk1: 5 } },
-    });
-    const processStockSale = vi.fn(async (data: any) => {
-      store.stockPortfolios['a1-eco1'][data.stockId] -= data.quantity;
-      if (store.stockPortfolios['a1-eco1'][data.stockId] <= 0) delete store.stockPortfolios['a1-eco1'][data.stockId];
-    });
-    const broadcastStockSale = vi.fn();
-    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ SocketHandler: { processStockSale, broadcastStockSale } });
-    (globalThis as any).game = makeGame({ active: true, settings, actors: { a1: { name: 'Salzenmund' } } });
-    const res: any = await dispatchModuleWfrpEconomy({ action: 'sell-stock', economyId: ECO, accountId: 'acc1', stockId: 'stk1', quantity: 5 });
-    expect(res.success).toBe(true);
-    expect(processStockSale).toHaveBeenCalledTimes(1);
-    expect(broadcastStockSale).not.toHaveBeenCalled();
-    expect(res.data.holding).toBe(0);
-  });
+  // sell-stock's processStockSale/broadcastStockSale routing-deviation test (BUG-A bypass) was RETIRED
+  // Phase 7d along with the action itself — socket-handler.js's processStockSale no longer exists
+  // (deleted, Phase 3 sweep). See "venture-ledger — retired investment-cycle actions" below for its
+  // replacement coverage (sell-stock now always returns WFRP_ECONOMY_ACTION_RETIRED, engine never called).
 
   it('transfer calls _handleTransferProcess and NOT processTransfer (double-invoke bypass)', async () => {
     const { settings, store } = makeSettings({
@@ -724,7 +709,9 @@ describe('legitimate-business-enterprises — list-enterprises / get-enterprise 
     // (D3 back-compat) — delta-based assertion, not the old exact-equality (would break on every
     // future additive field, per the eval-pair lesson in the plan's §Validation).
     expect(res.data.debt).toEqual({ principalBp: 480, escalationTier: 1, creditor: { name: 'Baron von Debt', notes: '' } });
-    expect(res.data.owners).toEqual([{ actorId: 'a1', sharePct: 100, actorName: 'Owner' }]);
+    // Phase 7d ADDITIVE: ventureId:null rides alongside every owner slot (D2/task 1.7 lift — a slot may
+    // be venture-held instead of actor-held; this fixture's slot is actor-held).
+    expect(res.data.owners).toEqual([{ actorId: 'a1', ventureId: null, sharePct: 100, actorName: 'Owner' }]);
     expect(res.data.incomeModifiers).toHaveLength(1);
   });
 
@@ -1228,5 +1215,632 @@ describe('levy-groups — delete-levy-group', () => {
     expect(res.success).toBe(true);
     expect(res.data.deleted).toBe(true);
     expect(store.levyGroups).toEqual([]);
+  });
+});
+
+// ── Phase 7d — venture-ledger (R7d.1-R7d.8) + the FIRST typed action retirement ─────────────────
+//
+// WHY (Rule 9): the venture-ledger idiom replaces investment-cycle; every write forwards to
+// venture-engine.js exactly, every confirm-gate refuses BEFORE the engine is touched (mirrors the
+// enterprise-ownership-and-debt suite above), and retirement must short-circuit ahead of any engine
+// import — a regression here would silently resurrect the retired stock-trading surface.
+
+describe('venture-ledger — retired investment-cycle actions', () => {
+  it('buy-stock → WFRP_ECONOMY_ACTION_RETIRED naming create-venture/subscribe-venture, no engine import', async () => {
+    const { settings } = makeSettings();
+    const createVenture = vi.fn();
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ createVenture });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'buy-stock' });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_ACTION_RETIRED');
+    expect(res.error).toContain('create-venture');
+    expect(res.error).toContain('subscribe-venture');
+    expect(createVenture).not.toHaveBeenCalled();
+  });
+
+  it('sell-stock → WFRP_ECONOMY_ACTION_RETIRED naming transfer-venture-parts', async () => {
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'sell-stock' });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_ACTION_RETIRED');
+    expect(res.error).toContain('transfer-venture-parts');
+  });
+
+  it('get-portfolio → WFRP_ECONOMY_ACTION_RETIRED naming list-ventures/get-venture', async () => {
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'get-portfolio' });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_ACTION_RETIRED');
+    expect(res.error).toContain('list-ventures');
+    expect(res.error).toContain('get-venture');
+  });
+
+  it('retirement fires even for a non-GM caller (checked before the GM gate would matter — read-shaped enum, no WRITE_ACTIONS membership)', async () => {
+    (globalThis as any).game = makeGame({ active: true, isGM: false, settings: makeSettings().settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'buy-stock' });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_ACTION_RETIRED');
+  });
+});
+
+describe('venture-ledger — create-venture', () => {
+  it('WITHOUT confirm → WFRP_ECONOMY_CONFIRM_REQUIRED, engine never called', async () => {
+    const { settings } = makeSettings();
+    const createVenture = vi.fn();
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ createVenture });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'create-venture', name: 'Reik Cargo Run', type: 'expedition', parts: { total: 10, priceBp: 240 } });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_CONFIRM_REQUIRED');
+    expect(createVenture).not.toHaveBeenCalled();
+  });
+
+  it('WITH confirm:true forwards every pass-through field exactly and returns the created deed', async () => {
+    const { settings } = makeSettings();
+    const createVenture = vi.fn(async () => ({ instanceId: 'v1', name: 'Reik Cargo Run', type: 'expedition', status: 'open', standing: 'reputable', escrowBp: 0 }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ createVenture });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({
+      action: 'create-venture', name: 'Reik Cargo Run', type: 'expedition',
+      parts: { total: 10, priceBp: 240 }, terms: { managerPortionPct: 10 },
+      handledBy: [{ role: 'registry', name: 'Reikland Trading House' }], linkedEnterpriseId: 'ent1', exposureTags: ['river'],
+      confirm: true,
+    });
+    expect(res.success).toBe(true);
+    expect(createVenture).toHaveBeenCalledWith({
+      name: 'Reik Cargo Run', type: 'expedition', parts: { total: 10, priceBp: 240 },
+      terms: { managerPortionPct: 10 }, handledBy: [{ role: 'registry', name: 'Reikland Trading House' }],
+      linkedEnterpriseId: 'ent1', exposureTags: ['river'],
+    });
+    expect(res.data.ventureId).toBe('v1');
+    expect(res.data.status).toBe('open');
+    expect(res.data.standing).toBe('reputable');
+  });
+
+  it('engine invalidType verdict → WFRP_ECONOMY_TARGET_NOT_FOUND-shaped refusal, zero writes claimed', async () => {
+    const { settings } = makeSettings();
+    const createVenture = vi.fn(async () => ({ invalidType: true }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ createVenture });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'create-venture', name: 'X', type: 'expedition', parts: { total: 1, priceBp: 1 }, confirm: true });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_TARGET_NOT_FOUND');
+  });
+});
+
+describe('venture-ledger — get-venture / list-ventures (pure reads)', () => {
+  it('get-venture projects holders, queuedTransfers, badges, notices, deedDateText', async () => {
+    const { settings } = makeSettings();
+    const inst = {
+      id: 'v1', name: 'Reik Cargo Run', type: 'expedition', status: 'underway', standing: 'reputable',
+      parts: { total: 10, subscribed: 4, priceBp: 240 }, escrowBp: 480,
+      holders: [{ actorId: 'a1', parts: 4 }],
+      queuedTransfers: [{ offerId: 'o1', sellerActorId: 'a1', parts: 1, askingPriceBp: 300 }],
+      badges: ['delayed'], notices: ['A bridge toll delayed the wagons.'],
+      deedDate: { text: '1 Nachexen 2522' },
+    };
+    const getVenture = vi.fn(async () => inst);
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ getVenture });
+    (globalThis as any).game = makeGame({ active: true, settings, actors: { a1: { name: 'Investor A' } } });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'get-venture', ventureId: 'v1' });
+    expect(res.success).toBe(true);
+    expect(getVenture).toHaveBeenCalledWith('v1');
+    expect(res.data.holders[0]).toEqual({ actorId: 'a1', externalName: null, actorName: 'Investor A', parts: 4 });
+    expect(res.data.queuedTransfers[0].sellerName).toBe('Investor A');
+    expect(res.data.badges).toEqual(['delayed']);
+    expect(res.data.notices).toEqual(['A bridge toll delayed the wagons.']);
+    expect(res.data.deedDateText).toBe('1 Nachexen 2522');
+  });
+
+  it('get-venture on a missing deed → WFRP_ECONOMY_TARGET_NOT_FOUND', async () => {
+    const { settings } = makeSettings();
+    const getVenture = vi.fn(async () => ({ notFound: true }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ getVenture });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'get-venture', ventureId: 'ghost' });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_TARGET_NOT_FOUND');
+  });
+
+  it('list-ventures forwards type/status filters exactly', async () => {
+    const { settings } = makeSettings();
+    const listVentures = vi.fn(async () => [{ id: 'v1', name: 'Reik Cargo Run', type: 'expedition', status: 'underway', standing: 'reputable', parts: { total: 10, subscribed: 4, priceBp: 240 }, escrowBp: 480, badges: [] }]);
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ listVentures });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'list-ventures', type: 'expedition', status: 'underway' });
+    expect(res.success).toBe(true);
+    expect(listVentures).toHaveBeenCalledWith({ type: 'expedition', status: 'underway' });
+    expect(res.data.count).toBe(1);
+    expect(res.data.ventures[0].ventureId).toBe('v1');
+  });
+});
+
+describe('venture-ledger — subscribe-venture', () => {
+  it('WITHOUT confirm → WFRP_ECONOMY_CONFIRM_REQUIRED, engine never called', async () => {
+    const { settings } = makeSettings();
+    const subscribeVenture = vi.fn();
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ subscribeVenture });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'subscribe-venture', ventureId: 'v1', actorId: 'a1', partsCount: 2 });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_CONFIRM_REQUIRED');
+    expect(subscribeVenture).not.toHaveBeenCalled();
+  });
+
+  it('WITH confirm:true forwards actorId/externalName/partsCount→parts exactly', async () => {
+    const { settings } = makeSettings();
+    const subscribeVenture = vi.fn(async () => ({ ventureId: 'v1', subscribedParts: 6, escrowBp: 1440, walletBalanceBp: 5000 }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ subscribeVenture });
+    (globalThis as any).game = makeGame({ active: true, settings, actors: { a1: { name: 'Investor A' } } });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'subscribe-venture', ventureId: 'v1', actorId: 'a1', partsCount: 2, confirm: true });
+    expect(res.success).toBe(true);
+    expect(subscribeVenture).toHaveBeenCalledWith('v1', { actorId: 'a1', externalName: undefined, parts: 2 });
+    expect(res.data.subscribedParts).toBe(6);
+    expect(res.data.escrowBp).toBe(1440);
+    expect(res.data.walletBalanceBp).toBe(5000);
+  });
+
+  it('externalName subscriber forwards correctly (no actor pre-check)', async () => {
+    const { settings } = makeSettings();
+    const subscribeVenture = vi.fn(async () => ({ ventureId: 'v1', subscribedParts: 1, escrowBp: 240, walletBalanceBp: null }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ subscribeVenture });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'subscribe-venture', ventureId: 'v1', externalName: 'The Reikland Trading House', partsCount: 1, confirm: true });
+    expect(res.success).toBe(true);
+    expect(subscribeVenture).toHaveBeenCalledWith('v1', { actorId: undefined, externalName: 'The Reikland Trading House', parts: 1 });
+    expect(res.data.walletBalanceBp).toBeNull();
+  });
+
+  it('registryNotHandling verdict surfaces a typed refusal, zero writes', async () => {
+    const { settings } = makeSettings();
+    const subscribeVenture = vi.fn(async () => ({ registryNotHandling: true }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ subscribeVenture });
+    (globalThis as any).game = makeGame({ active: true, settings, actors: { a1: { name: 'Investor A' } } });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'subscribe-venture', ventureId: 'v1', actorId: 'a1', partsCount: 1, confirm: true });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_VENTURE_REGISTRY_NOT_HANDLING');
+  });
+
+  it('unknown actorId → WFRP_ECONOMY_TARGET_NOT_FOUND, engine never called', async () => {
+    const { settings } = makeSettings();
+    const subscribeVenture = vi.fn();
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ subscribeVenture });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'subscribe-venture', ventureId: 'v1', actorId: 'ghost', partsCount: 1, confirm: true });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_TARGET_NOT_FOUND');
+    expect(subscribeVenture).not.toHaveBeenCalled();
+  });
+
+  it('ventureDisputed verdict (7d2 badge gate) → typed WFRP_ECONOMY_VENTURE_DISPUTED refusal', async () => {
+    const { settings } = makeSettings();
+    const subscribeVenture = vi.fn(async () => ({ ventureDisputed: true }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ subscribeVenture });
+    (globalThis as any).game = makeGame({ active: true, settings, actors: { a1: { name: 'Investor A' } } });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'subscribe-venture', ventureId: 'v1', actorId: 'a1', partsCount: 1, confirm: true });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_VENTURE_DISPUTED');
+  });
+});
+
+describe('venture-ledger — transfer-venture-parts (queues only, never resolves here)', () => {
+  it('WITHOUT confirm → WFRP_ECONOMY_CONFIRM_REQUIRED, engine never called', async () => {
+    const { settings } = makeSettings();
+    const queueTransfer = vi.fn();
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ queueTransfer });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'transfer-venture-parts', ventureId: 'v1', sellerActorId: 'a1', partsCount: 1, askingPriceBp: 300 });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_CONFIRM_REQUIRED');
+    expect(queueTransfer).not.toHaveBeenCalled();
+  });
+
+  it('WITH confirm:true forwards sellerActorId/sellerExternalName/partsCount→parts/askingPriceBp exactly and returns queued:true', async () => {
+    const { settings } = makeSettings();
+    const queueTransfer = vi.fn(async () => ({ queued: true, offerId: 'o1' }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ queueTransfer });
+    (globalThis as any).game = makeGame({ active: true, settings, actors: { a1: { name: 'Investor A' } } });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'transfer-venture-parts', ventureId: 'v1', sellerActorId: 'a1', partsCount: 2, askingPriceBp: 500, confirm: true });
+    expect(res.success).toBe(true);
+    expect(queueTransfer).toHaveBeenCalledWith('v1', { sellerActorId: 'a1', sellerExternalName: undefined, parts: 2, askingPriceBp: 500 });
+    expect(res.data.offerId).toBe('o1');
+    expect(res.data.queued).toBe(true);
+  });
+
+  it('holderNotFound verdict → WFRP_ECONOMY_TARGET_NOT_FOUND', async () => {
+    const { settings } = makeSettings();
+    const queueTransfer = vi.fn(async () => ({ holderNotFound: true }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ queueTransfer });
+    (globalThis as any).game = makeGame({ active: true, settings, actors: { a1: { name: 'Investor A' } } });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'transfer-venture-parts', ventureId: 'v1', sellerActorId: 'a1', partsCount: 1, askingPriceBp: 100, confirm: true });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_TARGET_NOT_FOUND');
+  });
+});
+
+describe('venture-ledger — settle-venture', () => {
+  it('WITHOUT confirm → WFRP_ECONOMY_CONFIRM_REQUIRED, engine never called', async () => {
+    const { settings } = makeSettings();
+    const settleVenture = vi.fn();
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ settleVenture });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'settle-venture', ventureId: 'v1', netBp: 1000 });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_CONFIRM_REQUIRED');
+    expect(settleVenture).not.toHaveBeenCalled();
+  });
+
+  it('WITH confirm:true forwards netBp exactly and returns the resulting status', async () => {
+    const { settings } = makeSettings();
+    const settleVenture = vi.fn(async () => ({ settled: true, status: 'completed', distributed: { distributedBp: 1000 } }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ settleVenture });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'settle-venture', ventureId: 'v1', netBp: 1000, confirm: true });
+    expect(res.success).toBe(true);
+    expect(settleVenture).toHaveBeenCalledWith('v1', { netBp: 1000 });
+    expect(res.data.status).toBe('completed');
+    expect(res.data.distributedBp).toBe(1000);
+  });
+
+  it('doesNotSettle verdict (open-ended type) → typed refusal naming distribute-venture', async () => {
+    const { settings } = makeSettings();
+    const settleVenture = vi.fn(async () => ({ doesNotSettle: true }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ settleVenture });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'settle-venture', ventureId: 'v1', confirm: true });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_VENTURE_DOES_NOT_SETTLE');
+    expect(res.error).toContain('distribute-venture');
+  });
+
+  // B2 REGRESSION (7d2): settleDelayed previously fell through to the success path (status:undefined,
+  // distributedBp:0, a "settled" toast for a settlement that never happened). Must now be a typed refusal.
+  it('B2: settleDelayed verdict → typed WFRP_ECONOMY_VENTURE_SETTLE_DELAYED, NOT a false success', async () => {
+    const { settings } = makeSettings();
+    const settleVenture = vi.fn(async () => ({ settleDelayed: true, delayCycles: 2 }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ settleVenture });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'settle-venture', ventureId: 'v1', confirm: true });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_VENTURE_SETTLE_DELAYED');
+    expect(res.error).toContain('2');
+    expect(res.data).toBeUndefined();
+  });
+
+  // BUG-544 REGRESSION (DP-16): settleVenture now re-reads the store and verifies its escrow/status write
+  // before ledgering. The handler had NO persistedCheckFailed branch, so a dropped write would have fallen
+  // through to success:true — the same false-success shape as B2, one layer down.
+  it('BUG-544: persistedCheckFailed verdict → typed WFRP_ECONOMY_NOT_PERSISTED, NOT a false success', async () => {
+    const { settings } = makeSettings();
+    const settleVenture = vi.fn(async () => ({
+      status: 'underway',
+      persistedCheckFailed: true,
+      detail: 'instance "v1" expected status "settling" / escrowBp 500, got status "underway" / escrowBp 0',
+    }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ settleVenture });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'settle-venture', ventureId: 'v1', confirm: true });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_NOT_PERSISTED');
+    expect(res.error).toContain('v1');
+    expect(res.data).toBeUndefined();
+  });
+
+  it('escrowSeized verdict → typed WFRP_ECONOMY_VENTURE_SEIZED refusal', async () => {
+    const { settings } = makeSettings();
+    const settleVenture = vi.fn(async () => ({ escrowSeized: true }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ settleVenture });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'settle-venture', ventureId: 'v1', confirm: true });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_VENTURE_SEIZED');
+  });
+});
+
+describe('venture-ledger — distribute-venture', () => {
+  it('WITHOUT confirm → WFRP_ECONOMY_CONFIRM_REQUIRED, engine never called', async () => {
+    const { settings } = makeSettings();
+    const distributeVenture = vi.fn();
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ distributeVenture });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'distribute-venture', ventureId: 'v1' });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_CONFIRM_REQUIRED');
+    expect(distributeVenture).not.toHaveBeenCalled();
+  });
+
+  it('WITH confirm:true forwards ventureId exactly and returns the split summary', async () => {
+    const { settings } = makeSettings();
+    const distributeVenture = vi.fn(async () => ({ distributed: true, distributedBp: 1440, escrowBp: 0, splits: [{ actorId: 'a1', amountBp: 1440 }] }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ distributeVenture });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'distribute-venture', ventureId: 'v1', confirm: true });
+    expect(res.success).toBe(true);
+    expect(distributeVenture).toHaveBeenCalledWith('v1');
+    expect(res.data.distributedBp).toBe(1440);
+    expect(res.data.escrowBp).toBe(0);
+    expect(res.data.splitCount).toBe(1);
+  });
+
+  it('noHolders verdict → WFRP_ECONOMY_NOT_PERSISTED (nothing to distribute)', async () => {
+    const { settings } = makeSettings();
+    const distributeVenture = vi.fn(async () => ({ noHolders: true }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ distributeVenture });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'distribute-venture', ventureId: 'v1', confirm: true });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_NOT_PERSISTED');
+  });
+
+  it('escrowSeized verdict → typed WFRP_ECONOMY_VENTURE_SEIZED refusal, zero writes attempted beyond the call', async () => {
+    const { settings } = makeSettings();
+    const distributeVenture = vi.fn(async () => ({ escrowSeized: true }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ distributeVenture });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'distribute-venture', ventureId: 'v1', confirm: true });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_VENTURE_SEIZED');
+  });
+});
+
+describe('venture-ledger — venture-event (no confirm gate, mirrors enterprise-event)', () => {
+  it('forwards ventureId and d100Roll exactly, returns the drawn text + standing', async () => {
+    const { settings } = makeSettings();
+    const drawVentureEvent = vi.fn(async () => ({ text: 'A bridge toll delays the wagons.', standing: 'uncertain' }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ drawVentureEvent });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'venture-event', ventureId: 'v1', d100Roll: 12 });
+    expect(res.success).toBe(true);
+    expect(drawVentureEvent).toHaveBeenCalledWith('v1', { d100Roll: 12 });
+    expect(res.data.text).toBe('A bridge toll delays the wagons.');
+    expect(res.data.standing).toBe('uncertain');
+  });
+
+  it('engine invalidRoll verdict (defensive path — Zod already constrains d100Roll to 1-100) → typed refusal', async () => {
+    const { settings } = makeSettings();
+    const drawVentureEvent = vi.fn(async () => ({ invalidRoll: true }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ drawVentureEvent });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'venture-event', ventureId: 'v1', d100Roll: 50 });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_INVALID_ROLL');
+  });
+
+  it('a non-GM caller may draw a venture event (WRITE_ACTIONS membership, mirrors enterprise-event)', async () => {
+    const { settings } = makeSettings();
+    const drawVentureEvent = vi.fn(async () => ({ text: 'Fair skies.', standing: 'reputable' }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ drawVentureEvent });
+    (globalThis as any).game = makeGame({ active: true, isGM: false, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'venture-event', ventureId: 'v1', d100Roll: 50 });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_ACCESS_DENIED');
+  });
+
+  // 7d2: the response is additive — naturalRoll/modifiedRoll/standingModifier/critical/effectsApplied.
+  it('7d2: forwards the richer standing-modified-roll response (naturalRoll/modifiedRoll/standingModifier/critical/effectsApplied)', async () => {
+    const { settings } = makeSettings();
+    const drawVentureEvent = vi.fn(async () => ({
+      text: 'The cargo is seized at a tollhouse on a pretext.', standing: 'troubled',
+      naturalRoll: 68, modifiedRoll: 94, standingModifier: 26, critical: null,
+      effectsApplied: ['escrowModPct', 'addBadge', 'standingShift'],
+    }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ drawVentureEvent });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'venture-event', ventureId: 'v1', d100Roll: 68 });
+    expect(res.success).toBe(true);
+    expect(res.data.naturalRoll).toBe(68);
+    expect(res.data.modifiedRoll).toBe(94);
+    expect(res.data.standingModifier).toBe(26);
+    expect(res.data.critical).toBeNull();
+    expect(res.data.effectsApplied).toEqual(['escrowModPct', 'addBadge', 'standingShift']);
+  });
+
+  it('7d2: noEventsForStatus verdict (Completed/Defaulted deed) → typed refusal, zero writes', async () => {
+    const { settings } = makeSettings();
+    const drawVentureEvent = vi.fn(async () => ({ noEventsForStatus: true, status: 'completed' }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ drawVentureEvent });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'venture-event', ventureId: 'v1', d100Roll: 50 });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_VENTURE_NO_EVENTS_FOR_STATUS');
+  });
+});
+
+describe('venture-ledger — toggle-venture-badge (7d2, D7/D13)', () => {
+  it('WITHOUT confirm → WFRP_ECONOMY_CONFIRM_REQUIRED, engine never called', async () => {
+    const { settings } = makeSettings();
+    const toggleBadge = vi.fn();
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ toggleBadge });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'toggle-venture-badge', ventureId: 'v1', badge: 'disputed' });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_CONFIRM_REQUIRED');
+    expect(toggleBadge).not.toHaveBeenCalled();
+  });
+
+  it('WITH confirm:true forwards ventureId/badge exactly and returns the resulting badges', async () => {
+    const { settings } = makeSettings();
+    const toggleBadge = vi.fn(async () => ({ badges: ['disputed'] }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ toggleBadge });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'toggle-venture-badge', ventureId: 'v1', badge: 'disputed', confirm: true });
+    expect(res.success).toBe(true);
+    expect(toggleBadge).toHaveBeenCalledWith('v1', 'disputed');
+    expect(res.data.badges).toEqual(['disputed']);
+  });
+
+  it('notFound verdict → WFRP_ECONOMY_TARGET_NOT_FOUND', async () => {
+    const { settings } = makeSettings();
+    const toggleBadge = vi.fn(async () => ({ notFound: true }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ toggleBadge });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'toggle-venture-badge', ventureId: 'ghost', badge: 'seized', confirm: true });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_TARGET_NOT_FOUND');
+  });
+});
+
+describe('venture-ledger — issue-parts (7d2, D10/D12)', () => {
+  it('WITHOUT confirm → WFRP_ECONOMY_CONFIRM_REQUIRED, engine never called', async () => {
+    const { settings } = makeSettings();
+    const issuePartsForVenture = vi.fn();
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ issuePartsForVenture });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'issue-parts', ventureId: 'v1', count: 2 });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_CONFIRM_REQUIRED');
+    expect(issuePartsForVenture).not.toHaveBeenCalled();
+  });
+
+  it('WITH confirm:true forwards count/priceModPct exactly and returns the new total/price', async () => {
+    const { settings } = makeSettings();
+    const issuePartsForVenture = vi.fn(async () => ({ partsTotal: 12, priceBp: 180 }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ issuePartsForVenture });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'issue-parts', ventureId: 'v1', count: 2, priceModPct: -25, confirm: true });
+    expect(res.success).toBe(true);
+    expect(issuePartsForVenture).toHaveBeenCalledWith('v1', { count: 2, priceModPct: -25 });
+    expect(res.data.partsTotal).toBe(12);
+    expect(res.data.priceBp).toBe(180);
+  });
+
+  it('engine invalidCount verdict (defensive path — Zod already constrains count to a positive integer) → typed refusal', async () => {
+    const { settings } = makeSettings();
+    const issuePartsForVenture = vi.fn(async () => ({ invalidCount: true }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ issuePartsForVenture });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'issue-parts', ventureId: 'v1', count: 2, confirm: true });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_VENTURE_INVALID_PARTS_COUNT');
+  });
+
+  it('notFound verdict → WFRP_ECONOMY_TARGET_NOT_FOUND', async () => {
+    const { settings } = makeSettings();
+    const issuePartsForVenture = vi.fn(async () => ({ notFound: true }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ issuePartsForVenture });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'issue-parts', ventureId: 'ghost', count: 2, confirm: true });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_TARGET_NOT_FOUND');
+  });
+});
+
+describe('venture-ledger — set-venture-status (7d2, incl. the Wind Up idiom)', () => {
+  it('WITHOUT confirm → WFRP_ECONOMY_CONFIRM_REQUIRED, engine never called', async () => {
+    const { settings } = makeSettings();
+    const setStatus = vi.fn();
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ setStatus });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'set-venture-status', ventureId: 'v1', status: 'settling' });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_CONFIRM_REQUIRED');
+    expect(setStatus).not.toHaveBeenCalled();
+  });
+
+  it('WITH confirm:true forwards status exactly (Wind Up: Partnership/Concern → settling)', async () => {
+    const { settings } = makeSettings();
+    const setStatus = vi.fn(async () => ({ status: 'settling' }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ setStatus });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'set-venture-status', ventureId: 'v1', status: 'settling', confirm: true });
+    expect(res.success).toBe(true);
+    expect(setStatus).toHaveBeenCalledWith('v1', 'settling');
+    expect(res.data.status).toBe('settling');
+  });
+
+  it('notFound verdict → WFRP_ECONOMY_TARGET_NOT_FOUND', async () => {
+    const { settings } = makeSettings();
+    const setStatus = vi.fn(async () => ({ notFound: true }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ setStatus });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'set-venture-status', ventureId: 'ghost', status: 'settling', confirm: true });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_TARGET_NOT_FOUND');
+  });
+});
+
+describe('venture-ledger — set-venture-standing (7d2)', () => {
+  it('WITHOUT confirm → WFRP_ECONOMY_CONFIRM_REQUIRED, engine never called', async () => {
+    const { settings } = makeSettings();
+    const setStanding = vi.fn();
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ setStanding });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'set-venture-standing', ventureId: 'v1', standing: 'ruinous' });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_CONFIRM_REQUIRED');
+    expect(setStanding).not.toHaveBeenCalled();
+  });
+
+  it('WITH confirm:true forwards standing exactly', async () => {
+    const { settings } = makeSettings();
+    const setStanding = vi.fn(async () => ({ standing: 'ruinous' }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ setStanding });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'set-venture-standing', ventureId: 'v1', standing: 'ruinous', confirm: true });
+    expect(res.success).toBe(true);
+    expect(setStanding).toHaveBeenCalledWith('v1', 'ruinous');
+    expect(res.data.standing).toBe('ruinous');
+  });
+});
+
+describe('venture-ledger — set-enterprise-owners ventureId-slot acceptance (D2/task 1.7 lift)', () => {
+  it('a {ventureId, sharePct} slot passes through to the engine unmodified (no ventureSlotsNotSupported rejection)', async () => {
+    const { settings } = makeSettings();
+    const setOwners = vi.fn(async () => ({ owners: [{ actorId: 'a1', sharePct: 60 }, { ventureId: 'v1', sharePct: 40 }], ownerActorId: 'a1' }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ setOwners });
+    (globalThis as any).game = makeGame({ active: true, settings, actors: { a1: { name: 'Owner A' } } });
+    const res: any = await dispatchModuleWfrpEconomy({
+      action: 'set-enterprise-owners', enterpriseId: 'ent1',
+      ownerShares: [{ actorId: 'a1', sharePct: 60 }, { ventureId: 'v1', sharePct: 40 }], confirm: true,
+    });
+    expect(res.success).toBe(true);
+    expect(setOwners).toHaveBeenCalledWith('ent1', { ownerShares: [{ actorId: 'a1', sharePct: 60 }, { ventureId: 'v1', sharePct: 40 }] });
+    expect(res.data.owners[1]).toEqual({ actorId: null, ventureId: 'v1', sharePct: 40, actorName: null });
+  });
+
+  it('engine ventureNotFound verdict → WFRP_ECONOMY_VENTURE_NOT_FOUND naming the missing venture', async () => {
+    const { settings } = makeSettings();
+    const setOwners = vi.fn(async () => ({ ventureNotFound: true, ventureId: 'ghost' }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ setOwners });
+    (globalThis as any).game = makeGame({ active: true, settings, actors: { a1: { name: 'Owner A' } } });
+    const res: any = await dispatchModuleWfrpEconomy({
+      action: 'set-enterprise-owners', enterpriseId: 'ent1',
+      ownerShares: [{ actorId: 'a1', sharePct: 60 }, { ventureId: 'ghost', sharePct: 40 }], confirm: true,
+    });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_VENTURE_NOT_FOUND');
+    expect(res.error).toContain('ghost');
+  });
+});
+
+describe('venture-ledger — list-transactions projection pin extension (ventureId)', () => {
+  it('projects ventureId from stored venture-* rows (same convention as enterpriseId/bankName)', async () => {
+    const { settings } = makeSettings();
+    const row = {
+      id: 't1', type: 'venture-subscribe', source: 'economy', actorId: 'a1', actorName: 'Investor A',
+      economyId: null, bankId: null, bankName: null, amount: 480, amountDisplay: '2gc 0ss 0bp',
+      targetActorId: null, targetActorName: null, enterpriseId: null, ventureId: 'v1',
+      description: 'Venture "Reik Cargo Run" — subscribed 2 Parts', date: 'today',
+    };
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ TransactionLogger: { getTransactionLogs: () => [row] } });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'list-transactions', actorId: 'a1' });
+    expect(res.success).toBe(true);
+    expect(res.data.transactions[0].ventureId).toBe('v1');
+  });
+});
+
+describe('venture-ledger — get-economy ventureCount (additive, R7d.7 stock fields frozen)', () => {
+  it('get-economy response carries ventureCount additively alongside the frozen stocks array', async () => {
+    const { settings } = makeSettings({
+      economies: [{ id: ECO, name: 'The Empire', currency: 'GC', banks: [], properties: [], stocks: [{ id: 's1', name: 'Old Stock Row' }] }],
+      ventures: { instances: { v1: { id: 'v1' }, v2: { id: 'v2' } } },
+    });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'get-economy', economyId: ECO });
+    expect(res.success).toBe(true);
+    expect(res.data.stocks).toHaveLength(1); // R7d.7 — frozen, still round-trips
+    expect(res.data.ventureCount).toBe(2);
   });
 });

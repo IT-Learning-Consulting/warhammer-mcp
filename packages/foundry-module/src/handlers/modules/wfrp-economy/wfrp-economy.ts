@@ -4,7 +4,7 @@
 // Always-registered umbrella. requireModuleActive('wfrp4e-economy') is the FIRST active-state check —
 // RETURNS the MODULE_NOT_ACTIVE envelope, never throws (v1 Phase 1 contract).
 //
-// 52 actions across 14 idioms (capability_audit/wfrp4e-economy.md + phase6_pre_plan.md §Action surface;
+// 64 actions across 15 idioms (capability_audit/wfrp4e-economy.md + phase6_pre_plan.md §Action surface;
 // unified-ledger idiom — record-transaction / delete-account — added Phase 2, wfrp_economy_system_v1_prd.md
 // §10; levy-and-burn idiom — apply-levies / money-to-burn — added Phase 4, same PRD §10; banking-and-income
 // idiom — invest / resolve-investment / list-investments / stash-deposit / stash-withdraw / accrue-interest
@@ -159,6 +159,44 @@
 //     logs an enterprise-delete ledger row. (Added post-Phase-6 L4a, user directive 2026-07-12.)
 // Same firstPersistFailure/notPersisted surfacing convention as levy-and-burn/banking-and-income above;
 // the schema's `financedPortionBp` maps to the engine's `financedPortion` param name.
+//
+// venture-ledger (create-venture / get-venture / list-ventures / subscribe-venture /
+// transfer-venture-parts / settle-venture / distribute-venture / venture-event — Phase 7d,
+// wfrp_economy_system_v1_prd.md §10) delegates to the fork's OWN headless, roll-free/dialog-free ventures
+// engine (src/ventures/venture-engine.js) via the same runtimeImport idiom. Ventures are a standalone
+// `ventures` world setting ({instances}) — NO `profiles` bucket (D1). get-venture/list-ventures are pure
+// reads over that store, NOT engine delegations (same convention as list-enterprises/get-enterprise).
+//
+// Engine contract (verified against E:\foundry_v13\data\Data\modules\wfrp4e-economy\src\ventures\
+// venture-engine.js):
+//   createVenture({name,type,parts:{total,priceBp},terms?,handledBy?,linkedEnterpriseId?,exposureTags?})
+//     => Promise<{invalidType:true}|{ventureHoldsVentureNotAllowed:true}
+//        |{instanceId,name,type,status,standing,escrowBp,persistedCheckFailed?,detail?}>
+//   getVenture(id) => Promise<{notFound:true}|(full deed record)>
+//   listVentures({type?,status?}) => Promise<Array<full deed record>>
+//   subscribeVenture(id,{actorId?,externalName?,parts}) => Promise<
+//     {notFound:true}|{registryNotHandling:true}|{partsExceedTotal:true,partsAvailable}
+//     |{insufficientFunds:true,walletBalanceBp,requiredBp}
+//     |{ventureId,subscribedParts,escrowBp,walletBalanceBp,persistedCheckFailed?,detail?}>
+//   queueTransfer(id,{sellerActorId?,sellerExternalName?,parts,askingPriceBp}) => Promise<
+//     {notFound:true}|{holderNotFound:true}|{partsExceedHolding:true,partsHeld}
+//     |{queued:true,offerId,persistedCheckFailed?,detail?}>
+//   settleVenture(id,{netBp?}) => Promise<{notFound:true}|{doesNotSettle:true}
+//     |{settled:true,status,distributed}>
+//   distributeVenture(id) => Promise<{notFound:true}|{noHolders:true}
+//     |{distributed:true,distributedBp,escrowBp,splits,persistedCheckFailed?,detail?}>
+//   drawVentureEvent(id,{d100Roll}) => Promise<{notFound:true}|{invalidRoll:true}
+//     |{text,standing,effect,persistedCheckFailed?,detail?}>
+// `parts` on the engine's subscribeVenture/queueTransfer maps from this schema's `partsCount` field (NOT
+// `parts` — that name is reserved on create-venture for the {total,priceBp} object; a scalar under the
+// same key would collide in the flattened mcp-server inputSchema).
+//
+// RETIREMENT (D2): buy-stock/sell-stock/get-portfolio are intercepted BEFORE any engine work — the
+// dispatcher's RETIRED_ACTIONS check runs BEFORE the WRITE_ACTIONS/GM gate (a caller learns about the
+// retirement + successor regardless of GM status; these 3 actions are no longer real writes so they were
+// dropped from WRITE_ACTIONS), short-circuiting to a typed WFRP_ECONOMY_ACTION_RETIRED error naming the
+// venture-ledger successors. Enum literals stay (HC8-as-amended); the old handler fns + Result interfaces
+// + formatter cases are deleted.
 
 import { requireModuleActive } from '../_shared/require-module-active.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
@@ -183,8 +221,8 @@ const WRITE_ACTIONS = new Set([
   'transfer',
   'request-loan',
   'repay-loan',
-  'buy-stock',
-  'sell-stock',
+  // buy-stock/sell-stock RETIRED Phase 7d (D2) — no longer real writes, removed from this set; the
+  // retirement short-circuit fires before this gate is even checked (see RETIRED_ACTIONS below).
   'buy-property',
   'sell-property',
   'set-rented',
@@ -212,7 +250,22 @@ const WRITE_ACTIONS = new Set([
   'forgive-enterprise-debt',
   'save-levy-group',
   'delete-levy-group',
+  'create-venture',
+  'subscribe-venture',
+  'transfer-venture-parts',
+  'settle-venture',
+  'distribute-venture',
+  'venture-event',
 ]);
+
+// D2 — the FIRST typed action retirement in the codebase. Checked immediately after the WRITE_ACTIONS/GM
+// gate, before any engine import: buy-stock/sell-stock/get-portfolio are enum-preserved (HC8) but always
+// refuse now that the Venture Ledger replaces stock trading.
+const RETIRED_ACTIONS: Record<string, string> = {
+  'buy-stock': 'create-venture / subscribe-venture',
+  'sell-stock': 'transfer-venture-parts',
+  'get-portfolio': 'list-ventures / get-venture',
+};
 
 // ── Local helpers ──────────────────────────────────────────────────────────────
 
@@ -238,6 +291,12 @@ function readPortfolios(): Record<string, any> {
 }
 function readEnterprises(): { profiles: Record<string, any>; instances: Record<string, any> } {
   return getSetting('enterprises') ?? { profiles: {}, instances: {} };
+}
+function readVentures(): { instances: Record<string, any> } {
+  return getSetting('ventures') ?? { instances: {} };
+}
+function ventureCount(): number {
+  return Object.keys(readVentures().instances ?? {}).length;
 }
 function readLevies(): any[] {
   return getSetting('levies') ?? [];
@@ -312,6 +371,8 @@ const importBankingEngine = (): Promise<any> =>
   runtimeImport(`/modules/${MODULE_ID}/src/banking/banking-engine.js`);
 const importEnterpriseEngine = (): Promise<any> =>
   runtimeImport(`/modules/${MODULE_ID}/src/enterprises/enterprise-engine.js`);
+const importVentureEngine = (): Promise<any> =>
+  runtimeImport(`/modules/${MODULE_ID}/src/ventures/venture-engine.js`);
 
 function walletBalance(actorId: string, economyId: string | undefined): number {
   return Number(getGame()?.financial?.wallet?.getBalance?.(actorId, economyId ?? '') ?? 0);
@@ -328,6 +389,11 @@ export async function dispatchModuleWfrpEconomy(data: unknown): Promise<Envelope
     input = WfrpEconomyInput.parse(data);
   } catch (e) {
     return { success: false, error: `WFRP_ECONOMY_INVALID_INPUT: ${e instanceof Error ? e.message : String(e)}` };
+  }
+
+  const retiredSuccessor = RETIRED_ACTIONS[input.action];
+  if (retiredSuccessor) {
+    return { success: false, error: `${ErrorTokens.WFRP_ECONOMY_ACTION_RETIRED}: ${input.action} retired by the Venture Ledger (Phase 7d) — use ${retiredSuccessor}` };
   }
 
   if (WRITE_ACTIONS.has(input.action) && !isGM()) {
@@ -365,13 +431,7 @@ export async function dispatchModuleWfrpEconomy(data: unknown): Promise<Envelope
         return await handleRequestLoan(input);
       case 'repay-loan':
         return await handleRepayLoan(input);
-      // ── investment-cycle ──
-      case 'buy-stock':
-        return await handleBuyStock(input);
-      case 'sell-stock':
-        return await handleSellStock(input);
-      case 'get-portfolio':
-        return handleGetPortfolio(input);
+      // ── investment-cycle: RETIRED (D2) — intercepted above the switch, never reached here ──
       // ── property-management ──
       case 'buy-property':
         return await handleBuyProperty(input);
@@ -452,6 +512,38 @@ export async function dispatchModuleWfrpEconomy(data: unknown): Promise<Envelope
         return handleListLevyGroups();
       case 'delete-levy-group':
         return await handleDeleteLevyGroup(input);
+      // ── venture-ledger (Phase 7d) ──
+      case 'create-venture':
+        return await handleCreateVenture(input);
+      case 'get-venture':
+        return await handleGetVenture(input);
+      case 'list-ventures':
+        return await handleListVentures(input);
+      case 'subscribe-venture':
+        return await handleSubscribeVenture(input);
+      case 'transfer-venture-parts':
+        return await handleTransferVentureParts(input);
+      case 'settle-venture':
+        return await handleSettleVenture(input);
+      case 'distribute-venture':
+        return await handleDistributeVenture(input);
+      case 'venture-event':
+        return await handleVentureEvent(input);
+      // ── venture-ledger (Phase 7d2 — Venture Events v2) ──
+      case 'toggle-venture-badge':
+        return await handleToggleVentureBadge(input);
+      case 'issue-parts':
+        return await handleIssueParts(input);
+      case 'set-venture-status':
+        return await handleSetVentureStatus(input);
+      case 'set-venture-standing':
+        return await handleSetVentureStanding(input);
+      // Unreachable at runtime — RETIRED_ACTIONS intercepts these above, before this switch runs. Cases
+      // kept only so the `never` exhaustiveness check below stays meaningful (D2).
+      case 'buy-stock':
+      case 'sell-stock':
+      case 'get-portfolio':
+        return { success: false, error: `${ErrorTokens.WFRP_ECONOMY_ACTION_RETIRED}: ${input.action} retired by the Venture Ledger (Phase 7d)` };
       default: {
         const _exhaustive: never = input;
         return { success: false, error: `WFRP_ECONOMY_UNKNOWN_ACTION: ${String((_exhaustive as any)?.action)}` };
@@ -466,13 +558,16 @@ export async function dispatchModuleWfrpEconomy(data: unknown): Promise<Envelope
 
 function handleListEconomies(): Envelope<unknown> {
   const economies = readEconomies();
+  // Ventures are world-scoped (not per-economy, D1) — the same total is additive on every row.
+  const totalVentures = ventureCount();
   const list = economies.map((e: any) => ({
     id: e?.id,
     name: e?.name,
     currency: e?.currency ?? '',
     bankCount: e?.banks?.length ?? 0,
     propertyCount: e?.properties?.length ?? 0,
-    stockCount: e?.stocks?.length ?? 0,
+    stockCount: e?.stocks?.length ?? 0, // frozen — R7d.7
+    ventureCount: totalVentures, // ADDITIVE, Phase 7d
   }));
   return { success: true, data: { action: 'list-economies', count: list.length, economies: list } };
 }
@@ -490,7 +585,8 @@ function handleGetEconomy(input: GetEconomyInput): Envelope<unknown> {
       currency: economy.currency ?? '',
       banks: economy.banks ?? [],
       properties: economy.properties ?? [],
-      stocks: economy.stocks ?? [],
+      stocks: economy.stocks ?? [], // frozen — R7d.7
+      ventureCount: ventureCount(), // ADDITIVE, Phase 7d — world-scoped, not per-economy
     },
   };
 }
@@ -561,7 +657,7 @@ async function handleCreateEconomy(input: CreateEconomyInput): Promise<Envelope<
   notify.created('wfrp-economy', input.name, { summary: `economy ${economyId} (${banks.length} bank/${stocks.length} stock/${properties.length} prop)` });
   return {
     success: true,
-    data: { action: 'create-economy', economyId, name: input.name, bankCount: banks.length, stockCount: stocks.length, propertyCount: properties.length },
+    data: { action: 'create-economy', economyId, name: input.name, bankCount: banks.length, stockCount: stocks.length, propertyCount: properties.length, ventureCount: ventureCount() },
   };
 }
 
@@ -878,113 +974,7 @@ async function handleRepayLoan(input: RepayLoanInput): Promise<Envelope<unknown>
   };
 }
 
-// ── investment-cycle ────────────────────────────────────────────────────────────
-
-function portfolioHolding(actorId: string, economyId: string, stockId: string): number {
-  const key = `${actorId}-${economyId}`;
-  return Number(readPortfolios()[key]?.[stockId] ?? 0);
-}
-
-type BuyStockInput = Extract<WfrpEconomyInputType, { action: 'buy-stock' }>;
-async function handleBuyStock(input: BuyStockInput): Promise<Envelope<unknown>> {
-  const accounts = readBankAccounts();
-  const account = accounts[input.accountId];
-  if (!account) return targetNotFound(`bank account "${input.accountId}" not found`);
-  const economy = findEconomy(input.economyId);
-  if (!economy) return targetNotFound(`economy "${input.economyId}" not found`);
-  const stock = economy.stocks?.find((s: any) => s?.id === input.stockId);
-  if (!stock) return targetNotFound(`stock "${input.stockId}" not in economy "${input.economyId}"`);
-  const totalCost = Number(stock.currentPrice ?? 0) * input.quantity;
-  if (totalCost > Number(account.balance ?? 0)) return notPersisted(`buy-stock cost ${totalCost} BP exceeds account balance ${Number(account.balance ?? 0)} BP`);
-  if (input.quantity > Number(stock.availableShares ?? 0)) return notPersisted(`buy-stock quantity ${input.quantity} exceeds available shares ${Number(stock.availableShares ?? 0)}`);
-  const bank = resolveBank(economy, account.bankId);
-  const beforeHolding = portfolioHolding(account.actorId, input.economyId, input.stockId);
-
-  const SocketHandler = await importSocketHandler();
-  await SocketHandler.processStockPurchase({
-    actorId: account.actorId,
-    stockId: input.stockId,
-    quantity: input.quantity,
-    economyId: input.economyId,
-    bankId: account.bankId,
-    bankName: bank?.name ?? 'Bank',
-    totalCost,
-    currency: economy.currency,
-    stockName: stock.name,
-    stockSymbol: stock.symbol,
-  });
-
-  const afterHolding = portfolioHolding(account.actorId, input.economyId, input.stockId);
-  if (afterHolding !== beforeHolding + input.quantity) {
-    return notPersisted(`portfolio holding expected ${beforeHolding + input.quantity}, got ${afterHolding} after buy-stock`);
-  }
-  notify.updated('wfrp-economy', actorName(account.actorId) ?? account.actorId, { summary: `bought ${input.quantity}× ${stock.symbol} for ${totalCost} BP` });
-  return {
-    success: true,
-    data: { action: 'buy-stock', accountId: input.accountId, stockId: input.stockId, quantity: input.quantity, totalBp: totalCost, holding: afterHolding, accountBalance: Number(readBankAccounts()[input.accountId]?.balance ?? 0) },
-  };
-}
-
-type SellStockInput = Extract<WfrpEconomyInputType, { action: 'sell-stock' }>;
-async function handleSellStock(input: SellStockInput): Promise<Envelope<unknown>> {
-  const accounts = readBankAccounts();
-  const account = accounts[input.accountId];
-  if (!account) return targetNotFound(`bank account "${input.accountId}" not found`);
-  const economy = findEconomy(input.economyId);
-  if (!economy) return targetNotFound(`economy "${input.economyId}" not found`);
-  const stock = economy.stocks?.find((s: any) => s?.id === input.stockId);
-  if (!stock) return targetNotFound(`stock "${input.stockId}" not in economy "${input.economyId}"`);
-  const beforeHolding = portfolioHolding(account.actorId, input.economyId, input.stockId);
-  if (input.quantity > beforeHolding) return notPersisted(`sell-stock quantity ${input.quantity} exceeds holding ${beforeHolding}`);
-  const totalValue = Number(stock.currentPrice ?? 0) * input.quantity;
-  const bank = resolveBank(economy, account.bankId);
-
-  // ROUTING DEVIATION: processStockSale DIRECT (NOT broadcastStockSale — the BUG-A broken socket path).
-  const SocketHandler = await importSocketHandler();
-  await SocketHandler.processStockSale({
-    actorId: account.actorId,
-    stockId: input.stockId,
-    quantity: input.quantity,
-    economyId: input.economyId,
-    bankId: account.bankId,
-    bankName: bank?.name ?? 'Bank',
-    totalValue,
-    currency: economy.currency,
-    stockName: stock.name,
-    stockSymbol: stock.symbol,
-  });
-
-  const afterHolding = portfolioHolding(account.actorId, input.economyId, input.stockId);
-  if (afterHolding !== beforeHolding - input.quantity) {
-    return notPersisted(`portfolio holding expected ${beforeHolding - input.quantity}, got ${afterHolding} after sell-stock`);
-  }
-  notify.updated('wfrp-economy', actorName(account.actorId) ?? account.actorId, { summary: `sold ${input.quantity}× ${stock.symbol} for ${totalValue} BP` });
-  return {
-    success: true,
-    data: { action: 'sell-stock', accountId: input.accountId, stockId: input.stockId, quantity: input.quantity, totalBp: totalValue, holding: afterHolding, accountBalance: Number(readBankAccounts()[input.accountId]?.balance ?? 0) },
-  };
-}
-
-type GetPortfolioInput = Extract<WfrpEconomyInputType, { action: 'get-portfolio' }>;
-function handleGetPortfolio(input: GetPortfolioInput): Envelope<unknown> {
-  const key = `${input.actorId}-${input.economyId}`;
-  const holdingsRaw = readPortfolios()[key] ?? {};
-  const economy = findEconomy(input.economyId);
-  const holdings = Object.entries(holdingsRaw).map(([stockId, qty]: [string, any]) => {
-    const stock = economy?.stocks?.find((s: any) => s?.id === stockId);
-    const quantity = Number(qty ?? 0);
-    const currentPrice = stock ? Number(stock.currentPrice ?? 0) : null;
-    return {
-      stockId,
-      stockName: stock?.name ?? null,
-      symbol: stock?.symbol ?? null,
-      quantity,
-      currentPrice,
-      valueBp: currentPrice !== null ? currentPrice * quantity : null,
-    };
-  });
-  return { success: true, data: { action: 'get-portfolio', actorId: input.actorId, economyId: input.economyId, holdingCount: holdings.length, holdings } };
-}
+// ── investment-cycle: RETIRED Phase 7d (D2) — handlers removed, see venture-ledger below ──────
 
 // ── property-management ─────────────────────────────────────────────────────────
 
@@ -1157,6 +1147,9 @@ async function handleListTransactions(input: ListTxInput): Promise<Envelope<unkn
     // instance (enterprise-engine.js TransactionLogger.logTransaction calls) — surface it same as
     // bankName/targetActorId above rather than silently dropping it.
     enterpriseId: l?.enterpriseId ?? null,
+    // Phase 7d (D16): venture-* rows carry a ventureId naming the deed instance — same convention as
+    // enterpriseId/bankName/targetActorId above, not silently dropped.
+    ventureId: l?.ventureId ?? null,
     description: l?.description ?? '',
     date: l?.date ?? null,
   }));
@@ -1182,6 +1175,10 @@ export function rebucketEconomySummary(summary: any, logs: any[], scope: { actor
   // don't contradict the corrected numerics (Rule 12: no silent stale field).
   summary.totalStockSalesDisplay = `${summary.totalStockSales} BP`;
   summary.totalLoansDisplay = `${summary.totalLoans} BP`;
+  // Phase 7d (D17): BUG-471 4th site — venture-* rows are bucketed at the fork's transaction-logger.js
+  // (P7d-5, sites 1-2) AND the display switch (P7d-13, site 3); this handler-side re-derivation is site 4.
+  summary.totalVenture = sum((l) => String(l?.type).startsWith('venture-'));
+  summary.totalVentureDisplay = `${summary.totalVenture} BP`;
   const i18n = (globalThis as any).game?.i18n;
   if (i18n?.localize && Array.isArray(summary.recentTransactions)) {
     summary.recentTransactions = summary.recentTransactions.map((tx: any) => {
@@ -1593,9 +1590,10 @@ async function handleAccrueInterest(input: AccrueInterestInput): Promise<Envelop
 
 // Phase 7c (D2/D3): weighted owners[], falling back to the legacy scalar for pre-migration instances
 // (main.js's ready-hook migration backfills owners[] on every instance, but this stays defensive).
-function mapOwners(inst: any): Array<{ actorId: string; sharePct: number; actorName: string | null }> {
+// Phase 7d: an owner slot may be venture-held (o.ventureId set, no actorId) — D2/task 1.7 lift.
+function mapOwners(inst: any): Array<{ actorId: string | null; ventureId: string | null; sharePct: number; actorName: string | null }> {
   const owners = Array.isArray(inst?.owners) && inst.owners.length ? inst.owners : (inst?.ownerActorId ? [{ actorId: inst.ownerActorId, sharePct: 100 }] : []);
-  return owners.map((o: any) => ({ actorId: o.actorId, sharePct: Number(o.sharePct ?? 0), actorName: actorName(o.actorId) }));
+  return owners.map((o: any) => ({ actorId: o.actorId ?? null, ventureId: o.ventureId ?? null, sharePct: Number(o.sharePct ?? 0), actorName: o.actorId ? actorName(o.actorId) : null }));
 }
 
 type ListEnterprisesInput = Extract<WfrpEconomyInputType, { action: 'list-enterprises' }>;
@@ -1942,15 +1940,19 @@ async function handleSetEnterpriseOwners(input: SetEnterpriseOwnersInput): Promi
       `set-enterprise-owners replaces the owners list for "${input.enterpriseId}" (${input.ownerShares.length} owner(s)) and re-derives the ownerActorId alias. Re-call with confirm:true.`,
     );
   }
-  const missing = missingActor(input.ownerShares.map((o) => o.actorId));
+  // Phase 7d: ownerShareInput is a union — {actorId,sharePct} | {ventureId,sharePct}. Only actor-bearing
+  // slots go through the actor existence pre-check; venture slots are validated engine-side (setOwners
+  // now calls getVenture() itself, D2/task 1.7 lift).
+  const actorIds = input.ownerShares.map((o: any) => o.actorId).filter((id: unknown): id is string => typeof id === 'string');
+  const missing = missingActor(actorIds);
   if (missing) return targetNotFound(`actor "${missing}" not found`);
 
   const EnterpriseEngine = await importEnterpriseEngine();
   const result = await EnterpriseEngine.setOwners(input.enterpriseId, { ownerShares: input.ownerShares });
 
   if (result?.notFound) return targetNotFound(`enterprise "${input.enterpriseId}" not found`);
-  if (result?.ventureSlotsNotSupported) {
-    return { success: false, error: `WFRP_ECONOMY_VENTURE_SLOTS_NOT_SUPPORTED: ownerShares contains a {ventureId} slot — not supported until a ventures store exists (7d)` };
+  if (result?.ventureNotFound) {
+    return { success: false, error: `${ErrorTokens.WFRP_ECONOMY_VENTURE_NOT_FOUND}: ownerShares references venture "${result.ventureId}" which does not exist` };
   }
   if (result?.invalidShares) {
     return { success: false, error: `WFRP_ECONOMY_INVALID_SHARES: owner sharePct must sum to exactly 100 (got ${result.shareSum})` };
@@ -1958,9 +1960,16 @@ async function handleSetEnterpriseOwners(input: SetEnterpriseOwnersInput): Promi
   if (result?.persistedCheckFailed) {
     return notPersisted(`set-enterprise-owners for "${input.enterpriseId}" failed persistence check: ${result?.detail ?? 'unknown'}`);
   }
-  const owners = (Array.isArray(result.owners) ? result.owners : []).map((o: any) => ({ actorId: o.actorId, sharePct: Number(o.sharePct ?? 0), actorName: actorName(o.actorId) }));
+  // Phase 7d: a venture-slot owner (o.ventureId set, o.actorId absent) has no actor to resolve — surface
+  // it as actorId:null, actorName:null so callers can tell it apart from a stale/deleted actor.
+  const owners = (Array.isArray(result.owners) ? result.owners : []).map((o: any) => ({
+    actorId: o.actorId ?? null,
+    ventureId: o.ventureId ?? null,
+    sharePct: Number(o.sharePct ?? 0),
+    actorName: o.actorId ? actorName(o.actorId) : null,
+  }));
   notify.updated('wfrp-economy', `enterprise ${input.enterpriseId}`, {
-    summary: `owners set: ${owners.map((o: any) => `${o.actorName ?? o.actorId} (${o.sharePct}%)`).join(', ')}`,
+    summary: `owners set: ${owners.map((o: any) => o.ventureId ? `venture ${o.ventureId} (${o.sharePct}%)` : `${o.actorName ?? o.actorId} (${o.sharePct}%)`).join(', ')}`,
   });
   return {
     success: true,
@@ -2116,4 +2125,326 @@ async function handleDeleteLevyGroup(input: DeleteLevyGroupInput): Promise<Envel
 
   notify.deleted('wfrp-economy', String(existing.name ?? input.groupId), { summary: `levy group ${input.groupId} removed` });
   return { success: true, data: { action: 'delete-levy-group', groupId: input.groupId, deleted: true } };
+}
+
+// ── venture-ledger (Phase 7d, wfrp_economy_system, R7d.1-R7d.8) ─────────────────
+
+function ventureHolderEntry(h: any): { actorId: string | null; externalName: string | null; actorName: string | null; parts: number } {
+  const actorId = h?.actorId ?? null;
+  const externalName = actorId ? null : (h?.externalName ?? null);
+  return { actorId, externalName, actorName: actorId ? actorName(actorId) : externalName, parts: Number(h?.parts ?? 0) };
+}
+
+function ventureQueuedTransferEntry(o: any): {
+  offerId: string; sellerActorId: string | null; sellerExternalName: string | null; sellerName: string | null; parts: number; askingPriceBp: number;
+} {
+  const sellerActorId = o?.sellerActorId ?? null;
+  const sellerExternalName = sellerActorId ? null : (o?.sellerExternalName ?? null);
+  return {
+    offerId: o?.offerId,
+    sellerActorId,
+    sellerExternalName,
+    sellerName: sellerActorId ? actorName(sellerActorId) : sellerExternalName,
+    parts: Number(o?.parts ?? 0),
+    askingPriceBp: Number(o?.askingPriceBp ?? 0),
+  };
+}
+
+function ventureSummaryEntry(inst: any) {
+  return {
+    ventureId: inst?.id,
+    name: inst?.name,
+    type: inst?.type,
+    status: inst?.status,
+    standing: inst?.standing,
+    partsTotal: Number(inst?.parts?.total ?? 0),
+    partsSubscribed: Number(inst?.parts?.subscribed ?? 0),
+    priceBp: Number(inst?.parts?.priceBp ?? 0),
+    escrowBp: Number(inst?.escrowBp ?? 0),
+    badges: Array.isArray(inst?.badges) ? inst.badges : [],
+  };
+}
+
+type CreateVentureInput = Extract<WfrpEconomyInputType, { action: 'create-venture' }>;
+async function handleCreateVenture(input: CreateVentureInput): Promise<Envelope<unknown>> {
+  if (input.confirm !== true) {
+    return confirmRequired(`create-venture starts a new "${input.type}" deed "${input.name}" (${input.parts.total} Parts @ ${input.parts.priceBp} BP). Re-call with confirm:true.`);
+  }
+  const VentureEngine = await importVentureEngine();
+  const result = await VentureEngine.createVenture({
+    name: input.name,
+    type: input.type,
+    parts: input.parts,
+    terms: input.terms,
+    handledBy: input.handledBy,
+    linkedEnterpriseId: input.linkedEnterpriseId,
+    exposureTags: input.exposureTags,
+  });
+
+  if (result?.invalidType) return targetNotFound(`invalid venture type "${input.type}"`);
+  if (result?.ventureHoldsVentureNotAllowed) {
+    return { success: false, error: `WFRP_ECONOMY_VENTURE_HOLDS_VENTURE: a venture can never hold another venture (D19)` };
+  }
+  if (result?.persistedCheckFailed) {
+    return notPersisted(`create-venture "${input.name}" failed persistence check: ${result?.detail ?? 'unknown'}`);
+  }
+  notify.created('wfrp-economy', input.name, { summary: `venture ${result.instanceId} (${input.type}, ${input.parts.total} Parts)` });
+  return {
+    success: true,
+    data: { action: 'create-venture', ventureId: result.instanceId, name: result.name, type: result.type, status: result.status, standing: result.standing, escrowBp: Number(result.escrowBp ?? 0) },
+  };
+}
+
+type GetVentureInput = Extract<WfrpEconomyInputType, { action: 'get-venture' }>;
+async function handleGetVenture(input: GetVentureInput): Promise<Envelope<unknown>> {
+  const VentureEngine = await importVentureEngine();
+  const inst = await VentureEngine.getVenture(input.ventureId);
+  if (inst?.notFound) return targetNotFound(`venture "${input.ventureId}" not found`);
+  return {
+    success: true,
+    data: {
+      action: 'get-venture',
+      ventureId: inst.id,
+      name: inst.name,
+      type: inst.type,
+      status: inst.status,
+      standing: inst.standing,
+      partsTotal: Number(inst.parts?.total ?? 0),
+      partsSubscribed: Number(inst.parts?.subscribed ?? 0),
+      priceBp: Number(inst.parts?.priceBp ?? 0),
+      escrowBp: Number(inst.escrowBp ?? 0),
+      holders: (inst.holders ?? []).map(ventureHolderEntry),
+      queuedTransfers: (inst.queuedTransfers ?? []).map(ventureQueuedTransferEntry),
+      badges: Array.isArray(inst.badges) ? inst.badges : [],
+      notices: Array.isArray(inst.notices) ? inst.notices : [],
+      deedDateText: inst.deedDate?.text ?? null,
+    },
+  };
+}
+
+type ListVenturesInput = Extract<WfrpEconomyInputType, { action: 'list-ventures' }>;
+async function handleListVentures(input: ListVenturesInput): Promise<Envelope<unknown>> {
+  const VentureEngine = await importVentureEngine();
+  const list: any[] = await VentureEngine.listVentures({ type: input.type, status: input.status });
+  const ventures = list.map(ventureSummaryEntry);
+  return { success: true, data: { action: 'list-ventures', count: ventures.length, ventures } };
+}
+
+type SubscribeVentureInput = Extract<WfrpEconomyInputType, { action: 'subscribe-venture' }>;
+async function handleSubscribeVenture(input: SubscribeVentureInput): Promise<Envelope<unknown>> {
+  if (input.confirm !== true) {
+    return confirmRequired(`subscribe-venture buys ${input.partsCount} Part(s) of venture "${input.ventureId}" for the subscriber. Re-call with confirm:true.`);
+  }
+  if (input.actorId && !getGame()?.actors?.get?.(input.actorId)) {
+    return targetNotFound(`actor "${input.actorId}" not found`);
+  }
+  const VentureEngine = await importVentureEngine();
+  const result = await VentureEngine.subscribeVenture(input.ventureId, {
+    actorId: input.actorId,
+    externalName: input.externalName,
+    parts: input.partsCount,
+  });
+
+  if (result?.notFound) return targetNotFound(`venture "${input.ventureId}" not found`);
+  if (result?.registryNotHandling) {
+    return { success: false, error: `WFRP_ECONOMY_VENTURE_REGISTRY_NOT_HANDLING: venture "${input.ventureId}" has no Registry handling it — subscriptions are refused` };
+  }
+  if (result?.ventureDisputed) {
+    return { success: false, error: `${ErrorTokens.WFRP_ECONOMY_VENTURE_DISPUTED}: venture "${input.ventureId}" is Disputed — new subscriptions are refused until the badge is cleared` };
+  }
+  if (result?.partsExceedTotal) {
+    return notPersisted(`subscribe-venture ${input.partsCount} Part(s) exceeds ${result.partsAvailable} available on "${input.ventureId}"`);
+  }
+  if (result?.insufficientFunds) {
+    return notPersisted(`subscribe-venture cost exceeds wallet balance ${result.walletBalanceBp} BP (required up to that amount)`);
+  }
+  if (result?.persistedCheckFailed) {
+    return notPersisted(`subscribe-venture on "${input.ventureId}" failed persistence check: ${result?.detail ?? 'unknown'}`);
+  }
+  notify.updated('wfrp-economy', `venture ${input.ventureId}`, { summary: `subscribed ${input.partsCount} Part(s) — escrow now ${result.escrowBp} BP` });
+  return {
+    success: true,
+    data: { action: 'subscribe-venture', ventureId: input.ventureId, subscribedParts: Number(result.subscribedParts ?? 0), escrowBp: Number(result.escrowBp ?? 0), walletBalanceBp: result.walletBalanceBp ?? null },
+  };
+}
+
+type TransferVenturePartsInput = Extract<WfrpEconomyInputType, { action: 'transfer-venture-parts' }>;
+async function handleTransferVentureParts(input: TransferVenturePartsInput): Promise<Envelope<unknown>> {
+  if (input.confirm !== true) {
+    return confirmRequired(`transfer-venture-parts queues an offer to sell ${input.partsCount} Part(s) of venture "${input.ventureId}" for ${input.askingPriceBp} BP — it resolves ONLY at the next economic cycle, never instantly. Re-call with confirm:true.`);
+  }
+  if (input.sellerActorId && !getGame()?.actors?.get?.(input.sellerActorId)) {
+    return targetNotFound(`actor "${input.sellerActorId}" not found`);
+  }
+  const VentureEngine = await importVentureEngine();
+  const result = await VentureEngine.queueTransfer(input.ventureId, {
+    sellerActorId: input.sellerActorId,
+    sellerExternalName: input.sellerExternalName,
+    parts: input.partsCount,
+    askingPriceBp: input.askingPriceBp,
+  });
+
+  if (result?.notFound) return targetNotFound(`venture "${input.ventureId}" not found`);
+  if (result?.holderNotFound) return targetNotFound(`seller is not a holder of venture "${input.ventureId}"`);
+  if (result?.partsExceedHolding) {
+    return notPersisted(`transfer-venture-parts ${input.partsCount} Part(s) exceeds holding ${result.partsHeld} on "${input.ventureId}"`);
+  }
+  if (result?.persistedCheckFailed) {
+    return notPersisted(`transfer-venture-parts on "${input.ventureId}" failed persistence check: ${result?.detail ?? 'unknown'}`);
+  }
+  notify.updated('wfrp-economy', `venture ${input.ventureId}`, { summary: `transfer offer ${result.offerId} queued — ${input.partsCount} Part(s) @ ${input.askingPriceBp} BP` });
+  return { success: true, data: { action: 'transfer-venture-parts', ventureId: input.ventureId, offerId: result.offerId, queued: true as const } };
+}
+
+type SettleVentureInput = Extract<WfrpEconomyInputType, { action: 'settle-venture' }>;
+async function handleSettleVenture(input: SettleVentureInput): Promise<Envelope<unknown>> {
+  if (input.confirm !== true) {
+    return confirmRequired(`settle-venture settles "${input.ventureId}"${input.netBp ? ` with net proceeds ${input.netBp} BP` : ''} and auto-distributes escrow to every holder. Re-call with confirm:true.`);
+  }
+  const VentureEngine = await importVentureEngine();
+  const result = await VentureEngine.settleVenture(input.ventureId, { netBp: input.netBp });
+
+  if (result?.notFound) return targetNotFound(`venture "${input.ventureId}" not found`);
+  if (result?.doesNotSettle) {
+    return { success: false, error: `WFRP_ECONOMY_VENTURE_DOES_NOT_SETTLE: "${input.ventureId}" is open-ended (Partnership/Chartered-Concern) — Wind Up first (set-venture-status to "settling"), or use distribute-venture instead` };
+  }
+  if (result?.escrowSeized) {
+    return { success: false, error: `${ErrorTokens.WFRP_ECONOMY_VENTURE_SEIZED}: venture "${input.ventureId}" escrow is Seized — Settle is refused until the badge is cleared` };
+  }
+  // B2 FIX (7d2): the engine's {settleDelayed:true} return had NO branch here — this fell through to the
+  // success path below, reporting success:true/status:undefined/distributedBp:0 for a settlement that
+  // never happened. Now a typed refusal naming the remaining delay.
+  if (result?.settleDelayed) {
+    return { success: false, error: `${ErrorTokens.WFRP_ECONOMY_VENTURE_SETTLE_DELAYED}: venture "${input.ventureId}" schedule is delayed — ${result.delayCycles} economic cycle(s) remain before it can be settled` };
+  }
+  // BUG-544 (DP-16): settleVenture now re-reads the store and verifies its escrow/status write before
+  // ledgering. Without this branch the engine's `persistedCheckFailed` verdict would fall straight through
+  // to the success path below — the fix would be invisible at the MCP layer, which is the whole bug class.
+  if (result?.persistedCheckFailed) {
+    return notPersisted(`settle-venture for "${input.ventureId}" failed persistence check: ${result?.detail ?? 'unknown'}`);
+  }
+  notify.updated('wfrp-economy', `venture ${input.ventureId}`, { summary: `settled — status ${result.status}` });
+  return {
+    success: true,
+    data: { action: 'settle-venture', ventureId: input.ventureId, status: result.status, distributedBp: Number(result.distributed?.distributedBp ?? 0) },
+  };
+}
+
+type DistributeVentureInput = Extract<WfrpEconomyInputType, { action: 'distribute-venture' }>;
+async function handleDistributeVenture(input: DistributeVentureInput): Promise<Envelope<unknown>> {
+  if (input.confirm !== true) {
+    return confirmRequired(`distribute-venture drains "${input.ventureId}"'s current escrow to every holder by Parts-weighted split. Re-call with confirm:true.`);
+  }
+  const VentureEngine = await importVentureEngine();
+  const result = await VentureEngine.distributeVenture(input.ventureId);
+
+  if (result?.notFound) return targetNotFound(`venture "${input.ventureId}" not found`);
+  if (result?.noHolders) return notPersisted(`venture "${input.ventureId}" has no holders to distribute to`);
+  if (result?.escrowSeized) {
+    return { success: false, error: `${ErrorTokens.WFRP_ECONOMY_VENTURE_SEIZED}: venture "${input.ventureId}" escrow is Seized — Distribute is refused until the badge is cleared` };
+  }
+  if (result?.persistedCheckFailed) {
+    return notPersisted(`distribute-venture on "${input.ventureId}" failed persistence check: ${result?.detail ?? 'unknown'}`);
+  }
+  notify.updated('wfrp-economy', `venture ${input.ventureId}`, { summary: `distributed ${result.distributedBp} BP across ${(result.splits ?? []).length} split(s)` });
+  return {
+    success: true,
+    data: { action: 'distribute-venture', ventureId: input.ventureId, distributedBp: Number(result.distributedBp ?? 0), escrowBp: Number(result.escrowBp ?? 0), splitCount: (result.splits ?? []).length },
+  };
+}
+
+type VentureEventInput = Extract<WfrpEconomyInputType, { action: 'venture-event' }>;
+async function handleVentureEvent(input: VentureEventInput): Promise<Envelope<unknown>> {
+  const VentureEngine = await importVentureEngine();
+  const result = await VentureEngine.drawVentureEvent(input.ventureId, { d100Roll: input.d100Roll });
+
+  if (result?.notFound) return targetNotFound(`venture "${input.ventureId}" not found`);
+  if (result?.invalidRoll) return { success: false, error: `WFRP_ECONOMY_INVALID_ROLL: d100Roll must be an integer 1-100` };
+  if (result?.noEventsForStatus) {
+    return { success: false, error: `WFRP_ECONOMY_VENTURE_NO_EVENTS_FOR_STATUS: venture "${input.ventureId}" is ${result.status} — no event table applies` };
+  }
+  if (result?.persistedCheckFailed) {
+    return notPersisted(`venture-event on "${input.ventureId}" failed persistence check: ${result?.detail ?? 'unknown'}`);
+  }
+  notify.updated('wfrp-economy', `venture ${input.ventureId}`, { summary: `event drawn — standing now ${result.standing}` });
+  return {
+    success: true,
+    data: {
+      action: 'venture-event',
+      ventureId: input.ventureId,
+      text: result.text,
+      standing: result.standing,
+      naturalRoll: Number(result.naturalRoll ?? input.d100Roll),
+      modifiedRoll: Number(result.modifiedRoll ?? input.d100Roll),
+      standingModifier: Number(result.standingModifier ?? 0),
+      critical: result.critical ?? null,
+      effectsApplied: Array.isArray(result.effectsApplied) ? result.effectsApplied : [],
+    },
+  };
+}
+
+type ToggleVentureBadgeInput = Extract<WfrpEconomyInputType, { action: 'toggle-venture-badge' }>;
+async function handleToggleVentureBadge(input: ToggleVentureBadgeInput): Promise<Envelope<unknown>> {
+  if (input.confirm !== true) {
+    return confirmRequired(`toggle-venture-badge flips the "${input.badge}" badge on venture "${input.ventureId}" (add if absent, remove if present). Re-call with confirm:true.`);
+  }
+  const VentureEngine = await importVentureEngine();
+  const result = await VentureEngine.toggleBadge(input.ventureId, input.badge);
+
+  if (result?.notFound) return targetNotFound(`venture "${input.ventureId}" not found`);
+  if (result?.persistedCheckFailed) {
+    return notPersisted(`toggle-venture-badge on "${input.ventureId}" failed persistence check: ${result?.detail ?? 'unknown'}`);
+  }
+  notify.updated('wfrp-economy', `venture ${input.ventureId}`, { summary: `badge "${input.badge}" toggled — badges now: ${(result.badges ?? []).join(', ') || '(none)'}` });
+  return { success: true, data: { action: 'toggle-venture-badge', ventureId: input.ventureId, badges: Array.isArray(result.badges) ? result.badges : [] } };
+}
+
+type IssuePartsInput = Extract<WfrpEconomyInputType, { action: 'issue-parts' }>;
+async function handleIssueParts(input: IssuePartsInput): Promise<Envelope<unknown>> {
+  if (input.confirm !== true) {
+    return confirmRequired(`issue-parts raises venture "${input.ventureId}"'s total Parts by ${input.count}${input.priceModPct ? ` and adjusts price by ${input.priceModPct > 0 ? '+' : ''}${input.priceModPct}%` : ''}. Existing holders are diluted only once the new Parts are subscribed. Re-call with confirm:true.`);
+  }
+  const VentureEngine = await importVentureEngine();
+  const result = await VentureEngine.issuePartsForVenture(input.ventureId, { count: input.count, priceModPct: input.priceModPct });
+
+  if (result?.notFound) return targetNotFound(`venture "${input.ventureId}" not found`);
+  if (result?.invalidCount) return { success: false, error: `WFRP_ECONOMY_VENTURE_INVALID_PARTS_COUNT: count must be a positive integer` };
+  if (result?.persistedCheckFailed) {
+    return notPersisted(`issue-parts on "${input.ventureId}" failed persistence check: ${result?.detail ?? 'unknown'}`);
+  }
+  notify.updated('wfrp-economy', `venture ${input.ventureId}`, { summary: `issued ${input.count} new Part(s) — total now ${result.partsTotal}` });
+  return { success: true, data: { action: 'issue-parts', ventureId: input.ventureId, partsTotal: Number(result.partsTotal ?? 0), priceBp: Number(result.priceBp ?? 0) } };
+}
+
+type SetVentureStatusInput = Extract<WfrpEconomyInputType, { action: 'set-venture-status' }>;
+async function handleSetVentureStatus(input: SetVentureStatusInput): Promise<Envelope<unknown>> {
+  if (input.confirm !== true) {
+    return confirmRequired(`set-venture-status forces venture "${input.ventureId}" to status "${input.status}". Re-call with confirm:true.`);
+  }
+  const VentureEngine = await importVentureEngine();
+  const result = await VentureEngine.setStatus(input.ventureId, input.status);
+
+  if (result?.notFound) return targetNotFound(`venture "${input.ventureId}" not found`);
+  if (result?.invalidStatus) return { success: false, error: `WFRP_ECONOMY_VENTURE_INVALID_STATUS: "${input.status}" is not a valid status` };
+  if (result?.persistedCheckFailed) {
+    return notPersisted(`set-venture-status on "${input.ventureId}" failed persistence check: ${result?.detail ?? 'unknown'}`);
+  }
+  notify.updated('wfrp-economy', `venture ${input.ventureId}`, { summary: `status now ${result.status}` });
+  return { success: true, data: { action: 'set-venture-status', ventureId: input.ventureId, status: result.status } };
+}
+
+type SetVentureStandingInput = Extract<WfrpEconomyInputType, { action: 'set-venture-standing' }>;
+async function handleSetVentureStanding(input: SetVentureStandingInput): Promise<Envelope<unknown>> {
+  if (input.confirm !== true) {
+    return confirmRequired(`set-venture-standing forces venture "${input.ventureId}" to standing "${input.standing}". Re-call with confirm:true.`);
+  }
+  const VentureEngine = await importVentureEngine();
+  const result = await VentureEngine.setStanding(input.ventureId, input.standing);
+
+  if (result?.notFound) return targetNotFound(`venture "${input.ventureId}" not found`);
+  if (result?.persistedCheckFailed) {
+    return notPersisted(`set-venture-standing on "${input.ventureId}" failed persistence check: ${result?.detail ?? 'unknown'}`);
+  }
+  notify.updated('wfrp-economy', `venture ${input.ventureId}`, { summary: `standing now ${result.standing}` });
+  return { success: true, data: { action: 'set-venture-standing', ventureId: input.ventureId, standing: result.standing } };
 }
