@@ -170,6 +170,8 @@ export const TokenGetInput = z
     action: z.literal('get'),
     sceneId: SceneId,
     tokenId: TokenId,
+    /** Opt-in because a synthetic Actor combat snapshot is substantially larger than token geometry. */
+    includeCombatSnapshot: z.boolean().optional(),
   })
   .strict();
 
@@ -256,6 +258,38 @@ export type TokenDeleteTokenInputType = z.infer<typeof TokenDeleteTokenInput>;
 export type TokenMountInputType = z.infer<typeof TokenMountInput>;
 export type TokenDismountInputType = z.infer<typeof TokenDismountInput>;
 
+export interface TokenCombatSnapshot {
+  schema: 'wfrp4e-token-combat-snapshot/v1';
+  actorType: string;
+  sourceId: string | null;
+  wounds: { value: number; max: number };
+  advantage: number;
+  characteristics: Record<string, { value: number; bonus: number }>;
+  size: string | null;
+  armour: Record<string, number>;
+  conditions: Array<{ key: string; value: number }>;
+  skills: Array<{ name: string; characteristic: string | null; advances: number; total: number | null }>;
+  traits: Array<{ name: string; rating: string }>;
+  weapons: Array<{
+    id: string;
+    name: string;
+    equipped: boolean;
+    attackType: string;
+    group: string;
+    damage: number;
+    range: number | string | null;
+    qualities: Array<{ name: string; value?: number }>;
+    flaws: Array<{ name: string; value?: number }>;
+  }>;
+  effects: Array<{
+    id: string;
+    name: string;
+    disabled: boolean;
+    statuses: string[];
+    changes: Array<{ key: string; mode: number; value: string; priority: number | null }>;
+  }>;
+}
+
 export interface TokenViewModel {
   id: string;
   sceneId: string;
@@ -267,6 +301,8 @@ export interface TokenViewModel {
   actorLink: boolean;
   /** ActorDelta surface (read-only in Phase 5 — Token.delta is full sync-actor diff model). */
   delta: { hasOverrides: boolean } | null;
+  /** Effective synthetic-Actor state, present only for token.get includeCombatSnapshot:true. */
+  combatSnapshot?: TokenCombatSnapshot | null;
   width: number;
   height: number;
   texture: TextureData;

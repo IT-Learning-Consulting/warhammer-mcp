@@ -26,6 +26,7 @@ interface CasualtyInput {
   wounds?: number | undefined;
   conditions?: string[] | undefined;
   criticalUuid?: string | undefined;
+  criticalUuids?: string[] | undefined;
 }
 
 interface CasualtyResult {
@@ -36,6 +37,7 @@ interface CasualtyResult {
   woundsAfter?: number;
   conditionsApplied?: string[];
   critEmbedded?: string | null;
+  critsEmbedded?: string[];
   siblingVerified?: boolean;
   alreadyApplied?: boolean; // BUG-409 — skipped as already-applied for the given batchId
   error?: string;
@@ -68,7 +70,8 @@ export class TokenCasualtiesService {
       // A real content write happened only when applied AND not an idempotent skip (BUG-409).
       if (r.applied && !r.alreadyApplied && !dryRun) {
         updatedDocIds.push(c.tokenId);
-        if (r.critEmbedded) createdItemIds.push(r.critEmbedded);
+        if (r.critsEmbedded?.length) createdItemIds.push(...r.critsEmbedded);
+        else if (r.critEmbedded) createdItemIds.push(r.critEmbedded);
       }
     }
 
@@ -189,9 +192,9 @@ export class TokenCasualtiesService {
         }
       }
     }
-    if (c.criticalUuid) {
-      const source: any = await (globalThis as any).fromUuid(c.criticalUuid);
-      if (!source) return `Critical Item not found for UUID: ${c.criticalUuid}`;
+    for (const uuid of this.getCriticalUuids(c)) {
+      const source: any = await (globalThis as any).fromUuid(uuid);
+      if (!source) return `Critical Item not found for UUID: ${uuid}`;
     }
     return null;
   }
@@ -205,7 +208,8 @@ export class TokenCasualtiesService {
       woundsBefore,
       woundsAfter: c.wounds !== undefined ? Math.max(0, Math.min(c.wounds, max)) : woundsBefore,
       conditionsApplied: c.conditions ?? [],
-      critEmbedded: c.criticalUuid ? '(dry-run)' : null,
+      critEmbedded: this.getCriticalUuids(c).length ? '(dry-run)' : null,
+      critsEmbedded: this.getCriticalUuids(c).map(() => '(dry-run)'),
     };
   }
 
@@ -215,7 +219,19 @@ export class TokenCasualtiesService {
       woundsAfter = await this.writeWounds(actor, c.wounds);
     }
     const conditionsApplied = await this.applyConditions(actor, c.conditions ?? []);
-    const critEmbedded = c.criticalUuid ? await this.embedCrit(actor, c.criticalUuid) : null;
+    const critsEmbedded = await this.embedCrits(actor, this.getCriticalUuids(c));
+    const critEmbedded = critsEmbedded[0] ?? null;
+    // A CriticalModel _onCreate hook normally subtracts its `system.wounds.value`. embedCrits suppresses
+    // that hook for this pre-resolved absolute-Wounds tool, then restores the Item's authored value.
+    // Re-read after every hook/write anyway: the receipt must report persisted reality, never a stale
+    // pre-embed local. When an absolute value was requested, fail loud on any final drift.
+    const freshActor: any = await (globalThis as any).fromUuid(actor.uuid);
+    woundsAfter = freshActor?.system?.status?.wounds?.value ?? woundsAfter;
+    if (c.wounds !== undefined) {
+      const max: number = actor.system?.status?.wounds?.max ?? c.wounds;
+      const expected = Math.max(0, Math.min(c.wounds, max));
+      verifyDocWrite(freshActor, { 'system.status.wounds.value': expected }, 'APPLY_TOKEN_CASUALTIES_FINAL_WOUNDS_NOT_PERSISTED');
+    }
     const siblingVerified = this.verifyWorldActorUnchanged(scene, tokenDoc, actor, worldActor, worldBaseline);
 
     notify.updated('actor', actor.name, {
@@ -223,11 +239,11 @@ export class TokenCasualtiesService {
       uuid: tokenDoc.uuid,
       tooltip: { tokenDoc, message: `-${Math.max(0, woundsBefore - woundsAfter)} wounds` },
     });
-    if (critEmbedded) {
-      notify.created('item', `${actor.name}: critical wound`, { summary: 'battle-sim crit', uuid: tokenDoc.uuid });
+    if (critsEmbedded.length) {
+      notify.created('item', `${actor.name}: critical wound`, { summary: `${critsEmbedded.length} battle-sim crit(s)`, uuid: tokenDoc.uuid });
     }
 
-    return { tokenId: c.tokenId, applied: true, actorName: actor.name, woundsBefore, woundsAfter, conditionsApplied, critEmbedded, siblingVerified };
+    return { tokenId: c.tokenId, applied: true, actorName: actor.name, woundsBefore, woundsAfter, conditionsApplied, critEmbedded, critsEmbedded, siblingVerified };
   }
 
   /** Clamp to [0, max] and write the absolute Wounds, then DP-16 verify it persisted (BUG-070). */
@@ -255,22 +271,48 @@ export class TokenCasualtiesService {
     return applied;
   }
 
-  /** Embed the ArtAntares crit Item by UUID on the synthetic actor + bump the criticalWounds counter. */
-  private async embedCrit(actor: any, uuid: string): Promise<string | null> {
-    const source: any = await (globalThis as any).fromUuid(uuid);
-    if (!source) throw new Error(`Critical Item not found for UUID: ${uuid}`);
-    const itemData = source.toObject();
-    delete itemData._id;
-    const created: any[] = await actor.createEmbeddedDocuments('Item', [itemData], { skipSpecialisationChoice: true });
-    const critItem = created?.[0];
-    if (!critItem || !actor.items?.get(critItem.id)) {
-      throw new Error(`APPLY_TOKEN_CASUALTIES_NOT_PERSISTED: critical item absent from ${actor.name}'s items after create`);
+  /** Return every requested critical UUID in its explicit, deterministic input order. The legacy
+   *  singular field is prepended when both forms are supplied so older mixed callers lose nothing. */
+  private getCriticalUuids(c: CasualtyInput): string[] {
+    return [...(c.criticalUuid ? [c.criticalUuid] : []), ...(c.criticalUuids ?? [])];
+  }
+
+  /** Embed the resolved crits without re-applying their wounds, then restore authored wound values.
+   *  WFRP4e CriticalModel._onCreate subtracts `system.wounds.value` automatically. This tool's `wounds`
+   *  is already the simulator's absolute post-critical value, so creation carries an empty wound value
+   *  (no hook update) and the embedded Item is restored immediately afterward via Item.update. */
+  private async embedCrits(actor: any, uuids: string[]): Promise<string[]> {
+    if (!uuids.length) return [];
+    const itemDatas: any[] = [];
+    const authoredWounds: unknown[] = [];
+    for (const uuid of uuids) {
+      const source: any = await (globalThis as any).fromUuid(uuid);
+      if (!source) throw new Error(`Critical Item not found for UUID: ${uuid}`);
+      const itemData = source.toObject();
+      delete itemData._id;
+      const authored = itemData?.system?.wounds?.value;
+      authoredWounds.push(authored);
+      if (itemData?.type === 'critical' && authored !== undefined) itemData.system.wounds.value = '';
+      itemDatas.push(itemData);
+    }
+    const created: any[] = await actor.createEmbeddedDocuments('Item', itemDatas, { skipSpecialisationChoice: true });
+    if (created.length !== itemDatas.length || created.some((item) => !item || !actor.items?.get(item.id))) {
+      throw new Error(`APPLY_TOKEN_CASUALTIES_NOT_PERSISTED: expected ${itemDatas.length} critical item(s) on ${actor.name}, found ${created.length}`);
+    }
+    for (let i = 0; i < created.length; i++) {
+      const critItem = created[i];
+      const authored = authoredWounds[i];
+      if (itemDatas[i]?.type === 'critical' && authored !== undefined) {
+        await critItem.update({ 'system.wounds.value': authored }, { skipExperienceChecks: true });
+        const freshCrit: any = await (globalThis as any).fromUuid(critItem.uuid);
+        verifyDocWrite(freshCrit, { 'system.wounds.value': authored }, 'APPLY_TOKEN_CASUALTIES_CRIT_VALUE_NOT_PERSISTED');
+      }
     }
     const current: number = actor.system?.status?.criticalWounds?.value ?? 0;
-    await actor.update({ 'system.status.criticalWounds.value': current + 1 }, { skipExperienceChecks: true });
+    await actor.update({ 'system.status.criticalWounds.value': current + created.length }, { skipExperienceChecks: true });
     const fresh: any = await (globalThis as any).fromUuid(actor.uuid);
-    verifyDocWrite(fresh, { 'system.status.criticalWounds.value': current + 1 }, 'APPLY_TOKEN_CASUALTIES_NOT_PERSISTED');
-    return critItem?.id ?? null;
+    verifyDocWrite(fresh, { 'system.status.criticalWounds.value': current + created.length }, 'APPLY_TOKEN_CASUALTIES_NOT_PERSISTED');
+    return created.map((item) => item.id);
   }
 
   /** HC2 — confirm our token-delta write did NOT leak through to the SHARED world actor. A leak

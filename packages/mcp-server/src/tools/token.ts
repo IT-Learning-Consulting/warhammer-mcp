@@ -111,6 +111,18 @@ function formatTokenView(t: TokenViewModel): string {
   const orphanWarn = !t.actorLinked && t.actorId
     ? `\n> ⚠️ **Stale FK:** actorId \`${t.actorId}\` no longer exists in game.actors.`
     : '';
+  const combat = t.combatSnapshot
+    ? [
+        `### Effective Combat Snapshot`,
+        `- schema: ${t.combatSnapshot.schema} · actor type: ${t.combatSnapshot.actorType}`,
+        `- Wounds: ${t.combatSnapshot.wounds.value}/${t.combatSnapshot.wounds.max} · ` +
+          `WS: ${t.combatSnapshot.characteristics.ws?.value ?? '—'} · BS: ${t.combatSnapshot.characteristics.bs?.value ?? '—'}`,
+        `- Conditions: ${t.combatSnapshot.conditions.map((c) => `${c.key}${c.value > 1 ? ` ${c.value}` : ''}`).join(', ') || '(none)'}`,
+        `- Equipped weapons: ${t.combatSnapshot.weapons.filter((w) => w.equipped).map((w) => `${w.name} [${w.attackType}, Damage ${w.damage}]`).join(', ') || '(none)'}`,
+        `- Active Effects captured: ${t.combatSnapshot.effects.filter((effect) => !effect.disabled).length}`,
+        ``,
+      ]
+    : [];
   return [
     `## Token \`${t.id}\``,
     `**Scene:** \`${t.sceneId}\``,
@@ -142,6 +154,7 @@ function formatTokenView(t: TokenViewModel): string {
     ``,
     `### Movement`,
     `- movementAction: ${t.movementAction ?? '_(none)_'}`,
+    ...(combat.length ? [``, ...combat] : []),
   ].filter((l) => l !== undefined).join('\n');
 }
 
@@ -188,7 +201,7 @@ export class TokenTool extends BaseTool {
 - **create**: Place a new Token on a scene. Required: sceneId, name, x, y. Optional: full write surface (actorId, actorLink, width/height, texture, shape, elevation, sort, locked, lockRotation, rotation, alpha, hidden, disposition, displayName, displayBars, bar1, bar2, light, sight, occludable, ring, turnMarker, movementAction, flags). Returns full TokenViewModel.
 - **update**: Partial-diff update. sceneId + tokenId + changes (≥1 field). Same writable surface as create.
 - **delete**: Remove a single Token from the scene (embedded-CRUD style, requires sceneId + tokenId). ⚠️ Irreversible.
-- **get**: Fetch a single token by sceneId + tokenId. Returns full TokenViewModel. Warns on stale actorId FK (actorLinked: false).
+- **get**: Fetch a single token by sceneId + tokenId. Returns full TokenViewModel. Warns on stale actorId FK (actorLinked: false). Set includeCombatSnapshot:true to include the effective synthetic WFRP Actor state (ActorDelta + active effects, characteristics, Wounds, armour, conditions, skills, traits, weapons).
 - **list**: List tokens on a scene. sceneId optional (defaults to active scene). Filters: hidden (boolean), onlyLinked (boolean), filter (name substring). Pagination: page/pageSize (1-100). countOnly=true for cheap inventory probe.
 - **add**: Bulk-drop prototype tokens for one or more actors. Required: actorIds[]. Optional: quantities[] (per-actor count, defaults 1), placement (random/grid/center), hidden, sceneId. Returns placed tokenIds + per-actor summary.
 - **delete-token**: Remove a token by sceneId + tokenId (migrated from scene umbrella). Action key is 'delete-token' (distinct from 'delete').
@@ -227,6 +240,10 @@ export class TokenTool extends BaseTool {
             tokenId: {
               type: 'string',
               description: '[update/delete/get/delete-token] Token document ID.',
+            },
+            includeCombatSnapshot: {
+              type: 'boolean',
+              description: '[get] Include the effective synthetic WFRP Actor combat state (larger read payload).',
             },
             // create writable fields (flat)
             name: { type: 'string', description: '[create] Required token name.' },

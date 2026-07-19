@@ -50,6 +50,7 @@ import {
   type TokenDismountInputType,
   type TokenViewModel,
   type TokenListItem,
+  type TokenCombatSnapshot,
   formatFKLink,
 } from '@foundry-mcp/shared';
 import { wrappedWrite } from '../transaction-manager.js';
@@ -186,7 +187,130 @@ function getActiveSceneOrThrow(): any {
 
 // ── Serializers ──────────────────────────────────────────────────────────────
 
-function serializeTokenViewModel(scene: any, token: any): TokenViewModel {
+const COMBAT_CHARACTERISTICS = ['ws', 'bs', 's', 't', 'i', 'ag', 'dex', 'int', 'wp', 'fel'];
+const COMBAT_LOCATIONS = ['head', 'body', 'rArm', 'lArm', 'rLeg', 'lLeg'];
+
+function finiteNumber(value: unknown, fallback = 0): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function propertyEntries(value: unknown): Array<{ name: string; value?: number }> {
+  return Array.from((value as any) ?? []).map((entry: any) => {
+    const numeric = Number(entry?.value);
+    return {
+      name: String(entry?.name ?? entry ?? ''),
+      ...(Number.isFinite(numeric) && numeric > 0 ? { value: numeric } : {}),
+    };
+  }).filter((entry) => entry.name);
+}
+
+function collectionValues(value: any): any[] {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  if (typeof value.values === 'function') return Array.from(value.values());
+  return Array.from(value);
+}
+
+/** Read the effective synthetic Actor behind this TokenDocument. That actor already includes the
+ * Token's ActorDelta and active effects, so these are the values the live token would actually use. */
+function serializeCombatSnapshot(token: any): TokenCombatSnapshot | null {
+  const actor = token.actor;
+  if (!actor?.system) return null;
+  const system = actor.system;
+  const characteristics: TokenCombatSnapshot['characteristics'] = {};
+  for (const key of COMBAT_CHARACTERISTICS) {
+    const characteristic = system.characteristics?.[key];
+    characteristics[key] = {
+      value: finiteNumber(characteristic?.value ?? characteristic?.initial),
+      bonus: finiteNumber(characteristic?.bonus, Math.floor(finiteNumber(characteristic?.value) / 10)),
+    };
+  }
+
+  const armour: Record<string, number> = {};
+  for (const location of COMBAT_LOCATIONS) {
+    const value = system.status?.armour?.[location];
+    armour[location] = Math.max(0, finiteNumber(value?.value ?? value));
+  }
+
+  const items = collectionValues(actor.items);
+  const skills = items.filter((item) => item.type === 'skill').map((item) => {
+    const characteristic = String(item.system?.characteristic?.value ?? '').toLowerCase() || null;
+    const advances = finiteNumber(item.system?.advances?.value);
+    const totalRaw = item.system?.total?.value ?? item.system?.total;
+    const total = Number.isFinite(Number(totalRaw))
+      ? Number(totalRaw)
+      : characteristic && characteristics[characteristic]
+        ? characteristics[characteristic]!.value + advances
+        : null;
+    return { name: String(item.name ?? ''), characteristic, advances, total };
+  });
+  const traits = items.filter((item) => item.type === 'trait').map((item) => ({
+    name: String(item.name ?? ''),
+    rating: String(item.system?.specification?.value ?? item.system?.value?.value ?? ''),
+  }));
+  const weapons = items.filter((item) => item.type === 'weapon').map((item) => ({
+    id: String(item.id ?? ''),
+    name: String(item.name ?? ''),
+    equipped: Boolean(item.system?.equipped?.value ?? item.system?.equipped),
+    attackType: String(item.attackType ?? item.system?.attackType ?? item.system?.modeOverride?.value ?? 'melee'),
+    group: String(item.system?.weaponGroup?.value ?? item.weaponGroup?.value ?? 'basic'),
+    damage: finiteNumber(item.Damage ?? item.system?.Damage ?? item.system?.damage?.value),
+    range: item.Range ?? item.system?.Range ?? item.system?.range?.value ?? null,
+    qualities: propertyEntries(item.system?.qualities?.value ?? (item.properties?.qualities ? Object.values(item.properties.qualities) : [])),
+    flaws: propertyEntries(item.system?.flaws?.value ?? (item.properties?.flaws ? Object.values(item.properties.flaws) : [])),
+  }));
+
+  const actorEffects = collectionValues(actor.effects);
+  const effects = actorEffects.map((effect) => {
+    const statuses = new Set(Array.from(effect.statuses ?? []).map(String));
+    const legacyStatus = effect.flags?.core?.statusId;
+    if (legacyStatus) statuses.add(String(legacyStatus));
+    return {
+      id: String(effect.id ?? ''),
+      name: String(effect.name ?? effect.label ?? ''),
+      disabled: Boolean(effect.disabled),
+      statuses: Array.from(statuses),
+      changes: Array.from(effect.changes ?? []).map((change: any) => ({
+        key: String(change.key ?? ''),
+        mode: finiteNumber(change.mode),
+        value: String(change.value ?? ''),
+        priority: change.priority == null ? null : finiteNumber(change.priority),
+      })),
+    };
+  });
+  const conditionCounts = new Map<string, number>();
+  const effectsById = new Map(actorEffects.map((effect) => [String(effect.id ?? ''), effect]));
+  for (const effect of effects) {
+    if (effect.disabled) continue;
+    for (const status of effect.statuses) {
+      const source = effectsById.get(effect.id);
+      const value = Math.max(1, finiteNumber(source?.conditionValue ?? source?.flags?.wfrp4e?.value, 1));
+      conditionCounts.set(status, Math.max(conditionCounts.get(status) ?? 0, value));
+    }
+  }
+
+  return {
+    schema: 'wfrp4e-token-combat-snapshot/v1',
+    actorType: String(actor.type ?? ''),
+    sourceId: actor.flags?.core?.sourceId ?? actor._source?.flags?.core?.sourceId ?? null,
+    wounds: {
+      value: finiteNumber(system.status?.wounds?.value),
+      max: finiteNumber(system.status?.wounds?.max),
+    },
+    advantage: finiteNumber(system.status?.advantage?.value ?? system.status?.advantage),
+    characteristics,
+    size: system.details?.size?.value ?? null,
+    armour,
+    conditions: [...conditionCounts].map(([key, value]) => ({ key, value })),
+    skills,
+    traits,
+    weapons,
+    effects,
+  };
+}
+
+function serializeTokenViewModel(scene: any, token: any, includeCombatSnapshot = false): TokenViewModel {
   const src = token._source ?? {};
   const actorIdRaw = (src.actorId ?? token.actorId) as string | null;
   const link = formatFKLink(actorIdRaw, (game as any).actors);
@@ -201,6 +325,7 @@ function serializeTokenViewModel(scene: any, token: any): TokenViewModel {
     actorLinked: link.linked,
     actorLink: Boolean(token.actorLink),
     delta: delta ? { hasOverrides: Object.keys(delta._source?.system ?? {}).length > 0 } : null,
+    ...(includeCombatSnapshot ? { combatSnapshot: serializeCombatSnapshot(token) } : {}),
     width: (token.width as number) ?? 1,
     height: (token.height as number) ?? 1,
     texture: {
@@ -428,7 +553,7 @@ export async function getToken(data: unknown): Promise<Envelope<TokenGetResponse
     const token = getEmbeddedOrThrow<any>(scene, 'tokens', input.tokenId, 'Token');
     return {
       success: true,
-      data: { token: serializeTokenViewModel(scene, token) },
+      data: { token: serializeTokenViewModel(scene, token, input.includeCombatSnapshot === true) },
     };
   } catch (e) {
     return { success: false, error: e instanceof Error ? e.message : 'getToken failed' };

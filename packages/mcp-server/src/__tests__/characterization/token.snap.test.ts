@@ -111,6 +111,26 @@ describe('TokenTool — characterization', () => {
     expect((r as any).content[0].text).toMatchSnapshot();
   });
 
+  it('get — requested combat snapshot is visible in text and structured content', async () => {
+    const combatSnapshot = {
+      schema: 'wfrp4e-token-combat-snapshot/v1' as const,
+      actorType: 'creature', sourceId: 'Compendium.pack.Actor.orc',
+      wounds: { value: 5, max: 14 }, advantage: 2,
+      characteristics: { ws: { value: 72, bonus: 7 }, bs: { value: 30, bonus: 3 } },
+      size: 'avg', armour: { body: 4 }, conditions: [{ key: 'prone', value: 1 }],
+      skills: [], traits: [],
+      weapons: [{ id: 'w1', name: 'Scarred Axe', equipped: true, attackType: 'melee', group: 'basic', damage: 9, range: null, qualities: [], flaws: [] }],
+      effects: [{ id: 'e1', name: 'Battle Fury', disabled: false, statuses: [], changes: [] }],
+    };
+    const r = await tool({ token: { ...TOKEN_VM, combatSnapshot } }).execute({
+      action: 'get', sceneId: 'scene-id-001', tokenId: 'token-id-001', includeCombatSnapshot: true,
+    });
+    expect((r as any).content[0].text).toContain('Effective Combat Snapshot');
+    expect((r as any).content[0].text).toContain('Wounds: 5/14');
+    expect((r as any).content[0].text).toContain('Scarred Axe');
+    expect((r as any).structuredContent.token.combatSnapshot).toEqual(combatSnapshot);
+  });
+
   it('list — paginated tokens', async () => {
     const r = await tool({
       tokens: [TOKEN_LIST_ITEM],

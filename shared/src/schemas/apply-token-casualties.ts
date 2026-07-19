@@ -2,7 +2,7 @@
 //
 // Batch per-token ActorDelta casualty writer. For each token: set wounds, apply conditions
 // (unconscious/broken/prone/… — no "dead" condition exists in wfrp4e), embed an ArtAntares
-// critical-wound Item by compendium UUID.
+// critical-wound Items by compendium UUID.
 // Writes ALWAYS target the token's SYNTHETIC actor (tokenDoc.actor / ActorDelta), never the
 // world actor — encounter forces are unlinked siblings of one world actor (HC2 / BUG-133).
 //
@@ -26,14 +26,17 @@ const TokenCasualty = z
     wounds: z.number().int().min(0).optional(),
     // WFRP4e condition keys to apply via actor.addCondition (unconscious / broken / prone …).
     conditions: z.array(ConditionKey).optional(),
-    // ArtAntares crit Item compendium UUID to embed (Compendium.<pack>.Item.<id>). The handler
-    // embeds it on the token's synthetic actor + bumps system.status.criticalWounds.value.
+    // Legacy single-critical input. New callers should use criticalUuids so one body can retain
+    // every ordered critical resolved by the simulator (BUG-612).
     criticalUuid: FoundryUuid.optional(),
+    // Ordered ArtAntares crit Item compendium UUIDs to embed. Repeated UUIDs are allowed because a
+    // combatant can legitimately receive the same named critical more than once.
+    criticalUuids: z.array(FoundryUuid).min(1).optional(),
   })
   .strict()
   .refine(
-    (c) => c.wounds !== undefined || (c.conditions?.length ?? 0) > 0 || c.criticalUuid !== undefined,
-    { message: 'each casualty must set at least one of: wounds, conditions, criticalUuid' },
+    (c) => c.wounds !== undefined || (c.conditions?.length ?? 0) > 0 || c.criticalUuid !== undefined || (c.criticalUuids?.length ?? 0) > 0,
+    { message: 'each casualty must set at least one of: wounds, conditions, criticalUuid, criticalUuids' },
   );
 
 // BUG-409 idempotency: a caller-supplied batch key. When present, the handler records a per-token
@@ -70,7 +73,8 @@ const TokenCasualtyResult = z
     woundsBefore: z.number().optional(),
     woundsAfter: z.number().optional(),
     conditionsApplied: z.array(z.string()).optional(),
-    critEmbedded: z.string().nullable().optional(), // embedded crit item id, or null
+    critEmbedded: z.string().nullable().optional(), // compatibility: first embedded crit item id, or null
+    critsEmbedded: z.array(z.string()).optional(), // BUG-612: every embedded crit item id, in request order
     siblingVerified: z.boolean().optional(), // HC2 — a same-world-actor sibling was unchanged
     // BUG-409 — true when this token was SKIPPED because it was already applied for the given batchId
     // (idempotent retry). `applied` is also true (the token is in the desired state); no write occurred.
