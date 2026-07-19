@@ -785,6 +785,50 @@ describe('buildEffectPayload — compendium clone regression', () => {
     const out: any = buildEffectPayload({ name: 'NoDesc', trigger: 'endTurn', script: '' } as any);
     expect(out.description).toBe('');
   });
+
+  // BUG-644: warhammer-lib routes owner-transfer effects by dispatching on
+  // `transferData.type == "document"`. It never tests for "ownership", so an effect
+  // built with that literal is silently never applied to the owning actor — it
+  // creates cleanly, reports success, and does nothing. Live-verified 2026-07-18:
+  // type=document yields AP with transfer true OR false; type=ownership yields 0 with
+  // either. These tests fail if the default or the alias normalization regresses.
+  it('defaults transferData.type to "document", not "ownership" (BUG-644)', () => {
+    const out: any = buildEffectPayload({ name: 'Barding', trigger: 'APCalc', script: '' } as any);
+    expect(out.system.transferData.type).toBe('document');
+    expect(out.system.transferData.documentType).toBe('Actor');
+  });
+  it('normalizes the deprecated "ownership" alias to "document" (BUG-644)', () => {
+    const out: any = buildEffectPayload({
+      name: 'Barding',
+      trigger: 'APCalc',
+      script: '',
+      transfer: { type: 'ownership' },
+    } as any);
+    expect(out.system.transferData.type).toBe('document');
+  });
+  it('preserves non-document transfer types verbatim (BUG-644)', () => {
+    for (const t of ['damage', 'target', 'area', 'aura', 'other'] as const) {
+      const out: any = buildEffectPayload({
+        name: 'E',
+        trigger: 'applyDamage',
+        script: '',
+        transfer: { type: t },
+      } as any);
+      expect(out.system.transferData.type).toBe(t);
+    }
+  });
+  // The `transfer` boolean is NOT load-bearing for routing (live matrix above) —
+  // system.transferData drives it. Pinned so a future "fix" doesn't flip it to true
+  // and mask a transferData regression.
+  it('keeps the Foundry-core transfer flag false (BUG-644)', () => {
+    const out: any = buildEffectPayload({
+      name: 'E',
+      trigger: 'APCalc',
+      script: '',
+      transfer: { type: 'document' },
+    } as any);
+    expect(out.transfer).toBe(false);
+  });
   it('includes all 53 triggers in enum (spot-check)', () => {
     expect(() =>
       CreateCustomItemInputSchema.parse({

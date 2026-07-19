@@ -63,9 +63,21 @@ const TRIGGER_KEYS = [
 
 export const ActiveEffectTrigger = z.enum(TRIGGER_KEYS);
 
+// BUG-644: the owner-transfer type is `document`, NOT `ownership`. warhammer-lib
+// dispatches on `transferData.type == "document"` (verified live 2026-07-18 against
+// warhammer-lib.js and the core wfrp4e Armour trait, which stores "document").
+// `ownership` is not a value the lib ever tests for, so an effect carrying it is
+// silently never routed to the owning actor — it creates cleanly, reports success,
+// and does nothing. Kept below as a DEPRECATED alias (normalized to `document` in
+// buildEffectPayload) so existing callers are repaired rather than hard-rejected.
+// Live-verified matrix: type=document works with transfer true OR false; type=ownership
+// fails with transfer true OR false. The `transfer` flag is not load-bearing.
+// Known gap: the lib also accepts `zone`, not yet modelled here (needs system.zone wiring).
 const TransferData = z
   .object({
-    type: z.enum(['ownership', 'damage', 'target', 'area', 'aura', 'other']).default('ownership'),
+    type: z
+      .enum(['document', 'damage', 'target', 'area', 'aura', 'other', 'ownership'])
+      .default('document'),
     documentType: z.enum(['Actor', 'Item']).default('Actor'),
     avoidable: z.boolean().optional(),
     prompt: z.boolean().optional(),
@@ -124,8 +136,10 @@ export type ActiveEffectInput = z.infer<typeof ActiveEffectDataSchema>;
  * Inflates `trigger` + `script` into system.scriptData[0]; applies transferData.
  */
 export function buildEffectPayload(input: ActiveEffectInput): Record<string, unknown> {
+  // BUG-644: normalize the deprecated `ownership` alias to the live `document` type.
+  const rawType = input.transfer?.type ?? 'document';
   const transferData = {
-    type: input.transfer?.type ?? 'ownership',
+    type: rawType === 'ownership' ? 'document' : rawType,
     documentType: input.transfer?.documentType ?? 'Actor',
     avoidable: input.transfer?.avoidable ?? false,
     prompt: input.transfer?.prompt ?? false,

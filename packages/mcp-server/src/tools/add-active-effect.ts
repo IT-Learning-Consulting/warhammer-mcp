@@ -66,11 +66,20 @@ export class AddActiveEffectTool extends BaseTool {
                 label: { type: 'string' },
                 transfer: {
                   type: 'object',
-                  description: 'Transfer config object (not a boolean). Controls whether the AE transfers to owned actors when item is equipped. Keys: disabled (boolean), actorId (string, optional), name (string, optional). buildEffectPayload maps this into Foundry\'s nested ActiveEffect shape.',
+                  description:
+                    'TransferData config object (not a boolean) — controls how/when the AE is routed off its source document. buildEffectPayload inflates this into system.transferData. Defaults to {type:"document", documentType:"Actor"}, i.e. classic transfer to the owning actor — the right default for talents/traits/passive buffs. BUG-644: the owner-transfer type is "document"; the legacy alias "ownership" is accepted but normalized to "document" (warhammer-lib only ever dispatches on "document", so a raw "ownership" effect silently never applies).',
                   properties: {
-                    disabled: { type: 'boolean' },
-                    actorId: { type: 'string' },
-                    name: { type: 'string' },
+                    type: {
+                      type: 'string',
+                      enum: ['document', 'damage', 'target', 'area', 'aura', 'other', 'ownership'],
+                      description:
+                        'document = transfer to owning actor (default); damage = applied to whoever takes damage from the owner; target = applied to a test target; area/aura = template-based; other = manual routing. "ownership" is a deprecated alias for "document".',
+                    },
+                    documentType: {
+                      type: 'string',
+                      enum: ['Actor', 'Item'],
+                      description: 'What the effect applies TO once transferred. Default "Actor".',
+                    },
                   },
                   additionalProperties: true,
                 },
