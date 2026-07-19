@@ -3,22 +3,28 @@
 // CCR-5: Zod input validation lives package-local on the foundry-module side. The mcp-server tool layer
 // only needs typed response shapes for this.query<T> (DP-15 — never <any>).
 //
-// Warhammer Economy v1.0.0. 64 actions across 14 idioms (unified-ledger: record-transaction /
+// Warhammer Economy v1.0.0. 92 actions across 17 idioms (unified-ledger: record-transaction /
 // delete-account added Phase 2; levy-and-burn: apply-levies / money-to-burn added Phase 4;
 // banking-and-income: invest / resolve-investment / list-investments / stash-deposit / stash-withdraw /
-// accrue-interest added Phase 5; legitimate-business-enterprises: list-enterprises / get-enterprise /
+// accrue-interest added Phase 5 (+run-economic-cycle added Phase 9, D7 revisit — the module-UI-only
+// "Run Economic Cycle" button's headless composer); legitimate-business-enterprises: list-enterprises / get-enterprise /
 // create-enterprise / connect-enterprise-actor / enterprise-income / enterprise-event /
 // enterprise-pay-interest / enterprise-repay-debt / enterprise-upgrade / delete-enterprise added Phase 6;
-// enterprise-ownership-and-debt: set-enterprise-owners / add-enterprise-debt / forgive-enterprise-debt +
+// enterprise-ownership-and-debt: set-enterprise-owners / add-enterprise-debt / forgive-enterprise-debt
+// (+set-enterprise-income-sources added Phase 7e2) +
 // levy-groups: list-levies / save-levy-group / list-levy-groups / delete-levy-group added Phase 7c;
 // venture-ledger: create-venture / get-venture / list-ventures / subscribe-venture /
 // transfer-venture-parts / settle-venture / distribute-venture / venture-event added Phase 7d (the
 // investment-cycle idiom's buy-stock/sell-stock/get-portfolio are RETIRED the same phase — enum literals
 // preserved, WFRP_ECONOMY_ACTION_RETIRED short-circuit); +toggle-venture-badge / issue-parts /
 // set-venture-status / set-venture-standing added Phase 7d2 (Venture Events v2), wfrp_economy_system_v1_prd.md
-// §10). Each handler
-// return carries `action` as a discriminant; WfrpEconomyResult is their union so the tool stays typed
-// without <any>.
+// §10; trading idiom (23 actions, trading-* prefix) — the ported trading-places engine, native to this
+// module — added Phase 7f, wfrp-economy-phase7f plan §10; +trading-list-vehicle-actors /
+// trading-connect-cargo-vehicle / trading-disconnect-cargo-vehicle, vehicle-linked cargo capacity,
+// post-7f; +trading-delete-rumour, post-7f Trade Rumour Table redesign Change 1/2); economic-climate
+// idiom (climate-get-state / climate-set-state) added Phase 8, wfrp-economy-phase8-living-economy
+// plan §10. Each handler return carries `action` as a discriminant; WfrpEconomyResult is their union so
+// the tool stays typed without <any>.
 
 export interface WfrpEconomySummary {
   id: string;
@@ -58,6 +64,8 @@ export interface WfrpEconomyListBankersResult {
   action: 'list-bankers';
   count: number;
   bankers: WfrpEconomyBankerEntry[];
+  retired?: boolean;
+  detail?: string;
 }
 
 export interface WfrpEconomyCreateEconomyResult {
@@ -80,6 +88,9 @@ export interface WfrpEconomyDeleteEconomyResult {
   action: 'delete-economy';
   economyId: string;
   deleted: boolean;
+  archiveId?: string;
+  affected?: Record<string, number>;
+  transactionHistoryRetained?: boolean;
 }
 
 export interface WfrpEconomyCreateAccountResult {
@@ -283,12 +294,16 @@ export interface WfrpEconomyInvestResult {
 export interface WfrpEconomyResolveInvestmentResult {
   action: 'resolve-investment';
   investmentId: string;
-  actorId: string;
-  bankrupt: boolean;
-  payoutBp: number;
+  // D11 (Phase 9 orphan-guard): ownerDeleted:true is a distinct non-error outcome — the owner actor no
+  // longer exists, so none of the payout/bankrupt fields below are populated (nothing was resolved; the
+  // record stays trackable only via the Banking-tab "remove record" affordance).
+  ownerDeleted?: boolean;
+  actorId?: string;
+  bankrupt?: boolean;
+  payoutBp?: number;
   principalBp: number;
   accruedBp: number;
-  walletBalanceBp: number;
+  walletBalanceBp?: number;
 }
 
 export interface WfrpEconomyInvestmentEntry {
@@ -361,6 +376,45 @@ export interface WfrpEconomyAccrueInterestResult {
   investmentVerdicts: WfrpEconomyInvestmentAccrualVerdict[];
   accountVerdicts: WfrpEconomyAccountAccrualVerdict[];
   loanReminders: WfrpEconomyLoanReminder[];
+}
+
+export interface WfrpEconomyRentalVerdict {
+  accountId?: string;
+  actorId?: string;
+  actorName?: string | null;
+  economyId?: string | null;
+  bankId?: string | null;
+  propertyId: string | null;
+  propertyName: string | null;
+  incomeBp?: number;
+  newBalanceBp?: number;
+  notFound?: boolean;
+}
+
+// Venture-pass verdicts are heterogeneous by `kind` (runVenturePass, venture-engine.js:1028-1078 — transfer
+// / distribution / standing-decay / delay-tick / event, each with its own extra fields); a loose shape
+// keeps this typed without re-deriving every per-kind field union. The formatter reads `kind` + common
+// fields defensively.
+export interface WfrpEconomyVenturePassVerdict {
+  kind: 'transfer' | 'distribution' | 'standing-decay' | 'delay-tick' | 'event';
+  ventureId: string;
+  [key: string]: unknown;
+}
+
+// Phase 9 (D7 revisit): the fork's own headless composer for the module-UI-only "Run Economic Cycle"
+// button — delegates to the SAME BankingEngine.runEconomicCycle export. dryRun:true previews
+// investment/account/loan/rental verdicts ONLY — the venture pass is skipped entirely on dryRun
+// (banking-engine.js:622) and ventureVerdicts is always [] in that case.
+export interface WfrpEconomyRunEconomicCycleResult {
+  action: 'run-economic-cycle';
+  economyId: string;
+  dryRun: boolean;
+  lastCycleAt: string | null;
+  investmentVerdicts: WfrpEconomyInvestmentAccrualVerdict[];
+  accountVerdicts: WfrpEconomyAccountAccrualVerdict[];
+  loanReminders: WfrpEconomyLoanReminder[];
+  rentalVerdicts: WfrpEconomyRentalVerdict[];
+  ventureVerdicts: WfrpEconomyVenturePassVerdict[];
 }
 
 // ── legitimate-business-enterprises idiom (Phase 6, wfrp_economy_system) ─────────
@@ -479,6 +533,8 @@ export interface WfrpEconomyEnterpriseRepayDebtResult {
   enterpriseId: string;
   principalBp: number;
   walletBalanceBp: number;
+  appliedBp: number;
+  unappliedBp: number;
 }
 
 export interface WfrpEconomyEnterpriseUpgradeResult {
@@ -520,6 +576,14 @@ export interface WfrpEconomyForgiveEnterpriseDebtResult {
   action: 'forgive-enterprise-debt';
   enterpriseId: string;
   principalBp: number;
+}
+
+// Phase 7e2 (R6.1/R6.5/R7c.3) — manager-primary income-source write.
+export interface WfrpEconomySetEnterpriseIncomeSourcesResult {
+  action: 'set-enterprise-income-sources';
+  enterpriseId: string;
+  incomeModifiers: WfrpEconomyIncomeModifier[];
+  actorSynced: boolean;
 }
 
 // ── levy-groups idiom (Phase 7c, R7c.4/R7c.5) ───────────────────────────────────
@@ -587,6 +651,15 @@ export interface WfrpEconomyVentureQueuedTransfer {
   askingPriceBp: number;
 }
 
+// Phase 7e D8: a linked entry carries bankId/economyId as a pair (a real institution); a generic/
+// unassigned Phase 7d entry carries neither.
+export interface WfrpEconomyVentureHandledByEntry {
+  role: string;
+  name: string | null;
+  bankId: string | null;
+  economyId: string | null;
+}
+
 export interface WfrpEconomyVentureSummary {
   ventureId: string;
   name: string;
@@ -598,6 +671,7 @@ export interface WfrpEconomyVentureSummary {
   priceBp: number;
   escrowBp: number;
   badges: string[];
+  handledBy: WfrpEconomyVentureHandledByEntry[];
 }
 
 export interface WfrpEconomyCreateVentureResult {
@@ -608,6 +682,7 @@ export interface WfrpEconomyCreateVentureResult {
   status: string;
   standing: string;
   escrowBp: number;
+  handledBy: WfrpEconomyVentureHandledByEntry[];
 }
 
 export interface WfrpEconomyGetVentureResult {
@@ -626,6 +701,7 @@ export interface WfrpEconomyGetVentureResult {
   badges: string[];
   notices: string[];
   deedDateText: string | null;
+  handledBy: WfrpEconomyVentureHandledByEntry[];
 }
 
 export interface WfrpEconomyListVenturesResult {
@@ -702,6 +778,277 @@ export interface WfrpEconomySetVentureStandingResult {
   standing: string;
 }
 
+// ── trading (Phase 7f) ───────────────────────────────────────────────────────
+
+export interface WfrpTradingSettlement {
+  name: string;
+  gazetteerId: string;
+  region: string;
+  size: number;
+  wealth: number;
+  population: number | null;
+  produces: string[];
+  demands: string[];
+  flags: string[];
+}
+
+export interface WfrpEconomyTradingListSettlementsResult {
+  action: 'trading-list-settlements';
+  count: number;
+  settlements: WfrpTradingSettlement[];
+}
+
+export interface WfrpEconomyTradingListCargoTypesResult {
+  action: 'trading-list-cargo-types';
+  count: number;
+  cargoTypes: Array<Record<string, unknown>>;
+}
+
+export interface WfrpEconomyTradingGetSeasonResult {
+  action: 'trading-get-season';
+  season: string;
+  seasonSource: 'manual' | 'calendar' | 'fallback';
+}
+
+export interface WfrpEconomyTradingSetSeasonResult {
+  action: 'trading-set-season';
+  season: string;
+  seasonSource: 'manual' | 'calendar' | 'fallback';
+}
+
+export interface WfrpTradingAvailabilitySlot {
+  slotNumber: number;
+  cargo: { name: string; category: string; probability: number; weight: number };
+  amountEp: number;
+}
+
+export interface WfrpEconomyTradingCheckAvailabilityResult {
+  action: 'trading-check-availability';
+  settlement: string;
+  season: string;
+  slotCount: number;
+  slots: WfrpTradingAvailabilitySlot[];
+}
+
+export interface WfrpEconomyTradingCalcPurchasePriceResult {
+  action: 'trading-calc-purchase-price';
+  cargoName: string;
+  quantity: number;
+  season: string;
+  pricePerEpBp: number;
+  totalBp: number;
+  dialFactor: number;
+}
+
+// Linked demand (connected economy, NEW — not RAW, a GM-requested extension): a standing, deterministic
+// settlement-data condition (produces/size/flags), re-evaluated fresh on every quote/sale — unlike
+// WfrpTradingRumourApplied, this is never minted/stored/consumed.
+export interface WfrpTradingLinkedDemandApplied {
+  multiplier: number;
+  reason: string;
+}
+
+export interface WfrpEconomyTradingCalcSalePriceResult {
+  action: 'trading-calc-sale-price';
+  cargoName: string;
+  quantity: number;
+  settlement: string;
+  season: string;
+  pricePerEpBp: number;
+  totalBp: number;
+  dialFactor: number;
+  linkedDemandApplied: WfrpTradingLinkedDemandApplied | null;
+}
+
+export interface WfrpEconomyTradingHaggleTestResult {
+  action: 'trading-haggle-test';
+  success: boolean;
+  hasDealmakerTalent: boolean;
+  player: Record<string, unknown>;
+  merchant: Record<string, unknown>;
+  resultDescription: string;
+}
+
+// Trade Rumour Table redesign (post-7f Change 1/2) — the 20-band d100 table's minted-row shape and the
+// buy/sell-time consumed-rumour echo. Replaces the old flat single-cargo 2x-eligibility model.
+export interface WfrpTradingRumour {
+  id: string;
+  text: string;
+  goods: string[];
+  effect: { kind: 'sellBonus' | 'buyDiscount'; multiplier: number };
+  mintedAt: string;
+}
+
+export interface WfrpTradingRumourApplied {
+  id: string;
+  text: string;
+  multiplier: number;
+  persistedCheckFailed?: boolean;
+  detail?: string;
+}
+
+export interface WfrpEconomyTradingGossipTestResult {
+  action: 'trading-gossip-test';
+  success: boolean;
+  degrees: number;
+  resultDescription: string;
+  rumourMinted: WfrpTradingRumour | null;
+}
+
+export interface WfrpEconomyTradingBuyCargoResult {
+  action: 'trading-buy-cargo';
+  actorId: string;
+  lotId: string;
+  cargoName: string;
+  quantity: number;
+  settlement: string;
+  totalBp: number;
+  walletBalanceBp: number;
+  secretQuality: { tierIndex: number; tier: string; priceMultiplierPer10Ep: number } | null;
+  rumourApplied: WfrpTradingRumourApplied | null;
+}
+
+export interface WfrpEconomyTradingSellCargoResult {
+  action: 'trading-sell-cargo';
+  actorId: string;
+  lotId: string;
+  settlement: string;
+  soldPartial: boolean;
+  quantitySold: number | null;
+  quantityRemaining: number;
+  totalBp: number;
+  walletBalanceBp: number;
+  rumourApplied: WfrpTradingRumourApplied | null;
+  linkedDemandApplied: WfrpTradingLinkedDemandApplied | null;
+}
+
+export interface WfrpEconomyTradingDeleteRumourResult {
+  action: 'trading-delete-rumour';
+  rumourId: string;
+  deleted: true;
+}
+
+export interface WfrpEconomyTradingGetHoldResult {
+  action: 'trading-get-hold';
+  capacity: number;
+  capacitySource: 'vehicle' | 'manual';
+  connectedVehicleName: string | null;
+  currentHoldEp: number;
+  count: number;
+  hold: Array<Record<string, unknown>>;
+}
+
+export interface WfrpTradingVehicleActorEntry {
+  actorId: string;
+  actorUuid: string;
+  name: string;
+  carriesMax: number;
+}
+
+export interface WfrpEconomyTradingListVehicleActorsResult {
+  action: 'trading-list-vehicle-actors';
+  count: number;
+  actors: WfrpTradingVehicleActorEntry[];
+}
+
+export interface WfrpEconomyTradingConnectCargoVehicleResult {
+  action: 'trading-connect-cargo-vehicle';
+  actorId: string;
+  actorUuid: string;
+  carriesMax: number;
+}
+
+export interface WfrpEconomyTradingDisconnectCargoVehicleResult {
+  action: 'trading-disconnect-cargo-vehicle';
+  disconnected: true;
+}
+
+export interface WfrpTradingGazetteerEntry {
+  packId: string;
+  label: string;
+  builtin: boolean;
+  active: boolean;
+  settlementCount: number;
+  loadError?: string;
+}
+
+export interface WfrpEconomyTradingListGazetteersResult {
+  action: 'trading-list-gazetteers';
+  count: number;
+  activeIds: string[];
+  gazetteers: WfrpTradingGazetteerEntry[];
+}
+
+export interface WfrpEconomyTradingImportGazetteerResult {
+  action: 'trading-import-gazetteer';
+  packId: string;
+  settlementCount: number;
+}
+
+export interface WfrpEconomyTradingConfigureGazetteersResult {
+  action: 'trading-configure-gazetteers';
+  active: string[];
+}
+
+export interface WfrpEconomyTradingGenerateMerchantResult {
+  action: 'trading-generate-merchant';
+  id: string;
+  type: 'producer' | 'seeker';
+  settlement: Record<string, unknown>;
+  cargoType: string;
+  hagglingSkill: number;
+  skillDescription: string;
+  equilibrium: { supply: number; demand: number };
+  specialBehaviors: string[];
+}
+
+export interface WfrpEconomyTradingRevealQualityResult {
+  action: 'trading-reveal-quality';
+  lotId: string;
+  cargoName: string;
+  revealedTier: string;
+  misreported: boolean;
+  trueTier: string;
+}
+
+export interface WfrpEconomyTradingGetPriceModifiersResult {
+  action: 'trading-get-price-modifiers';
+  global: number;
+  perCargo: Record<string, number>;
+}
+
+export interface WfrpEconomyTradingSetPriceModifiersResult {
+  action: 'trading-set-price-modifiers';
+  previous: { global: number; perCargo: Record<string, number> };
+  current: { global: number; perCargo: Record<string, number> };
+}
+
+export interface WfrpEconomyTradingMigrationStatusResult {
+  action: 'trading-migration-status';
+  migrated: true;
+  alreadyMigrated: boolean;
+  migratedFrom?: string;
+  seededSeason?: string | null;
+  seededHoldCount?: number;
+  seededCapacity?: number | null;
+  seededDial?: boolean;
+}
+
+// Phase 8 (D1/D4/D11) — economic climate: 2 additive actions (89 -> 91). Response carries the FULL
+// resolved state-table entry (label + all 3 factors), never a bare id — write-amount-echo discipline
+// (7c F03 lesson).
+export interface WfrpEconomyClimateStateResult {
+  action: 'climate-get-state' | 'climate-set-state';
+  // addendum-2: climate is PER-ECONOMY — the record echoed is this economy's own state, never global.
+  economyId: string;
+  state: string;
+  label: string;
+  priceFactor: number;
+  incomeFactor: number;
+  eventShift: number;
+  updatedAt: number | null;
+}
+
 export type WfrpEconomyResult =
   | WfrpEconomyListEconomiesResult
   | WfrpEconomyGetEconomyResult
@@ -732,6 +1079,7 @@ export type WfrpEconomyResult =
   | WfrpEconomyStashDepositResult
   | WfrpEconomyStashWithdrawResult
   | WfrpEconomyAccrueInterestResult
+  | WfrpEconomyRunEconomicCycleResult
   | WfrpEconomyListEnterprisesResult
   | WfrpEconomyGetEnterpriseResult
   | WfrpEconomyCreateEnterpriseResult
@@ -745,6 +1093,7 @@ export type WfrpEconomyResult =
   | WfrpEconomySetEnterpriseOwnersResult
   | WfrpEconomyAddEnterpriseDebtResult
   | WfrpEconomyForgiveEnterpriseDebtResult
+  | WfrpEconomySetEnterpriseIncomeSourcesResult
   | WfrpEconomyListLeviesResult
   | WfrpEconomySaveLevyGroupResult
   | WfrpEconomyListLevyGroupsResult
@@ -760,9 +1109,34 @@ export type WfrpEconomyResult =
   | WfrpEconomyToggleVentureBadgeResult
   | WfrpEconomyIssuePartsResult
   | WfrpEconomySetVentureStatusResult
-  | WfrpEconomySetVentureStandingResult;
+  | WfrpEconomySetVentureStandingResult
+  | WfrpEconomyTradingListSettlementsResult
+  | WfrpEconomyTradingListCargoTypesResult
+  | WfrpEconomyTradingGetSeasonResult
+  | WfrpEconomyTradingSetSeasonResult
+  | WfrpEconomyTradingCheckAvailabilityResult
+  | WfrpEconomyTradingCalcPurchasePriceResult
+  | WfrpEconomyTradingCalcSalePriceResult
+  | WfrpEconomyTradingHaggleTestResult
+  | WfrpEconomyTradingGossipTestResult
+  | WfrpEconomyTradingBuyCargoResult
+  | WfrpEconomyTradingSellCargoResult
+  | WfrpEconomyTradingDeleteRumourResult
+  | WfrpEconomyTradingGetHoldResult
+  | WfrpEconomyTradingListVehicleActorsResult
+  | WfrpEconomyTradingConnectCargoVehicleResult
+  | WfrpEconomyTradingDisconnectCargoVehicleResult
+  | WfrpEconomyTradingListGazetteersResult
+  | WfrpEconomyTradingImportGazetteerResult
+  | WfrpEconomyTradingConfigureGazetteersResult
+  | WfrpEconomyTradingGenerateMerchantResult
+  | WfrpEconomyTradingRevealQualityResult
+  | WfrpEconomyTradingGetPriceModifiersResult
+  | WfrpEconomyTradingSetPriceModifiersResult
+  | WfrpEconomyTradingMigrationStatusResult
+  | WfrpEconomyClimateStateResult;
 
-// ── The action enum (mirrors the foundry-module discriminatedUnion literals; 64 actions) ──
+// ── The action enum (mirrors the foundry-module discriminatedUnion literals; 91 actions) ──
 
 export const WFRP_ECONOMY_ACTIONS = [
   'list-economies',
@@ -800,6 +1174,7 @@ export const WFRP_ECONOMY_ACTIONS = [
   'stash-deposit',
   'stash-withdraw',
   'accrue-interest',
+  'run-economic-cycle',
   'list-enterprises',
   'get-enterprise',
   'create-enterprise',
@@ -813,6 +1188,7 @@ export const WFRP_ECONOMY_ACTIONS = [
   'set-enterprise-owners',
   'add-enterprise-debt',
   'forgive-enterprise-debt',
+  'set-enterprise-income-sources',
   'list-levies',
   'save-levy-group',
   'list-levy-groups',
@@ -829,6 +1205,32 @@ export const WFRP_ECONOMY_ACTIONS = [
   'issue-parts',
   'set-venture-status',
   'set-venture-standing',
+  'trading-list-settlements',
+  'trading-list-cargo-types',
+  'trading-get-season',
+  'trading-set-season',
+  'trading-check-availability',
+  'trading-calc-purchase-price',
+  'trading-calc-sale-price',
+  'trading-haggle-test',
+  'trading-gossip-test',
+  'trading-buy-cargo',
+  'trading-sell-cargo',
+  'trading-delete-rumour',
+  'trading-get-hold',
+  'trading-list-vehicle-actors',
+  'trading-connect-cargo-vehicle',
+  'trading-disconnect-cargo-vehicle',
+  'trading-list-gazetteers',
+  'trading-import-gazetteer',
+  'trading-configure-gazetteers',
+  'trading-generate-merchant',
+  'trading-reveal-quality',
+  'trading-get-price-modifiers',
+  'trading-set-price-modifiers',
+  'trading-migration-status',
+  'climate-get-state',
+  'climate-set-state',
 ] as const;
 
 export type WfrpEconomyAction = (typeof WFRP_ECONOMY_ACTIONS)[number];

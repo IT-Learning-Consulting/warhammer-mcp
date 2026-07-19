@@ -73,6 +73,16 @@ export const ErrorTokens = {
   // (status:undefined, distributedBp:0, a "settled" toast for a settlement that never happened). No
   // `_NOT_PERSISTED` suffix (nothing written yet — the delay gate refuses BEFORE any escrow write).
   WFRP_ECONOMY_VENTURE_SETTLE_DELAYED: 'WFRP_ECONOMY_VENTURE_SETTLE_DELAYED',
+  // Phase 7f (D14, folded from inline literals at wfrp-economy.ts's settle-venture/venture-event
+  // handlers) — VENTURE_DOES_NOT_SETTLE: settle-venture called on an open-ended (Partnership/
+  // Chartered-Concern) deed that hasn't been Wind-Up'd. INVALID_ROLL: a d100Roll failed the engine's
+  // own 1-100 integer check (defensive — the shared Zod schema already constrains this). No
+  // `_NOT_PERSISTED` suffix on either (nothing written yet — nothing to roll back).
+  WFRP_ECONOMY_VENTURE_DOES_NOT_SETTLE: 'WFRP_ECONOMY_VENTURE_DOES_NOT_SETTLE',
+  WFRP_ECONOMY_INVALID_ROLL: 'WFRP_ECONOMY_INVALID_ROLL',
+  // Phase 7e2 — set-enterprise-income-sources: an entry failed the fork's validateIncomeSources rules
+  // (label/skill/tier/standing). No `_NOT_PERSISTED` suffix (nothing written yet).
+  WFRP_ECONOMY_INVALID_INCOME_SOURCES: 'WFRP_ECONOMY_INVALID_INCOME_SOURCES',
   // module_integration_v2 Phase 8 (module-mortal-needs) — pre-write rejections (no rollback).
   // CONFIRM_REQUIRED: reset-all / untrack-actor / party-wide long-rest / unregister-custom-need fired
   // without confirm:true. TARGET_NOT_FOUND: actor/need/need-config could not be resolved. No
@@ -315,6 +325,12 @@ export const ErrorTokens = {
   TRADE_ITEM_SOURCE_DECREMENT_NOT_PERSISTED: 'TRADE_ITEM_SOURCE_DECREMENT_NOT_PERSISTED',
   TRADE_ITEM_SOURCE_DELETE_NOT_PERSISTED: 'TRADE_ITEM_SOURCE_DELETE_NOT_PERSISTED',
   TRADE_ITEM_DEST_CREATE_NOT_PERSISTED: 'TRADE_ITEM_DEST_CREATE_NOT_PERSISTED',
+  // Phase 7g — module-trading-places retirement (D7, clone of WFRP_ECONOMY_ACTION_RETIRED): every
+  // trading-places action is superseded by a module-wfrp-economy trading-* successor (or, for the 3
+  // currency ops, an existing wallet/currency action). Enum literals stay (HC8-as-amended); the
+  // dispatcher short-circuits BEFORE requireModuleActive (D6 — inverts the 7d order, since this module
+  // is DISABLED, not merely superseded), message names the successor action.
+  TRADING_PLACES_ACTION_RETIRED: 'TRADING_PLACES_ACTION_RETIRED',
   UPDATE_ACTOR_NOT_PERSISTED: 'UPDATE_ACTOR_NOT_PERSISTED',
   UPDATE_ITEM_NOT_PERSISTED: 'UPDATE_ITEM_NOT_PERSISTED',
   UPDATE_PROTOTYPE_TOKEN_NOT_PERSISTED: 'UPDATE_PROTOTYPE_TOKEN_NOT_PERSISTED',

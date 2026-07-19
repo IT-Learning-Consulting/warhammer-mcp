@@ -290,16 +290,11 @@ export class ModuleSettings {
       default: {},
     });
 
-    // wfrp_economy_system Phase 7 — GM-tunable price dial for module-trading-places
-    // calc-purchase-price/calc-sale-price (applied post-calcToBp). Lives under this module's own
-    // namespace (ADR-U10 portability), NOT a trading-places setting — trading-places renders no UI
-    // for it. {global, perCargo} both default to neutral (1 / {}).
-    game.settings.register(this.moduleId, 'tradingPriceModifiers', {
-      scope: 'world',
-      config: false,
-      type: Object,
-      default: { global: 1, perCargo: {} },
-    });
+    // Phase 7g: the warhammer-mcp-namespaced price-dial setting registration is retired along with the
+    // module-trading-places umbrella it backed. The price dial now lives entirely under the fork's own
+    // world-settings namespace (registered by wfrp4e-economy itself, D8), consumed by
+    // module-wfrp-economy's trading-get/set-price-modifiers actions — the D2 seed-once migration already
+    // copied this namespace's last value across before this registration was removed.
 
     // ============================================================================
     // SECTION: DIALOG CHIME — audible alert for MCP-triggered blocking dialogs

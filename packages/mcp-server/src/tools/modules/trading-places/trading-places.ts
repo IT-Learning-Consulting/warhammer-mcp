@@ -103,7 +103,9 @@ export class ModuleTradingPlacesTool extends BaseTool {
           idempotentHint: false,
           openWorldHint: false,
         },
-        description: `Drive the Trading Places module (trading-places) — settlement/cargo reference data, seasonal availability checks, purchase/sale price calculation, haggle/gossip test resolution, the shared cargo hold, and REAL actor coin movement. Bulk-EP cargo economy (Death on the Reik companion algorithm) — complements /module-itempiles (item-level shops) and availability-test (Core-RAW single-item market availability).
+        description: `RETIRED (Phase 7g): every action below now returns a typed TRADING_PLACES_ACTION_RETIRED error naming its module-wfrp-economy trading-* successor (or, for the 3 currency ops, the existing wallet action) — the retirement fires whether trading-places is active, inactive, or uninstalled. Route new work to module-wfrp-economy's trading-* actions instead (get-currency/add-currency/deduct-currency → get-wallet-balance/wallet-add/wallet-remove). Schema/enum below are UNCHANGED (HC8 — registry stays stable) so a caller mid-migration still gets a typed, actionable refusal rather than a hard schema break; this description is the only thing that changed.
+
+Historical (pre-retirement) purpose, kept for context on what the successor replaces: drove the Trading Places module (trading-places) — settlement/cargo reference data, seasonal availability checks, purchase/sale price calculation, haggle/gossip test resolution, the shared cargo hold, and REAL actor coin movement. Bulk-EP cargo economy (Death on the Reik companion algorithm) — complements /module-itempiles (item-level shops) and availability-test (Core-RAW single-item market availability).
 Conditional: returns MODULE_NOT_ACTIVE when trading-places is absent/inactive. Pre-flight: module-probe.is-active trading-places. All amounts are integer Brass Pennies (BP); 1 GC = 240 BP, 1 SS = 12 BP.
 
 DATASET LIMIT (R7.3): the bundled dataset is Empire-only — 14 provinces/regions of Reikland-and-neighbours settlements. Settlements outside the Empire are not in the data and will TARGET_NOT_FOUND.

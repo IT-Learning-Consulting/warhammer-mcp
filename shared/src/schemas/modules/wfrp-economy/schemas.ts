@@ -7,7 +7,7 @@
 // `.strict()` ZodObject (NO `.refine`/`.transform` — a ZodEffects breaks the discriminatedUnion);
 // cross-field rules (confirm-gate, large-transfer threshold, target resolution) live in the handler.
 //
-// 64 actions across 14 idioms (capability_audit/wfrp4e-economy.md + phase6_pre_plan.md §Action surface;
+// 91 actions across 16 idioms (capability_audit/wfrp4e-economy.md + phase6_pre_plan.md §Action surface;
 // record-transaction + delete-account added Phase 2, wfrp_economy_system_v1_prd.md §10; apply-levies +
 // money-to-burn added Phase 4, same PRD §10; invest/resolve-investment/list-investments/stash-deposit/
 // stash-withdraw/accrue-interest added Phase 5, same PRD §10; list-enterprises/get-enterprise/
@@ -45,15 +45,57 @@
 //     store (NOT engine delegations). backing is 'create' (embeds an archives3 enterprise actor, gated
 //     on wfrp4e-archives3) | 'link' (an existing archives3 actor) | 'data-only' (no actor). Rolls
 //     (rolledTotal/d100Roll) are pre-computed by the caller, never rolled by this layer.
-//   enterprise-ownership-and-debt (3, Phase 7c): set-enterprise-owners / add-enterprise-debt /
-//     forgive-enterprise-debt — DELEGATE to the same enterprise-engine.js (setOwners/addDebt/
-//     forgiveDebt exports). owners[] widens the single ownerActorId scalar to weighted shares;
-//     ownerActorId stays as a deprecated alias (= largest-share owner). RAW Archives III Creditors
-//     debt model: principal never auto-derives a tier, escalation derives from missed payments.
+//   enterprise-ownership-and-debt (4, Phase 7c + 7e2): set-enterprise-owners / add-enterprise-debt /
+//     forgive-enterprise-debt / set-enterprise-income-sources — DELEGATE to the same
+//     enterprise-engine.js (setOwners/addDebt/forgiveDebt/setIncomeSources exports). owners[] widens
+//     the single ownerActorId scalar to weighted shares; ownerActorId stays as a deprecated alias
+//     (= largest-share owner). RAW Archives III Creditors debt model: principal never auto-derives a
+//     tier, escalation derives from missed payments. set-enterprise-income-sources (Phase 7e2) is
+//     manager-primary: it replaces the full incomeModifiers list and pushes the same list onto the
+//     backing actor (when actor-backed) so the Economy Manager and the archives3 actor sheet never
+//     drift — see enterprise-engine.js's setIncomeSources + the fork's updateActor mirror hook.
 //   levy-groups (4, Phase 7c): list-levies / save-levy-group / list-levy-groups / delete-levy-group —
 //     list-levies is a pure read over the `levies` world setting; the group actions DELEGATE to the
 //     `levyGroups` world setting (named actor rosters a levy's `target`/`groupId` can point at,
 //     resolved engine-side by levy-engine.js's resolveTargets()).
+//   trading (24, Phase 7f — the ported trading-places engine, native to this module; +1 post-7f Change-2
+//     rumour-table sync): trading-list-settlements / trading-list-cargo-types / trading-get-season /
+//     trading-set-season / trading-check-availability / trading-calc-purchase-price / trading-calc-sale-price /
+//     trading-haggle-test / trading-gossip-test / trading-buy-cargo / trading-sell-cargo /
+//     trading-delete-rumour / trading-get-hold / trading-list-gazetteers /
+//     trading-import-gazetteer / trading-configure-gazetteers / trading-generate-merchant /
+//     trading-reveal-quality / trading-get-price-modifiers / trading-set-price-modifiers /
+//     trading-migration-status — DELEGATE to the wfrp4e-economy fork's own headless, roll-free/
+//     dialog-free trading engine (src/trading/trading-engine.js + gazetteer-store.js + trading-math.js
+//     barrel). Additive, ADDITIVE-ONLY to the still-live `module-trading-places` umbrella (19 actions,
+//     untouched) — this is the 7f "native successor" surface, not a replacement (retirement is 7g).
+//     Settlements/cargo/season/price-quote/haggle/gossip/hold/gazetteers/merchant-generation/dial mirror
+//     the trading-places precedent field names (settlement, cargoName, playerRoll, merchantRoll,
+//     availabilityRoll-shaped rolls[], etc.) for cross-tool consistency (D11). Every stochastic action
+//     REQUIRES a pre-rolled total (memo F8/AC-10) — trading-generate-merchant's percentileRoll is
+//     REQUIRED here even though the engine itself allows omitting it (a Math.random() UI-convenience
+//     fallback lives in merchant-generator.js — this MCP surface must never trigger it). Secret d10 wine/
+//     brandy quality (D12) is GM-only data; trading-buy-cargo/trading-reveal-quality echo it because the
+//     MCP caller IS the GM surface. trading-migration-status exposes the D2 seed-once migration
+//     (idempotent — a second call returns `alreadyMigrated:true`) as a manual/diagnostic trigger; the
+//     fork's own ready-hook already calls it automatically on first engine init. Trade Rumour Table
+//     redesign (post-7f Change 1/2 — real 20-band d100 table, data/trading/rumour-table.json, replacing
+//     the old flat single-cargo 2x-eligibility model): trading-gossip-test now REQUIRES rumourD100Roll
+//     (1-100, pre-rolled — this layer never rolls) and, on a successful Gossip Test, mints+stores a rumour
+//     via mintAndStoreRumour, echoing it as rumourMinted (null on a failed test). trading-buy-cargo/
+//     trading-sell-cargo no longer take a rumourId param — the engine auto-matches a stored rumour against
+//     the traded cargo's name (buyDiscount on buy, sellBonus on sell; first eligible match wins, mint
+//     order) and consumes it on a successful trade; both responses are additive with rumourApplied (the
+//     consumed rumour's { id, text, multiplier }, or null). trading-delete-rumour { rumourId } — new
+//     GM-only manual removal of a stored-but-unused rumour, mirroring delete-enterprise/delete-levy-group's
+//     deepClone-read -> filter -> write -> verify idiom. +3 actions (post-7f
+//     vehicle-linked cargo capacity): trading-list-vehicle-actors {} — unconnected world `vehicle`-type
+//     actors, each carrying their system.status.carries.max · trading-connect-cargo-vehicle { actorId } —
+//     tie the shared hold's capacity to a real vehicle actor's carries.max instead of the flat
+//     tradingCargoCapacity setting · trading-disconnect-cargo-vehicle {} — revert to the flat manual
+//     setting. trading-get-hold's response is additive: capacitySource ('vehicle'|'manual') +
+//     connectedVehicleName (nullable) now echo which capacity source is active, mirroring the
+//     seasonSource/backing conventions used elsewhere in this schema.
 //   venture-ledger (8, Phase 7d): create-venture / get-venture / list-ventures / subscribe-venture /
 //     transfer-venture-parts / settle-venture / distribute-venture / venture-event — DELEGATE to the
 //     wfrp4e-economy fork's own headless ventures engine (src/ventures/venture-engine.js). Deeds are a
@@ -61,6 +103,16 @@
 //     holders[] (actorId or externalName), an escrowBp coin pool, a status/standing pair, and
 //     queuedTransfers[]. transfer-venture-parts QUEUES an offer — resolution happens only at the fork's
 //     Run Economic Cycle button, never instantly. get-venture/list-ventures are pure reads.
+//   economic-climate (2, Phase 8; addendum-2 PER-ECONOMY): climate-get-state { economyId } /
+//     climate-set-state { economyId, state } — DELEGATE to the fork's climate-math.js 8-state table via
+//     climate-state.js (re-exported through trading-engine.js). Climate is keyed PER ECONOMY (a map
+//     { [economyId]: { state, updatedAt } }); The Empire at `war` never touches Brettonia. set is
+//     GM-gated identically to trading-set-price-modifiers; both actions echo the FULL resolved state
+//     entry (economyId + label + priceFactor + incomeFactor + eventShift + updatedAt), never a bare id.
+//     `none` = exact identity everywhere the climate factor is consumed (applyDial, enterprise income
+//     payout, venture event roll — each seam reads its OWN economy's state; trading quote actions take
+//     an optional economyId, omitted = identity) — the seams live entirely in the fork, this schema
+//     only validates the GM's state pick.
 //
 // All monetary amounts are integer Brass Pennies (BP); 1 GC = 240 BP, 1 SS = 12 BP.
 //
@@ -83,6 +135,36 @@ const ventureId = z.string().min(1); // BRANDED-ID-EXEMPT:ventureId — module-i
 
 const amountBp = z.number().int().positive(); // integer Brass Pennies, > 0
 const financedPortionBp = z.number().int().nonnegative(); // BP covered by a Creditor (becomes/adds to debt.principal)
+
+// Phase 7f (trading, D11) — mirrors module-trading-places/schemas.ts field-naming precedent.
+const tradingSeasonEnum = z.enum(['spring', 'summer', 'autumn', 'winter']);
+const tradingQuality = z.enum(['poor', 'average', 'good', 'excellent']); // wine/brandy quality tiers
+const tradingD100Roll = z.number().int().min(1).max(100); // pre-rolled 1d100 total
+const tradingD10Roll = z.number().int().min(1).max(10); // pre-rolled 1d10 total (secret quality / Top-Shelf gate)
+const tradingSkillValue = z.number().int().min(0).max(100); // WFRP skill target number
+const tradingEpQuantity = z.number().int().positive(); // Encumbrance Points
+const tradingGazetteerId = z.string().min(1); // BRANDED-ID-EXEMPT:gazetteerId — module-internal id (a gazetteer pack's packId), not a Foundry document id
+const tradingLotId = z.string().min(1); // BRANDED-ID-EXEMPT:lotId — module-internal id (a tradingCargoHold entry's randomID), not a Foundry document id
+const tradingRumourId = z.string().min(1); // BRANDED-ID-EXEMPT:rumourId — module-internal id (a tradingRumours entry's randomID), not a Foundry document id
+const tradingPriceMultiplier = z.number().positive(); // price-dial multiplier, > 0 (1 = neutral)
+// Phase 8 (D1): the 8 economic-climate state ids — MUST mirror climate-math.js CLIMATE_STATE_IDS exactly
+// (fork engine): 4 positive-class + none + 3 negative-class per D1's generalization directive.
+const climateStateEnum = z.enum(['prosperity', 'bountiful-harvest', 'festival', 'none', 'banditry', 'plague', 'war', 'siege']);
+// One pre-rolled { cargoRoll, amountRoll } pair per availability-pipeline slot (memo F5 — no Foundry
+// `new Roll("1d100")` fallback exists; over-supply is fine, extras are ignored by runAvailabilityPipeline).
+const tradingAvailabilityRollPair = z.object({ cargoRoll: tradingD100Roll, amountRoll: tradingD100Roll }).strict();
+
+// Phase 7e2: an income-source entry (mirrors WfrpEconomyIncomeModifier / the fork's
+// validateIncomeSources rules — cross-field/tier/standing enforcement lives in the handler, not here,
+// per the ZodEffects-breaks-discriminatedUnion constraint above).
+const incomeModifierInput = z
+  .object({
+    label: z.string(),
+    skill: z.string(),
+    tier: z.enum(['b', 's', 'g']),
+    standing: z.number().int(),
+  })
+  .strict();
 
 // Phase 7c: RAW Archives III Creditors identity — name/notes, both optional (blank until a GM sets them).
 const creditorInput = z.object({ name: z.string().optional(), notes: z.string().optional() }).strict();
@@ -207,7 +289,7 @@ export const WfrpEconomyInput = z.discriminatedUnion('action', [
     .object({
       action: z.literal('list-transactions'),
       actorId: ActorId.optional(),
-      economyId: economyId.optional(),
+      economyId,
       type: z.string().min(1).optional(),
       bankId: bankId.optional(),
       source: z.string().min(1).optional(),
@@ -225,7 +307,7 @@ export const WfrpEconomyInput = z.discriminatedUnion('action', [
       source: z.enum(['earn', 'trade', 'itempiles', 'levy', 'economy']),
       type: z.string().min(1),
       description: z.string().min(1),
-      economyId: economyId.optional(),
+      economyId,
       bankId: bankId.optional(),
       targetActorId: ActorId.optional(),
       currency: z.string().min(1).optional(),
@@ -239,6 +321,7 @@ export const WfrpEconomyInput = z.discriminatedUnion('action', [
   z
     .object({
       action: z.literal('apply-levies'),
+      economyId,
       // Phase 7c (R7c.5): actorIds is now OPTIONAL — when omitted, the engine's resolveTargets()
       // resolves `target`/`groupId` instead (explicit actorIds still WINS when provided, back-compat).
       actorIds: z.array(ActorId).min(1).optional(),
@@ -255,6 +338,7 @@ export const WfrpEconomyInput = z.discriminatedUnion('action', [
   z
     .object({
       action: z.literal('money-to-burn'),
+      economyId,
       // Phase 7c (Q&A fold-in): actorIds is now OPTIONAL, same resolveTargets()/groupId back-compat
       // contract as apply-levies above.
       actorIds: z.array(ActorId).min(1).optional(),
@@ -268,19 +352,20 @@ export const WfrpEconomyInput = z.discriminatedUnion('action', [
   // ── levy-groups idiom (Phase 7c, R7c.4/R7c.5) ───────────────────────────────────
   // list-levies is a pure read over the `levies` world setting (not an engine delegation — mirrors
   // list-enterprises/get-enterprise's read-only precedent).
-  z.object({ action: z.literal('list-levies') }).strict(),
+  z.object({ action: z.literal('list-levies'), economyId }).strict(),
   z
     .object({
       action: z.literal('save-levy-group'),
+      economyId,
       groupId: levyGroupId.optional(), // omit = create new
       name: z.string().min(1),
       actorIds: z.array(ActorId).min(1),
       confirm: z.boolean().optional(),
     })
     .strict(),
-  z.object({ action: z.literal('list-levy-groups') }).strict(),
+  z.object({ action: z.literal('list-levy-groups'), economyId }).strict(),
   z
-    .object({ action: z.literal('delete-levy-group'), groupId: levyGroupId, confirm: z.boolean().optional() })
+    .object({ action: z.literal('delete-levy-group'), economyId, groupId: levyGroupId, confirm: z.boolean().optional() })
     .strict(),
 
   // ── banking-and-income idiom (Phase 5, wfrp_economy_system) ─────────────────────
@@ -290,7 +375,7 @@ export const WfrpEconomyInput = z.discriminatedUnion('action', [
       actorId: ActorId,
       rate: z.number().int().min(1).max(10), // RAW Banking endeavour interest rate, percent per elapsed Imperial month
       amountBp,
-      economyId: economyId.optional(), // omit = a stash-like "reputable institution" abstraction (world-global rows)
+      economyId,
       bankId: bankId.optional(),
     })
     .strict(),
@@ -298,17 +383,19 @@ export const WfrpEconomyInput = z.discriminatedUnion('action', [
     .object({
       action: z.literal('resolve-investment'),
       investmentId: investmentId,
+      economyId,
       d100Roll: z.number().int().min(1).max(100), // pre-rolled by the caller; <= rate = RAW bankruptcy (total loss)
       confirm: z.boolean().optional(), // required — can total-loss the investment
     })
     .strict(),
   z
-    .object({ action: z.literal('list-investments'), actorId: ActorId.optional(), activeOnly: z.boolean().optional() })
+    .object({ action: z.literal('list-investments'), economyId, actorId: ActorId.optional(), activeOnly: z.boolean().optional() })
     .strict(),
-  z.object({ action: z.literal('stash-deposit'), actorId: ActorId, amountBp }).strict(),
+  z.object({ action: z.literal('stash-deposit'), economyId, actorId: ActorId, amountBp }).strict(),
   z
     .object({
       action: z.literal('stash-withdraw'),
+      economyId,
       actorId: ActorId,
       d100Roll: z.number().int().min(1).max(100), // pre-rolled by the caller; <= 10 = RAW total stash loss
       confirm: z.boolean().optional(), // required — whole-stash withdrawal, can total-loss
@@ -317,19 +404,38 @@ export const WfrpEconomyInput = z.discriminatedUnion('action', [
   z
     .object({
       action: z.literal('accrue-interest'),
-      economyId: economyId.optional(), // omit = process all economies' bank accounts + every endeavour investment
+      economyId,
       dryRun: z.boolean().optional(), // preview only, zero writes — no confirm required
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal('run-economic-cycle'),
+      economyId,
+      // Preview covers investment/account/loan/rental verdicts ONLY — the venture pass (queued-transfer
+      // resolution, distributions, standing decay, delay-tick, events) is SKIPPED entirely on dryRun
+      // (engine contract, banking-engine.js:622) and never previews. No confirm required on dryRun.
+      dryRun: z.boolean().optional(),
+      // Flat {ventureId|offerId: preRolledD100} map forwarded verbatim to the venture pass (D6: engine is
+      // roll-free — the caller pre-rolls every d100). Named cycleRolls, not `rolls`, to avoid colliding
+      // with trading-check-availability's differently-shaped `rolls` in the flattened mcp-server
+      // inputSchema (same precedent as partsCount vs create-venture's `parts`).
+      cycleRolls: z.record(z.string().min(1), z.number().int().min(1).max(100)).optional(),
+      // Required to execute (dryRun:false/undefined) — no worldTime gate; a repeat call pays every duty
+      // again (cycle, not calendar).
+      confirm: z.boolean().optional(),
     })
     .strict(),
 
   // ── legitimate-business-enterprises idiom (Phase 6, wfrp_economy_system) ───────
   z
-    .object({ action: z.literal('list-enterprises'), unconnectedActors: z.boolean().optional() })
+    .object({ action: z.literal('list-enterprises'), economyId, unconnectedActors: z.boolean().optional() })
     .strict(),
   z.object({ action: z.literal('get-enterprise'), enterpriseId }).strict(),
   z
     .object({
       action: z.literal('create-enterprise'),
+      economyId,
       presetKey: z.string().min(1).optional(),
       profile: z.record(z.unknown()).optional(),
       backing: z.enum(['create', 'link', 'data-only']),
@@ -341,7 +447,7 @@ export const WfrpEconomyInput = z.discriminatedUnion('action', [
     })
     .strict(),
   z
-    .object({ action: z.literal('connect-enterprise-actor'), actorId: ActorId, ownerActorId: ActorId.optional() })
+    .object({ action: z.literal('connect-enterprise-actor'), economyId, actorId: ActorId, ownerActorId: ActorId.optional() })
     .strict(),
   z
     .object({
@@ -404,6 +510,17 @@ export const WfrpEconomyInput = z.discriminatedUnion('action', [
     })
     .strict(),
 
+  // Phase 7e2 (R6.1/R6.5/R7c.3): manager-primary income-source write — DELEGATES to the fork's new
+  // setIncomeSources engine duty (mutex + verify + echo-tagged actor push). Full-list replace, not a
+  // patch. tier/standing/label validation lives in the handler (validateIncomeSources on the fork side).
+  z
+    .object({
+      action: z.literal('set-enterprise-income-sources'),
+      enterpriseId,
+      incomeModifiers: z.array(incomeModifierInput),
+    })
+    .strict(),
+
   // ── venture-ledger idiom (Phase 7d, wfrp_economy_system, R7d.1-R7d.8) ───────────
   // DELEGATE to the wfrp4e-economy fork's own headless, roll-free/dialog-free ventures engine
   // (src/ventures/venture-engine.js, Phase 7d task 1.4) via the same runtimeImport idiom as
@@ -414,11 +531,21 @@ export const WfrpEconomyInput = z.discriminatedUnion('action', [
   z
     .object({
       action: z.literal('create-venture'),
+      economyId,
       name: z.string().min(1),
       type: ventureType,
       parts: z.object({ total: z.number().int().positive(), priceBp: amountBp }).strict(),
       terms: z.object({ managerActorId: ActorId.optional(), managerPortionPct: z.number().int().min(0).max(100).optional() }).strict().optional(),
-      handledBy: z.array(z.object({ role: z.string().min(1), name: z.string().optional() }).strict()).optional(),
+      // D8 (Phase 7e): a linked Registry entry additively carries {bankId,economyId} as a pair — both
+      // present names a real institution; both absent stays the Phase 7d generic/context-free entry.
+      handledBy: z
+        .array(
+          z
+            .object({ role: z.string().min(1), name: z.string().optional(), bankId: bankId.optional(), economyId: economyId.optional() })
+            .strict()
+            .refine((h) => (h.bankId == null) === (h.economyId == null), { message: 'handledBy bankId/economyId must both be present (linked) or both absent (unassigned)' }),
+        )
+        .optional(),
       linkedEnterpriseId: z.string().min(1).optional(), // BRANDED-ID-EXEMPT:linkedEnterpriseId — module-internal id (enterprise instance id, actor UUID or generated), not a Foundry document id
 
       exposureTags: z.array(z.string().min(1)).optional(),
@@ -426,7 +553,21 @@ export const WfrpEconomyInput = z.discriminatedUnion('action', [
     })
     .strict(),
   z.object({ action: z.literal('get-venture'), ventureId }).strict(),
-  z.object({ action: z.literal('list-ventures'), type: ventureType.optional(), status: ventureStatus.optional() }).strict(),
+  z
+    .object({
+      action: z.literal('list-ventures'),
+      type: ventureType.optional(),
+      status: ventureStatus.optional(),
+      // Per-economy sweep (Phases 5-8): economyId is REQUIRED — every list is economy-scoped; the old
+      // Phase 7d "omit both for context-free" behavior is retired. D8's institution-context gate is now
+      // bankId-only: supplying bankId additionally requires a handledBy Registry entry matching the pair.
+      // BUG-545: the bankId-pairing gate is enforced at the foundry-module HANDLER (handleListVentures →
+      // WFRP_ECONOMY_VENTURE_PARTIAL_CONTEXT), NOT here — a discriminatedUnion variant cannot carry a
+      // .refine()/.superRefine() (ZodEffects has no .shape and breaks discrimination; see file header CCR-5).
+      bankId: bankId.optional(),
+      economyId,
+    })
+    .strict(),
   z
     .object({
       action: z.literal('subscribe-venture'),
@@ -436,6 +577,12 @@ export const WfrpEconomyInput = z.discriminatedUnion('action', [
       // NOT `parts` — create-venture's `parts` is an object ({total,priceBp}); a scalar under the same
       // key would collide in the flattened mcp-server inputSchema (one JSON-schema type per property name).
       partsCount: z.number().int().positive(),
+      // D8: optional institution context — when supplied, the venture must carry one Registry entry
+      // matching both fields (registryNotHandling otherwise). Omit both for the Phase 7d "any Registry" rule.
+      // BUG-545: both-or-neither is enforced at the foundry-module HANDLER (handleSubscribeVenture →
+      // WFRP_ECONOMY_VENTURE_PARTIAL_CONTEXT), NOT here (discriminatedUnion variants can't carry .refine()).
+      bankId: bankId.optional(),
+      economyId: economyId.optional(),
       confirm: z.boolean().optional(),
     })
     .strict(),
@@ -495,6 +642,147 @@ export const WfrpEconomyInput = z.discriminatedUnion('action', [
       confirm: z.boolean().optional(),
     })
     .strict(),
+
+  // ── trading idiom (Phase 7f, D11) — DELEGATE to src/trading/{trading-engine,gazetteer-store,trading-math}.js ──
+  z.object({ action: z.literal('trading-list-settlements'), gazetteerId: tradingGazetteerId.optional() }).strict(),
+  z.object({ action: z.literal('trading-list-cargo-types') }).strict(),
+  z.object({ action: z.literal('trading-get-season') }).strict(),
+  z
+    .object({ action: z.literal('trading-set-season'), season: tradingSeasonEnum.optional(), clear: z.boolean().optional() })
+    .strict(),
+  z
+    .object({
+      action: z.literal('trading-check-availability'),
+      settlement: z.string().min(1),
+      season: tradingSeasonEnum.optional(),
+      rolls: z.array(tradingAvailabilityRollPair).min(1), // caller over-supplies; extras beyond slotCount are ignored
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal('trading-calc-purchase-price'),
+      cargoName: z.string().min(1),
+      quantity: tradingEpQuantity,
+      quality: tradingQuality.optional(),
+      season: tradingSeasonEnum.optional(),
+      // addendum-2: per-economy climate — optional (HC8-additive); omitted = identity/no climate factor.
+      economyId: z.string().min(1).optional(),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal('trading-calc-sale-price'),
+      cargoName: z.string().min(1),
+      quantity: tradingEpQuantity,
+      settlement: z.string().min(1),
+      quality: tradingQuality.optional(),
+      season: tradingSeasonEnum.optional(),
+      // addendum-2: per-economy climate — optional (HC8-additive); omitted = identity/no climate factor.
+      economyId: z.string().min(1).optional(),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal('trading-haggle-test'),
+      playerSkill: tradingSkillValue,
+      merchantSkill: tradingSkillValue,
+      playerRoll: tradingD100Roll,
+      merchantRoll: tradingD100Roll,
+      hasDealmakerTalent: z.boolean().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal('trading-gossip-test'),
+      playerSkill: tradingSkillValue,
+      playerRoll: tradingD100Roll,
+      difficulty: z.number().int().optional(), // modifier; RAW default -10 (Difficult)
+      // Change 2 redesign: this action now ALSO mints+stores a rumour (mintAndStoreRumour) whenever the
+      // Gossip Test succeeds — rumourD100Roll selects the RAW 20-band d100 Trade Rumour Table row
+      // (rumour-table.json). Required always (not just on success) since this layer never rolls (HC10);
+      // the engine itself no-ops (returns null, zero writes) when the test failed.
+      rumourD100Roll: tradingD100Roll,
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal('trading-buy-cargo'),
+      economyId,
+      actorId: ActorId,
+      cargoName: z.string().min(1),
+      quantity: tradingEpQuantity,
+      settlement: z.string().min(1),
+      season: tradingSeasonEnum.optional(),
+      quality: tradingQuality.optional(),
+      secretQualityD10Roll: tradingD10Roll.optional(), // required (by RAW) for Wine/Brandy lots; D12
+      originBonusSteps: z.number().int().optional(), // Kemperbad-class settlement origin bonus (+2, D3)
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal('trading-sell-cargo'),
+      economyId,
+      actorId: ActorId,
+      lotId: tradingLotId,
+      settlement: z.string().min(1),
+      isTradeSettlement: z.boolean(),
+      buyerRoll: tradingD100Roll,
+      halfCargoRetryRoll: tradingD100Roll.optional(), // only consumed on a first buyer-chance failure
+      weeksElapsedSincePurchase: z.number().int().nonnegative().optional(), // default 1 (assume travel)
+      // Change 2 redesign: rumourId dropped — the engine now auto-matches a stored sellBonus rumour by
+      // cargo name (first eligible match wins, mint order) and consumes it itself; no explicit id param.
+      topShelfBuyerRoll: tradingD10Roll.optional(), // Top Shelf Wine/Brandy self-supply exception (RAW)
+    })
+    .strict(),
+  // Change 1 (GM-only removal): mirrors the deepClone-read -> filter-out -> write -> verify idiom used by
+  // every other delete in this module (delete-enterprise, delete-levy-group). Also fires internally when
+  // buyCargo/sellCargo consume a matched rumour on use — this action is the standalone/manual path.
+  z.object({ action: z.literal('trading-delete-rumour'), rumourId: tradingRumourId }).strict(),
+  z.object({ action: z.literal('trading-get-hold') }).strict(),
+  z.object({ action: z.literal('trading-list-vehicle-actors') }).strict(),
+  z.object({ action: z.literal('trading-connect-cargo-vehicle'), actorId: ActorId }).strict(),
+  z.object({ action: z.literal('trading-disconnect-cargo-vehicle') }).strict(),
+  z.object({ action: z.literal('trading-list-gazetteers') }).strict(),
+  z.object({ action: z.literal('trading-import-gazetteer'), pack: z.record(z.unknown()) }).strict(),
+  z
+    .object({ action: z.literal('trading-configure-gazetteers'), activeIds: z.array(z.string().min(1)).min(1) })
+    .strict(),
+  z
+    .object({
+      action: z.literal('trading-generate-merchant'),
+      settlement: z.string().min(1),
+      cargoType: z.string().min(1),
+      merchantType: z.enum(['producer', 'seeker']),
+      // REQUIRED here (unlike the engine's own optional param) — merchant-generator.js falls back to
+      // Math.random() when omitted; this MCP surface must never trigger that (AC-10/memo F8).
+      percentileRoll: z.number().min(0).max(100),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal('trading-reveal-quality'),
+      lotId: tradingLotId,
+      evaluateSuccess: z.boolean(),
+      sl: z.number().int(), // the buyer's Evaluate Test Success Level (any sign; magnitude only is used)
+      misreportDirection: z.union([z.literal(1), z.literal(-1)]).optional(),
+    })
+    .strict(),
+  z.object({ action: z.literal('trading-get-price-modifiers') }).strict(),
+  z
+    .object({
+      action: z.literal('trading-set-price-modifiers'),
+      global: tradingPriceMultiplier.optional(),
+      perCargo: z.record(z.string().min(1), tradingPriceMultiplier).optional(),
+      reset: z.boolean().optional(), // true restores {global:1, perCargo:{}}, ignoring global/perCargo
+    })
+    .strict(),
+  z.object({ action: z.literal('trading-migration-status') }).strict(),
+  // Phase 8 (D1/D4/D11; addendum-2 PER-ECONOMY) — economic climate is keyed by economyId (The Empire's
+  // war never touches Brettonia's harvest): both actions REQUIRE economyId, same posture as the levy
+  // actions. set is GM-gated in the handler (mirrors trading-set-price-modifiers) and takes exactly one
+  // of the 8 climate-state ids; an unknown economyId refuses with zero writes.
+  z.object({ action: z.literal('climate-get-state'), economyId: z.string().min(1) }).strict(),
+  z.object({ action: z.literal('climate-set-state'), economyId: z.string().min(1), state: climateStateEnum }).strict(),
 ]);
 
 export type WfrpEconomyInputType = z.infer<typeof WfrpEconomyInput>;

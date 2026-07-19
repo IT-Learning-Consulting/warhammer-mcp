@@ -12,18 +12,54 @@
 //   3. delete-economy / large transfer WITHOUT confirm → WFRP_ECONOMY_CONFIRM_REQUIRED, BEFORE any write.
 //      WHY: CCR-4 — destructive/large ops gate on confirm, and the reject must precede the mutation.
 //   4. delete-economy WITH confirm:true removes the economy + related stores. WHY: the confirmed path works.
-//   5. ROUTING DEVIATIONS — sell-stock calls processStockSale (NOT broadcastStockSale, the BUG-A path);
-//      transfer calls _handleTransferProcess (NOT processTransfer, the double-invoke path); request-loan
-//      calls _handleLoanProcess (NOT processLoan, the await-dropping path). WHY: the whole HC-v2-7 thesis is
-//      that we drive the AWAITED direct methods and never the broken/fire-and-forget wrappers.
+//   5. ROUTING DEVIATIONS — transfer calls TransferProcess and request-loan/repay-loan call LoanProcess
+//      DIRECTLY (never _handleTransferProcess/_handleLoanProcess: since the fork's D5 hardening those are
+//      socket-envelope entry points that run _authorizeGMRequest and silently no-op on a direct flat call).
+//      WHY: the whole HC-v2-7 thesis is that we drive the AWAITED direct methods and never the
+//      envelope-only/fire-and-forget wrappers.
 //   6. A write whose mocked read-back mismatches → WFRP_ECONOMY_NOT_PERSISTED. WHY: DP-16 must catch a
 //      silently no-op'ing write (Document/settings success ≠ persistence proof).
 //   7. An unknown action → WFRP_ECONOMY_INVALID_INPUT (discriminatedUnion reject).
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { dispatchModuleWfrpEconomy, rebucketEconomySummary } from '../wfrp-economy.js';
+import { dispatchModuleWfrpEconomy as dispatchModuleWfrpEconomyRaw, rebucketEconomySummary } from '../wfrp-economy.js';
 
 const ECO = 'eco1';
+
+// Economy-owned stores must never be queried or mutated without an explicit scope.
+// Existing behavior tests use this helper so they exercise the default test economy;
+// dedicated contract tests below call the raw dispatcher to verify that omission fails.
+const ECONOMY_SCOPED_ACTIONS = new Set([
+  'list-transactions',
+  'record-transaction',
+  'apply-levies',
+  'money-to-burn',
+  'list-levies',
+  'save-levy-group',
+  'list-levy-groups',
+  'delete-levy-group',
+  'invest',
+  'resolve-investment',
+  'list-investments',
+  'stash-deposit',
+  'stash-withdraw',
+  'accrue-interest',
+  'run-economic-cycle',
+  'list-enterprises',
+  'create-enterprise',
+  'connect-enterprise-actor',
+  'create-venture',
+  'list-ventures',
+  'trading-buy-cargo',
+  'trading-sell-cargo',
+]);
+
+function dispatchModuleWfrpEconomy(input: Record<string, any>) {
+  const scopedInput = ECONOMY_SCOPED_ACTIONS.has(input.action) && input.economyId == null
+    ? { ...input, economyId: ECO }
+    : input;
+  return dispatchModuleWfrpEconomyRaw(scopedInput);
+}
 
 function makeSettings(seed: Record<string, any> = {}) {
   const store: Record<string, any> = {
@@ -106,6 +142,18 @@ describe('GM gate', () => {
   });
 });
 
+describe('economy isolation contract', () => {
+  it('rejects an economy-owned read when economyId is omitted', async () => {
+    const { settings } = makeSettings({ levies: [] });
+    (globalThis as any).game = makeGame({ active: true, settings });
+
+    const res: any = await dispatchModuleWfrpEconomyRaw({ action: 'list-levies' } as any);
+
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_INVALID_INPUT');
+  });
+});
+
 // ── 3/4. Confirm-gated delete-economy + large transfer ────────────────────────────
 
 describe('confirm gates (CCR-4)', () => {
@@ -119,13 +167,43 @@ describe('confirm gates (CCR-4)', () => {
     expect(settings.set).not.toHaveBeenCalled();
   });
 
-  it('delete-economy WITH confirm:true removes the economy', async () => {
-    const { settings, store } = makeSettings({ economies: [{ id: ECO, name: 'Reikland', banks: [], properties: [], stocks: [] }] });
+  it('delete-economy WITH confirm:true delegates to the recovery-archive workflow and retains transaction history', async () => {
+    const { settings, store } = makeSettings({
+      economies: [{ id: ECO, name: 'Reikland', banks: [], properties: [], stocks: [] }],
+      transactionLogs: [{ id: 'tx1', economyId: ECO }],
+    });
+    const archiveAndDeleteEconomy = vi.fn(async (economyId: string) => {
+      store.economies = store.economies.filter((entry: any) => entry.id !== economyId);
+      return {
+        deleted: true, archiveId: 'archive1', affected: { bankAccounts: 0 },
+        transactionHistoryRetained: true, persistedCheckFailed: false,
+      };
+    });
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ archiveAndDeleteEconomy });
     (globalThis as any).game = makeGame({ active: true, settings });
     const res: any = await dispatchModuleWfrpEconomy({ action: 'delete-economy', economyId: ECO, confirm: true });
     expect(res.success).toBe(true);
     expect(res.data.deleted).toBe(true);
+    expect(res.data.archiveId).toBe('archive1');
+    expect(res.data.transactionHistoryRetained).toBe(true);
+    expect(archiveAndDeleteEconomy).toHaveBeenCalledWith(ECO);
     expect(store.economies).toHaveLength(0);
+    expect(store.transactionLogs).toEqual([{ id: 'tx1', economyId: ECO }]);
+  });
+
+  it('list-bankers is a retired compatibility read and never touches the unregistered setting', async () => {
+    const { settings, store } = makeSettings();
+    settings.get = vi.fn((_scope: string, key: string) => {
+      if (key === 'bankers') throw new Error('bankers setting is unregistered');
+      return store[key];
+    });
+    (globalThis as any).game = makeGame({ active: true, settings });
+
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'list-bankers', economyId: ECO });
+
+    expect(res.success).toBe(true);
+    expect(res.data).toMatchObject({ action: 'list-bankers', count: 0, bankers: [], retired: true });
+    expect((settings.get as any).mock.calls.some(([, key]: [string, string]) => key === 'bankers')).toBe(false);
   });
 
   it('large transfer (>= 4800 BP) WITHOUT confirm → WFRP_ECONOMY_CONFIRM_REQUIRED, module never called', async () => {
@@ -133,13 +211,13 @@ describe('confirm gates (CCR-4)', () => {
       economies: [{ id: ECO, name: 'Reikland', currency: 'Gold Crowns', banks: [{ id: 'b1', name: 'Reik Bank' }], properties: [], stocks: [] }],
       bankAccounts: { acc1: { id: 'acc1', actorId: 'a1', bankId: 'b1', economyId: ECO, balance: 100000 }, acc2: { id: 'acc2', actorId: 'a2', bankId: 'b1', economyId: ECO, balance: 0 } },
     });
-    const _handleTransferProcess = vi.fn();
-    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ SocketHandler: { _handleTransferProcess } });
+    const TransferProcess = vi.fn();
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ SocketHandler: { TransferProcess } });
     (globalThis as any).game = makeGame({ active: true, settings });
     const res: any = await dispatchModuleWfrpEconomy({ action: 'transfer', economyId: ECO, sourceAccountId: 'acc1', destinationAccountId: 'acc2', amountBp: 5000 });
     expect(res.success).toBe(false);
     expect(res.error).toContain('WFRP_ECONOMY_CONFIRM_REQUIRED');
-    expect(_handleTransferProcess).not.toHaveBeenCalled();
+    expect(TransferProcess).not.toHaveBeenCalled();
   });
 });
 
@@ -151,43 +229,47 @@ describe('routing deviations — direct awaited methods, never the broken wrappe
   // (deleted, Phase 3 sweep). See "venture-ledger — retired investment-cycle actions" below for its
   // replacement coverage (sell-stock now always returns WFRP_ECONOMY_ACTION_RETIRED, engine never called).
 
-  it('transfer calls _handleTransferProcess and NOT processTransfer (double-invoke bypass)', async () => {
+  it('transfer calls TransferProcess directly and NOT the envelope-only _handleTransferProcess (D5 silent no-op)', async () => {
     const { settings, store } = makeSettings({
       economies: [{ id: ECO, name: 'Reikland', currency: 'Gold Crowns', banks: [{ id: 'b1', name: 'Reik Bank' }], properties: [], stocks: [] }],
       bankAccounts: { acc1: { id: 'acc1', actorId: 'a1', bankId: 'b1', economyId: ECO, balance: 1000 }, acc2: { id: 'acc2', actorId: 'a2', bankId: 'b1', economyId: ECO, balance: 0 } },
     });
-    const _handleTransferProcess = vi.fn(async (data: any) => {
+    const TransferProcess = vi.fn(async (data: any) => {
       store.bankAccounts[data.sourceAccountId].balance -= data.amount;
       store.bankAccounts[data.destinationAccountId].balance += data.amount;
+      return { ok: true };
     });
-    const processTransfer = vi.fn();
-    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ SocketHandler: { _handleTransferProcess, processTransfer } });
+    // Envelope-only socket entry point — runs _authorizeGMRequest and silently no-ops on a direct flat call.
+    const _handleTransferProcess = vi.fn();
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ SocketHandler: { TransferProcess, _handleTransferProcess } });
     (globalThis as any).game = makeGame({ active: true, settings });
     const res: any = await dispatchModuleWfrpEconomy({ action: 'transfer', economyId: ECO, sourceAccountId: 'acc1', destinationAccountId: 'acc2', amountBp: 100 });
     expect(res.success).toBe(true);
-    expect(_handleTransferProcess).toHaveBeenCalledTimes(1);
-    expect(processTransfer).not.toHaveBeenCalled();
+    expect(TransferProcess).toHaveBeenCalledTimes(1);
+    expect(_handleTransferProcess).not.toHaveBeenCalled();
     expect(res.data.sourceBalance).toBe(900);
     expect(res.data.destinationBalance).toBe(100);
   });
 
-  it('request-loan calls _handleLoanProcess and NOT processLoan (await-drop bypass)', async () => {
+  it('request-loan calls LoanProcess directly and NOT the envelope-only _handleLoanProcess (D5 silent no-op)', async () => {
     const { settings, store } = makeSettings({
       economies: [{ id: ECO, name: 'Reikland', currency: 'Gold Crowns', banks: [{ id: 'b1', name: 'Reik Bank', loanRate: 0.05 }], properties: [], stocks: [] }],
       bankAccounts: { acc1: { id: 'acc1', actorId: 'a1', bankId: 'b1', economyId: ECO, balance: 0 } },
     });
-    const _handleLoanProcess = vi.fn(async (data: any) => {
+    const LoanProcess = vi.fn(async (data: any) => {
       // Mirrors socket-handler.js:778-781 — loan.interest stored as a FRACTION (interestRate ?? bank default 0.05).
       store.bankAccounts[data.accountId].loan = { amount: data.amount, interest: data.interestRate ?? 0.05, active: true };
       store.bankAccounts[data.accountId].balance += data.amount;
+      return { ok: true };
     });
-    const processLoan = vi.fn();
-    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ SocketHandler: { _handleLoanProcess, processLoan } });
+    // Envelope-only socket entry point — runs _authorizeGMRequest and silently no-ops on a direct flat call.
+    const _handleLoanProcess = vi.fn();
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ SocketHandler: { LoanProcess, _handleLoanProcess } });
     (globalThis as any).game = makeGame({ active: true, settings, actors: { a1: { name: 'Debtor' } } });
     const res: any = await dispatchModuleWfrpEconomy({ action: 'request-loan', economyId: ECO, accountId: 'acc1', amountBp: 240 });
     expect(res.success).toBe(true);
-    expect(_handleLoanProcess).toHaveBeenCalledTimes(1);
-    expect(processLoan).not.toHaveBeenCalled();
+    expect(LoanProcess).toHaveBeenCalledTimes(1);
+    expect(_handleLoanProcess).not.toHaveBeenCalled();
     expect(res.data.loanActive).toBe(true);
     expect(res.data.loanAmount).toBe(240);
   });
@@ -197,16 +279,17 @@ describe('routing deviations — direct awaited methods, never the broken wrappe
       economies: [{ id: ECO, name: 'Reikland', currency: 'Gold Crowns', banks: [{ id: 'b1', name: 'Reik Bank', loanRate: 0.1 }], properties: [], stocks: [] }],
       bankAccounts: { acc1: { id: 'acc1', actorId: 'a1', bankId: 'b1', economyId: ECO, balance: 0 } },
     });
-    const _handleLoanProcess = vi.fn(async (data: any) => {
+    const LoanProcess = vi.fn(async (data: any) => {
       store.bankAccounts[data.accountId].loan = { amount: data.amount, interest: data.interestRate ?? 0.05, active: true };
       store.bankAccounts[data.accountId].balance += data.amount;
+      return { ok: true };
     });
-    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ SocketHandler: { _handleLoanProcess } });
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ SocketHandler: { LoanProcess } });
     (globalThis as any).game = makeGame({ active: true, settings, actors: { a1: { name: 'Debtor' } } });
     // Published contract: interestRate is a percent (5 = 5%). Module storage: fraction (0.05).
     const res: any = await dispatchModuleWfrpEconomy({ action: 'request-loan', economyId: ECO, accountId: 'acc1', amountBp: 240, interestRate: 5 });
     expect(res.success).toBe(true);
-    expect(_handleLoanProcess).toHaveBeenCalledWith(expect.objectContaining({ interestRate: 0.05 }));
+    expect(LoanProcess).toHaveBeenCalledWith(expect.objectContaining({ interestRate: 0.05 }));
     expect(store.bankAccounts.acc1.loan.interest).toBe(0.05);
   });
 
@@ -218,15 +301,16 @@ describe('routing deviations — direct awaited methods, never the broken wrappe
       economies: [{ id: ECO, name: 'Reikland', currency: 'Gold Crowns', banks: [{ id: 'b1', name: 'Reik Bank', loanRate: 0.1 }], properties: [], stocks: [] }],
       bankAccounts: { acc1: { id: 'acc1', actorId: 'a1', bankId: 'b1', economyId: ECO, balance: 1440, loan: { amount: 240, interest: 0.1, active: true } } },
     });
-    const _handleLoanProcess = vi.fn(async (data: any) => {
+    const LoanProcess = vi.fn(async (data: any) => {
       const acc = store.bankAccounts[data.accountId]; // SAME object the handler retains (aliasing)
       acc.balance -= data.amount;
       // Mirrors socket-handler.js:840 — interest is a FRACTION (BUG-542): principalPaid = amount / (1 + fraction).
       const principalPaid = data.amount / (1 + acc.loan.interest);
       acc.loan.amount = Math.max(0, acc.loan.amount - principalPaid);
       if (acc.loan.amount < 0.01) acc.loan.active = false;
+      return { ok: true };
     });
-    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ SocketHandler: { _handleLoanProcess } });
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ SocketHandler: { LoanProcess } });
     (globalThis as any).game = makeGame({ active: true, settings, actors: { a1: { name: 'Debtor' } } });
     const res: any = await dispatchModuleWfrpEconomy({ action: 'repay-loan', economyId: ECO, accountId: 'acc1', amountBp: 240 });
     expect(res.success).toBe(true);
@@ -243,14 +327,15 @@ describe('routing deviations — direct awaited methods, never the broken wrappe
       economies: [{ id: ECO, name: 'Reikland', currency: 'Gold Crowns', banks: [{ id: 'b1', name: 'Reik Bank', loanRate: 0.1 }], properties: [], stocks: [] }],
       bankAccounts: { acc1: { id: 'acc1', actorId: 'a1', bankId: 'b1', economyId: ECO, balance: 1440, loan: { amount: 240, interest: 0.1, active: true } } },
     });
-    const _handleLoanProcess = vi.fn(async (data: any) => {
+    const LoanProcess = vi.fn(async (data: any) => {
       const acc = store.bankAccounts[data.accountId];
       acc.balance -= data.amount;
       // Mirrors socket-handler.js:817 — totalOwed = round(amount * (1 + FRACTION interest)) (BUG-542).
       const totalOwed = Math.round(acc.loan.amount * (1 + acc.loan.interest));
       if (data.amount >= totalOwed) acc.loan.active = false;
+      return { ok: true };
     });
-    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ SocketHandler: { _handleLoanProcess } });
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ SocketHandler: { LoanProcess } });
     (globalThis as any).game = makeGame({ active: true, settings, actors: { a1: { name: 'Debtor' } } });
     const res: any = await dispatchModuleWfrpEconomy({ action: 'repay-loan', economyId: ECO, accountId: 'acc1', amountBp: 264 });
     expect(res.success).toBe(true);
@@ -264,13 +349,13 @@ describe('routing deviations — direct awaited methods, never the broken wrappe
       economies: [{ id: ECO, name: 'Reikland', currency: 'Gold Crowns', banks: [{ id: 'b1', name: 'Reik Bank', loanRate: 0.1 }], properties: [], stocks: [] }],
       bankAccounts: { acc1: { id: 'acc1', actorId: 'a1', bankId: 'b1', economyId: ECO, balance: 5000, loan: { amount: 240, interest: 0.1, active: true } } },
     });
-    const _handleLoanProcess = vi.fn();
-    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ SocketHandler: { _handleLoanProcess } });
+    const LoanProcess = vi.fn();
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ SocketHandler: { LoanProcess } });
     (globalThis as any).game = makeGame({ active: true, settings, actors: { a1: { name: 'Debtor' } } });
     const res: any = await dispatchModuleWfrpEconomy({ action: 'repay-loan', economyId: ECO, accountId: 'acc1', amountBp: 300 });
     expect(res.success).toBe(false);
     expect(res.error).toContain('exceeds total owed');
-    expect(_handleLoanProcess).not.toHaveBeenCalled();
+    expect(LoanProcess).not.toHaveBeenCalled();
   });
 });
 
@@ -423,6 +508,22 @@ describe('banking-and-income — resolve-investment (confirm-gate, D11)', () => 
     expect(res.error).toContain('WFRP_ECONOMY_TARGET_NOT_FOUND');
   });
 
+  // D11 (Phase 9 orphan-guard): the owner actor was deleted — this is NOT a persistence failure (the
+  // engine never attempted a wallet write), so it must surface as a distinct SUCCESSFUL non-resolving
+  // outcome, never WFRP_ECONOMY_NOT_PERSISTED (the misleading detail this used to fall through to).
+  it('engine ownerDeleted verdict → success:true with ownerDeleted:true, never NOT_PERSISTED', async () => {
+    const { settings } = makeSettings();
+    const resolveInvestment = vi.fn(async () => ({ ownerDeleted: true, investmentId: 'inv1', principalBp: 2400, accruedBp: 144 }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ resolveInvestment });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'resolve-investment', investmentId: 'inv1', d100Roll: 50, confirm: true });
+    expect(res.success).toBe(true);
+    expect(res.data.ownerDeleted).toBe(true);
+    expect(res.data.principalBp).toBe(2400);
+    expect(res.data.accruedBp).toBe(144);
+    expect(res.data.actorId).toBeUndefined();
+  });
+
   // G2 (Phase 5b): defensive — the shared Zod schema already constrains d100Roll to an integer 1-100,
   // so this path is unreachable via the MCP surface today, but must still surface correctly if that
   // constraint is ever loosened.
@@ -447,7 +548,7 @@ describe('banking-and-income — list-investments (read-only)', () => {
     (globalThis as any).game = makeGame({ active: true, settings });
     const res: any = await dispatchModuleWfrpEconomy({ action: 'list-investments', activeOnly: true });
     expect(res.success).toBe(true);
-    expect(listInvestments).toHaveBeenCalledWith({ actorId: undefined, activeOnly: true });
+    expect(listInvestments).toHaveBeenCalledWith({ actorId: undefined, activeOnly: true, economyId: ECO });
     expect(res.data.count).toBe(1);
     expect(res.data.investments[0].investmentId).toBe('inv1');
     expect(res.data.investments[0].lastCycleAt).toBe('2026-07-11T00:00:00.000Z'); // D9 pass-through
@@ -528,7 +629,7 @@ describe('banking-and-income — accrue-interest', () => {
     (globalThis as any).game = makeGame({ active: true, settings });
     const res: any = await dispatchModuleWfrpEconomy({ action: 'accrue-interest', dryRun: true });
     expect(res.success).toBe(true);
-    expect(accrueInterest).toHaveBeenCalledWith({ economyId: undefined, dryRun: true });
+    expect(accrueInterest).toHaveBeenCalledWith({ economyId: ECO, dryRun: true });
     expect(res.data.dryRun).toBe(true);
     expect(res.data.cycleApplied).toBe(true);
     expect(res.data.lastCycleAt).toBe('2026-07-11T00:00:00.000Z');
@@ -571,6 +672,103 @@ describe('banking-and-income — accrue-interest', () => {
     const res: any = await dispatchModuleWfrpEconomy({ action: 'accrue-interest' });
     expect(res.success).toBe(false);
     expect(res.error).toContain('WFRP_ECONOMY_NOT_PERSISTED');
+  });
+});
+
+// ── Phase 9 (D7 revisit): run-economic-cycle — headless composer for the module-UI-only "Run Economic
+// Cycle" button. Delegates to the SAME engine export the button calls (kills the double-pay hazard by
+// construction, rather than merely documenting it). dryRun:true previews investment/account/loan/rental
+// verdicts ONLY — the venture pass is skipped entirely on dryRun (banking-engine.js:622) and never
+// previews. cycleRolls (the schema field) forwards verbatim as the engine's `rolls` param.
+describe('banking-and-income — run-economic-cycle', () => {
+  it('without confirm or dryRun → WFRP_ECONOMY_CONFIRM_REQUIRED, engine never imported', async () => {
+    const { settings } = makeSettings({ economies: [{ id: ECO, name: 'Test' }] });
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => {
+      throw new Error('must not import the engine before the confirm gate');
+    };
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'run-economic-cycle' });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_CONFIRM_REQUIRED');
+  });
+
+  it('a non-GM caller → WFRP_ECONOMY_ACCESS_DENIED (write-action GM gate)', async () => {
+    const { settings } = makeSettings({ economies: [{ id: ECO, name: 'Test' }] });
+    (globalThis as any).game = makeGame({ active: true, isGM: false, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'run-economic-cycle', dryRun: true });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_ACCESS_DENIED');
+  });
+
+  it('unknown economyId → WFRP_ECONOMY_TARGET_NOT_FOUND, engine never imported', async () => {
+    const { settings } = makeSettings({ economies: [] });
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => {
+      throw new Error('must not import the engine for an unknown economy');
+    };
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomyRaw({ action: 'run-economic-cycle', economyId: 'nope', dryRun: true });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_TARGET_NOT_FOUND');
+  });
+
+  it('dryRun:true previews investment/account/loan/rental verdicts only — ventureVerdicts stays empty and cycleRolls forwards as rolls', async () => {
+    const { settings } = makeSettings({ economies: [{ id: ECO, name: 'Test' }] });
+    const runEconomicCycle = vi.fn(async () => ({
+      lastCycleAt: '2026-07-18T00:00:00.000Z',
+      investmentVerdicts: [{ investmentId: 'inv1', actorId: 'a1', actorName: 'Investor', accruedDeltaBp: 144, accruedBp: 144 }],
+      accountVerdicts: [{ accountId: 'acc1', actorId: 'a1', actorName: 'Investor', economyId: ECO, bankId: 'bank1', accruedDeltaBp: 12, newBalanceBp: 252 }],
+      loanReminders: [{ accountId: 'acc2', actorId: 'a2', actorName: 'Debtor', totalOwedBp: 500 }],
+      rentalVerdicts: [{ accountId: 'acc3', actorId: 'a3', actorName: 'Landlord', economyId: ECO, bankId: 'bank1', propertyId: 'p1', propertyName: 'Inn', incomeBp: 100, newBalanceBp: 100 }],
+      ventureVerdicts: [],
+    }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ runEconomicCycle });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'run-economic-cycle', dryRun: true, cycleRolls: { v1: 42 } });
+    expect(res.success).toBe(true);
+    expect(runEconomicCycle).toHaveBeenCalledWith({ economyId: ECO, dryRun: true, rolls: { v1: 42 } });
+    expect(res.data.dryRun).toBe(true);
+    expect(res.data.investmentVerdicts).toHaveLength(1);
+    expect(res.data.accountVerdicts).toHaveLength(1);
+    expect(res.data.loanReminders).toHaveLength(1);
+    expect(res.data.rentalVerdicts).toHaveLength(1);
+    expect(res.data.ventureVerdicts).toHaveLength(0);
+  });
+
+  it('confirmed real cycle returns all 5 verdict families + lastCycleAt', async () => {
+    const { settings } = makeSettings({ economies: [{ id: ECO, name: 'Test' }] });
+    const runEconomicCycle = vi.fn(async () => ({
+      lastCycleAt: '2026-07-18T00:00:00.000Z',
+      investmentVerdicts: [],
+      accountVerdicts: [],
+      loanReminders: [],
+      rentalVerdicts: [],
+      ventureVerdicts: [{ kind: 'transfer', ventureId: 'v1', offerId: 'o1', sold: true }],
+    }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ runEconomicCycle });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'run-economic-cycle', confirm: true, cycleRolls: { o1: 55 } });
+    expect(res.success).toBe(true);
+    expect(runEconomicCycle).toHaveBeenCalledWith({ economyId: ECO, dryRun: false, rolls: { o1: 55 } });
+    expect(res.data.ventureVerdicts).toHaveLength(1);
+    expect(res.data.lastCycleAt).toBe('2026-07-18T00:00:00.000Z');
+  });
+
+  it('a persistedCheckFailed venture verdict → WFRP_ECONOMY_NOT_PERSISTED naming the venture', async () => {
+    const { settings } = makeSettings({ economies: [{ id: ECO, name: 'Test' }] });
+    const runEconomicCycle = vi.fn(async () => ({
+      lastCycleAt: '2026-07-18T00:00:00.000Z',
+      investmentVerdicts: [],
+      accountVerdicts: [],
+      loanReminders: [],
+      rentalVerdicts: [],
+      ventureVerdicts: [{ kind: 'distribution', ventureId: 'v1', persistedCheckFailed: true, detail: 'escrow mismatch' }],
+    }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ runEconomicCycle });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'run-economic-cycle', confirm: true });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_NOT_PERSISTED');
+    expect(res.error).toContain('v1');
   });
 });
 
@@ -655,7 +853,7 @@ describe('legitimate-business-enterprises — list-enterprises / get-enterprise 
         profiles: {},
         instances: {
           ent1: {
-            id: 'ent1', name: 'The Salty Dog', profileId: 'tavern', backing: 'data-only', actorUuid: null,
+            id: 'ent1', economyId: ECO, name: 'The Salty Dog', profileId: 'tavern', backing: 'data-only', actorUuid: null,
             ownerActorId: 'a1', level: 1, upkeep: 240, debt: { principal: 480, escalationTier: 0 },
           },
         },
@@ -768,6 +966,20 @@ describe('legitimate-business-enterprises — create-enterprise', () => {
     const res: any = await dispatchModuleWfrpEconomy({ action: 'create-enterprise', presetKey: 'tavern', backing: 'data-only', ownerActorId: 'a1', confirm: true });
     expect(res.success).toBe(false);
     expect(res.error).toContain('WFRP_ECONOMY_NOT_PERSISTED');
+  });
+
+  // Mock provenance: live enterprise-engine.js createEnterprise contract captured 2026-07-16:
+  // {invalidFinancing:true, minimumSelfFundedBp, maximumFinancedBp} is a zero-write refusal.
+  it('engine invalidFinancing verdict → typed refusal instead of fabricated success', async () => {
+    const { settings } = makeSettings();
+    const createEnterprise = vi.fn(async () => ({ invalidFinancing: true, minimumSelfFundedBp: 240, maximumFinancedBp: 2160 }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ createEnterprise });
+    (globalThis as any).game = makeGame({ active: true, settings, actors: { a1: { name: 'Owner' } } });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'create-enterprise', presetKey: 'tavern', backing: 'data-only', ownerActorId: 'a1', financedPortionBp: 2400, confirm: true });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_NOT_PERSISTED');
+    expect(res.error).toContain('240 BP');
+    expect(res.error).toContain('2160 BP');
   });
 });
 
@@ -913,13 +1125,41 @@ describe('legitimate-business-enterprises — enterprise-repay-debt', () => {
 
   it('WITH confirm:true delegates and returns the new principal', async () => {
     const { settings } = makeSettings();
-    const repayDebt = vi.fn(async () => ({ principalBp: 240, walletBalanceBp: 760 }));
+    const repayDebt = vi.fn(async () => ({ principalBp: 240, walletBalanceBp: 760, appliedBp: 240, unappliedBp: 0 }));
     (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ repayDebt });
     (globalThis as any).game = makeGame({ active: true, settings });
     const res: any = await dispatchModuleWfrpEconomy({ action: 'enterprise-repay-debt', enterpriseId: 'ent1', amountBp: 240, confirm: true });
     expect(res.success).toBe(true);
     expect(res.data.principalBp).toBe(240);
     expect(res.data.walletBalanceBp).toBe(760);
+    expect(res.data.appliedBp).toBe(240);
+    expect(res.data.unappliedBp).toBe(0);
+  });
+
+  // Mock provenance: live enterprise-engine.js repayDebt contract captured 2026-07-16:
+  // requested repayment is capped to principal and returns both appliedBp and unappliedBp.
+  it('capped/no-op repayment exposes applied and unapplied BP instead of reporting the request as paid', async () => {
+    const { settings } = makeSettings();
+    const repayDebt = vi.fn(async () => ({ principalBp: 0, walletBalanceBp: 1000, appliedBp: 0, unappliedBp: 999 }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ repayDebt });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'enterprise-repay-debt', enterpriseId: 'ent1', amountBp: 999, confirm: true });
+    expect(res.success).toBe(true);
+    expect(res.data.principalBp).toBe(0);
+    expect(res.data.walletBalanceBp).toBe(1000);
+    expect(res.data.appliedBp).toBe(0);
+    expect(res.data.unappliedBp).toBe(999);
+  });
+
+  it('missing applied/unapplied engine fields fail loud instead of fabricating repayment values', async () => {
+    const { settings } = makeSettings();
+    const repayDebt = vi.fn(async () => ({ principalBp: 0, walletBalanceBp: 1000 }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ repayDebt });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'enterprise-repay-debt', enterpriseId: 'ent1', amountBp: 999, confirm: true });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_NOT_PERSISTED');
+    expect(res.error).toContain('applied/unapplied');
   });
 });
 
@@ -944,6 +1184,31 @@ describe('legitimate-business-enterprises — enterprise-upgrade', () => {
     expect(res.success).toBe(false);
     expect(res.error).toContain('WFRP_ECONOMY_NOT_PERSISTED');
     expect(res.error).toContain('debt');
+  });
+
+  // Mock provenance: live enterprise-engine.js upgrade contract captured 2026-07-16:
+  // invalidLevel carries requested level + requiredLevel; invalidFinancing carries owner/Creditor bounds.
+  it('skipped upgrade level → typed refusal naming the required next level', async () => {
+    const { settings } = makeSettings();
+    const upgrade = vi.fn(async () => ({ invalidLevel: true, level: 3, requiredLevel: 1 }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ upgrade });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'enterprise-upgrade', enterpriseId: 'ent1', level: 3, confirm: true });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_NOT_PERSISTED');
+    expect(res.error).toContain('required next sequential level is 1');
+  });
+
+  it('upgrade invalidFinancing verdict → typed refusal instead of fabricated success', async () => {
+    const { settings } = makeSettings();
+    const upgrade = vi.fn(async () => ({ invalidFinancing: true, minimumSelfFundedBp: 120, maximumFinancedBp: 1080 }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ upgrade });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'enterprise-upgrade', enterpriseId: 'ent1', level: 1, financedPortionBp: 1200, confirm: true });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_NOT_PERSISTED');
+    expect(res.error).toContain('120 BP');
+    expect(res.error).toContain('1080 BP');
   });
 
   it('happy path', async () => {
@@ -1114,6 +1379,62 @@ describe('enterprise-ownership-and-debt — forgive-enterprise-debt', () => {
   });
 });
 
+describe('enterprise-ownership-and-debt — set-enterprise-income-sources (Phase 7e2)', () => {
+  it('forwards enterpriseId to the engine call', async () => {
+    const { settings } = makeSettings();
+    const setIncomeSources = vi.fn(async () => ({ incomeModifiers: [], actorSynced: false }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ setIncomeSources });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    await dispatchModuleWfrpEconomy({ action: 'set-enterprise-income-sources', enterpriseId: 'ent1', incomeModifiers: [] });
+    expect(setIncomeSources).toHaveBeenCalledWith('ent1', expect.objectContaining({ incomeModifiers: [] }));
+  });
+
+  it('forwards incomeModifiers to the engine call', async () => {
+    const { settings } = makeSettings();
+    const incomeModifiers = [{ label: 'Haggle', skill: 'Haggle', tier: 's', standing: 3 }];
+    const setIncomeSources = vi.fn(async () => ({ incomeModifiers, actorSynced: true }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ setIncomeSources });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    await dispatchModuleWfrpEconomy({ action: 'set-enterprise-income-sources', enterpriseId: 'ent1', incomeModifiers });
+    expect(setIncomeSources).toHaveBeenCalledWith('ent1', { incomeModifiers });
+  });
+
+  it('WITH a happy-path result echoes enterpriseId, incomeModifiers, and actorSynced', async () => {
+    const { settings } = makeSettings();
+    const incomeModifiers = [{ label: 'Haggle', skill: 'Haggle', tier: 's', standing: 3 }];
+    const setIncomeSources = vi.fn(async () => ({ incomeModifiers, actorSynced: true }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ setIncomeSources });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'set-enterprise-income-sources', enterpriseId: 'ent1', incomeModifiers });
+    expect(res.success).toBe(true);
+    expect(res.data.action).toBe('set-enterprise-income-sources');
+    expect(res.data.enterpriseId).toBe('ent1');
+    expect(res.data.incomeModifiers).toEqual(incomeModifiers);
+    expect(res.data.actorSynced).toBe(true);
+  });
+
+  it('engine invalidSources verdict → WFRP_ECONOMY_INVALID_INCOME_SOURCES', async () => {
+    const { settings } = makeSettings();
+    const setIncomeSources = vi.fn(async () => ({ invalidSources: true, reason: 'entry 0: standing must be an integer >= 1, got "0"' }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ setIncomeSources });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'set-enterprise-income-sources', enterpriseId: 'ent1', incomeModifiers: [{ label: 'Bad', skill: '', tier: 'b', standing: 0 }] });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_INVALID_INCOME_SOURCES');
+    expect(res.error).toContain('standing');
+  });
+
+  it('engine notFound verdict → WFRP_ECONOMY_TARGET_NOT_FOUND, no confirm gate required', async () => {
+    const { settings } = makeSettings();
+    const setIncomeSources = vi.fn(async () => ({ notFound: true }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ setIncomeSources });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'set-enterprise-income-sources', enterpriseId: 'ghost', incomeModifiers: [] });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_TARGET_NOT_FOUND');
+  });
+});
+
 // ── Phase 7c — levy-groups (R7c.4/R7c.5) ─────────────────────────────────────────
 //
 // list-levies is a PURE READ over the `levies` setting (no engine import — mirrors list-enterprises).
@@ -1125,8 +1446,8 @@ describe('levy-groups — list-levies (direct settings read)', () => {
   it('projects the levies store directly, defaulting type to custom/builtin, no engine import needed', async () => {
     const { settings } = makeSettings({
       levies: [
-        { id: 'l1', name: 'Cost of Living', cadence: 'weekly', active: true, amount: { kind: 'standing-scaled', multiplier: 1.5 }, target: 'party', builtin: true, state: {} },
-        { id: 'l2', name: 'River Toll', cadence: 'per-travel', active: true, amount: { kind: 'fixed-bp', value: 120 }, target: 'group:g1', type: 'toll', builtin: false, state: {} },
+        { id: 'l1', economyId: ECO, name: 'Cost of Living', cadence: 'weekly', active: true, amount: { kind: 'standing-scaled', multiplier: 1.5 }, target: 'party', builtin: true, state: {} },
+        { id: 'l2', economyId: ECO, name: 'River Toll', cadence: 'per-travel', active: true, amount: { kind: 'fixed-bp', value: 120 }, target: 'group:g1', type: 'toll', builtin: false, state: {} },
       ],
     });
     (globalThis as any).game = makeGame({ active: true, settings });
@@ -1160,7 +1481,7 @@ describe('levy-groups — save-levy-group (direct settings write)', () => {
   });
 
   it('WITH confirm:true and an existing groupId renames/re-members in place (no duplicate row)', async () => {
-    const { settings, store } = makeSettings({ levyGroups: [{ id: 'g1', name: 'Old Name', actorIds: ['a1'] }] });
+    const { settings, store } = makeSettings({ levyGroups: [{ id: 'g1', economyId: ECO, name: 'Old Name', actorIds: ['a1'] }] });
     (globalThis as any).game = makeGame({ active: true, settings, actors: { a1: { name: 'A' }, a2: { name: 'B' } } });
     const res: any = await dispatchModuleWfrpEconomy({ action: 'save-levy-group', groupId: 'g1', name: 'New Name', actorIds: ['a1', 'a2'], confirm: true });
     expect(res.success).toBe(true);
@@ -1181,7 +1502,7 @@ describe('levy-groups — save-levy-group (direct settings write)', () => {
 
 describe('levy-groups — list-levy-groups (direct settings read)', () => {
   it('projects the levyGroups store directly', async () => {
-    const { settings } = makeSettings({ levyGroups: [{ id: 'g1', name: 'River Party', actorIds: ['a1', 'a2'] }] });
+    const { settings } = makeSettings({ levyGroups: [{ id: 'g1', economyId: ECO, name: 'River Party', actorIds: ['a1', 'a2'] }] });
     (globalThis as any).game = makeGame({ active: true, settings });
     const res: any = await dispatchModuleWfrpEconomy({ action: 'list-levy-groups' });
     expect(res.success).toBe(true);
@@ -1192,7 +1513,7 @@ describe('levy-groups — list-levy-groups (direct settings read)', () => {
 
 describe('levy-groups — delete-levy-group', () => {
   it('WITHOUT confirm → WFRP_ECONOMY_CONFIRM_REQUIRED, settings never written', async () => {
-    const { settings, store } = makeSettings({ levyGroups: [{ id: 'g1', name: 'River Party', actorIds: ['a1'] }] });
+    const { settings, store } = makeSettings({ levyGroups: [{ id: 'g1', economyId: ECO, name: 'River Party', actorIds: ['a1'] }] });
     (globalThis as any).game = makeGame({ active: true, settings });
     const res: any = await dispatchModuleWfrpEconomy({ action: 'delete-levy-group', groupId: 'g1' });
     expect(res.success).toBe(false);
@@ -1209,7 +1530,7 @@ describe('levy-groups — delete-levy-group', () => {
   });
 
   it('WITH confirm:true removes the group, persisted read-back confirms removal', async () => {
-    const { settings, store } = makeSettings({ levyGroups: [{ id: 'g1', name: 'River Party', actorIds: ['a1'] }] });
+    const { settings, store } = makeSettings({ levyGroups: [{ id: 'g1', economyId: ECO, name: 'River Party', actorIds: ['a1'] }] });
     (globalThis as any).game = makeGame({ active: true, settings });
     const res: any = await dispatchModuleWfrpEconomy({ action: 'delete-levy-group', groupId: 'g1', confirm: true });
     expect(res.success).toBe(true);
@@ -1289,7 +1610,7 @@ describe('venture-ledger — create-venture', () => {
     });
     expect(res.success).toBe(true);
     expect(createVenture).toHaveBeenCalledWith({
-      name: 'Reik Cargo Run', type: 'expedition', parts: { total: 10, priceBp: 240 },
+      economyId: ECO, name: 'Reik Cargo Run', type: 'expedition', parts: { total: 10, priceBp: 240 },
       terms: { managerPortionPct: 10 }, handledBy: [{ role: 'registry', name: 'Reikland Trading House' }],
       linkedEnterpriseId: 'ent1', exposureTags: ['river'],
     });
@@ -1350,7 +1671,7 @@ describe('venture-ledger — get-venture / list-ventures (pure reads)', () => {
     (globalThis as any).game = makeGame({ active: true, settings });
     const res: any = await dispatchModuleWfrpEconomy({ action: 'list-ventures', type: 'expedition', status: 'underway' });
     expect(res.success).toBe(true);
-    expect(listVentures).toHaveBeenCalledWith({ type: 'expedition', status: 'underway' });
+    expect(listVentures).toHaveBeenCalledWith({ type: 'expedition', status: 'underway', bankId: undefined, economyId: ECO });
     expect(res.data.count).toBe(1);
     expect(res.data.ventures[0].ventureId).toBe('v1');
   });
@@ -1375,10 +1696,40 @@ describe('venture-ledger — subscribe-venture', () => {
     (globalThis as any).game = makeGame({ active: true, settings, actors: { a1: { name: 'Investor A' } } });
     const res: any = await dispatchModuleWfrpEconomy({ action: 'subscribe-venture', ventureId: 'v1', actorId: 'a1', partsCount: 2, confirm: true });
     expect(res.success).toBe(true);
-    expect(subscribeVenture).toHaveBeenCalledWith('v1', { actorId: 'a1', externalName: undefined, parts: 2 });
+    expect(subscribeVenture).toHaveBeenCalledWith('v1', { actorId: 'a1', externalName: undefined, parts: 2, bankId: undefined, economyId: undefined });
     expect(res.data.subscribedParts).toBe(6);
     expect(res.data.escrowBp).toBe(1440);
     expect(res.data.walletBalanceBp).toBe(5000);
+  });
+
+  it('forwards the D8 institution-context pair (bankId+economyId) into the engine (Phase 9 S3 T80/T83 regression pin)', async () => {
+    const { settings } = makeSettings();
+    const subscribeVenture = vi.fn(async () => ({ ventureId: 'v1', subscribedParts: 1, escrowBp: 240, walletBalanceBp: 0 }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ subscribeVenture });
+    (globalThis as any).game = makeGame({ active: true, settings, actors: { a1: { name: 'Investor A' } } });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'subscribe-venture', ventureId: 'v1', actorId: 'a1', partsCount: 1, bankId: 'bankA', economyId: 'eco1', confirm: true });
+    expect(res.success).toBe(true);
+    expect(subscribeVenture).toHaveBeenCalledWith('v1', { actorId: 'a1', externalName: undefined, parts: 1, bankId: 'bankA', economyId: 'eco1' });
+  });
+
+  it('partialContext verdict (one-sided bankId/economyId) → typed WFRP_ECONOMY_VENTURE_PARTIAL_CONTEXT refusal', async () => {
+    const { settings } = makeSettings();
+    const subscribeVenture = vi.fn(async () => ({ partialContext: true }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ subscribeVenture });
+    (globalThis as any).game = makeGame({ active: true, settings, actors: { a1: { name: 'Investor A' } } });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'subscribe-venture', ventureId: 'v1', actorId: 'a1', partsCount: 1, economyId: 'eco1', confirm: true });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_VENTURE_PARTIAL_CONTEXT');
+  });
+
+  it('economyMismatch verdict (deed belongs to another economy) → typed refusal, zero writes', async () => {
+    const { settings } = makeSettings();
+    const subscribeVenture = vi.fn(async () => ({ economyMismatch: true }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ subscribeVenture });
+    (globalThis as any).game = makeGame({ active: true, settings, actors: { a1: { name: 'Investor A' } } });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'subscribe-venture', ventureId: 'v1', actorId: 'a1', partsCount: 1, bankId: 'bankB', economyId: 'eco2', confirm: true });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_VENTURE_REGISTRY_NOT_HANDLING');
   });
 
   it('externalName subscriber forwards correctly (no actor pre-check)', async () => {
@@ -1494,6 +1845,19 @@ describe('venture-ledger — settle-venture', () => {
     expect(res.error).toContain('distribute-venture');
   });
 
+  // BUG-549 RESIDUAL REGRESSION (2026-07-18): the engine now preflights holders BEFORE any write —
+  // its {noHolders:true} refusal must surface as a typed failure, never a false success.
+  it('BUG-549: noHolders verdict → typed refusal (settlement never happened, zero writes)', async () => {
+    const { settings } = makeSettings();
+    const settleVenture = vi.fn(async () => ({ noHolders: true }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ settleVenture });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'settle-venture', ventureId: 'v1', netBp: 1, confirm: true });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('no holders');
+    expect(res.data).toBeUndefined();
+  });
+
   // B2 REGRESSION (7d2): settleDelayed previously fell through to the success path (status:undefined,
   // distributedBp:0, a "settled" toast for a settlement that never happened). Must now be a typed refusal.
   it('B2: settleDelayed verdict → typed WFRP_ECONOMY_VENTURE_SETTLE_DELAYED, NOT a false success', async () => {
@@ -1505,6 +1869,20 @@ describe('venture-ledger — settle-venture', () => {
     expect(res.success).toBe(false);
     expect(res.error).toContain('WFRP_ECONOMY_VENTURE_SETTLE_DELAYED');
     expect(res.error).toContain('2');
+    expect(res.data).toBeUndefined();
+  });
+
+  // Phase 9 S3 T59 REGRESSION: settlementNotReady (deed not yet "settling" — post-BUG-549
+  // isSettlementReady gate) fell through to the success path exactly like pre-fix B2. Typed refusal now.
+  it('settlementNotReady verdict → typed WFRP_ECONOMY_VENTURE_SETTLE_NOT_READY, NOT a false success', async () => {
+    const { settings } = makeSettings();
+    const settleVenture = vi.fn(async () => ({ settlementNotReady: true, status: 'open' }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ settleVenture });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'settle-venture', ventureId: 'v1', netBp: 500, confirm: true });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_VENTURE_SETTLE_NOT_READY');
+    expect(res.error).toContain('"open"');
     expect(res.data).toBeUndefined();
   });
 
@@ -1842,5 +2220,858 @@ describe('venture-ledger — get-economy ventureCount (additive, R7d.7 stock fie
     expect(res.success).toBe(true);
     expect(res.data.stocks).toHaveLength(1); // R7d.7 — frozen, still round-trips
     expect(res.data.ventureCount).toBe(2);
+  });
+});
+
+// ── trading (Phase 7f) ────────────────────────────────────────────────────────
+// Coverage: one forwarding assertion per pass-through field on every new trading-* action (7c lesson,
+// BLOCKING per the plan), plus refusal cases (capacity exceeded, insufficient funds, gazetteer/settlement
+// not found, insufficient pre-rolled rolls) and the D2 seed-once dial-migration read path.
+
+const RIVER = { name: 'ALTDORF', size: 5, wealth: 5, population: 50000, produces: ['Grain'], demands: ['Wine/Brandy'], flags: ['trade'] };
+const REIKLAND_PACK = { packId: 'reikland', label: 'Reikland', settlements: [RIVER] };
+
+describe('trading — trading-list-settlements', () => {
+  it('flattens active-gazetteer settlements with pack metadata', async () => {
+    const loadActiveGazetteers = vi.fn(async () => [REIKLAND_PACK]);
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ loadActiveGazetteers });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-list-settlements' });
+    expect(res.success).toBe(true);
+    expect(loadActiveGazetteers).toHaveBeenCalledWith();
+    expect(res.data.count).toBe(1);
+    expect(res.data.settlements[0]).toMatchObject({ name: 'ALTDORF', gazetteerId: 'reikland', size: 5, wealth: 5, produces: ['Grain'], demands: ['Wine/Brandy'] });
+  });
+
+  it('an unrecognized gazetteerId filter → TARGET_NOT_FOUND-style refusal', async () => {
+    const loadActiveGazetteers = vi.fn(async () => [REIKLAND_PACK]);
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ loadActiveGazetteers });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-list-settlements', gazetteerId: 'nowhereland' });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_TARGET_NOT_FOUND');
+    expect(res.error).toContain('nowhereland');
+  });
+});
+
+describe('trading — trading-list-cargo-types', () => {
+  it('forwards the catalog straight through', async () => {
+    const loadCargoCatalog = vi.fn(async () => [{ name: 'Grain', basePrice: 10 }]);
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ loadCargoCatalog });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-list-cargo-types' });
+    expect(res.success).toBe(true);
+    expect(res.data.count).toBe(1);
+    expect(res.data.cargoTypes[0].name).toBe('Grain');
+  });
+});
+
+describe('trading — trading-get-season / trading-set-season', () => {
+  it('trading-get-season echoes season + seasonSource from the engine', async () => {
+    const tradingSeason = vi.fn(() => ({ season: 'summer', seasonSource: 'calendar' }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ tradingSeason });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-get-season' });
+    expect(res.success).toBe(true);
+    expect(res.data).toMatchObject({ season: 'summer', seasonSource: 'calendar' });
+  });
+
+  it('trading-set-season { season } writes the setting and echoes the manual seasonSource', async () => {
+    const { settings, store } = makeSettings();
+    const tradingSeason = vi.fn(() => ({ season: 'winter', seasonSource: 'manual' }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ tradingSeason });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-set-season', season: 'winter' });
+    expect(res.success).toBe(true);
+    expect(settings.set).toHaveBeenCalledWith('wfrp4e-economy', 'tradingSeason', 'winter');
+    expect(store.tradingSeason).toBe('winter');
+    expect(res.data).toMatchObject({ season: 'winter', seasonSource: 'manual' });
+  });
+
+  it('trading-set-season { clear:true } writes an empty override', async () => {
+    const { settings, store } = makeSettings({ tradingSeason: 'summer' });
+    const tradingSeason = vi.fn(() => ({ season: 'spring', seasonSource: 'fallback' }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ tradingSeason });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-set-season', clear: true });
+    expect(res.success).toBe(true);
+    expect(settings.set).toHaveBeenCalledWith('wfrp4e-economy', 'tradingSeason', '');
+    expect(store.tradingSeason).toBe('');
+  });
+
+  it('trading-set-season with neither season nor clear → invalid-input refusal, no write', async () => {
+    const { settings } = makeSettings();
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-set-season' });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_TRADING_INVALID_INPUT');
+    expect(settings.set).not.toHaveBeenCalled();
+  });
+});
+
+describe('trading — trading-check-availability', () => {
+  it('forwards settlement/season/rolls into the pipeline and reports slotCount used', async () => {
+    const resolveSettlement = vi.fn(async () => ({ settlement: RIVER, pack: REIKLAND_PACK }));
+    const tradingSeason = vi.fn(() => ({ season: 'spring', seasonSource: 'calendar' }));
+    const loadCargoCatalog = vi.fn(async () => [{ name: 'Grain' }]);
+    const loadTuning = vi.fn(async () => ({ cargoSlots: {} }));
+    const calculateCargoSlots = vi.fn(() => 1);
+    const runAvailabilityPipeline = vi.fn(() => ({ slotCount: 1, slots: [{ slotNumber: 1, cargo: { name: 'Grain', category: 'food', probability: 100, weight: 1 }, amountEp: 50 }] }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ resolveSettlement, tradingSeason, loadCargoCatalog, loadTuning, calculateCargoSlots, runAvailabilityPipeline });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings });
+    const rolls = [{ cargoRoll: 50, amountRoll: 50 }];
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-check-availability', settlement: 'ALTDORF', rolls });
+    expect(res.success).toBe(true);
+    expect(resolveSettlement).toHaveBeenCalledWith('ALTDORF');
+    expect(runAvailabilityPipeline).toHaveBeenCalledWith({ settlement: RIVER, season: 'spring', cargoCatalog: [{ name: 'Grain' }], tuning: { cargoSlots: {} }, rolls });
+    expect(res.data.slotCount).toBe(1);
+    expect(res.data.settlement).toBe('ALTDORF');
+  });
+
+  it('an unresolvable settlement → TARGET_NOT_FOUND-style refusal', async () => {
+    const resolveSettlement = vi.fn(async () => ({ notFound: true }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ resolveSettlement });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-check-availability', settlement: 'NOWHERE', rolls: [{ cargoRoll: 1, amountRoll: 1 }] });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_TARGET_NOT_FOUND');
+  });
+
+  it('fewer pre-rolled rolls than the settlement needs this season → typed refusal naming the required count', async () => {
+    const resolveSettlement = vi.fn(async () => ({ settlement: RIVER, pack: REIKLAND_PACK }));
+    const tradingSeason = vi.fn(() => ({ season: 'spring', seasonSource: 'calendar' }));
+    const loadCargoCatalog = vi.fn(async () => []);
+    const loadTuning = vi.fn(async () => ({}));
+    const calculateCargoSlots = vi.fn(() => 3);
+    const runAvailabilityPipeline = vi.fn();
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ resolveSettlement, tradingSeason, loadCargoCatalog, loadTuning, calculateCargoSlots, runAvailabilityPipeline });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-check-availability', settlement: 'ALTDORF', rolls: [{ cargoRoll: 1, amountRoll: 1 }] });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_TRADING_INSUFFICIENT_ROLLS');
+    expect(res.error).toContain('3');
+    expect(runAvailabilityPipeline).not.toHaveBeenCalled();
+  });
+});
+
+describe('trading — trading-calc-purchase-price / trading-calc-sale-price', () => {
+  it('trading-calc-purchase-price forwards cargoName/quantity/season/quality to quotePurchasePrice', async () => {
+    const quotePurchasePrice = vi.fn(async () => ({ pricePerEpBp: 2, totalBp: 200, dialFactor: 1 }));
+    const tradingSeason = vi.fn(() => ({ season: 'spring', seasonSource: 'calendar' }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ quotePurchasePrice, tradingSeason });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-calc-purchase-price', cargoName: 'Grain', quantity: 100, season: 'summer', quality: 'good' });
+    expect(res.success).toBe(true);
+    expect(quotePurchasePrice).toHaveBeenCalledWith({ cargoName: 'Grain', quantity: 100, season: 'summer', quality: 'good' });
+    expect(res.data).toMatchObject({ cargoName: 'Grain', quantity: 100, season: 'summer', totalBp: 200, pricePerEpBp: 2 });
+  });
+
+  it('trading-calc-purchase-price on an unknown cargo → TARGET_NOT_FOUND-style refusal', async () => {
+    const quotePurchasePrice = vi.fn(async () => ({ notFound: true }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ quotePurchasePrice });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-calc-purchase-price', cargoName: 'Unobtainium', quantity: 10 });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_TARGET_NOT_FOUND');
+  });
+
+  it('trading-calc-sale-price forwards cargoName/quantity/settlementName/season/quality to quoteSalePrice', async () => {
+    const quoteSalePrice = vi.fn(async () => ({ pricePerEpBp: 3, totalBp: 300, dialFactor: 1, linkedDemandApplied: null }));
+    const tradingSeason = vi.fn(() => ({ season: 'autumn', seasonSource: 'calendar' }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ quoteSalePrice, tradingSeason });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-calc-sale-price', cargoName: 'Grain', quantity: 100, settlement: 'ALTDORF', season: 'autumn', quality: 'average' });
+    expect(res.success).toBe(true);
+    expect(quoteSalePrice).toHaveBeenCalledWith({ cargoName: 'Grain', quantity: 100, settlementName: 'ALTDORF', season: 'autumn', quality: 'average' });
+    expect(res.data).toMatchObject({ cargoName: 'Grain', quantity: 100, settlement: 'ALTDORF', totalBp: 300, linkedDemandApplied: null });
+  });
+
+  // WHY: linked demand (connected economy) is a standing settlement-data condition computed inside
+  // calculateSalePrice/quoteSalePrice — NOT a one-time consumed rumour. trading-calc-sale-price must echo
+  // it so a GM can preview the connected-economy bonus before committing to trading-sell-cargo.
+  it('trading-calc-sale-price echoes a non-null linkedDemandApplied from quoteSalePrice verbatim', async () => {
+    const linkedDemandApplied = { multiplier: 1.25, reason: 'Kemperbad is a metalworking town' };
+    const quoteSalePrice = vi.fn(async () => ({ pricePerEpBp: 5, totalBp: 500, dialFactor: 1, linkedDemandApplied }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ quoteSalePrice });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-calc-sale-price', cargoName: 'Ores', quantity: 100, settlement: 'KEMPERBAD', season: 'summer' });
+    expect(res.success).toBe(true);
+    expect(res.data.linkedDemandApplied).toEqual(linkedDemandApplied);
+  });
+
+  it('trading-calc-sale-price at an unresolvable settlement → TARGET_NOT_FOUND-style refusal', async () => {
+    const quoteSalePrice = vi.fn(async () => ({ settlementNotFound: true }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ quoteSalePrice });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-calc-sale-price', cargoName: 'Grain', quantity: 10, settlement: 'NOWHERE' });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_TARGET_NOT_FOUND');
+  });
+});
+
+describe('trading — trading-haggle-test / trading-gossip-test (roll-free engine, pre-rolled totals only)', () => {
+  it('trading-haggle-test forwards every field positionally to performHaggleTest', async () => {
+    const performHaggleTest = vi.fn(() => ({ success: true, hasDealmakerTalent: true, player: { degrees: 2 }, merchant: { degrees: -1 }, resultDescription: 'Player wins' }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ performHaggleTest });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-haggle-test', playerSkill: 50, merchantSkill: 40, playerRoll: 30, merchantRoll: 60, hasDealmakerTalent: true });
+    expect(res.success).toBe(true);
+    expect(performHaggleTest).toHaveBeenCalledWith(50, 40, true, 30, 60);
+    expect(res.data).toMatchObject({ success: true, hasDealmakerTalent: true, resultDescription: 'Player wins' });
+  });
+
+  // WHY: Change 2 redesign — a FAILED Gossip Test must never mint (mintAndStoreRumour is still called so
+  // the engine's own zero-write no-op is exercised, but gossipSuccess:false must reach it and the response
+  // must echo rumourMinted:null, not silently drop the field).
+  it('trading-gossip-test forwards playerSkill/playerRoll/difficulty (RAW default -10 when omitted); a failed test mints nothing', async () => {
+    const performGossipTest = vi.fn(() => ({ success: false, degrees: -1, resultDescription: 'Gossip Test Failure' }));
+    const mintAndStoreRumour = vi.fn(async () => null);
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ performGossipTest, mintAndStoreRumour });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-gossip-test', playerSkill: 45, playerRoll: 80, rumourD100Roll: 37 });
+    expect(res.success).toBe(true);
+    expect(performGossipTest).toHaveBeenCalledWith(45, 80, -10);
+    expect(mintAndStoreRumour).toHaveBeenCalledWith({ gossipSuccess: false, rumourD100Roll: 37 });
+    expect(res.data).toMatchObject({ success: false, degrees: -1, rumourMinted: null });
+  });
+
+  // WHY: Change 2 redesign — a SUCCESSFUL Gossip Test rolls the RAW 20-band Trade Rumour Table
+  // (rumourD100Roll) and mints+stores the row's own rumour; the response must echo the minted rumour
+  // verbatim (not just a boolean) so a caller can reference its id later (e.g. trading-delete-rumour).
+  it('trading-gossip-test on a successful test mints+stores a rumour and echoes it as rumourMinted', async () => {
+    const performGossipTest = vi.fn(() => ({ success: true, degrees: 2, resultDescription: 'Gossip Test Success' }));
+    const rumour = { id: 'r1', text: 'Grain fire at the mill', goods: ['Grain'], effect: { kind: 'sellBonus', multiplier: 1.75 }, mintedAt: '2026-01-01T00:00:00.000Z' };
+    const mintAndStoreRumour = vi.fn(async () => ({ minted: true, rumour }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ performGossipTest, mintAndStoreRumour });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-gossip-test', playerSkill: 45, playerRoll: 20, rumourD100Roll: 13 });
+    expect(res.success).toBe(true);
+    expect(mintAndStoreRumour).toHaveBeenCalledWith({ gossipSuccess: true, rumourD100Roll: 13 });
+    expect(res.data.rumourMinted).toEqual(rumour);
+  });
+
+  it('trading-gossip-test rumour mint persistence failure → WFRP_ECONOMY_NOT_PERSISTED', async () => {
+    const performGossipTest = vi.fn(() => ({ success: true, degrees: 1, resultDescription: 'Gossip Test Success' }));
+    const mintAndStoreRumour = vi.fn(async () => ({ minted: true, rumour: { id: 'r2' }, persistedCheckFailed: true, detail: 'rumour "r2" absent from tradingRumours after write' }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ performGossipTest, mintAndStoreRumour });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-gossip-test', playerSkill: 45, playerRoll: 20, rumourD100Roll: 13 });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_NOT_PERSISTED');
+  });
+
+  it('a non-GM caller → WFRP_ECONOMY_ACCESS_DENIED (trading-gossip-test is now a real write, GM-gated)', async () => {
+    (globalThis as any).game = makeGame({ active: true, isGM: false, settings: makeSettings().settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-gossip-test', playerSkill: 45, playerRoll: 80, rumourD100Roll: 37 });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_ACCESS_DENIED');
+  });
+});
+
+describe('trading — trading-buy-cargo (real wallet debit + hold write)', () => {
+  it('forwards every buy field to buyCargo (no rumourId param), echoes secretQuality via getHoldRows, and notifies', async () => {
+    const buyCargo = vi.fn(async () => ({ bought: true, lotId: 'lot1', totalBp: 1000, walletBalanceBp: 500, rumourApplied: null }));
+    const getHoldRows = vi.fn(() => [{ lotId: 'lot1', cargoName: 'Wine/Brandy', secretQuality: { tierIndex: 4, tier: 'Excellent', priceMultiplierPer10Ep: 6 } }]);
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ buyCargo, getHoldRows });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings, actors: { a1: { name: 'Buyer' } } });
+    const res: any = await dispatchModuleWfrpEconomy({
+      action: 'trading-buy-cargo', actorId: 'a1', cargoName: 'Wine/Brandy', quantity: 50, settlement: 'ALTDORF',
+      season: 'spring', quality: 'good', secretQualityD10Roll: 8, originBonusSteps: 2,
+    });
+    expect(res.success).toBe(true);
+    expect(buyCargo).toHaveBeenCalledWith({
+      actorId: 'a1', economyId: ECO, cargoName: 'Wine/Brandy', quantity: 50, settlementName: 'ALTDORF', season: 'spring',
+      quality: 'good', secretQualityD10Roll: 8, originBonusSteps: 2,
+    });
+    expect(res.data).toMatchObject({ actorId: 'a1', lotId: 'lot1', cargoName: 'Wine/Brandy', quantity: 50, settlement: 'ALTDORF', totalBp: 1000, walletBalanceBp: 500, rumourApplied: null });
+    expect(res.data.secretQuality).toMatchObject({ tier: 'Excellent' });
+  });
+
+  // WHY: Change 2 redesign — buyCargo now auto-matches+consumes a stored buyDiscount rumour internally;
+  // the MCP response must echo it as rumourApplied so a caller (and the player-facing narration) can see
+  // the discount fired, since there is no longer a rumourId request param to correlate against.
+  it('echoes rumourApplied when buyCargo auto-consumed a matching buyDiscount rumour', async () => {
+    const rumourApplied = { id: 'r3', text: 'Dwarf smith selling cheap pots', multiplier: 0.5 };
+    const buyCargo = vi.fn(async () => ({ bought: true, lotId: 'lot2', totalBp: 400, walletBalanceBp: 600, rumourApplied }));
+    const getHoldRows = vi.fn(() => [{ lotId: 'lot2', cargoName: 'Metal', secretQuality: null }]);
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ buyCargo, getHoldRows });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings, actors: { a1: {} } });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-buy-cargo', actorId: 'a1', cargoName: 'Metal', quantity: 20, settlement: 'ALTDORF' });
+    expect(res.success).toBe(true);
+    expect(res.data.rumourApplied).toEqual(rumourApplied);
+  });
+
+  // WHY (this task, vehicle-materialization response-shape verification): the post-buy secretQuality
+  // lookup must use getHoldRows() — NOT getHold() — or a lot materialized as a vehicle-embedded Item
+  // (secretQuality lives on the item's flags) would silently echo secretQuality:null even though it was
+  // actually assigned, because getHold() only ever reads the abstract tradingCargoHold setting.
+  it('looks up the bought lot via getHoldRows (NOT getHold) so vehicle-embedded secretQuality surfaces', async () => {
+    const buyCargo = vi.fn(async () => ({ bought: true, lotId: 'itemXYZ', totalBp: 1000, walletBalanceBp: 500, rumourApplied: null }));
+    const getHold = vi.fn(() => { throw new Error('getHold() must not be called by trading-buy-cargo'); });
+    const getHoldRows = vi.fn(() => [{ lotId: 'itemXYZ', cargoName: 'Wine/Brandy', secretQuality: { tierIndex: 5, tier: 'Top Shelf', priceMultiplierPer10Ep: 8 } }]);
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ buyCargo, getHold, getHoldRows });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings, actors: { a1: {} } });
+    const res: any = await dispatchModuleWfrpEconomy({
+      action: 'trading-buy-cargo', actorId: 'a1', cargoName: 'Wine/Brandy', quantity: 10, settlement: 'ALTDORF', secretQualityD10Roll: 10,
+    });
+    expect(res.success).toBe(true);
+    expect(getHoldRows).toHaveBeenCalled();
+    expect(getHold).not.toHaveBeenCalled();
+    expect(res.data.secretQuality).toMatchObject({ tier: 'Top Shelf' });
+  });
+
+  it('actor not found → TARGET_NOT_FOUND, engine never called', async () => {
+    const buyCargo = vi.fn();
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ buyCargo });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings, actors: {} });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-buy-cargo', actorId: 'ghost', cargoName: 'Grain', quantity: 10, settlement: 'ALTDORF' });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_TARGET_NOT_FOUND');
+    expect(buyCargo).not.toHaveBeenCalled();
+  });
+
+  it('hold capacity exceeded → typed refusal, zero notify/wallet-echo', async () => {
+    const buyCargo = vi.fn(async () => ({ capacityExceeded: true, capacity: 400, currentHoldEp: 380 }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ buyCargo });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings, actors: { a1: {} } });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-buy-cargo', actorId: 'a1', cargoName: 'Grain', quantity: 50, settlement: 'ALTDORF' });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_TRADING_CAPACITY_EXCEEDED');
+    expect(res.error).toContain('400');
+  });
+
+  it('insufficient wallet funds → WFRP_ECONOMY_NOT_PERSISTED (mirrors invest/stash-deposit precedent)', async () => {
+    const buyCargo = vi.fn(async () => ({ insufficientFunds: true, walletBalanceBp: 50, requiredBp: 1000 }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ buyCargo });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings, actors: { a1: {} } });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-buy-cargo', actorId: 'a1', cargoName: 'Grain', quantity: 50, settlement: 'ALTDORF' });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_NOT_PERSISTED');
+    expect(res.error).toContain('1000');
+  });
+
+  it('a non-GM caller → WFRP_ECONOMY_ACCESS_DENIED (write-action GM gate)', async () => {
+    (globalThis as any).game = makeGame({ active: true, isGM: false, settings: makeSettings().settings, actors: { a1: {} } });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-buy-cargo', actorId: 'a1', cargoName: 'Grain', quantity: 50, settlement: 'ALTDORF' });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_ACCESS_DENIED');
+  });
+});
+
+describe('trading — trading-sell-cargo (RAW demand gates)', () => {
+  // WHY: Change 2 redesign — sellCargo no longer takes a `rumour`/`rumourId` param at all; the engine
+  // auto-matches a stored sellBonus rumour by the lot's cargo name internally. This test locks the exact
+  // sellCargo call shape (no rumour key present) so a regression that re-adds the old lookup is caught.
+  it('forwards every sell field to sellCargo with NO rumour/rumourId key, and echoes the engine\'s rumourApplied', async () => {
+    const rumourApplied = { id: 'r1', text: 'Bandits rustling cattle', multiplier: 1.5 };
+    const sellCargo = vi.fn(async () => ({ sold: true, totalBp: 800, walletBalanceBp: 900, rumourApplied, linkedDemandApplied: null }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ sellCargo });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings, actors: { a1: {} } });
+    const res: any = await dispatchModuleWfrpEconomy({
+      action: 'trading-sell-cargo', actorId: 'a1', lotId: 'lot1', settlement: 'KEMPERBAD', isTradeSettlement: true,
+      buyerRoll: 20, halfCargoRetryRoll: 40, weeksElapsedSincePurchase: 2, topShelfBuyerRoll: 7,
+    });
+    expect(res.success).toBe(true);
+    expect(sellCargo).toHaveBeenCalledWith({
+      actorId: 'a1', economyId: ECO, lotId: 'lot1', settlementName: 'KEMPERBAD', isTradeSettlement: true, buyerRoll: 20,
+      halfCargoRetryRoll: 40, weeksElapsedSincePurchase: 2, topShelfBuyerRoll: 7,
+    });
+    expect(Object.keys(sellCargo.mock.calls[0][0])).not.toContain('rumour');
+    expect(Object.keys(sellCargo.mock.calls[0][0])).not.toContain('rumourId');
+    expect(res.data).toMatchObject({ actorId: 'a1', lotId: 'lot1', settlement: 'KEMPERBAD', soldPartial: false, totalBp: 800, walletBalanceBp: 900, rumourApplied, linkedDemandApplied: null });
+  });
+
+  it('echoes rumourApplied:null when no sellBonus rumour matched the lot\'s cargo', async () => {
+    const sellCargo = vi.fn(async () => ({ sold: true, totalBp: 400, walletBalanceBp: 400, rumourApplied: null, linkedDemandApplied: null }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ sellCargo });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings, actors: { a1: {} } });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-sell-cargo', actorId: 'a1', lotId: 'lot1', settlement: 'ALTDORF', isTradeSettlement: false, buyerRoll: 5 });
+    expect(res.success).toBe(true);
+    expect(res.data.rumourApplied).toBeNull();
+  });
+
+  // WHY: linked-demand (connected economy) is a settlement-side sale bonus computed inside
+  // calculateSalePrice and threaded through sellCargo's priceResult — distinct from rumourApplied (a
+  // one-time consumed rumour). The MCP response must echo it so a caller/narration can see WHY a sale
+  // fetched more than the base wealth-adjusted price.
+  it('echoes a non-null linkedDemandApplied from sellCargo verbatim', async () => {
+    const linkedDemandApplied = { multiplier: 1.25, reason: 'Kemperbad is a metalworking town' };
+    const sellCargo = vi.fn(async () => ({ sold: true, totalBp: 1250, walletBalanceBp: 1250, rumourApplied: null, linkedDemandApplied }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ sellCargo });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings, actors: { a1: {} } });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-sell-cargo', actorId: 'a1', lotId: 'lot1', settlement: 'KEMPERBAD', isTradeSettlement: false, buyerRoll: 5 });
+    expect(res.success).toBe(true);
+    expect(res.data.linkedDemandApplied).toEqual(linkedDemandApplied);
+  });
+
+  // WHY: linkedDemandApplied must also survive the soldPartial (half-cargo-retry) branch — sellCargo's
+  // engine contract carries it on BOTH the `sold` and `soldPartial` return shapes (trading-engine.js:680-682).
+  it('echoes linkedDemandApplied on the soldPartial branch too', async () => {
+    const linkedDemandApplied = { multiplier: 1.1, reason: 'Altdorf produces Cloth' };
+    const sellCargo = vi.fn(async () => ({
+      soldPartial: true, quantitySold: 20, quantityRemaining: 20, totalBp: 300, walletBalanceBp: 300,
+      rumourApplied: null, linkedDemandApplied,
+    }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ sellCargo });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings, actors: { a1: {} } });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-sell-cargo', actorId: 'a1', lotId: 'lot1', settlement: 'ALTDORF', isTradeSettlement: false, buyerRoll: 5 });
+    expect(res.success).toBe(true);
+    expect(res.data).toMatchObject({ soldPartial: true, quantitySold: 20, quantityRemaining: 20, linkedDemandApplied });
+  });
+
+  it('a RAW demand-gate refusal (e.g. village non-Grain) → typed refusal naming the gate, zero writes', async () => {
+    const sellCargo = vi.fn(async () => ({ refused: true, gate: 'village', verdict: { reason: 'village has no demand for Wine/Brandy outside Grain/Spring' } }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ sellCargo });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings, actors: { a1: {} } });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-sell-cargo', actorId: 'a1', lotId: 'lot1', settlement: 'A_VILLAGE', isTradeSettlement: false, buyerRoll: 10 });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_TRADING_SALE_REFUSED');
+    expect(res.error).toContain('village');
+  });
+
+  it('lot not found in the hold → TARGET_NOT_FOUND-style refusal', async () => {
+    const sellCargo = vi.fn(async () => ({ lotNotFound: true }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ sellCargo });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings, actors: { a1: {} } });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-sell-cargo', actorId: 'a1', lotId: 'ghost', settlement: 'ALTDORF', isTradeSettlement: false, buyerRoll: 10 });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_TARGET_NOT_FOUND');
+  });
+});
+
+describe('trading — trading-delete-rumour (Change 1: GM-only manual removal)', () => {
+  it('deletes a stored rumour via deleteRumour and notifies', async () => {
+    const deleteRumour = vi.fn(async () => ({ deleted: true }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ deleteRumour });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-delete-rumour', rumourId: 'r1' });
+    expect(res.success).toBe(true);
+    expect(deleteRumour).toHaveBeenCalledWith({ rumourId: 'r1' });
+    expect(res.data).toMatchObject({ action: 'trading-delete-rumour', rumourId: 'r1', deleted: true });
+  });
+
+  it('an unknown rumourId → TARGET_NOT_FOUND', async () => {
+    const deleteRumour = vi.fn(async () => ({ notFound: true }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ deleteRumour });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-delete-rumour', rumourId: 'ghost' });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_TARGET_NOT_FOUND');
+  });
+
+  it('a persistence-check failure → WFRP_ECONOMY_NOT_PERSISTED', async () => {
+    const deleteRumour = vi.fn(async () => ({ deleted: true, persistedCheckFailed: true, detail: 'rumour "r1" still present in tradingRumours after delete' }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ deleteRumour });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-delete-rumour', rumourId: 'r1' });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_NOT_PERSISTED');
+  });
+
+  it('a non-GM caller → WFRP_ECONOMY_ACCESS_DENIED (write-action GM gate)', async () => {
+    (globalThis as any).game = makeGame({ active: true, isGM: false, settings: makeSettings().settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-delete-rumour', rumourId: 'r1' });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_ACCESS_DENIED');
+  });
+});
+
+describe('trading — trading-get-hold', () => {
+  it('sums quantity across lots and echoes the GM-tunable capacity (manual source)', async () => {
+    const getHoldRows = vi.fn(() => [{ lotId: 'l1', quantity: 100 }, { lotId: 'l2', quantity: 40 }]);
+    const getCargoCapacityInfo = vi.fn(() => ({ capacity: 400, capacitySource: 'manual', connectedVehicleName: null }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ getHoldRows, getCargoCapacityInfo });
+    const { settings } = makeSettings({ tradingCargoCapacity: 400 });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-get-hold' });
+    expect(res.success).toBe(true);
+    expect(res.data).toMatchObject({ capacity: 400, capacitySource: 'manual', connectedVehicleName: null, currentHoldEp: 140, count: 2 });
+  });
+
+  // WHY: post-7f vehicle-linked capacity — trading-get-hold must surface WHICH capacity source is active
+  // (a connected vehicle's carries.max vs the flat setting) so a caller can tell why the number changed.
+  it('echoes a connected vehicle as the capacity source', async () => {
+    const getHoldRows = vi.fn(() => []);
+    const getCargoCapacityInfo = vi.fn(() => ({ capacity: 600, capacitySource: 'vehicle', connectedVehicleName: 'The Reik Trader' }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ getHoldRows, getCargoCapacityInfo });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-get-hold' });
+    expect(res.success).toBe(true);
+    expect(res.data).toMatchObject({ capacity: 600, capacitySource: 'vehicle', connectedVehicleName: 'The Reik Trader' });
+  });
+
+  // WHY (this task, vehicle-materialization response-shape verification): getHoldRows() is the unified
+  // reader across BOTH hold modes (post-7f). The handler must call getHoldRows(), never the RAW getHold()
+  // (which only reads the abstract tradingCargoHold setting and would silently show an empty/stale hold
+  // once a vehicle is connected, since buyCargo/sellCargo/deleteCargoLot stop writing that setting in
+  // vehicle mode). This test locks the exact function called so a regression that reverts to getHold()
+  // is caught, and asserts vehicle-sourced rows (which carry the same field shape as manual-mode rows)
+  // pass through untouched.
+  it('reads hold rows via getHoldRows (NOT getHold) so vehicle-embedded cargo rows surface correctly', async () => {
+    const vehicleRow = {
+      lotId: 'item123', cargoName: 'Ores', quantity: 60, purchasePricePerEpBp: 4, purchaseTotalBp: 240,
+      purchaseSettlement: 'NULN', purchaseSeason: 'summer', purchasedAt: '2026-01-01T00:00:00.000Z', secretQuality: null,
+    };
+    const getHold = vi.fn(() => { throw new Error('getHold() must not be called by trading-get-hold'); });
+    const getHoldRows = vi.fn(() => [vehicleRow]);
+    const getCargoCapacityInfo = vi.fn(() => ({ capacity: 600, capacitySource: 'vehicle', connectedVehicleName: 'The Reik Trader' }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ getHold, getHoldRows, getCargoCapacityInfo });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-get-hold' });
+    expect(res.success).toBe(true);
+    expect(getHoldRows).toHaveBeenCalled();
+    expect(getHold).not.toHaveBeenCalled();
+    expect(res.data).toMatchObject({ count: 1, currentHoldEp: 60, hold: [vehicleRow] });
+  });
+});
+
+describe('trading — trading-list-vehicle-actors (read-only discover)', () => {
+  it('returns the engine\'s unconnected-vehicle-actor list verbatim', async () => {
+    const discoverCargoVehicleActors = vi.fn(() => [
+      { actorId: 'v1', actorUuid: 'Actor.v1', name: 'The Reik Trader', carriesMax: 600 },
+    ]);
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ discoverCargoVehicleActors });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-list-vehicle-actors' });
+    expect(res.success).toBe(true);
+    expect(res.data).toMatchObject({ count: 1, actors: [{ actorId: 'v1', name: 'The Reik Trader', carriesMax: 600 }] });
+  });
+
+  it('is read-only — reachable by a non-GM caller (not in WRITE_ACTIONS)', async () => {
+    const discoverCargoVehicleActors = vi.fn(() => []);
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ discoverCargoVehicleActors });
+    (globalThis as any).game = makeGame({ active: true, isGM: false, settings: makeSettings().settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-list-vehicle-actors' });
+    expect(res.success).toBe(true);
+  });
+});
+
+describe('trading — trading-connect-cargo-vehicle', () => {
+  it('happy path delegates to connectCargoVehicle and notifies', async () => {
+    const connectCargoVehicle = vi.fn(async () => ({ actorUuid: 'Actor.v1', carriesMax: 600 }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ connectCargoVehicle });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings, actors: { v1: { name: 'The Reik Trader' } } });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-connect-cargo-vehicle', actorId: 'v1' });
+    expect(res.success).toBe(true);
+    expect(connectCargoVehicle).toHaveBeenCalledWith({ actorId: 'v1' });
+    expect(res.data).toMatchObject({ actorId: 'v1', actorUuid: 'Actor.v1', carriesMax: 600 });
+  });
+
+  it('actor not found in game.actors → TARGET_NOT_FOUND, engine never called', async () => {
+    const connectCargoVehicle = vi.fn();
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ connectCargoVehicle });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings, actors: {} });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-connect-cargo-vehicle', actorId: 'ghost' });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_TARGET_NOT_FOUND');
+    expect(connectCargoVehicle).not.toHaveBeenCalled();
+  });
+
+  it('engine notFound (actor exists but is not vehicle-type) → TARGET_NOT_FOUND', async () => {
+    const connectCargoVehicle = vi.fn(async () => ({ notFound: true }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ connectCargoVehicle });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings, actors: { v1: { name: 'Not A Vehicle' } } });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-connect-cargo-vehicle', actorId: 'v1' });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_TARGET_NOT_FOUND');
+  });
+
+  it('persistedCheckFailed → WFRP_ECONOMY_NOT_PERSISTED (DP-16)', async () => {
+    const connectCargoVehicle = vi.fn(async () => ({ actorUuid: 'Actor.v1', carriesMax: 600, persistedCheckFailed: true, detail: 'mismatch' }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ connectCargoVehicle });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings, actors: { v1: { name: 'The Reik Trader' } } });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-connect-cargo-vehicle', actorId: 'v1' });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_NOT_PERSISTED');
+  });
+
+  it('a non-GM caller → WFRP_ECONOMY_ACCESS_DENIED (write-action GM gate)', async () => {
+    const connectCargoVehicle = vi.fn();
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ connectCargoVehicle });
+    (globalThis as any).game = makeGame({ active: true, isGM: false, settings: makeSettings().settings, actors: { v1: {} } });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-connect-cargo-vehicle', actorId: 'v1' });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_ACCESS_DENIED');
+    expect(connectCargoVehicle).not.toHaveBeenCalled();
+  });
+});
+
+describe('trading — trading-disconnect-cargo-vehicle', () => {
+  it('happy path delegates to disconnectCargoVehicle and notifies', async () => {
+    const disconnectCargoVehicle = vi.fn(async () => ({ disconnected: true }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ disconnectCargoVehicle });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-disconnect-cargo-vehicle' });
+    expect(res.success).toBe(true);
+    expect(disconnectCargoVehicle).toHaveBeenCalled();
+    expect(res.data).toMatchObject({ disconnected: true });
+  });
+
+  it('persistedCheckFailed → WFRP_ECONOMY_NOT_PERSISTED (DP-16)', async () => {
+    const disconnectCargoVehicle = vi.fn(async () => ({ disconnected: true, persistedCheckFailed: true, detail: 'mismatch' }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ disconnectCargoVehicle });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-disconnect-cargo-vehicle' });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_NOT_PERSISTED');
+  });
+
+  it('a non-GM caller → WFRP_ECONOMY_ACCESS_DENIED (write-action GM gate)', async () => {
+    const disconnectCargoVehicle = vi.fn();
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ disconnectCargoVehicle });
+    (globalThis as any).game = makeGame({ active: true, isGM: false, settings: makeSettings().settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-disconnect-cargo-vehicle' });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_ACCESS_DENIED');
+    expect(disconnectCargoVehicle).not.toHaveBeenCalled();
+  });
+});
+
+describe('trading — trading-list-gazetteers / trading-import-gazetteer / trading-configure-gazetteers', () => {
+  it('trading-list-gazetteers merges builtin + imported packs with active flags', async () => {
+    const readActiveGazetteerIds = vi.fn(() => ['reikland']);
+    const readImportedGazetteers = vi.fn(() => ({ homebrew: { label: 'Homebrew', settlements: [{ name: 'X' }] } }));
+    const loadBuiltinPack = vi.fn(async (id: string) => ({ label: id, settlements: [{ name: 'A' }] }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({
+      BUILTIN_GAZETTEER_IDS: ['reikland'], readActiveGazetteerIds, readImportedGazetteers, loadBuiltinPack,
+    });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-list-gazetteers' });
+    expect(res.success).toBe(true);
+    expect(res.data.count).toBe(2);
+    expect(res.data.activeIds).toEqual(['reikland']);
+    expect(res.data.gazetteers.find((g: any) => g.packId === 'reikland')).toMatchObject({ builtin: true, active: true, settlementCount: 1 });
+    expect(res.data.gazetteers.find((g: any) => g.packId === 'homebrew')).toMatchObject({ builtin: false, active: false, settlementCount: 1 });
+  });
+
+  it('trading-import-gazetteer forwards the raw pack object and echoes settlementCount', async () => {
+    const pack = { packId: 'homebrew', label: 'Homebrew', settlements: [{ name: 'X', size: 2, wealth: 2 }] };
+    const importGazetteerPack = vi.fn(async () => ({ imported: true, packId: 'homebrew' }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ importGazetteerPack });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-import-gazetteer', pack });
+    expect(res.success).toBe(true);
+    expect(importGazetteerPack).toHaveBeenCalledWith(pack);
+    expect(res.data).toMatchObject({ packId: 'homebrew', settlementCount: 1 });
+  });
+
+  it('trading-import-gazetteer on a malformed pack → fail-loud refusal, no partial write', async () => {
+    const importGazetteerPack = vi.fn(async () => ({ invalidPack: true, detail: 'pack "bad" has no settlements[] array' }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ importGazetteerPack });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-import-gazetteer', pack: { packId: 'bad' } });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_TRADING_INVALID_GAZETTEER');
+    expect(res.error).toContain('no settlements');
+  });
+
+  it('trading-configure-gazetteers forwards activeIds exactly', async () => {
+    const setActiveGazetteerIds = vi.fn(async (ids: string[]) => ({ active: ids }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ setActiveGazetteerIds });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-configure-gazetteers', activeIds: ['reikland', 'averland'] });
+    expect(res.success).toBe(true);
+    expect(setActiveGazetteerIds).toHaveBeenCalledWith(['reikland', 'averland']);
+    expect(res.data.active).toEqual(['reikland', 'averland']);
+  });
+});
+
+describe('trading — trading-generate-merchant (D4 narrative-only)', () => {
+  it('forwards settlement/cargoType/merchantType/percentileRoll (roll REQUIRED — never the engine Math.random fallback)', async () => {
+    const resolveSettlement = vi.fn(async () => ({ settlement: RIVER, pack: REIKLAND_PACK }));
+    const loadTuning = vi.fn(async () => ({ skillDistribution: { baseSkill: 30 }, specialSourceBehaviors: {} }));
+    const generateMerchant = vi.fn(() => ({ id: 'm1', type: 'seeker', settlement: RIVER, cargoType: 'Grain', hagglingSkill: 55, skillDescription: 'Competent', equilibrium: { supply: 1, demand: 1 }, specialBehaviors: [] }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ resolveSettlement, loadTuning, generateMerchant });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-generate-merchant', settlement: 'ALTDORF', cargoType: 'Grain', merchantType: 'seeker', percentileRoll: 63 });
+    expect(res.success).toBe(true);
+    expect(generateMerchant).toHaveBeenCalledWith(expect.objectContaining({
+      settlement: RIVER, cargoType: 'Grain', merchantType: 'seeker', percentileRoll: 63,
+      merchantId: expect.any(String), skillDistribution: { baseSkill: 30 }, specialSourceBehaviors: {},
+    }));
+    expect(res.data).toMatchObject({ type: 'seeker', hagglingSkill: 55, skillDescription: 'Competent' });
+  });
+});
+
+describe('trading — trading-reveal-quality', () => {
+  it('forwards trueTierIndex/evaluateSuccess/sl/misreportDirection and echoes the GM-only true tier', async () => {
+    const getHoldRows = vi.fn(() => [{ lotId: 'lot1', cargoName: 'Wine/Brandy', secretQuality: { tierIndex: 5, tier: 'Top Shelf' } }]);
+    const revealQuality = vi.fn(() => ({ revealedTierIndex: 3, revealedTier: 'Good', misreported: true, trueTierIndex: 5 }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ getHoldRows, revealQuality });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-reveal-quality', lotId: 'lot1', evaluateSuccess: false, sl: -3, misreportDirection: -1 });
+    expect(res.success).toBe(true);
+    expect(revealQuality).toHaveBeenCalledWith({ trueTierIndex: 5, evaluateSuccess: false, sl: -3, misreportDirection: -1 });
+    expect(res.data).toMatchObject({ lotId: 'lot1', cargoName: 'Wine/Brandy', revealedTier: 'Good', misreported: true, trueTier: 'Top Shelf' });
+  });
+
+  it('a lot with no secret quality assigned → typed refusal', async () => {
+    const getHoldRows = vi.fn(() => [{ lotId: 'lot1', cargoName: 'Grain' }]);
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ getHoldRows });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-reveal-quality', lotId: 'lot1', evaluateSuccess: true, sl: 2 });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_TRADING_NO_SECRET_QUALITY');
+  });
+
+  // WHY (this task, vehicle-materialization response-shape verification): same getHoldRows()-not-getHold()
+  // fix as trading-buy-cargo/trading-get-hold — a vehicle-embedded lot's secretQuality would otherwise be
+  // silently unreachable (WFRP_ECONOMY_TARGET_NOT_FOUND) since getHold() never sees vehicle-mode cargo.
+  it('looks up the lot via getHoldRows (NOT getHold)', async () => {
+    const getHold = vi.fn(() => { throw new Error('getHold() must not be called by trading-reveal-quality'); });
+    const getHoldRows = vi.fn(() => [{ lotId: 'item1', cargoName: 'Wine/Brandy', secretQuality: { tierIndex: 2, tier: 'Average' } }]);
+    const revealQuality = vi.fn(() => ({ revealedTierIndex: 2, revealedTier: 'Average', misreported: false, trueTierIndex: 2 }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ getHold, getHoldRows, revealQuality });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-reveal-quality', lotId: 'item1', evaluateSuccess: true, sl: 1 });
+    expect(res.success).toBe(true);
+    expect(getHoldRows).toHaveBeenCalled();
+    expect(getHold).not.toHaveBeenCalled();
+  });
+});
+
+describe('trading — trading-get-price-modifiers / trading-set-price-modifiers (NEW dial, separate from the old warhammer-mcp namespace one)', () => {
+  it('trading-get-price-modifiers reads the wfrp4e-economy-namespace tradingPriceModifiers setting', async () => {
+    const { settings } = makeSettings({ tradingPriceModifiers: { global: 1.2, perCargo: { Grain: 0.9 } } });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-get-price-modifiers' });
+    expect(res.success).toBe(true);
+    expect(res.data).toMatchObject({ global: 1.2, perCargo: { Grain: 0.9 } });
+  });
+
+  it('trading-set-price-modifiers merges perCargo (not replaces) and round-trip verifies', async () => {
+    const { settings, store } = makeSettings({ tradingPriceModifiers: { global: 1, perCargo: { Grain: 1.1 } } });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-set-price-modifiers', global: 1.5, perCargo: { Wine: 2 } });
+    expect(res.success).toBe(true);
+    expect(settings.set).toHaveBeenCalledWith('wfrp4e-economy', 'tradingPriceModifiers', { global: 1.5, perCargo: { Grain: 1.1, Wine: 2 } });
+    expect(store.tradingPriceModifiers).toEqual({ global: 1.5, perCargo: { Grain: 1.1, Wine: 2 } });
+    expect(res.data.current).toEqual({ global: 1.5, perCargo: { Grain: 1.1, Wine: 2 } });
+  });
+
+  it('trading-set-price-modifiers { reset:true } restores neutral, ignoring global/perCargo', async () => {
+    const { settings, store } = makeSettings({ tradingPriceModifiers: { global: 3, perCargo: { Grain: 5 } } });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-set-price-modifiers', reset: true, global: 9 });
+    expect(res.success).toBe(true);
+    expect(store.tradingPriceModifiers).toEqual({ global: 1, perCargo: {} });
+  });
+});
+
+// F03 fix: the handler now echoes labels/factors from the FORK's CLIMATE_STATES (fork shape: labelKey,
+// not label) — mocks provide the fork table so the echo path is exercised end-to-end.
+const FORK_CLIMATE_STATES = {
+  none: { id: 'none', labelKey: 'financial-system.climate.none', priceFactor: 1, incomeFactor: 1, eventShift: 0 },
+  war: { id: 'war', labelKey: 'financial-system.climate.war', priceFactor: 1.40, incomeFactor: 0.80, eventShift: 20 },
+  banditry: { id: 'banditry', labelKey: 'financial-system.climate.banditry', priceFactor: 1.15, incomeFactor: 0.85, eventShift: 10 },
+};
+
+describe('economic-climate — climate-get-state / climate-set-state (Phase 8, D1/D4/D11; addendum-2 per-economy)', () => {
+  it('climate-get-state reads ONE economy\'s record and echoes the full resolved state entry incl. economyId', async () => {
+    const getEconomicClimate = vi.fn(() => ({ state: 'war', updatedAt: 12345 }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ getEconomicClimate, CLIMATE_STATES: FORK_CLIMATE_STATES });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings({ economies: [{ id: 'empire', name: 'The Empire' }] }).settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'climate-get-state', economyId: 'empire' });
+    expect(res.success).toBe(true);
+    expect(getEconomicClimate).toHaveBeenCalledWith('empire');
+    expect(res.data).toMatchObject({ action: 'climate-get-state', economyId: 'empire', state: 'war', priceFactor: 1.40, incomeFactor: 0.80, eventShift: 20, updatedAt: 12345 });
+  });
+
+  it('climate-get-state falls back to none identity when that economy has never been set', async () => {
+    const getEconomicClimate = vi.fn(() => ({ state: 'none', updatedAt: null }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ getEconomicClimate, CLIMATE_STATES: FORK_CLIMATE_STATES });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings({ economies: [{ id: 'brettonia', name: 'Brettonia' }] }).settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'climate-get-state', economyId: 'brettonia' });
+    expect(res.success).toBe(true);
+    expect(getEconomicClimate).toHaveBeenCalledWith('brettonia');
+    expect(res.data).toMatchObject({ economyId: 'brettonia', state: 'none', priceFactor: 1, incomeFactor: 1, eventShift: 0 });
+  });
+
+  it('climate-get-state refuses an unknown economyId with TARGET_NOT_FOUND instead of a bogus identity read (Phase 9 S3 finding)', async () => {
+    const getEconomicClimate = vi.fn(() => ({ state: 'none', updatedAt: null }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ getEconomicClimate, CLIMATE_STATES: FORK_CLIMATE_STATES });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings({ economies: [{ id: 'empire', name: 'The Empire' }] }).settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'climate-get-state', economyId: 'totally-fake-id' });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_TARGET_NOT_FOUND');
+    expect(getEconomicClimate).not.toHaveBeenCalled();
+  });
+
+  it('climate-set-state forwards economyId + state to setEconomicClimate and round-trip verifies per economy', async () => {
+    const written = { state: 'banditry', updatedAt: 99999 };
+    const setEconomicClimate = vi.fn(async (_economyId: string, state: string) => ({ state, updatedAt: 99999 }));
+    const getEconomicClimate = vi.fn(() => written);
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ setEconomicClimate, getEconomicClimate, CLIMATE_STATES: FORK_CLIMATE_STATES });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'climate-set-state', economyId: 'empire', state: 'banditry' });
+    expect(res.success).toBe(true);
+    expect(setEconomicClimate).toHaveBeenCalledWith('empire', 'banditry');
+    expect(getEconomicClimate).toHaveBeenCalledWith('empire');
+    expect(res.data).toMatchObject({ action: 'climate-set-state', economyId: 'empire', state: 'banditry', priceFactor: 1.15, incomeFactor: 0.85, eventShift: 10 });
+  });
+
+  it('climate-set-state refuses an unknown economyId (economyNotFound) with zero read-back', async () => {
+    const setEconomicClimate = vi.fn(async (economyId: string) => ({ economyNotFound: true, economyId }));
+    const getEconomicClimate = vi.fn(() => { throw new Error('must not read back after a refused write'); });
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ setEconomicClimate, getEconomicClimate, CLIMATE_STATES: FORK_CLIMATE_STATES });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'climate-set-state', economyId: 'nurgle-land', state: 'plague' });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('nurgle-land');
+    expect(getEconomicClimate).not.toHaveBeenCalled();
+  });
+
+  it('climate-set-state returns NOT_PERSISTED when the read-back state does not match what was written', async () => {
+    const setEconomicClimate = vi.fn(async (_economyId: string, state: string) => ({ state, updatedAt: 1 }));
+    const getEconomicClimate = vi.fn(() => ({ state: 'none', updatedAt: null })); // stale read-back — GM write silently no-op'd
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ setEconomicClimate, getEconomicClimate, CLIMATE_STATES: FORK_CLIMATE_STATES });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'climate-set-state', economyId: 'empire', state: 'siege' });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_NOT_PERSISTED');
+  });
+
+  it('climate-set-state is GM-gated (WRITE_ACTIONS) — non-GM caller refused before the engine import', async () => {
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => { throw new Error('must not import the engine for a refused non-GM write'); };
+    (globalThis as any).game = makeGame({ active: true, isGM: false, settings: makeSettings().settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'climate-set-state', economyId: 'empire', state: 'plague' });
+    expect(res.success).toBe(false);
+  });
+});
+
+describe('trading — trading-migration-status (D2 seed-once, dial-migration read path)', () => {
+  it('a fresh world runs the seed-once migration and reports what was seeded', async () => {
+    const ensureMigrated = vi.fn(async () => ({ migrated: true, seededSeason: 'spring', seededHoldCount: 3, seededCapacity: 400, seededDial: true }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ ensureMigrated });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-migration-status' });
+    expect(res.success).toBe(true);
+    expect(ensureMigrated).toHaveBeenCalledWith();
+    expect(res.data).toMatchObject({ migrated: true, alreadyMigrated: false, seededSeason: 'spring', seededHoldCount: 3, seededCapacity: 400, seededDial: true });
+  });
+
+  it('a second call is idempotent — reads back alreadyMigrated:true with zero re-seeding', async () => {
+    const ensureMigrated = vi.fn(async () => ({ alreadyMigrated: true, migratedFrom: 'trading-places' }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ ensureMigrated });
+    (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-migration-status' });
+    expect(res.success).toBe(true);
+    expect(res.data).toMatchObject({ alreadyMigrated: true, migratedFrom: 'trading-places' });
+  });
+
+  it('a non-GM caller → WFRP_ECONOMY_ACCESS_DENIED (migration can write on first call)', async () => {
+    (globalThis as any).game = makeGame({ active: true, isGM: false, settings: makeSettings().settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-migration-status' });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_ACCESS_DENIED');
+  });
+});
+
+describe('trading — inactive module guard covers the new trading idiom too', () => {
+  it('inactive wfrp4e-economy → MODULE_NOT_ACTIVE on a trading read action', async () => {
+    (globalThis as any).game = makeGame({ active: false });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-get-season' });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('MODULE_NOT_ACTIVE');
   });
 });

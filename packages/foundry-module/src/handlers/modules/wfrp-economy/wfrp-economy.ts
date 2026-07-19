@@ -4,7 +4,7 @@
 // Always-registered umbrella. requireModuleActive('wfrp4e-economy') is the FIRST active-state check —
 // RETURNS the MODULE_NOT_ACTIVE envelope, never throws (v1 Phase 1 contract).
 //
-// 64 actions across 15 idioms (capability_audit/wfrp4e-economy.md + phase6_pre_plan.md §Action surface;
+// 88 actions across 16 idioms (capability_audit/wfrp4e-economy.md + phase6_pre_plan.md §Action surface;
 // unified-ledger idiom — record-transaction / delete-account — added Phase 2, wfrp_economy_system_v1_prd.md
 // §10; levy-and-burn idiom — apply-levies / money-to-burn — added Phase 4, same PRD §10; banking-and-income
 // idiom — invest / resolve-investment / list-investments / stash-deposit / stash-withdraw / accrue-interest
@@ -12,17 +12,23 @@
 // create-enterprise / connect-enterprise-actor / enterprise-income / enterprise-event /
 // enterprise-pay-interest / enterprise-repay-debt / enterprise-upgrade / delete-enterprise — added Phase 6,
 // same PRD §10; enterprise-ownership-and-debt idiom — set-enterprise-owners / add-enterprise-debt /
-// forgive-enterprise-debt — + levy-groups idiom — list-levies / save-levy-group / list-levy-groups /
-// delete-levy-group — both added Phase 7c, same PRD §10). ALL
-// financial state lives in world-scoped game settings (economies / bankers / bankAccounts /
-// stockPortfolios / transactionLogs / levies / recordedStashes / endeavourInvestments / enterprises). The
+// forgive-enterprise-debt (+set-enterprise-income-sources added Phase 7e2) — + levy-groups idiom — list-levies / save-levy-group / list-levy-groups /
+// delete-levy-group — both added Phase 7c, same PRD §10; trading idiom (20 actions, trading-* prefix) —
+// the ported trading-places engine, native to this module — added Phase 7f, wfrp-economy-phase7f plan §10
+// (see the DELEGATE block below the venture-ledger engine contract for the trading engine contract). ALL
+// financial state lives in world-scoped game settings (economies / bankAccounts / transactionLogs /
+// levies / recordedStashes / endeavourInvestments / enterprises). The retired bankers and stockPortfolios
+// settings are never accessed. The
 // 9 transactional writes are driven by runtime-importing
 // the module's SocketHandler and calling its AWAITED process method DIRECTLY:
 //
-//   ⚠ ROUTING DEVIATIONS (phase6_pre_plan §Write access — verified against socket-handler.js):
-//     • loan      → SocketHandler._handleLoanProcess(...)  NOT processLoan (non-async, drops await).
-//     • transfer  → SocketHandler._handleTransferProcess(...) NOT processTransfer (calls _emit → the
-//                   local dispatch re-invokes _handleTransferProcess → DOUBLE-INVOCATION).
+//   ⚠ ROUTING DEVIATIONS (phase6_pre_plan §Write access — re-verified 2026-07-18 against the D5-hardened
+//   socket-handler.js: the _handle*Process wrappers are now SOCKET-ENVELOPE entry points that run
+//   _authorizeGMRequest (requires _socketSenderUserId/requesterUserId) and unwrap data.payload — a direct
+//   flat call silently no-ops. Call the direct process statics instead; actingUser defaults to game.user
+//   and a GM caller skips the ownership gate):
+//     • loan      → SocketHandler.LoanProcess(...)      NOT _handleLoanProcess (envelope-only).
+//     • transfer  → SocketHandler.TransferProcess(...)  NOT _handleTransferProcess (envelope-only).
 //     • stock sale→ SocketHandler.processStockSale(...) NOT broadcastStockSale (BUG A: it emits the
 //                   socket action 'processStockSale' which neither switch handles → silently dropped).
 //   create-bank → processCreateBank; deposit/withdraw → TransactionProcess; stock buy →
@@ -100,8 +106,10 @@
 // CYCLE SEMANTICS (Phase 5b, ADR-U3, plan D1/D7): NOT worldTime-elapsed-month gated. Every call accrues one
 // abstract GM-declared cycle to every eligible entity — there is no "caught up" no-op shape. `cycleApplied`
 // is always `true`; `lastCycleAt` is a display-only ISO stamp, never a gate. A second immediate call pays
-// again. `runEconomicCycle` (rentals + stock fluctuation, duties d/e) stays module-UI-only this phase — NOT
-// exposed via MCP (D7 revisit if a headless composer needs it).
+// again. `runEconomicCycle` (full 6-duty cycle incl. rentals + the venture pass) is now exposed via MCP as
+// its own `run-economic-cycle` action (Phase 9, D7 revisit — see handleRunEconomicCycle below); it
+// delegates to the SAME engine export the module's "Run Economic Cycle" button calls. TRAP unchanged:
+// firing both the button and this action for the same GM-declared cycle still double-pays — pick one.
 // Same firstPersistFailure/notPersisted surfacing convention as levy-and-burn above.
 //
 // legitimate-business-enterprises (list-enterprises / get-enterprise / create-enterprise /
@@ -118,6 +126,7 @@
 // enterprise-engine.js — the 8 real exports):
 //   createEnterprise({ presetKey?, profile?, backing, ownerActorId, actorId?, financedPortion? }) => Promise<
 //     { profileNotFound: true }
+//     | { invalidFinancing: true; minimumSelfFundedBp?: number; maximumFinancedBp?: number }
 //     | { moduleInactive: true }
 //     | { insufficientFunds: true; walletBalanceBp: number; requiredBp: number }
 //     | { instanceId: string | null; actorUuid: string | null; debtPrincipalBp: number; walletBalanceBp: number;
@@ -144,10 +153,13 @@
 //   >
 //   repayDebt(id, { amountBp }) => Promise<
 //     { notFound: true } | { insufficientFunds: true; walletBalanceBp: number; requiredBp: number }
-//     | { principalBp: number; walletBalanceBp: number; persistedCheckFailed?: boolean; detail?: string }
+//     | { principalBp: number; walletBalanceBp: number; appliedBp: number; unappliedBp: number;
+//         persistedCheckFailed?: boolean; detail?: string }
 //   >
 //   upgrade(id, { level, financedPortion? }) => Promise<
-//     { notFound: true } | { upgradeBlocked: true } | { invalidLevel: true }
+//     { notFound: true } | { upgradeBlocked: true }
+//     | { invalidLevel: true; level: number; requiredLevel: number }
+//     | { invalidFinancing: true; minimumSelfFundedBp?: number; maximumFinancedBp?: number }
 //     | { insufficientFunds: true; walletBalanceBp: number; requiredBp: number }
 //     | { level: number; newUpkeep: number; debtPrincipalBp: number; walletBalanceBp: number;
 //         persistedCheckFailed?: boolean; detail?: string }
@@ -181,8 +193,8 @@
 //   queueTransfer(id,{sellerActorId?,sellerExternalName?,parts,askingPriceBp}) => Promise<
 //     {notFound:true}|{holderNotFound:true}|{partsExceedHolding:true,partsHeld}
 //     |{queued:true,offerId,persistedCheckFailed?,detail?}>
-//   settleVenture(id,{netBp?}) => Promise<{notFound:true}|{doesNotSettle:true}
-//     |{settled:true,status,distributed}>
+//   settleVenture(id,{netBp?}) => Promise<{notFound:true}|{doesNotSettle:true}|{noHolders:true}
+//     |{settled:true,status,distributed}> — noHolders (BUG-549 residual fix) refuses BEFORE any write
 //   distributeVenture(id) => Promise<{notFound:true}|{noHolders:true}
 //     |{distributed:true,distributedBp,escrowBp,splits,persistedCheckFailed?,detail?}>
 //   drawVentureEvent(id,{d100Roll}) => Promise<{notFound:true}|{invalidRoll:true}
@@ -190,6 +202,86 @@
 // `parts` on the engine's subscribeVenture/queueTransfer maps from this schema's `partsCount` field (NOT
 // `parts` — that name is reserved on create-venture for the {total,priceBp} object; a scalar under the
 // same key would collide in the flattened mcp-server inputSchema).
+//
+// trading (trading-list-settlements / trading-list-cargo-types / trading-get-season / trading-set-season /
+// trading-check-availability / trading-calc-purchase-price / trading-calc-sale-price / trading-haggle-test /
+// trading-gossip-test / trading-buy-cargo / trading-sell-cargo / trading-delete-rumour / trading-get-hold /
+// trading-list-gazetteers / trading-import-gazetteer / trading-configure-gazetteers / trading-generate-merchant /
+// trading-reveal-quality / trading-get-price-modifiers / trading-set-price-modifiers /
+// trading-migration-status / trading-list-vehicle-actors / trading-connect-cargo-vehicle /
+// trading-disconnect-cargo-vehicle — Phase 7f, wfrp-economy-phase7f plan) delegates to THREE fork files instead of
+// one (the trading port collapsed the old TradingEngine class into a duty split — D5): trading-engine.js
+// (tradingSeason/ensureMigrated/resolveSettlement/quotePurchasePrice/quoteSalePrice/buyCargo/sellCargo/
+// getHold/mintAndStoreRumour/getRumours — the store-owning "5th headless engine"), gazetteer-store.js
+// (pack load/merge/import — loadCargoCatalog/loadTuning/readActiveGazetteerIds/setActiveGazetteerIds/
+// readImportedGazetteers/importGazetteerPack/loadActiveGazetteers/BUILTIN_GAZETTEER_IDS/loadBuiltinPack),
+// and trading-math.js (the pure-calculator barrel — performHaggleTest/performGossipTest/
+// runAvailabilityPipeline/calculateCargoSlots/generateMerchant/revealQuality/assignSecretQuality — none of
+// these are re-exported by trading-engine.js, so this handler runtime-imports all three files). ALL THREE
+// are MODAL-PROMPT-FREE + ROLL-FREE (HC10) — every stochastic duty takes caller pre-rolled integers; this
+// handler never awaits a path that could open a Foundry dialog.
+//
+// Engine contract (fixed here at MCP-authoring time; Phase 2/3 of the same plan implemented TO this shape —
+// verified against E:\foundry_v13\data\Data\modules\wfrp4e-economy\src\trading\*.js):
+//   tradingSeason() => {season, seasonSource:'manual'|'calendar'|'fallback'} (sync, no Promise)
+//   ensureMigrated() => Promise<{alreadyMigrated:true,migratedFrom}|{migrated:true,seededSeason,
+//     seededHoldCount,seededCapacity,seededDial,persistedCheckFailed?,detail?}>
+//   resolveSettlement(name) => Promise<{notFound:true}|{settlement,pack}>
+//   quotePurchasePrice({cargoName,quantity,season?,quality?,economyId?}) => Promise<{notFound:true}|priceResult>
+//     (economyId — addendum-2 per-economy climate; omitted = identity/no climate factor)
+//   quoteSalePrice({cargoName,quantity,settlementName,season?,quality?,economyId?}) =>
+//     Promise<{notFound:true}|{settlementNotFound:true}|priceResult>
+//   buyCargo({actorId,cargoName,quantity,settlementName,season?,quality?,secretQualityD10Roll?,
+//     originBonusSteps?}) => Promise<{notFound:true}|{capacityExceeded:true,capacity,currentHoldEp}
+//     |{insufficientFunds:true,walletBalanceBp,requiredBp}
+//     |{bought:true,lotId,totalBp,walletBalanceBp,rumourApplied:?{id,text,multiplier,persistedCheckFailed?,
+//       detail?},persistedCheckFailed?,detail?}>
+//   sellCargo({actorId,lotId,settlementName,isTradeSettlement,buyerRoll,halfCargoRetryRoll?,
+//     weeksElapsedSincePurchase?,topShelfBuyerRoll?}) => Promise<{notFound:true}|{lotNotFound:true}
+//     |{refused:true,gate,verdict}
+//     |{soldPartial:true,quantitySold,quantityRemaining,totalBp,walletBalanceBp,rumourApplied,linkedDemandApplied}
+//     |{sold:true,totalBp,walletBalanceBp,rumourApplied:?{id,text,multiplier,persistedCheckFailed?,detail?},
+//       linkedDemandApplied:?{multiplier,reason},persistedCheckFailed?,detail?}>
+//     ⚠ Trade Rumour Table redesign (post-7f Change 1/2): sellCargo no longer takes a `rumour` param — it
+//     auto-matches a stored sellBonus rumour against the lot's cargoName itself (rumourSellMultiplier,
+//     sale-mechanics.js) and consumes (deletes) it internally on a successful sale, same for buyCargo's
+//     buyDiscount match. This handler must NEVER pass a `rumour`/`rumourId` field to either call anymore.
+//     linkedDemandApplied (this task) is DISTINCT from rumourApplied: a standing settlement-data condition
+//     (calculateSalePrice/sale-mechanics.js's linkedDemandMultiplier), re-evaluated fresh every call — never
+//     minted/stored/consumed like a rumour. quoteSalePrice's own priceResult carries the same field.
+//   getHold() => Array<lot> (sync) — RAW tradingCargoHold setting only, ignores a connected vehicle.
+//   getHoldRows() (post-7f vehicle materialization, this task) => Array<row> (sync) — the UNIFIED read
+//     across both hold modes (abstract tradingCargoHold array when no vehicle connected, the vehicle's own
+//     embedded `cargo`-type Items when one is). This handler's trading-get-hold action, and the lot lookup
+//     inside handleTradingBuyCargo, MUST call getHoldRows() — NEVER getHold() — or vehicle-connected mode
+//     silently reads an empty/stale abstract array instead of the real cargo.
+//   getRumours() => Array<rumour> (sync)
+//   mintAndStoreRumour({gossipSuccess,rumourD100Roll}) => Promise<null|{minted:true,rumour:{id,text,goods,
+//     effect,mintedAt},persistedCheckFailed?,detail?}> — rolls the RAW 20-band d100 Trade Rumour Table
+//     (data/trading/rumour-table.json) and stores the row's own {kind:'sellBonus'|'buyDiscount',multiplier}
+//     effect; returns null (zero writes) when gossipSuccess is false. Replaces the old flat single-cargo
+//     2x-eligibility rumour model entirely (Change 2).
+//   deleteRumour({rumourId}) => Promise<{notFound:true}|{deleted:true,persistedCheckFailed?,detail?}> —
+//     GM-only manual removal (Change 1); also called internally by buyCargo/sellCargo to consume a matched
+//     rumour on use.
+//   [post-7f vehicle-linked cargo capacity, trading-engine.js]
+//   getCargoCapacityInfo() => {capacity,capacitySource:'vehicle'|'manual',connectedVehicleName:?string} (sync)
+//   discoverCargoVehicleActors() => Array<{actorId,actorUuid,name,carriesMax}> (sync) — unconnected world
+//     `vehicle`-type actors
+//   connectCargoVehicle({actorId}) => Promise<{notFound:true}|{actorUuid,carriesMax,persistedCheckFailed?,
+//     detail?}>
+//   disconnectCargoVehicle() => Promise<{disconnected:true,persistedCheckFailed?,detail?}>
+//   [gazetteer-store.js] loadCargoCatalog()/loadTuning() => Promise<Array|Object>; readActiveGazetteerIds()
+//     => Array<string> (sync); setActiveGazetteerIds(ids) => Promise<{active,persistedCheckFailed?,detail?}>
+//     readImportedGazetteers() => Object<string,pack> (sync); importGazetteerPack(raw) =>
+//     Promise<{invalidPack:true,detail}|{imported:true,packId,persistedCheckFailed?,detail?}>
+//   [trading-math.js barrel] performHaggleTest/performGossipTest (sync); runAvailabilityPipeline (sync,
+//     throws if rolls.length < slotCount — this handler pre-computes slotCount via calculateCargoSlots to
+//     surface a typed refusal instead of letting the throw propagate); generateMerchant (sync); revealQuality
+//     (sync, needs the lot's secretQuality.tierIndex as trueTierIndex).
+// D7 (no new ledger allowlist field): buyCargo/sellCargo log via TransactionLogger internally with
+// `type:'trade-buy'/'trade-sell'`, `source:'trade'` — this handler never calls TransactionLogger itself for
+// trading actions (unlike delete-account/get-transaction-history-style reads elsewhere in this file).
 //
 // RETIREMENT (D2): buy-stock/sell-stock/get-portfolio are intercepted BEFORE any engine work — the
 // dispatcher's RETIRED_ACTIONS check runs BEFORE the WRITE_ACTIONS/GM gate (a caller learns about the
@@ -237,6 +329,7 @@ const WRITE_ACTIONS = new Set([
   'stash-deposit',
   'stash-withdraw',
   'accrue-interest',
+  'run-economic-cycle',
   'create-enterprise',
   'connect-enterprise-actor',
   'enterprise-income',
@@ -256,6 +349,18 @@ const WRITE_ACTIONS = new Set([
   'settle-venture',
   'distribute-venture',
   'venture-event',
+  'trading-set-season',
+  'trading-gossip-test', // Change 2: now mints+stores a rumour on a successful Gossip Test (real write)
+  'trading-buy-cargo',
+  'trading-sell-cargo',
+  'trading-delete-rumour',
+  'trading-import-gazetteer',
+  'trading-configure-gazetteers',
+  'trading-set-price-modifiers',
+  'trading-migration-status', // idempotent (D2) but can write on first call — GM-gated like every other write
+  'trading-connect-cargo-vehicle',
+  'trading-disconnect-cargo-vehicle',
+  'climate-set-state', // Phase 8 (D11) — GM-gated identically to trading-set-price-modifiers
 ]);
 
 // D2 — the FIRST typed action retirement in the codebase. Checked immediately after the WRITE_ACTIONS/GM
@@ -282,12 +387,6 @@ function readEconomies(): any[] {
 }
 function readBankAccounts(): Record<string, any> {
   return getSetting('bankAccounts') ?? {};
-}
-function readBankers(): Record<string, any> {
-  return getSetting('bankers') ?? {};
-}
-function readPortfolios(): Record<string, any> {
-  return getSetting('stockPortfolios') ?? {};
 }
 function readEnterprises(): { profiles: Record<string, any>; instances: Record<string, any> } {
   return getSetting('enterprises') ?? { profiles: {}, instances: {} };
@@ -320,14 +419,12 @@ function resolveBank(economy: any, bankId: string): any | null {
 }
 
 /**
- * Build the `banker` descriptor the SocketHandler process methods require. They validate banker.actorId
- * + banker.bankId truthy and use banker.actorId only for a name lookup. We resolve the assigned banker
- * NPC from the `bankers` setting, falling back to the account owner so validation always passes.
+ * Build the legacy `banker`-shaped descriptor that SocketHandler process methods still accept. Banker
+ * assignments were retired in Phase 7g, so the account owner supplies actorId and no retired setting is
+ * read.
  */
-function resolveBanker(economyId: string, bankId: string, bankName: string | null, fallbackActorId: string): any {
-  const entry = Object.values(readBankers()).find((b: any) => b?.bankId === bankId && b?.economyId === economyId);
-  const actorId = (entry as any)?.actorId || fallbackActorId;
-  return { actorId, bankId, name: bankName ?? undefined };
+function resolveBanker(bankId: string, bankName: string | null, fallbackActorId: string): any {
+  return { actorId: fallbackActorId, bankId, name: bankName ?? undefined };
 }
 
 function actorName(actorId: string | null | undefined): string | null {
@@ -373,6 +470,14 @@ const importEnterpriseEngine = (): Promise<any> =>
   runtimeImport(`/modules/${MODULE_ID}/src/enterprises/enterprise-engine.js`);
 const importVentureEngine = (): Promise<any> =>
   runtimeImport(`/modules/${MODULE_ID}/src/ventures/venture-engine.js`);
+const importEconomyIntegrity = (): Promise<any> =>
+  runtimeImport(`/modules/${MODULE_ID}/src/economy/economy-integrity.js`);
+const importTradingEngine = (): Promise<any> =>
+  runtimeImport(`/modules/${MODULE_ID}/src/trading/trading-engine.js`);
+const importGazetteerStore = (): Promise<any> =>
+  runtimeImport(`/modules/${MODULE_ID}/src/trading/gazetteer-store.js`);
+const importTradingMath = (): Promise<any> =>
+  runtimeImport(`/modules/${MODULE_ID}/src/trading/trading-math.js`);
 
 function walletBalance(actorId: string, economyId: string | undefined): number {
   return Number(getGame()?.financial?.wallet?.getBalance?.(actorId, economyId ?? '') ?? 0);
@@ -475,6 +580,8 @@ export async function dispatchModuleWfrpEconomy(data: unknown): Promise<Envelope
         return await handleStashWithdraw(input);
       case 'accrue-interest':
         return await handleAccrueInterest(input);
+      case 'run-economic-cycle':
+        return await handleRunEconomicCycle(input);
       // ── legitimate-business-enterprises (Phase 6) ──
       case 'list-enterprises':
         return await handleListEnterprises(input);
@@ -503,13 +610,15 @@ export async function dispatchModuleWfrpEconomy(data: unknown): Promise<Envelope
         return await handleAddEnterpriseDebt(input);
       case 'forgive-enterprise-debt':
         return await handleForgiveEnterpriseDebt(input);
+      case 'set-enterprise-income-sources':
+        return await handleSetEnterpriseIncomeSources(input);
       // ── levy-groups (Phase 7c) ──
       case 'list-levies':
-        return handleListLevies();
+        return handleListLevies(input);
       case 'save-levy-group':
         return await handleSaveLevyGroup(input);
       case 'list-levy-groups':
-        return handleListLevyGroups();
+        return handleListLevyGroups(input);
       case 'delete-levy-group':
         return await handleDeleteLevyGroup(input);
       // ── venture-ledger (Phase 7d) ──
@@ -538,6 +647,59 @@ export async function dispatchModuleWfrpEconomy(data: unknown): Promise<Envelope
         return await handleSetVentureStatus(input);
       case 'set-venture-standing':
         return await handleSetVentureStanding(input);
+      // ── trading (Phase 7f) ──
+      case 'trading-list-settlements':
+        return await handleTradingListSettlements(input);
+      case 'trading-list-cargo-types':
+        return await handleTradingListCargoTypes();
+      case 'trading-get-season':
+        return await handleTradingGetSeason();
+      case 'trading-set-season':
+        return await handleTradingSetSeason(input);
+      case 'trading-check-availability':
+        return await handleTradingCheckAvailability(input);
+      case 'trading-calc-purchase-price':
+        return await handleTradingCalcPurchasePrice(input);
+      case 'trading-calc-sale-price':
+        return await handleTradingCalcSalePrice(input);
+      case 'trading-haggle-test':
+        return await handleTradingHaggleTest(input);
+      case 'trading-gossip-test':
+        return await handleTradingGossipTest(input);
+      case 'trading-buy-cargo':
+        return await handleTradingBuyCargo(input);
+      case 'trading-sell-cargo':
+        return await handleTradingSellCargo(input);
+      case 'trading-delete-rumour':
+        return await handleTradingDeleteRumour(input);
+      case 'trading-get-hold':
+        return await handleTradingGetHold();
+      case 'trading-list-vehicle-actors':
+        return await handleTradingListVehicleActors();
+      case 'trading-connect-cargo-vehicle':
+        return await handleTradingConnectCargoVehicle(input);
+      case 'trading-disconnect-cargo-vehicle':
+        return await handleTradingDisconnectCargoVehicle();
+      case 'trading-list-gazetteers':
+        return await handleTradingListGazetteers();
+      case 'trading-import-gazetteer':
+        return await handleTradingImportGazetteer(input);
+      case 'trading-configure-gazetteers':
+        return await handleTradingConfigureGazetteers(input);
+      case 'trading-generate-merchant':
+        return await handleTradingGenerateMerchant(input);
+      case 'trading-reveal-quality':
+        return await handleTradingRevealQuality(input);
+      case 'trading-get-price-modifiers':
+        return handleTradingGetPriceModifiers();
+      case 'trading-set-price-modifiers':
+        return await handleTradingSetPriceModifiers(input);
+      case 'trading-migration-status':
+        return await handleTradingMigrationStatus();
+      case 'climate-get-state':
+        return await handleClimateGetState(input);
+      case 'climate-set-state':
+        return await handleClimateSetState(input);
       // Unreachable at runtime — RETIRED_ACTIONS intercepts these above, before this switch runs. Cases
       // kept only so the `never` exhaustiveness check below stays meaningful (D2).
       case 'buy-stock':
@@ -592,17 +754,14 @@ function handleGetEconomy(input: GetEconomyInput): Envelope<unknown> {
 }
 
 type ListBankersInput = Extract<WfrpEconomyInputType, { action: 'list-bankers' }>;
-function handleListBankers(input: ListBankersInput): Envelope<unknown> {
-  const bankers = readBankers();
-  const list = Object.entries(bankers)
-    .map(([bankerId, b]: [string, any]) => ({
-      bankerId,
-      actorId: b?.actorId,
-      bankId: b?.bankId,
-      economyId: b?.economyId,
-    }))
-    .filter((b) => !input.economyId || b.economyId === input.economyId);
-  return { success: true, data: { action: 'list-bankers', count: list.length, bankers: list } };
+function handleListBankers(_input: ListBankersInput): Envelope<unknown> {
+  return {
+    success: true,
+    data: {
+      action: 'list-bankers', count: 0, bankers: [], retired: true,
+      detail: 'Banker assignments were retired in Phase 7g; bank operations now use the account owner context.',
+    },
+  };
 }
 
 type CreateEconomyInput = Extract<WfrpEconomyInputType, { action: 'create-economy' }>;
@@ -688,40 +847,29 @@ type DeleteEconomyInput = Extract<WfrpEconomyInputType, { action: 'delete-econom
 async function handleDeleteEconomy(input: DeleteEconomyInput): Promise<Envelope<unknown>> {
   if (input.confirm !== true) {
     return confirmRequired(
-      `delete-economy "${input.economyId}" purges the economy AND its bank accounts, bankers, stock portfolios, and transaction logs. Re-call with confirm:true.`,
+      `delete-economy "${input.economyId}" archives the economy and dependent active records before removal. Transaction history is retained. Re-call with confirm:true.`,
     );
   }
   const economy = findEconomy(input.economyId);
   if (!economy) return targetNotFound(`economy "${input.economyId}" not found`);
   const name = economy.name;
 
-  // 5 sequential settings keys (economies + the 4 related stores keyed by economyId).
-  await setSetting('economies', readEconomies().filter((e: any) => e?.id !== input.economyId));
+  const integrity = await importEconomyIntegrity();
+  const result = await integrity.archiveAndDeleteEconomy(input.economyId);
+  if (result?.accessDenied) return { success: false, error: `WFRP_ECONOMY_ACCESS_DENIED: delete-economy requires GM` };
+  if (result?.notFound) return targetNotFound(`economy "${input.economyId}" not found`);
+  if (!result?.deleted) return notPersisted(`economy "${input.economyId}" deletion returned no success verdict`);
+  if (result.persistedCheckFailed) return notPersisted(result.detail ?? `economy "${input.economyId}" deletion persisted only partially`);
 
-  const bankAccounts = readBankAccounts();
-  for (const [accId, acc] of Object.entries(bankAccounts)) {
-    if ((acc as any)?.economyId === input.economyId) delete bankAccounts[accId];
-  }
-  await setSetting('bankAccounts', bankAccounts);
-
-  const bankers = readBankers();
-  for (const [bId, b] of Object.entries(bankers)) {
-    if ((b as any)?.economyId === input.economyId) delete bankers[bId];
-  }
-  await setSetting('bankers', bankers);
-
-  const portfolios = readPortfolios();
-  for (const key of Object.keys(portfolios)) {
-    if (key.endsWith(`-${input.economyId}`)) delete portfolios[key];
-  }
-  await setSetting('stockPortfolios', portfolios);
-
-  const logs = (getSetting('transactionLogs') ?? []).filter((l: any) => l?.economyId !== input.economyId);
-  await setSetting('transactionLogs', logs);
-
-  if (findEconomy(input.economyId)) return notPersisted(`economy "${input.economyId}" still present after delete`);
-  notify.deleted('wfrp-economy', name, { summary: `economy ${input.economyId} + related stores purged` });
-  return { success: true, data: { action: 'delete-economy', economyId: input.economyId, deleted: true } };
+  notify.deleted('wfrp-economy', name, { summary: `economy ${input.economyId} archived and removed; transaction history retained` });
+  return {
+    success: true,
+    data: {
+      action: 'delete-economy', economyId: input.economyId, deleted: true,
+      archiveId: result.archiveId, affected: result.affected,
+      transactionHistoryRetained: result.transactionHistoryRetained === true,
+    },
+  };
 }
 
 // ── open-a-bank-account ────────────────────────────────────────────────────────
@@ -794,7 +942,7 @@ async function handleDepositWithdraw(input: DepositWithdrawInput): Promise<Envel
     if (input.amountBp > beforeBalance) return notPersisted(`withdraw of ${input.amountBp} BP exceeds account balance ${beforeBalance} BP`);
   }
 
-  const banker = resolveBanker(input.economyId, account.bankId, bank?.name ?? null, actorId);
+  const banker = resolveBanker(account.bankId, bank?.name ?? null, actorId);
   const SocketHandler = await importSocketHandler();
   await SocketHandler.TransactionProcess({
     actorId,
@@ -835,9 +983,9 @@ async function handleTransfer(input: TransferInput): Promise<Envelope<unknown>> 
   if (input.amountBp > beforeSource) return notPersisted(`transfer of ${input.amountBp} BP exceeds source balance ${beforeSource} BP`);
 
   const bank = resolveBank(economy, source.bankId);
-  const banker = resolveBanker(input.economyId, source.bankId, bank?.name ?? null, source.actorId);
+  const banker = resolveBanker(source.bankId, bank?.name ?? null, source.actorId);
   const SocketHandler = await importSocketHandler();
-  await SocketHandler._handleTransferProcess({
+  const engineResult = await SocketHandler.TransferProcess({
     sourceActorId: source.actorId,
     sourceAccountId: input.sourceAccountId,
     destinationAccountId: input.destinationAccountId,
@@ -847,6 +995,9 @@ async function handleTransfer(input: TransferInput): Promise<Envelope<unknown>> 
     amount: input.amountBp,
     description: '',
   });
+  if (engineResult?.ok === false) {
+    return notPersisted(`transfer refused by engine: ${engineResult.code}${engineResult.detail ? ` — ${engineResult.detail}` : ''}`);
+  }
 
   const fresh = readBankAccounts();
   const afterSource = Number(fresh[input.sourceAccountId]?.balance ?? 0);
@@ -872,10 +1023,10 @@ async function handleRequestLoan(input: RequestLoanInput): Promise<Envelope<unkn
   const economy = findEconomy(input.economyId);
   if (!economy) return targetNotFound(`economy "${input.economyId}" not found`);
   const bank = resolveBank(economy, account.bankId);
-  const banker = resolveBanker(input.economyId, account.bankId, bank?.name ?? null, account.actorId);
+  const banker = resolveBanker(account.bankId, bank?.name ?? null, account.actorId);
 
   const SocketHandler = await importSocketHandler();
-  await SocketHandler._handleLoanProcess({
+  const engineResult = await SocketHandler.LoanProcess({
     actorId: account.actorId,
     accountId: input.accountId,
     economyId: input.economyId,
@@ -884,9 +1035,13 @@ async function handleRequestLoan(input: RequestLoanInput): Promise<Envelope<unkn
     amount: input.amountBp,
     // Published contract takes interestRate as a PERCENT (e.g. 5 = 5%); the module stores loan.interest
     // as a FRACTION (socket-handler.js:780-781). Convert here; undefined falls through to bank.loanRate.
+    // (BUG-546/DF8: the engine ignores caller-supplied interestRate on request — kept for back-compat.)
     interestRate: input.interestRate != null ? input.interestRate / 100 : undefined,
     loanAction: 'request',
   });
+  if (engineResult?.ok === false) {
+    return notPersisted(`loan request refused by engine: ${engineResult.code}${engineResult.detail ? ` — ${engineResult.detail}` : ''}`);
+  }
 
   const after = readBankAccounts()[input.accountId];
   if (!after?.loan?.active || Number(after.loan.amount) !== input.amountBp) {
@@ -930,10 +1085,10 @@ async function handleRepayLoan(input: RepayLoanInput): Promise<Envelope<unknown>
   const economy = findEconomy(input.economyId);
   if (!economy) return targetNotFound(`economy "${input.economyId}" not found`);
   const bank = resolveBank(economy, account.bankId);
-  const banker = resolveBanker(input.economyId, account.bankId, bank?.name ?? null, account.actorId);
+  const banker = resolveBanker(account.bankId, bank?.name ?? null, account.actorId);
 
   const SocketHandler = await importSocketHandler();
-  await SocketHandler._handleLoanProcess({
+  const engineResult = await SocketHandler.LoanProcess({
     actorId: account.actorId,
     accountId: input.accountId,
     economyId: input.economyId,
@@ -943,6 +1098,9 @@ async function handleRepayLoan(input: RepayLoanInput): Promise<Envelope<unknown>
     interestRate: interest,
     loanAction: 'repay',
   });
+  if (engineResult?.ok === false) {
+    return notPersisted(`loan repay refused by engine: ${engineResult.code}${engineResult.detail ? ` — ${engineResult.detail}` : ''}`);
+  }
 
   const after = readBankAccounts()[input.accountId];
   const afterBalance = Number(after?.balance ?? 0);
@@ -1061,10 +1219,9 @@ async function handleSetRented(input: SetRentedInput): Promise<Envelope<unknown>
   const property = economy.properties?.find((p: any) => p?.id === input.propertyId);
   if (!property) return targetNotFound(`property "${input.propertyId}" not in economy "${input.economyId}"`);
 
-  const firstBanker = Object.values(readBankers()).find((b: any) => b?.economyId === input.economyId) as any;
   const currentBanker = {
-    bankId: property.purchasedFromBankId ?? firstBanker?.bankId ?? economy.banks?.[0]?.id ?? null,
-    actorId: property.owner ?? firstBanker?.actorId ?? null,
+    bankId: property.purchasedFromBankId ?? economy.banks?.[0]?.id ?? null,
+    actorId: property.owner ?? null,
   };
 
   const SocketHandler = await importSocketHandler();
@@ -1266,7 +1423,15 @@ async function handleDeleteAccount(input: DeleteAccountInput): Promise<Envelope<
   if (!account) return targetNotFound(`bank account "${input.accountId}" not found`);
 
   const SocketHandler = await importSocketHandler();
-  await SocketHandler.processDeleteAccount({ accountId: input.accountId, bankAccounts });
+  const engineResult = await SocketHandler.processDeleteAccount({ accountId: input.accountId, bankAccounts });
+  if (engineResult?.ok === false) {
+    // ACCOUNT_HAS_OBLIGATIONS carries the actionable blockers list (non-zero balance / active loan /
+    // linked property) — surface it instead of masking the deliberate refusal as NOT_PERSISTED.
+    const blockers = Array.isArray(engineResult?.data?.blockers)
+      ? ` Blockers: ${engineResult.data.blockers.map((b: any) => b?.detail ?? b?.code).join('; ')}`
+      : '';
+    return notPersisted(`delete-account refused by engine: ${engineResult.code}${engineResult.detail ? ` — ${engineResult.detail}` : ''}${blockers}`);
+  }
 
   if (readBankAccounts()[input.accountId]) return notPersisted(`bank account "${input.accountId}" still present after delete-account`);
   notify.deleted('wfrp-economy', actorName(account.actorId) ?? input.accountId, { summary: `account ${input.accountId} deleted` });
@@ -1295,6 +1460,16 @@ function firstPersistFailure(verdicts: unknown): { actorId: string; detail: stri
   return null;
 }
 
+// Venture-pass verdicts (runVenturePass) key on ventureId, not actorId — a dedicated scanner mirrors
+// firstPersistFailure's contract but reports the venture instance instead of an actor.
+function firstVentureVerdictFailure(verdicts: unknown): { ventureId: string; detail: string } | null {
+  if (!Array.isArray(verdicts)) return null;
+  for (const v of verdicts as any[]) {
+    if (v?.persistedCheckFailed) return { ventureId: String(v?.ventureId ?? 'unknown'), detail: String(v?.detail ?? 'unknown') };
+  }
+  return null;
+}
+
 type ApplyLeviesInput = Extract<WfrpEconomyInputType, { action: 'apply-levies' }>;
 async function handleApplyLevies(input: ApplyLeviesInput): Promise<Envelope<unknown>> {
   // Phase 7c (R7c.5): explicit actorIds still validates up front (back-compat); target/groupId are
@@ -1308,6 +1483,7 @@ async function handleApplyLevies(input: ApplyLeviesInput): Promise<Envelope<unkn
   const LevyEngine = await importLevyEngine();
   const dryRun = input.dryRun === true;
   const result = await LevyEngine.applyLevies({
+    economyId: input.economyId,
     levyIds: input.levyIds,
     actorIds: input.actorIds,
     target: input.target,
@@ -1358,7 +1534,7 @@ async function handleMoneyToBurn(input: MoneyToBurnInput): Promise<Envelope<unkn
   }
 
   const LevyEngine = await importLevyEngine();
-  const result = await LevyEngine.moneyToBurn({ actorIds: input.actorIds, target: input.target, groupId: input.groupId, dryRun });
+  const result = await LevyEngine.moneyToBurn({ economyId: input.economyId, actorIds: input.actorIds, target: input.target, groupId: input.groupId, dryRun });
 
   if (!dryRun) {
     const failure = firstPersistFailure(result?.verdicts);
@@ -1406,6 +1582,7 @@ async function handleInvest(input: InvestInput): Promise<Envelope<unknown>> {
     // contract in case that guard is ever loosened.
     return notPersisted(`invest of ${input.amountBp} BP exceeds wallet balance ${result.walletBalanceBp} BP (actor ${input.actorId})`);
   }
+  if (result?.invalidContext) return targetNotFound(result.detail ?? `economy "${input.economyId}" not found`);
   if (result?.persistedCheckFailed) {
     return notPersisted(`invest for actor "${input.actorId}" failed persistence check: ${result?.detail ?? 'unknown'}`);
   }
@@ -1435,12 +1612,31 @@ async function handleResolveInvestment(input: ResolveInvestmentInput): Promise<E
     );
   }
   const BankingEngine = await importBankingEngine();
-  const result = await BankingEngine.resolveInvestment({ investmentId: input.investmentId, d100Roll: input.d100Roll });
+  const result = await BankingEngine.resolveInvestment({ investmentId: input.investmentId, d100Roll: input.d100Roll, economyId: input.economyId });
 
   if (result?.notFound) return targetNotFound(`investment "${input.investmentId}" not found or already resolved`);
   if (result?.invalidRoll) {
     // G2 — defensive: the shared Zod schema already constrains d100Roll to an integer 1-100.
     return notPersisted(`resolve-investment "${input.investmentId}" received an invalid d100Roll (${result.d100Roll})`);
+  }
+  // D11 (Phase 9 orphan-guard): the owner actor was deleted. This is NOT a persistence failure — the
+  // engine never attempted a wallet write — so it surfaces as a distinct, non-error outcome (the caller
+  // can then drive the Banking-tab "remove record" affordance) instead of the misleading NOT_PERSISTED
+  // this used to fall through to.
+  if (result?.ownerDeleted) {
+    notify.updated('wfrp-economy', input.investmentId, {
+      summary: `investment ${input.investmentId} owner actor no longer exists — cannot resolve (principal ${result.principalBp} BP + accrued ${result.accruedBp} BP on record; untrack via the Banking tab's Remove Record control)`,
+    });
+    return {
+      success: true,
+      data: {
+        action: 'resolve-investment',
+        investmentId: input.investmentId,
+        ownerDeleted: true,
+        principalBp: Number(result.principalBp ?? 0),
+        accruedBp: Number(result.accruedBp ?? 0),
+      },
+    };
   }
   if (result?.persistedCheckFailed) {
     return notPersisted(`resolve-investment "${input.investmentId}" failed persistence check: ${result?.detail ?? 'unknown'}`);
@@ -1468,7 +1664,7 @@ async function handleResolveInvestment(input: ResolveInvestmentInput): Promise<E
 type ListInvestmentsInput = Extract<WfrpEconomyInputType, { action: 'list-investments' }>;
 async function handleListInvestments(input: ListInvestmentsInput): Promise<Envelope<unknown>> {
   const BankingEngine = await importBankingEngine();
-  const raw = await BankingEngine.listInvestments({ actorId: input.actorId, activeOnly: input.activeOnly });
+  const raw = await BankingEngine.listInvestments({ actorId: input.actorId, activeOnly: input.activeOnly, economyId: input.economyId });
   const list = (Array.isArray(raw) ? raw : []).map((i: any) => ({
     investmentId: i?.investmentId,
     actorId: i?.actorId,
@@ -1491,12 +1687,13 @@ async function handleStashDeposit(input: StashDepositInput): Promise<Envelope<un
   if (input.amountBp > wb) return notPersisted(`stash-deposit of ${input.amountBp} BP exceeds wallet balance ${wb} BP (actor ${input.actorId})`);
 
   const BankingEngine = await importBankingEngine();
-  const result = await BankingEngine.stashDeposit({ actorId: input.actorId, amountBp: input.amountBp });
+  const result = await BankingEngine.stashDeposit({ actorId: input.actorId, amountBp: input.amountBp, economyId: input.economyId });
 
   if (result?.insufficientFunds) {
     // G1 — defensive: the pre-check above already guards this path.
     return notPersisted(`stash-deposit of ${input.amountBp} BP exceeds wallet balance ${result.walletBalanceBp} BP (actor ${input.actorId})`);
   }
+  if (result?.invalidContext) return targetNotFound(result.detail ?? `economy "${input.economyId}" not found`);
   if (result?.persistedCheckFailed) {
     return notPersisted(`stash-deposit for actor "${input.actorId}" failed persistence check: ${result?.detail ?? 'unknown'}`);
   }
@@ -1525,7 +1722,7 @@ async function handleStashWithdraw(input: StashWithdrawInput): Promise<Envelope<
   if (!getGame()?.actors?.get?.(input.actorId)) return targetNotFound(`actor "${input.actorId}" not found`);
 
   const BankingEngine = await importBankingEngine();
-  const result = await BankingEngine.stashWithdraw({ actorId: input.actorId, d100Roll: input.d100Roll });
+  const result = await BankingEngine.stashWithdraw({ actorId: input.actorId, d100Roll: input.d100Roll, economyId: input.economyId });
 
   if (result?.notFound) return targetNotFound(`actor "${input.actorId}" has no recorded stash`);
   if (result?.invalidRoll) {
@@ -1582,6 +1779,66 @@ async function handleAccrueInterest(input: AccrueInterestInput): Promise<Envelop
   };
 }
 
+// D7 revisit (Phase 9): the fork's own headless composer for the module-UI-only "Run Economic Cycle"
+// button. Delegates to the SAME BankingEngine.runEconomicCycle the button calls (identical engine path —
+// kills the double-pay hazard by construction rather than merely documenting it). Supersedes
+// accrue-interest for full-cycle use (accrue-interest still covers duties a-c standalone); TRAP: running
+// BOTH this action and the module's own button for the same GM-declared cycle double-pays every duty —
+// pick exactly one trigger per world per cycle (D6 in the Phase 9 plan).
+type RunEconomicCycleInput = Extract<WfrpEconomyInputType, { action: 'run-economic-cycle' }>;
+async function handleRunEconomicCycle(input: RunEconomicCycleInput): Promise<Envelope<unknown>> {
+  const dryRun = input.dryRun === true;
+  if (!dryRun && input.confirm !== true) {
+    return confirmRequired(
+      `run-economic-cycle applies one abstract GM-declared cycle to economy "${input.economyId}" — investment/account interest, loan reminders, rental income, and the full venture pass (queued-transfer resolution, distributions, standing decay, delay-tick, events). No worldTime gate — a repeat call pays every duty again. Re-call with confirm:true, or dryRun:true to preview investment/account/loan/rental verdicts first (the venture pass never previews on dryRun).`,
+    );
+  }
+  if (!findEconomy(input.economyId)) return targetNotFound(`economy "${input.economyId}" not found`);
+
+  const BankingEngine = await importBankingEngine();
+  const result = await BankingEngine.runEconomicCycle({
+    economyId: input.economyId,
+    dryRun,
+    rolls: input.cycleRolls,
+  });
+
+  const investmentVerdicts = Array.isArray(result?.investmentVerdicts) ? result.investmentVerdicts : [];
+  const accountVerdicts = Array.isArray(result?.accountVerdicts) ? result.accountVerdicts : [];
+  const loanReminders = Array.isArray(result?.loanReminders) ? result.loanReminders : [];
+  const rentalVerdicts = Array.isArray(result?.rentalVerdicts) ? result.rentalVerdicts : [];
+  const ventureVerdicts = Array.isArray(result?.ventureVerdicts) ? result.ventureVerdicts : [];
+
+  if (!dryRun) {
+    const failure =
+      firstPersistFailure(investmentVerdicts) ??
+      firstPersistFailure(accountVerdicts) ??
+      firstPersistFailure(rentalVerdicts) ??
+      firstVentureVerdictFailure(ventureVerdicts);
+    if (failure) {
+      const who = 'actorId' in failure ? `actor "${failure.actorId}"` : `venture "${failure.ventureId}"`;
+      return notPersisted(`run-economic-cycle verdict for ${who} failed persistence check: ${failure.detail}`);
+    }
+  }
+
+  notify.updated('wfrp-economy', input.economyId, {
+    summary: `${dryRun ? '[dry-run] ' : ''}run-economic-cycle "${input.economyId}": ${investmentVerdicts.length} investment(s), ${accountVerdicts.length} account(s), ${loanReminders.length} loan reminder(s), ${rentalVerdicts.length} rental verdict(s), ${ventureVerdicts.length} venture-pass event(s)`,
+  });
+  return {
+    success: true,
+    data: {
+      action: 'run-economic-cycle',
+      economyId: input.economyId,
+      dryRun,
+      lastCycleAt: result?.lastCycleAt ?? null,
+      investmentVerdicts,
+      accountVerdicts,
+      loanReminders,
+      rentalVerdicts,
+      ventureVerdicts,
+    },
+  };
+}
+
 // ── legitimate-business-enterprises (Phase 6, wfrp_economy_system) ─────────────
 //
 // list-enterprises(default)/get-enterprise are PURE READS over the `enterprises` setting store (see the
@@ -1599,7 +1856,7 @@ function mapOwners(inst: any): Array<{ actorId: string | null; ventureId: string
 type ListEnterprisesInput = Extract<WfrpEconomyInputType, { action: 'list-enterprises' }>;
 async function handleListEnterprises(input: ListEnterprisesInput): Promise<Envelope<unknown>> {
   const store = readEnterprises();
-  const enterprises = Object.values(store.instances ?? {}).map((i: any) => ({
+  const enterprises = Object.values(store.instances ?? {}).filter((i: any) => i?.economyId === input.economyId).map((i: any) => ({
     instanceId: i?.id,
     name: i?.name,
     profileId: i?.profileId ?? null,
@@ -1693,6 +1950,7 @@ async function handleCreateEnterprise(input: CreateEnterpriseInput): Promise<Env
     actorId: input.actorId,
     financedPortion: input.financedPortionBp,
     creditor: input.creditor,
+    economyId: input.economyId,
   });
 
   if (result?.profileNotFound) {
@@ -1702,6 +1960,12 @@ async function handleCreateEnterprise(input: CreateEnterpriseInput): Promise<Env
     // Defensive: the pre-guard above already covers backing:'create' — only reachable on a race where
     // wfrp4e-archives3 was deactivated between the guard check and this call.
     return requireModuleActive('wfrp4e-archives3') ?? notPersisted('wfrp4e-archives3 became inactive during create-enterprise');
+  }
+  if (result?.invalidFinancing) {
+    const bounds = Number.isSafeInteger(result.minimumSelfFundedBp) && Number.isSafeInteger(result.maximumFinancedBp)
+      ? `owner must self-fund at least ${result.minimumSelfFundedBp} BP and Creditor financing cannot exceed ${result.maximumFinancedBp} BP`
+      : 'cost, financedPortionBp, and minimum funding percentage must form valid non-negative whole-BP financing';
+    return notPersisted(`create-enterprise financing is invalid: ${bounds}`);
   }
   if (result?.insufficientFunds) {
     return notPersisted(`create-enterprise start-up cost exceeds wallet balance ${result.walletBalanceBp} BP (required ${result.requiredBp} BP)`);
@@ -1730,7 +1994,7 @@ async function handleConnectEnterpriseActor(input: ConnectEnterpriseActorInput):
   if (!getGame()?.actors?.get?.(input.actorId)) return targetNotFound(`actor "${input.actorId}" not found`);
 
   const EnterpriseEngine = await importEnterpriseEngine();
-  const result = await EnterpriseEngine.connectActor({ actorId: input.actorId, ownerActorId: input.ownerActorId });
+  const result = await EnterpriseEngine.connectActor({ actorId: input.actorId, ownerActorId: input.ownerActorId, economyId: input.economyId });
 
   if (result?.notFound) return targetNotFound(`actor "${input.actorId}" is not a wfrp4e-archives3 enterprise actor`);
   if (result?.alreadyConnected) {
@@ -1847,8 +2111,15 @@ async function handleEnterpriseRepayDebt(input: EnterpriseRepayDebtInput): Promi
   if (result?.persistedCheckFailed) {
     return notPersisted(`enterprise-repay-debt for "${input.enterpriseId}" failed persistence check: ${result?.detail ?? 'unknown'}`);
   }
+  const appliedBp = Number(result?.appliedBp);
+  const unappliedBp = Number(result?.unappliedBp);
+  if (!Number.isSafeInteger(appliedBp) || appliedBp < 0
+    || !Number.isSafeInteger(unappliedBp) || unappliedBp < 0
+    || appliedBp + unappliedBp !== input.amountBp) {
+    return notPersisted(`enterprise-repay-debt for "${input.enterpriseId}" returned an invalid applied/unapplied result contract`);
+  }
   notify.updated('wfrp-economy', `enterprise ${input.enterpriseId}`, {
-    summary: `debt repaid ${input.amountBp} BP — principal now ${result.principalBp} BP`,
+    summary: `debt repaid ${appliedBp} BP${unappliedBp > 0 ? ` (${unappliedBp} BP unapplied)` : ''} — principal now ${result.principalBp} BP`,
   });
   return {
     success: true,
@@ -1857,6 +2128,8 @@ async function handleEnterpriseRepayDebt(input: EnterpriseRepayDebtInput): Promi
       enterpriseId: input.enterpriseId,
       principalBp: Number(result.principalBp ?? 0),
       walletBalanceBp: Number(result.walletBalanceBp ?? 0),
+      appliedBp,
+      unappliedBp,
     },
   };
 }
@@ -1876,7 +2149,16 @@ async function handleEnterpriseUpgrade(input: EnterpriseUpgradeInput): Promise<E
     // RAW refusal, zero writes: an enterprise cannot Expand while it carries active Creditor debt.
     return notPersisted(`enterprise "${input.enterpriseId}" cannot upgrade while in debt (RAW: Expand is blocked with an active Creditor principal)`);
   }
-  if (result?.invalidLevel) return targetNotFound(`enterprise "${input.enterpriseId}" has no upgrade path for level ${input.level}`);
+  if (result?.invalidLevel) {
+    const requiredLevel = Number.isSafeInteger(result.requiredLevel) ? result.requiredLevel : 'unknown';
+    return notPersisted(`enterprise "${input.enterpriseId}" cannot upgrade to level ${input.level}; the required next sequential level is ${requiredLevel}`);
+  }
+  if (result?.invalidFinancing) {
+    const bounds = Number.isSafeInteger(result.minimumSelfFundedBp) && Number.isSafeInteger(result.maximumFinancedBp)
+      ? `owner must self-fund at least ${result.minimumSelfFundedBp} BP and Creditor financing cannot exceed ${result.maximumFinancedBp} BP`
+      : 'cost, financedPortionBp, and minimum funding percentage must form valid non-negative whole-BP financing';
+    return notPersisted(`enterprise-upgrade financing is invalid: ${bounds}`);
+  }
   if (result?.insufficientFunds) {
     return notPersisted(`enterprise-upgrade for "${input.enterpriseId}" exceeds wallet balance ${result.walletBalanceBp} BP (required ${result.requiredBp} BP)`);
   }
@@ -2051,6 +2333,36 @@ async function handleForgiveEnterpriseDebt(input: ForgiveEnterpriseDebtInput): P
   };
 }
 
+// Phase 7e2 (R6.1/R6.5/R7c.3): manager-primary income-source write. DELEGATES to enterprise-engine.js's
+// setIncomeSources export (mutex + verify + echo-tagged actor push — the sync contract that keeps the
+// Economy Manager instance and the backing archives3 actor from drifting). Full-list replace, not a
+// patch; no confirm gate — unlike owners/debt this never moves coin and only replaces a metadata list.
+type SetEnterpriseIncomeSourcesInput = Extract<WfrpEconomyInputType, { action: 'set-enterprise-income-sources' }>;
+async function handleSetEnterpriseIncomeSources(input: SetEnterpriseIncomeSourcesInput): Promise<Envelope<unknown>> {
+  const EnterpriseEngine = await importEnterpriseEngine();
+  const result = await EnterpriseEngine.setIncomeSources(input.enterpriseId, { incomeModifiers: input.incomeModifiers });
+
+  if (result?.notFound) return targetNotFound(`enterprise "${input.enterpriseId}" not found`);
+  if (result?.invalidSources) {
+    return { success: false, error: `${ErrorTokens.WFRP_ECONOMY_INVALID_INCOME_SOURCES}: ${result.reason}` };
+  }
+  if (result?.persistedCheckFailed) {
+    return notPersisted(`set-enterprise-income-sources for "${input.enterpriseId}" failed persistence check: ${result?.detail ?? 'unknown'}`);
+  }
+  notify.updated('wfrp-economy', `enterprise ${input.enterpriseId}`, {
+    summary: `income sources set (${(result.incomeModifiers ?? []).length} source(s))${result.actorSynced ? ', synced to backing actor' : ''}`,
+  });
+  return {
+    success: true,
+    data: {
+      action: 'set-enterprise-income-sources',
+      enterpriseId: input.enterpriseId,
+      incomeModifiers: result.incomeModifiers ?? [],
+      actorSynced: Boolean(result.actorSynced),
+    },
+  };
+}
+
 // ── levy-groups (Phase 7c, R7c.4/R7c.5) ──────────────────────────────────────────
 //
 // list-levies is a PURE READ over the `levies` world setting (mirrors list-enterprises' pure-read
@@ -2058,8 +2370,9 @@ async function handleForgiveEnterpriseDebt(input: ForgiveEnterpriseDebtInput): P
 // `levyGroups` world setting DIRECTLY (register.js pattern — no engine export needed for simple CRUD
 // over a flat array setting; mirrors how levyExcludedActorIds is written today).
 
-function handleListLevies(): Envelope<unknown> {
-  const levies = readLevies().map((l: any) => ({
+type ListLeviesInput = Extract<WfrpEconomyInputType, { action: 'list-levies' }>;
+function handleListLevies(input: ListLeviesInput): Envelope<unknown> {
+  const levies = readLevies().filter((l: any) => l?.economyId === input.economyId).map((l: any) => ({
     levyId: l?.id,
     name: l?.name,
     type: l?.builtin ? 'builtin' : (l?.type ?? 'custom'),
@@ -2084,8 +2397,8 @@ async function handleSaveLevyGroup(input: SaveLevyGroupInput): Promise<Envelope<
 
   const groups = readLevyGroups();
   const groupId = input.groupId ?? randomId();
-  const idx = groups.findIndex((g: any) => g?.id === groupId);
-  const entry = { id: groupId, name: input.name, actorIds: [...input.actorIds] };
+  const idx = groups.findIndex((g: any) => g?.id === groupId && g?.economyId === input.economyId);
+  const entry = { id: groupId, economyId: input.economyId, name: input.name, actorIds: [...input.actorIds] };
   if (idx >= 0) groups[idx] = entry;
   else groups.push(entry);
   await setSetting('levyGroups', groups);
@@ -2100,8 +2413,9 @@ async function handleSaveLevyGroup(input: SaveLevyGroupInput): Promise<Envelope<
   };
 }
 
-function handleListLevyGroups(): Envelope<unknown> {
-  const groups = readLevyGroups().map((g: any) => ({
+type ListLevyGroupsInput = Extract<WfrpEconomyInputType, { action: 'list-levy-groups' }>;
+function handleListLevyGroups(input: ListLevyGroupsInput): Envelope<unknown> {
+  const groups = readLevyGroups().filter((g: any) => g?.economyId === input.economyId).map((g: any) => ({
     groupId: g?.id,
     name: g?.name,
     actorIds: Array.isArray(g?.actorIds) ? g.actorIds : [],
@@ -2116,11 +2430,11 @@ async function handleDeleteLevyGroup(input: DeleteLevyGroupInput): Promise<Envel
     return confirmRequired(`delete-levy-group removes group "${input.groupId}" (levies still targeting it resolve to an empty roster afterward — no cascade rewrite). Re-call with confirm:true.`);
   }
   const groups = readLevyGroups();
-  const existing = groups.find((g: any) => g?.id === input.groupId);
+  const existing = groups.find((g: any) => g?.id === input.groupId && g?.economyId === input.economyId);
   if (!existing) return targetNotFound(`levy group "${input.groupId}" not found`);
 
-  await setSetting('levyGroups', groups.filter((g: any) => g?.id !== input.groupId));
-  const stillThere = readLevyGroups().some((g: any) => g?.id === input.groupId);
+  await setSetting('levyGroups', groups.filter((g: any) => g?.id !== input.groupId || g?.economyId !== input.economyId));
+  const stillThere = readLevyGroups().some((g: any) => g?.id === input.groupId && g?.economyId === input.economyId);
   if (stillThere) return notPersisted(`levy group "${input.groupId}" still present in levyGroups setting after delete`);
 
   notify.deleted('wfrp-economy', String(existing.name ?? input.groupId), { summary: `levy group ${input.groupId} removed` });
@@ -2179,6 +2493,7 @@ async function handleCreateVenture(input: CreateVentureInput): Promise<Envelope<
     handledBy: input.handledBy,
     linkedEnterpriseId: input.linkedEnterpriseId,
     exposureTags: input.exposureTags,
+    economyId: input.economyId,
   });
 
   if (result?.invalidType) return targetNotFound(`invalid venture type "${input.type}"`);
@@ -2225,7 +2540,7 @@ async function handleGetVenture(input: GetVentureInput): Promise<Envelope<unknow
 type ListVenturesInput = Extract<WfrpEconomyInputType, { action: 'list-ventures' }>;
 async function handleListVentures(input: ListVenturesInput): Promise<Envelope<unknown>> {
   const VentureEngine = await importVentureEngine();
-  const list: any[] = await VentureEngine.listVentures({ type: input.type, status: input.status });
+  const list: any[] = await VentureEngine.listVentures({ type: input.type, status: input.status, bankId: input.bankId, economyId: input.economyId });
   const ventures = list.map(ventureSummaryEntry);
   return { success: true, data: { action: 'list-ventures', count: ventures.length, ventures } };
 }
@@ -2239,13 +2554,25 @@ async function handleSubscribeVenture(input: SubscribeVentureInput): Promise<Env
     return targetNotFound(`actor "${input.actorId}" not found`);
   }
   const VentureEngine = await importVentureEngine();
+  // Phase 9 validate S3 fix (eval T80/T83 regression): the D8 institution-context pair MUST be forwarded —
+  // the engine owns the partial-context / exact-institution / economy-mismatch gates (BUG-545
+  // defense-in-depth), and dropping the fields here silently disabled all three, letting a wrong-bank or
+  // one-sided-context subscribe move real coin.
   const result = await VentureEngine.subscribeVenture(input.ventureId, {
     actorId: input.actorId,
     externalName: input.externalName,
     parts: input.partsCount,
+    bankId: input.bankId,
+    economyId: input.economyId,
   });
 
   if (result?.notFound) return targetNotFound(`venture "${input.ventureId}" not found`);
+  if (result?.partialContext) {
+    return { success: false, error: `WFRP_ECONOMY_VENTURE_PARTIAL_CONTEXT: bankId/economyId must both be present (institution-linked) or both absent (context-free) — one-sided context refused, zero writes` };
+  }
+  if (result?.economyMismatch) {
+    return { success: false, error: `WFRP_ECONOMY_VENTURE_REGISTRY_NOT_HANDLING: venture "${input.ventureId}" does not belong to economy "${input.economyId}" — subscription refused, zero writes` };
+  }
   if (result?.registryNotHandling) {
     return { success: false, error: `WFRP_ECONOMY_VENTURE_REGISTRY_NOT_HANDLING: venture "${input.ventureId}" has no Registry handling it — subscriptions are refused` };
   }
@@ -2306,16 +2633,29 @@ async function handleSettleVenture(input: SettleVentureInput): Promise<Envelope<
 
   if (result?.notFound) return targetNotFound(`venture "${input.ventureId}" not found`);
   if (result?.doesNotSettle) {
-    return { success: false, error: `WFRP_ECONOMY_VENTURE_DOES_NOT_SETTLE: "${input.ventureId}" is open-ended (Partnership/Chartered-Concern) — Wind Up first (set-venture-status to "settling"), or use distribute-venture instead` };
+    return { success: false, error: `${ErrorTokens.WFRP_ECONOMY_VENTURE_DOES_NOT_SETTLE}: "${input.ventureId}" is open-ended (Partnership/Chartered-Concern) — Wind Up first (set-venture-status to "settling"), or use distribute-venture instead` };
   }
   if (result?.escrowSeized) {
     return { success: false, error: `${ErrorTokens.WFRP_ECONOMY_VENTURE_SEIZED}: venture "${input.ventureId}" escrow is Seized — Settle is refused until the badge is cleared` };
+  }
+  // BUG-549 residual fix (2026-07-18): the engine now preflights the holder set BEFORE any write —
+  // a no-holder settlement is refused with zero escrow/status/ledger mutation (previously it credited
+  // netBp + wrote a venture-settle row while the deed stayed Settling, repeatably). Same mapping shape
+  // as distribute-venture's own noHolders branch.
+  if (result?.noHolders) {
+    return notPersisted(`venture "${input.ventureId}" has no holders — settlement refused before any write (subscribe a holder first, or park the deed via set-venture-status)`);
   }
   // B2 FIX (7d2): the engine's {settleDelayed:true} return had NO branch here — this fell through to the
   // success path below, reporting success:true/status:undefined/distributedBp:0 for a settlement that
   // never happened. Now a typed refusal naming the remaining delay.
   if (result?.settleDelayed) {
     return { success: false, error: `${ErrorTokens.WFRP_ECONOMY_VENTURE_SETTLE_DELAYED}: venture "${input.ventureId}" schedule is delayed — ${result.delayCycles} economic cycle(s) remain before it can be settled` };
+  }
+  // Phase 9 validate S3 fix (eval T59): the post-BUG-549 isSettlementReady gate returns
+  // {settlementNotReady:true, status} for a deed not yet at "settling" — the sibling guard to
+  // settleDelayed above, with the same fell-through-to-false-success failure mode. Typed refusal now.
+  if (result?.settlementNotReady) {
+    return { success: false, error: `WFRP_ECONOMY_VENTURE_SETTLE_NOT_READY: venture "${input.ventureId}" is "${result.status}" — only a "settling" deed can settle (Wind Up first via set-venture-status, or let an Expedition reach its reckoning)` };
   }
   // BUG-544 (DP-16): settleVenture now re-reads the store and verifies its escrow/status write before
   // ledgering. Without this branch the engine's `persistedCheckFailed` verdict would fall straight through
@@ -2359,7 +2699,7 @@ async function handleVentureEvent(input: VentureEventInput): Promise<Envelope<un
   const result = await VentureEngine.drawVentureEvent(input.ventureId, { d100Roll: input.d100Roll });
 
   if (result?.notFound) return targetNotFound(`venture "${input.ventureId}" not found`);
-  if (result?.invalidRoll) return { success: false, error: `WFRP_ECONOMY_INVALID_ROLL: d100Roll must be an integer 1-100` };
+  if (result?.invalidRoll) return { success: false, error: `${ErrorTokens.WFRP_ECONOMY_INVALID_ROLL}: d100Roll must be an integer 1-100` };
   if (result?.noEventsForStatus) {
     return { success: false, error: `WFRP_ECONOMY_VENTURE_NO_EVENTS_FOR_STATUS: venture "${input.ventureId}" is ${result.status} — no event table applies` };
   }
@@ -2447,4 +2787,605 @@ async function handleSetVentureStanding(input: SetVentureStandingInput): Promise
   }
   notify.updated('wfrp-economy', `venture ${input.ventureId}`, { summary: `standing now ${result.standing}` });
   return { success: true, data: { action: 'set-venture-standing', ventureId: input.ventureId, standing: result.standing } };
+}
+
+// ── trading (Phase 7f) ──────────────────────────────────────────────────────────
+// DIALOG-PATH: DIALOG_FREE — src/trading/{trading-engine,gazetteer-store,trading-math}.js are all
+// MODAL-PROMPT-FREE + ROLL-FREE (Phase 2 task 2.2/2.4 acceptance: zero Dialog/DialogV2, zero Math.random
+// in trading-math.js/trading-engine.js — confirmed by reading all three files at MCP-authoring time).
+// Every stochastic action below takes a caller pre-rolled total; this handler never awaits a path that
+// could open a Foundry dialog or silently roll.
+
+type TradingListSettlementsInput = Extract<WfrpEconomyInputType, { action: 'trading-list-settlements' }>;
+async function handleTradingListSettlements(input: TradingListSettlementsInput): Promise<Envelope<unknown>> {
+  const GazetteerStore = await importGazetteerStore();
+  const packs = await GazetteerStore.loadActiveGazetteers();
+  const filtered = input.gazetteerId ? packs.filter((p: any) => p?.packId === input.gazetteerId) : packs;
+  if (input.gazetteerId && filtered.length === 0) {
+    return targetNotFound(`gazetteer "${input.gazetteerId}" is not active (or does not exist)`);
+  }
+  const settlements = filtered.flatMap((pack: any) =>
+    (pack.settlements ?? []).map((s: any) => ({
+      name: s.name,
+      gazetteerId: pack.packId,
+      region: pack.label ?? pack.packId,
+      size: Number(s.size ?? 0),
+      wealth: Number(s.wealth ?? 0),
+      population: s.population ?? null,
+      produces: Array.isArray(s.produces) ? s.produces : [],
+      demands: Array.isArray(s.demands) ? s.demands : [],
+      flags: Array.isArray(s.flags) ? s.flags : [],
+    })),
+  );
+  return { success: true, data: { action: 'trading-list-settlements', count: settlements.length, settlements } };
+}
+
+async function handleTradingListCargoTypes(): Promise<Envelope<unknown>> {
+  const GazetteerStore = await importGazetteerStore();
+  const catalog = await GazetteerStore.loadCargoCatalog();
+  const cargoTypes = Array.isArray(catalog) ? catalog : [];
+  return { success: true, data: { action: 'trading-list-cargo-types', count: cargoTypes.length, cargoTypes } };
+}
+
+async function handleTradingGetSeason(): Promise<Envelope<unknown>> {
+  const TradingEngine = await importTradingEngine();
+  const { season, seasonSource } = TradingEngine.tradingSeason();
+  return { success: true, data: { action: 'trading-get-season', season, seasonSource } };
+}
+
+type TradingSetSeasonInput = Extract<WfrpEconomyInputType, { action: 'trading-set-season' }>;
+async function handleTradingSetSeason(input: TradingSetSeasonInput): Promise<Envelope<unknown>> {
+  if (!input.clear && !input.season) {
+    return { success: false, error: 'WFRP_ECONOMY_TRADING_INVALID_INPUT: trading-set-season requires either `season` or `clear:true`' };
+  }
+  const value = input.clear ? '' : (input.season as string);
+  await setSetting('tradingSeason', value);
+
+  const fresh = getSetting('tradingSeason');
+  if (fresh !== value) {
+    return notPersisted(`trading-set-season expected "${value}", read back "${fresh}"`);
+  }
+  const TradingEngine = await importTradingEngine();
+  const resolved = TradingEngine.tradingSeason();
+  notify.updated('wfrp-economy', 'trading season', {
+    summary: input.clear ? 'season override cleared (calendar-derived)' : `season set to ${input.season}`,
+  });
+  return { success: true, data: { action: 'trading-set-season', season: resolved.season, seasonSource: resolved.seasonSource } };
+}
+
+type TradingCheckAvailabilityInput = Extract<WfrpEconomyInputType, { action: 'trading-check-availability' }>;
+async function handleTradingCheckAvailability(input: TradingCheckAvailabilityInput): Promise<Envelope<unknown>> {
+  const TradingEngine = await importTradingEngine();
+  const resolved = await TradingEngine.resolveSettlement(input.settlement);
+  if (resolved.notFound) return targetNotFound(`settlement "${input.settlement}" not found in any active gazetteer`);
+
+  const GazetteerStore = await importGazetteerStore();
+  const TradingMath = await importTradingMath();
+  const [cargoCatalog, tuning] = await Promise.all([GazetteerStore.loadCargoCatalog(), GazetteerStore.loadTuning()]);
+  const season = input.season ?? TradingEngine.tradingSeason().season;
+  const flags = (resolved.settlement.flags ?? []).map((f: string) => String(f).toLowerCase());
+  const slotCount = TradingMath.calculateCargoSlots(resolved.settlement, flags, tuning);
+
+  if (input.rolls.length < slotCount) {
+    return {
+      success: false,
+      error: `WFRP_ECONOMY_TRADING_INSUFFICIENT_ROLLS: "${input.settlement}" needs ${slotCount} pre-rolled {cargoRoll,amountRoll} pair(s) this season, got ${input.rolls.length}`,
+    };
+  }
+
+  const pipeline = TradingMath.runAvailabilityPipeline({ settlement: resolved.settlement, season, cargoCatalog, tuning, rolls: input.rolls });
+  return {
+    success: true,
+    data: { action: 'trading-check-availability', settlement: resolved.settlement.name, season, slotCount: pipeline.slotCount, slots: pipeline.slots },
+  };
+}
+
+type TradingCalcPurchasePriceInput = Extract<WfrpEconomyInputType, { action: 'trading-calc-purchase-price' }>;
+async function handleTradingCalcPurchasePrice(input: TradingCalcPurchasePriceInput): Promise<Envelope<unknown>> {
+  const TradingEngine = await importTradingEngine();
+  const quote = await TradingEngine.quotePurchasePrice({ cargoName: input.cargoName, quantity: input.quantity, season: input.season, quality: input.quality, economyId: input.economyId });
+  if (quote.notFound) return targetNotFound(`cargo "${input.cargoName}" not found in the catalog`);
+  return {
+    success: true,
+    data: {
+      action: 'trading-calc-purchase-price',
+      cargoName: input.cargoName,
+      quantity: input.quantity,
+      season: input.season ?? TradingEngine.tradingSeason().season,
+      pricePerEpBp: Number(quote.pricePerEpBp ?? 0),
+      totalBp: Number(quote.totalBp ?? 0),
+      dialFactor: Number(quote.dialFactor ?? 1),
+    },
+  };
+}
+
+type TradingCalcSalePriceInput = Extract<WfrpEconomyInputType, { action: 'trading-calc-sale-price' }>;
+async function handleTradingCalcSalePrice(input: TradingCalcSalePriceInput): Promise<Envelope<unknown>> {
+  const TradingEngine = await importTradingEngine();
+  const quote = await TradingEngine.quoteSalePrice({
+    cargoName: input.cargoName,
+    quantity: input.quantity,
+    settlementName: input.settlement,
+    season: input.season,
+    quality: input.quality,
+    economyId: input.economyId,
+  });
+  if (quote.notFound) return targetNotFound(`cargo "${input.cargoName}" not found in the catalog`);
+  if (quote.settlementNotFound) return targetNotFound(`settlement "${input.settlement}" not found in any active gazetteer`);
+  return {
+    success: true,
+    data: {
+      action: 'trading-calc-sale-price',
+      cargoName: input.cargoName,
+      quantity: input.quantity,
+      settlement: input.settlement,
+      season: input.season ?? TradingEngine.tradingSeason().season,
+      pricePerEpBp: Number(quote.pricePerEpBp ?? 0),
+      totalBp: Number(quote.totalBp ?? 0),
+      dialFactor: Number(quote.dialFactor ?? 1),
+      linkedDemandApplied: quote.linkedDemandApplied ?? null,
+    },
+  };
+}
+
+type TradingHaggleTestInput = Extract<WfrpEconomyInputType, { action: 'trading-haggle-test' }>;
+async function handleTradingHaggleTest(input: TradingHaggleTestInput): Promise<Envelope<unknown>> {
+  const TradingMath = await importTradingMath();
+  const result = TradingMath.performHaggleTest(input.playerSkill, input.merchantSkill, !!input.hasDealmakerTalent, input.playerRoll, input.merchantRoll);
+  return {
+    success: true,
+    data: {
+      action: 'trading-haggle-test',
+      success: Boolean(result.success),
+      hasDealmakerTalent: Boolean(result.hasDealmakerTalent),
+      player: result.player,
+      merchant: result.merchant,
+      resultDescription: result.resultDescription,
+    },
+  };
+}
+
+type TradingGossipTestInput = Extract<WfrpEconomyInputType, { action: 'trading-gossip-test' }>;
+async function handleTradingGossipTest(input: TradingGossipTestInput): Promise<Envelope<unknown>> {
+  const TradingMath = await importTradingMath();
+  const result = TradingMath.performGossipTest(input.playerSkill, input.playerRoll, input.difficulty ?? -10);
+  const gossipSuccess = Boolean(result.success);
+
+  // Change 2: a successful Gossip Test rolls the RAW 20-band d100 Trade Rumour Table and mints+stores the
+  // row's own rumour — mintAndStoreRumour returns null (zero writes) when gossipSuccess is false.
+  const TradingEngine = await importTradingEngine();
+  const minted = await TradingEngine.mintAndStoreRumour({ gossipSuccess, rumourD100Roll: input.rumourD100Roll });
+  if (minted?.persistedCheckFailed) {
+    return notPersisted(`trading-gossip-test rumour mint failed persistence check: ${minted?.detail ?? 'unknown'}`);
+  }
+  if (minted?.minted) {
+    notify.created('wfrp-economy', 'trade rumour', { summary: `minted rumour ${minted.rumour.id} (goods: ${(minted.rumour.goods ?? []).join(', ')})` });
+  }
+
+  return {
+    success: true,
+    data: {
+      action: 'trading-gossip-test',
+      success: gossipSuccess,
+      degrees: Number(result.degrees ?? 0),
+      resultDescription: result.resultDescription,
+      rumourMinted: minted?.minted ? minted.rumour : null,
+    },
+  };
+}
+
+type TradingBuyCargoInput = Extract<WfrpEconomyInputType, { action: 'trading-buy-cargo' }>;
+async function handleTradingBuyCargo(input: TradingBuyCargoInput): Promise<Envelope<unknown>> {
+  if (!getGame()?.actors?.get?.(input.actorId)) return targetNotFound(`actor "${input.actorId}" not found`);
+
+  const TradingEngine = await importTradingEngine();
+  const result = await TradingEngine.buyCargo({
+    actorId: input.actorId,
+    cargoName: input.cargoName,
+    quantity: input.quantity,
+    settlementName: input.settlement,
+    season: input.season,
+    quality: input.quality,
+    secretQualityD10Roll: input.secretQualityD10Roll,
+    // F04 (validate 2026-07-17): pass through as-is — an omitted value lets the engine derive the
+    // bonus from the settlement's own wineQualityBonus (D3 wiring); explicit values (incl. 0) win.
+    originBonusSteps: input.originBonusSteps,
+    economyId: input.economyId,
+  });
+
+  if (result?.notFound) return targetNotFound(`cargo "${input.cargoName}" not found in the catalog`);
+  if (result?.capacityExceeded) {
+    return {
+      success: false,
+      error: `WFRP_ECONOMY_TRADING_CAPACITY_EXCEEDED: hold capacity ${result.capacity} EP — ${result.currentHoldEp} EP already held, ${input.quantity} EP would overflow it`,
+    };
+  }
+  if (result?.insufficientFunds) {
+    return notPersisted(`trading-buy-cargo of ${input.quantity} EP ${input.cargoName} requires ${result.requiredBp} BP but actor "${input.actorId}" wallet has ${result.walletBalanceBp} BP`);
+  }
+  if (result?.persistedCheckFailed) {
+    return notPersisted(`trading-buy-cargo for actor "${input.actorId}" failed persistence check: ${result?.detail ?? 'unknown'}`);
+  }
+
+  // D12: echo the secret quality — the MCP caller IS the GM surface, so this is not a leak to a player.
+  // getHoldRows() (post-7f vehicle materialization), NOT getHold() — see handleTradingGetHold's comment;
+  // when a vehicle is connected the just-bought lot lives as an embedded Item, absent from getHold()'s
+  // abstract-array read, which would silently null out secretQuality below.
+  const hold = TradingEngine.getHoldRows();
+  const lot = (Array.isArray(hold) ? hold : []).find((l: any) => l?.lotId === result.lotId);
+
+  notify.created('wfrp-economy', actorName(input.actorId) ?? input.actorId, {
+    summary: `bought ${input.quantity} EP ${input.cargoName} at ${input.settlement} for ${result.totalBp} BP (lot ${result.lotId})`,
+  });
+  return {
+    success: true,
+    data: {
+      action: 'trading-buy-cargo',
+      actorId: input.actorId,
+      lotId: result.lotId,
+      cargoName: input.cargoName,
+      quantity: input.quantity,
+      settlement: input.settlement,
+      totalBp: Number(result.totalBp ?? 0),
+      walletBalanceBp: Number(result.walletBalanceBp ?? 0),
+      secretQuality: lot?.secretQuality ?? null,
+      rumourApplied: result.rumourApplied ?? null,
+    },
+  };
+}
+
+type TradingSellCargoInput = Extract<WfrpEconomyInputType, { action: 'trading-sell-cargo' }>;
+async function handleTradingSellCargo(input: TradingSellCargoInput): Promise<Envelope<unknown>> {
+  if (!getGame()?.actors?.get?.(input.actorId)) return targetNotFound(`actor "${input.actorId}" not found`);
+
+  const TradingEngine = await importTradingEngine();
+
+  // Change 2: no more explicit rumourId lookup — sellCargo auto-matches a stored sellBonus rumour against
+  // the lot's cargoName internally and consumes it on a successful sale (see the engine-contract comment
+  // above this file's imports).
+  const result = await TradingEngine.sellCargo({
+    actorId: input.actorId,
+    lotId: input.lotId,
+    settlementName: input.settlement,
+    isTradeSettlement: input.isTradeSettlement,
+    buyerRoll: input.buyerRoll,
+    halfCargoRetryRoll: input.halfCargoRetryRoll,
+    weeksElapsedSincePurchase: input.weeksElapsedSincePurchase ?? 1,
+    topShelfBuyerRoll: input.topShelfBuyerRoll,
+    economyId: input.economyId,
+  });
+
+  if (result?.lotNotFound) return targetNotFound(`cargo lot "${input.lotId}" not found in the hold`);
+  if (result?.notFound) return targetNotFound(`settlement "${input.settlement}" not found in any active gazetteer`);
+  if (result?.refused) {
+    return { success: false, error: `WFRP_ECONOMY_TRADING_SALE_REFUSED: gate=${result.gate} — ${result.verdict?.reason ?? 'refused'}` };
+  }
+  if (result?.persistedCheckFailed) {
+    return notPersisted(`trading-sell-cargo of lot "${input.lotId}" failed persistence check: ${result?.detail ?? 'unknown'}`);
+  }
+
+  const partial = Boolean(result?.soldPartial);
+  notify.updated('wfrp-economy', actorName(input.actorId) ?? input.actorId, {
+    summary: `sold lot ${input.lotId} at ${input.settlement} for ${result.totalBp} BP${partial ? ` (${result.quantitySold} EP of it — ${result.quantityRemaining} EP remaining)` : ''}`,
+  });
+  return {
+    success: true,
+    data: {
+      action: 'trading-sell-cargo',
+      actorId: input.actorId,
+      lotId: input.lotId,
+      settlement: input.settlement,
+      soldPartial: partial,
+      quantitySold: partial ? Number(result.quantitySold ?? 0) : null,
+      quantityRemaining: partial ? Number(result.quantityRemaining ?? 0) : 0,
+      totalBp: Number(result.totalBp ?? 0),
+      walletBalanceBp: Number(result.walletBalanceBp ?? 0),
+      rumourApplied: result.rumourApplied ?? null,
+      linkedDemandApplied: result.linkedDemandApplied ?? null,
+    },
+  };
+}
+
+type TradingDeleteRumourInput = Extract<WfrpEconomyInputType, { action: 'trading-delete-rumour' }>;
+async function handleTradingDeleteRumour(input: TradingDeleteRumourInput): Promise<Envelope<unknown>> {
+  const TradingEngine = await importTradingEngine();
+  const result = await TradingEngine.deleteRumour({ rumourId: input.rumourId });
+
+  if (result?.notFound) return targetNotFound(`rumour "${input.rumourId}" not found`);
+  if (result?.persistedCheckFailed) {
+    return notPersisted(`trading-delete-rumour of "${input.rumourId}" failed persistence check: ${result?.detail ?? 'unknown'}`);
+  }
+  notify.deleted('wfrp-economy', 'trade rumour', { summary: `rumour ${input.rumourId} removed` });
+  return { success: true, data: { action: 'trading-delete-rumour', rumourId: input.rumourId, deleted: true } };
+}
+
+async function handleTradingGetHold(): Promise<Envelope<unknown>> {
+  const TradingEngine = await importTradingEngine();
+  // getHoldRows() (post-7f vehicle materialization), NOT getHold() — getHold() only ever reads the
+  // abstract tradingCargoHold setting, which buyCargo/sellCargo/deleteCargoLot stop touching entirely once
+  // a vehicle is connected (embedded `cargo`-type Items on the vehicle are the record instead). Calling
+  // getHold() here would silently show an empty/stale hold whenever a vehicle is connected.
+  const hold = TradingEngine.getHoldRows();
+  const { capacity, capacitySource, connectedVehicleName } = TradingEngine.getCargoCapacityInfo();
+  const list = Array.isArray(hold) ? hold : [];
+  const currentHoldEp = list.reduce((sum: number, lot: any) => sum + Number(lot?.quantity ?? 0), 0);
+  return {
+    success: true,
+    data: { action: 'trading-get-hold', capacity, capacitySource, connectedVehicleName: connectedVehicleName ?? null, currentHoldEp, count: list.length, hold: list },
+  };
+}
+
+async function handleTradingListVehicleActors(): Promise<Envelope<unknown>> {
+  const TradingEngine = await importTradingEngine();
+  const actors = TradingEngine.discoverCargoVehicleActors();
+  const list = Array.isArray(actors) ? actors : [];
+  return { success: true, data: { action: 'trading-list-vehicle-actors', count: list.length, actors: list } };
+}
+
+type TradingConnectCargoVehicleInput = Extract<WfrpEconomyInputType, { action: 'trading-connect-cargo-vehicle' }>;
+async function handleTradingConnectCargoVehicle(input: TradingConnectCargoVehicleInput): Promise<Envelope<unknown>> {
+  if (!getGame()?.actors?.get?.(input.actorId)) return targetNotFound(`actor "${input.actorId}" not found`);
+
+  const TradingEngine = await importTradingEngine();
+  const result = await TradingEngine.connectCargoVehicle({ actorId: input.actorId });
+
+  if (result?.notFound) return targetNotFound(`actor "${input.actorId}" is not a vehicle-type actor`);
+  if (result?.persistedCheckFailed) {
+    return notPersisted(`trading-connect-cargo-vehicle for actor "${input.actorId}" failed persistence check: ${result?.detail ?? 'unknown'}`);
+  }
+  notify.updated('wfrp-economy', actorName(input.actorId) ?? input.actorId, { summary: `connected as the cargo hold's vehicle (carries.max ${result.carriesMax})` });
+  return {
+    success: true,
+    data: { action: 'trading-connect-cargo-vehicle', actorId: input.actorId, actorUuid: result.actorUuid, carriesMax: Number(result.carriesMax ?? 0) },
+  };
+}
+
+async function handleTradingDisconnectCargoVehicle(): Promise<Envelope<unknown>> {
+  const TradingEngine = await importTradingEngine();
+  const result = await TradingEngine.disconnectCargoVehicle();
+
+  if (result?.persistedCheckFailed) {
+    return notPersisted(`trading-disconnect-cargo-vehicle failed persistence check: ${result?.detail ?? 'unknown'}`);
+  }
+  notify.updated('wfrp-economy', 'cargo hold', { summary: 'vehicle disconnected — capacity reverted to the manual setting' });
+  return { success: true, data: { action: 'trading-disconnect-cargo-vehicle', disconnected: true } };
+}
+
+async function handleTradingListGazetteers(): Promise<Envelope<unknown>> {
+  const GazetteerStore = await importGazetteerStore();
+  const activeIds: string[] = GazetteerStore.readActiveGazetteerIds();
+  const imported = GazetteerStore.readImportedGazetteers();
+
+  const builtinRows = await Promise.all(
+    (GazetteerStore.BUILTIN_GAZETTEER_IDS as string[]).map(async (packId: string) => {
+      try {
+        const pack = await GazetteerStore.loadBuiltinPack(packId);
+        return {
+          packId,
+          label: pack?.label ?? packId,
+          builtin: true,
+          active: activeIds.includes(packId),
+          settlementCount: Array.isArray(pack?.settlements) ? pack.settlements.length : 0,
+        };
+      } catch (e) {
+        return {
+          packId,
+          label: packId,
+          builtin: true,
+          active: activeIds.includes(packId),
+          settlementCount: 0,
+          loadError: e instanceof Error ? e.message : String(e),
+        };
+      }
+    }),
+  );
+  const importedRows = Object.entries(imported).map(([packId, pack]: [string, any]) => ({
+    packId,
+    label: pack?.label ?? packId,
+    builtin: false,
+    active: activeIds.includes(packId),
+    settlementCount: Array.isArray(pack?.settlements) ? pack.settlements.length : 0,
+  }));
+
+  const gazetteers = [...builtinRows, ...importedRows];
+  return { success: true, data: { action: 'trading-list-gazetteers', count: gazetteers.length, activeIds, gazetteers } };
+}
+
+type TradingImportGazetteerInput = Extract<WfrpEconomyInputType, { action: 'trading-import-gazetteer' }>;
+async function handleTradingImportGazetteer(input: TradingImportGazetteerInput): Promise<Envelope<unknown>> {
+  const GazetteerStore = await importGazetteerStore();
+  const result = await GazetteerStore.importGazetteerPack(input.pack);
+
+  if (result?.invalidPack) {
+    return { success: false, error: `WFRP_ECONOMY_TRADING_INVALID_GAZETTEER: ${result.detail}` };
+  }
+  if (result?.persistedCheckFailed) {
+    return notPersisted(`trading-import-gazetteer "${result.packId}" failed persistence check: ${result?.detail ?? 'unknown'}`);
+  }
+  const settlementCount = Array.isArray((input.pack as any)?.settlements) ? (input.pack as any).settlements.length : 0;
+  notify.created('wfrp-economy', result.packId, { summary: `imported gazetteer "${result.packId}" (${settlementCount} settlement(s))` });
+  return { success: true, data: { action: 'trading-import-gazetteer', packId: result.packId, settlementCount } };
+}
+
+type TradingConfigureGazetteersInput = Extract<WfrpEconomyInputType, { action: 'trading-configure-gazetteers' }>;
+async function handleTradingConfigureGazetteers(input: TradingConfigureGazetteersInput): Promise<Envelope<unknown>> {
+  const GazetteerStore = await importGazetteerStore();
+  const result = await GazetteerStore.setActiveGazetteerIds(input.activeIds);
+  if (result?.persistedCheckFailed) {
+    return notPersisted(`trading-configure-gazetteers failed persistence check: ${result?.detail ?? 'unknown'}`);
+  }
+  notify.updated('wfrp-economy', 'active gazetteers', { summary: `active gazetteers now: ${(result.active ?? []).join(', ') || '(none)'}` });
+  return { success: true, data: { action: 'trading-configure-gazetteers', active: result.active ?? [] } };
+}
+
+type TradingGenerateMerchantInput = Extract<WfrpEconomyInputType, { action: 'trading-generate-merchant' }>;
+async function handleTradingGenerateMerchant(input: TradingGenerateMerchantInput): Promise<Envelope<unknown>> {
+  const TradingEngine = await importTradingEngine();
+  const resolved = await TradingEngine.resolveSettlement(input.settlement);
+  if (resolved.notFound) return targetNotFound(`settlement "${input.settlement}" not found in any active gazetteer`);
+
+  const GazetteerStore = await importGazetteerStore();
+  const TradingMath = await importTradingMath();
+  const tuning = await GazetteerStore.loadTuning();
+
+  const merchant = TradingMath.generateMerchant({
+    settlement: resolved.settlement,
+    cargoType: input.cargoType,
+    merchantType: input.merchantType,
+    percentileRoll: input.percentileRoll,
+    merchantId: randomId(),
+    skillDistribution: tuning?.skillDistribution ?? {},
+    specialSourceBehaviors: tuning?.specialSourceBehaviors ?? {},
+  });
+
+  return { success: true, data: { action: 'trading-generate-merchant', ...merchant } };
+}
+
+type TradingRevealQualityInput = Extract<WfrpEconomyInputType, { action: 'trading-reveal-quality' }>;
+async function handleTradingRevealQuality(input: TradingRevealQualityInput): Promise<Envelope<unknown>> {
+  const TradingEngine = await importTradingEngine();
+  // getHoldRows() (post-7f vehicle materialization) — see handleTradingGetHold's comment; a vehicle-mode
+  // lot lives as an embedded Item, invisible to getHold()'s abstract-array read.
+  const hold = TradingEngine.getHoldRows();
+  const lot = (Array.isArray(hold) ? hold : []).find((l: any) => l?.lotId === input.lotId);
+  if (!lot) return targetNotFound(`cargo lot "${input.lotId}" not found in the hold`);
+  if (!lot.secretQuality) {
+    return { success: false, error: `WFRP_ECONOMY_TRADING_NO_SECRET_QUALITY: lot "${input.lotId}" (${lot.cargoName}) carries no secret quality tier to reveal` };
+  }
+
+  const TradingMath = await importTradingMath();
+  const revealed = TradingMath.revealQuality({
+    trueTierIndex: lot.secretQuality.tierIndex,
+    evaluateSuccess: input.evaluateSuccess,
+    sl: input.sl,
+    misreportDirection: input.misreportDirection ?? 1,
+  });
+
+  return {
+    success: true,
+    data: {
+      action: 'trading-reveal-quality',
+      lotId: input.lotId,
+      cargoName: lot.cargoName,
+      revealedTier: revealed.revealedTier,
+      misreported: Boolean(revealed.misreported),
+      trueTier: lot.secretQuality.tier, // GM-only ground truth — the MCP caller IS the GM surface (D12)
+    },
+  };
+}
+
+// Phase 7f (task 4.3): the NEW trading dial lives under THIS module's own namespace (SETTING_SCOPE =
+// 'wfrp4e-economy'). The OLD dial registration at settings.ts:~297 (`warhammer-mcp`.`tradingPriceModifiers`,
+// consumed by module-trading-places' get/set-price-modifiers) stays untouched for the still-live old
+// umbrella until Phase 7g retirement — the two dials are deliberately separate stores (D2 seed-once
+// migration copies the old value into this one ONCE, at first engine init; they don't stay in sync after).
+function tradingDial(): { global: number; perCargo: Record<string, number> } {
+  return getSetting('tradingPriceModifiers') ?? { global: 1, perCargo: {} };
+}
+
+function handleTradingGetPriceModifiers(): Envelope<unknown> {
+  const dial = tradingDial();
+  return { success: true, data: { action: 'trading-get-price-modifiers', global: dial.global, perCargo: dial.perCargo } };
+}
+
+type TradingSetPriceModifiersInput = Extract<WfrpEconomyInputType, { action: 'trading-set-price-modifiers' }>;
+async function handleTradingSetPriceModifiers(input: TradingSetPriceModifiersInput): Promise<Envelope<unknown>> {
+  const previous = tradingDial();
+  const next = input.reset
+    ? { global: 1, perCargo: {} }
+    : { global: input.global ?? previous.global, perCargo: { ...previous.perCargo, ...(input.perCargo ?? {}) } };
+
+  await setSetting('tradingPriceModifiers', next);
+
+  const persisted = tradingDial();
+  const roundTripOk = persisted.global === next.global && JSON.stringify(persisted.perCargo) === JSON.stringify(next.perCargo);
+  if (!roundTripOk) {
+    return notPersisted('trading-set-price-modifiers wrote a value that did not round-trip through the tradingPriceModifiers setting');
+  }
+
+  notify.updated('wfrp-economy', 'trading price dial', {
+    summary: `global ${previous.global} → ${next.global}${Object.keys(next.perCargo).length ? `, ${Object.keys(next.perCargo).length} perCargo override(s)` : ''}`,
+  });
+  return { success: true, data: { action: 'trading-set-price-modifiers', previous, current: next } };
+}
+
+async function handleTradingMigrationStatus(): Promise<Envelope<unknown>> {
+  const TradingEngine = await importTradingEngine();
+  const result = await TradingEngine.ensureMigrated();
+
+  if (result?.persistedCheckFailed) {
+    return notPersisted(`trading-migration-status seed-once write failed persistence check: ${result?.detail ?? 'unknown'}`);
+  }
+  if (result?.alreadyMigrated) {
+    notify.updated('wfrp-economy', 'trading migration', { summary: `already migrated (source: ${result.migratedFrom})` });
+    return { success: true, data: { action: 'trading-migration-status', migrated: true, alreadyMigrated: true, migratedFrom: result.migratedFrom } };
+  }
+  notify.created('wfrp-economy', 'trading migration', {
+    summary: `seed-once migration ran — season ${result.seededSeason ?? 'n/a'}, ${result.seededHoldCount} hold lot(s), capacity ${result.seededCapacity ?? 'n/a'}, dial seeded ${result.seededDial}`,
+  });
+  return {
+    success: true,
+    data: {
+      action: 'trading-migration-status',
+      migrated: true,
+      alreadyMigrated: false,
+      seededSeason: result.seededSeason ?? null,
+      seededHoldCount: Number(result.seededHoldCount ?? 0),
+      seededCapacity: result.seededCapacity ?? null,
+      seededDial: Boolean(result.seededDial),
+    },
+  };
+}
+
+// Phase 8 (D1/D4/D11) — economic climate. F03 fix (2026-07-18): the hand-copied TS mirror of the D13
+// table is GONE — labels/factors are read from the FORK's own CLIMATE_STATES (re-exported by
+// trading-engine.js from climate-math.js) at echo time, so a D13 re-tune is a one-file fork edit and
+// the echo can never lie. This handler still never computes a price/income/event number itself (D2).
+type ClimateStatesTable = Record<string, { labelKey: string; priceFactor: number; incomeFactor: number; eventShift: number }>;
+
+function climateResultFrom(action: 'climate-get-state' | 'climate-set-state', economyId: string, record: { state: string; updatedAt: number | null }, states: ClimateStatesTable): Envelope<unknown> {
+  const meta = states[record.state] ?? states.none!;
+  const label = (globalThis as any).game?.i18n?.localize?.(meta.labelKey) ?? record.state;
+  return {
+    success: true,
+    data: {
+      action,
+      economyId,
+      state: record.state,
+      label,
+      priceFactor: meta.priceFactor,
+      incomeFactor: meta.incomeFactor,
+      eventShift: meta.eventShift,
+      updatedAt: record.updatedAt,
+    },
+  };
+}
+
+type ClimateGetStateInput = Extract<WfrpEconomyInputType, { action: 'climate-get-state' }>;
+async function handleClimateGetState(input: ClimateGetStateInput): Promise<Envelope<unknown>> {
+  // Validate economy existence like climate-set-state/get-economy do — without this, a guessed/typo'd
+  // economyId silently returns the identity `none`/Stable record instead of failing loud (Phase 9
+  // validate S3 sweep finding: a bogus id read back as a plausible "Stable" climate).
+  if (!findEconomy(input.economyId)) return targetNotFound(`economy "${input.economyId}" not found`);
+  const TradingEngine = await importTradingEngine();
+  // addendum-2: climate is per-economy — reads that economy's record (missing key = identity `none`).
+  const record = TradingEngine.getEconomicClimate(input.economyId);
+  return climateResultFrom('climate-get-state', input.economyId, record, TradingEngine.CLIMATE_STATES);
+}
+
+type ClimateSetStateInput = Extract<WfrpEconomyInputType, { action: 'climate-set-state' }>;
+async function handleClimateSetState(input: ClimateSetStateInput): Promise<Envelope<unknown>> {
+  const TradingEngine = await importTradingEngine();
+  const written = await TradingEngine.setEconomicClimate(input.economyId, input.state);
+  if ((written as { economyNotFound?: boolean })?.economyNotFound) {
+    return targetNotFound(`economy "${input.economyId}" not found — climate-set-state refused, zero writes`);
+  }
+
+  const persisted = TradingEngine.getEconomicClimate(input.economyId);
+  if (persisted?.state !== written.state || persisted?.updatedAt !== written.updatedAt) {
+    return notPersisted('climate-set-state wrote a value that did not round-trip through the economicClimate setting');
+  }
+
+  notify.updated('wfrp-economy', 'economic climate', { summary: `climate set to ${input.state} for economy ${input.economyId}` });
+  return climateResultFrom('climate-set-state', input.economyId, persisted, TradingEngine.CLIMATE_STATES);
 }
