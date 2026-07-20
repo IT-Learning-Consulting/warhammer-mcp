@@ -150,9 +150,13 @@ const tradingPriceMultiplier = z.number().positive(); // price-dial multiplier, 
 // Phase 8 (D1): the 8 economic-climate state ids — MUST mirror climate-math.js CLIMATE_STATE_IDS exactly
 // (fork engine): 4 positive-class + none + 3 negative-class per D1's generalization directive.
 const climateStateEnum = z.enum(['prosperity', 'bountiful-harvest', 'festival', 'none', 'banditry', 'plague', 'war', 'siege']);
-// One pre-rolled { cargoRoll, amountRoll } pair per availability-pipeline slot (memo F5 — no Foundry
-// `new Roll("1d100")` fallback exists; over-supply is fine, extras are ignored by runAvailabilityPipeline).
-const tradingAvailabilityRollPair = z.object({ cargoRoll: tradingD100Roll, amountRoll: tradingD100Roll }).strict();
+// One pre-rolled { availabilityRoll, cargoRoll, amountRoll } triple per availability-pipeline POTENTIAL
+// slot (memo F5 — no Foundry `new Roll("1d100")` fallback exists; over-supply is fine, extras are ignored
+// by runAvailabilityPipeline). GM directive 2026-07-19 (P10-4): availabilityRoll is the RAW "Availability
+// of Goods" gate (Gazetteer of the Reikland p.75, d100 <= (Size+Wealth)x10) — rolled and checked
+// INDIVIDUALLY per potential slot; a slot whose availabilityRoll fails contributes no cargo at all. Before
+// P10-4 this field didn't exist and every potential slot always produced a cargo — that was the bug.
+const tradingAvailabilityRollPair = z.object({ availabilityRoll: tradingD100Roll, cargoRoll: tradingD100Roll, amountRoll: tradingD100Roll }).strict();
 
 // Phase 7e2: an income-source entry (mirrors WfrpEconomyIncomeModifier / the fork's
 // validateIncomeSources rules — cross-field/tier/standing enforcement lives in the handler, not here,
@@ -195,7 +199,16 @@ const stockObj = z.record(z.unknown());
 export const WfrpEconomyInput = z.discriminatedUnion('action', [
   // ── stand-up-an-economy idiom ───────────────────────────────────────────────────
   z.object({ action: z.literal('list-economies') }).strict(),
-  z.object({ action: z.literal('get-economy'), economyId: economyId }).strict(),
+  z
+    .object({
+      action: z.literal('get-economy'),
+      economyId: economyId,
+      // Follow-up plan (2026-07-19): optional convenience filter over the returned properties array —
+      // additive, HC8-safe (no new action/tool). Matches the wfrp4e-economy fork UI's Available/Owned
+      // split (owner == null = available). Omitted/'all' = today's unfiltered behavior (back-compat).
+      propertyFilter: z.enum(['all', 'owned', 'available']).optional(),
+    })
+    .strict(),
   z.object({ action: z.literal('list-bankers'), economyId: economyId.optional() }).strict(),
   z
     .object({
@@ -606,6 +619,11 @@ export const WfrpEconomyInput = z.discriminatedUnion('action', [
     })
     .strict(),
   z.object({ action: z.literal('distribute-venture'), ventureId, confirm: z.boolean().optional() }).strict(),
+  // delete-venture — closes BUG-821's delete half. The engine already refuses a deed whose escrow is
+  // non-empty AND still has at least one payable holder; it permits the delete (writing the residue
+  // off) only when EVERY holder is unpayable, i.e. deleted actors and/or external names nobody can be
+  // paid through. That orphan case was previously unrecoverable except by raw settings surgery.
+  z.object({ action: z.literal('delete-venture'), ventureId, confirm: z.boolean().optional() }).strict(),
   z.object({ action: z.literal('venture-event'), ventureId, d100Roll: z.number().int().min(1).max(100) }).strict(),
 
   // ── Phase 7d2 (Venture Events v2, D13) — 4 new GM actions ───────────────────────
@@ -666,7 +684,7 @@ export const WfrpEconomyInput = z.discriminatedUnion('action', [
       quality: tradingQuality.optional(),
       season: tradingSeasonEnum.optional(),
       // addendum-2: per-economy climate — optional (HC8-additive); omitted = identity/no climate factor.
-      economyId: z.string().min(1).optional(),
+      economyId: economyId.optional(),
     })
     .strict(),
   z
@@ -678,7 +696,7 @@ export const WfrpEconomyInput = z.discriminatedUnion('action', [
       quality: tradingQuality.optional(),
       season: tradingSeasonEnum.optional(),
       // addendum-2: per-economy climate — optional (HC8-additive); omitted = identity/no climate factor.
-      economyId: z.string().min(1).optional(),
+      economyId: economyId.optional(),
     })
     .strict(),
   z
@@ -732,6 +750,11 @@ export const WfrpEconomyInput = z.discriminatedUnion('action', [
       // Change 2 redesign: rumourId dropped — the engine now auto-matches a stored sellBonus rumour by
       // cargo name (first eligible match wins, mint order) and consumes it itself; no explicit id param.
       topShelfBuyerRoll: tradingD10Roll.optional(), // Top Shelf Wine/Brandy self-supply exception (RAW)
+      // P10-4 (GM directive 2026-07-19): RAW Selling #6/#7 guaranteed fire sale. Opt-in — only consulted
+      // when buyerChance (and its half-cargo retry, if halfCargoRetryRoll was supplied) BOTH fail; a
+      // Trade-flagged settlement then always sells at flat half base price (no wealth/haggle/rumour
+      // modifiers). Omitted/false preserves the pre-existing hard-refusal-on-failure behavior.
+      acceptFireSale: z.boolean().optional(),
     })
     .strict(),
   // Change 1 (GM-only removal): mirrors the deepClone-read -> filter-out -> write -> verify idiom used by
@@ -781,8 +804,8 @@ export const WfrpEconomyInput = z.discriminatedUnion('action', [
   // war never touches Brettonia's harvest): both actions REQUIRE economyId, same posture as the levy
   // actions. set is GM-gated in the handler (mirrors trading-set-price-modifiers) and takes exactly one
   // of the 8 climate-state ids; an unknown economyId refuses with zero writes.
-  z.object({ action: z.literal('climate-get-state'), economyId: z.string().min(1) }).strict(),
-  z.object({ action: z.literal('climate-set-state'), economyId: z.string().min(1), state: climateStateEnum }).strict(),
+  z.object({ action: z.literal('climate-get-state'), economyId: economyId }).strict(),
+  z.object({ action: z.literal('climate-set-state'), economyId: economyId, state: climateStateEnum }).strict(),
 ]);
 
 export type WfrpEconomyInputType = z.infer<typeof WfrpEconomyInput>;

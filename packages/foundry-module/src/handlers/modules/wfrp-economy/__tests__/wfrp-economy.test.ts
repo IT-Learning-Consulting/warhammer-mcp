@@ -1654,6 +1654,58 @@ describe('venture-ledger — get-venture / list-ventures (pure reads)', () => {
     expect(res.data.deedDateText).toBe('1 Nachexen 2522');
   });
 
+  it('BUG-822: get-venture projects handledBy (stored, filter-driving, previously never echoed)', async () => {
+    const { settings } = makeSettings();
+    const inst = {
+      id: 'v1', name: 'Reik Cargo Run', type: 'expedition', status: 'open', standing: 'reputable',
+      parts: { total: 10, subscribed: 0, priceBp: 240 }, escrowBp: 0, capitalBp: 0,
+      holders: [], queuedTransfers: [], badges: [], notices: [],
+      handledBy: [{ role: 'registry', name: 'Bank of Reikland', bankId: 'b1', economyId: 'e1' }],
+    };
+    const getVenture = vi.fn(async () => inst);
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ getVenture });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'get-venture', ventureId: 'v1' });
+    expect(res.success).toBe(true);
+    expect(res.data.handledBy).toEqual([{ role: 'registry', name: 'Bank of Reikland', bankId: 'b1', economyId: 'e1' }]);
+  });
+
+  it('BUG-822: a Phase-7d context-free handledBy entry normalises its absent fields to null, not undefined', async () => {
+    // Pre-Phase-7e entries carry a role and nothing else. They must still round-trip as a present
+    // field with explicit nulls — `undefined` would be dropped by JSON serialisation, leaving the
+    // caller unable to distinguish "no Registry" from "field not implemented".
+    const { settings } = makeSettings();
+    const inst = {
+      id: 'v1', name: 'Old Deed', type: 'expedition', status: 'open', standing: 'reputable',
+      parts: { total: 10, subscribed: 0, priceBp: 240 }, escrowBp: 0, capitalBp: 0,
+      holders: [], queuedTransfers: [], badges: [], notices: [],
+      handledBy: [{ role: 'registry' }],
+    };
+    const getVenture = vi.fn(async () => inst);
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ getVenture });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'get-venture', ventureId: 'v1' });
+    expect(res.data.handledBy).toEqual([{ role: 'registry', name: null, bankId: null, economyId: null }]);
+  });
+
+  it('BUG-822: create-venture echoes the PERSISTED (sanitised) handledBy, not the raw input', async () => {
+    const { settings } = makeSettings();
+    const createVenture = vi.fn(async () => ({
+      instanceId: 'v9', name: 'New Deed', type: 'partnership', status: 'open', standing: 'reputable', escrowBp: 0,
+      handledBy: [{ role: 'registry', name: 'Sanitised Registry', bankId: 'b1', economyId: 'e1' }],
+    }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ createVenture });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({
+      action: 'create-venture', economyId: 'e1', name: 'New Deed', type: 'partnership',
+      parts: { total: 4, priceBp: 100 },
+      handledBy: [{ role: 'registry', name: 'Raw Input Registry', bankId: 'b1', economyId: 'e1' }],
+      confirm: true,
+    });
+    expect(res.success).toBe(true);
+    expect(res.data.handledBy[0].name).toBe('Sanitised Registry');
+  });
+
   it('get-venture on a missing deed → WFRP_ECONOMY_TARGET_NOT_FOUND', async () => {
     const { settings } = makeSettings();
     const getVenture = vi.fn(async () => ({ notFound: true }));
@@ -2025,6 +2077,76 @@ describe('venture-ledger — venture-event (no confirm gate, mirrors enterprise-
   });
 });
 
+describe('venture-ledger — delete-venture (closes BUG-821 delete half)', () => {
+  it('WITHOUT confirm → WFRP_ECONOMY_CONFIRM_REQUIRED, engine never called', async () => {
+    const { settings } = makeSettings();
+    const deleteVenture = vi.fn();
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ deleteVenture });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'delete-venture', ventureId: 'v1' });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_CONFIRM_REQUIRED');
+    expect(deleteVenture).not.toHaveBeenCalled();
+  });
+
+  it('WITH confirm:true forwards ventureId exactly and returns the deed name', async () => {
+    const { settings } = makeSettings();
+    const deleteVenture = vi.fn(async () => ({ deleted: true, name: 'Doomed Deed', writtenOffBp: 0 }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ deleteVenture });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'delete-venture', ventureId: 'v1', confirm: true });
+    expect(res.success).toBe(true);
+    expect(deleteVenture).toHaveBeenCalledWith('v1');
+    expect(res.data.name).toBe('Doomed Deed');
+    expect(res.data.writtenOffBp).toBe(0);
+  });
+
+  it('escrowNotEmpty verdict → typed refusal naming the balance, NOT a success', async () => {
+    // The deed still has a holder who could be paid. Deleting here would silently destroy claimable
+    // coin, so the engine refuses and the handler must surface that as a failure envelope.
+    const { settings } = makeSettings();
+    const deleteVenture = vi.fn(async () => ({ escrowNotEmpty: true, escrowBp: 1470 }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ deleteVenture });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'delete-venture', ventureId: 'v1', confirm: true });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_VENTURE_ESCROW_NOT_EMPTY');
+    expect(res.error).toContain('1470');
+  });
+
+  it('orphaned deed (every holder unpayable) deletes and reports the written-off amount', async () => {
+    // The P9-Smoke shape that previously required raw settings surgery: escrow > 0 but nobody left to
+    // pay. writtenOffBp must be reported so the GM is told the coin vanished rather than being paid out.
+    const { settings } = makeSettings();
+    const deleteVenture = vi.fn(async () => ({ deleted: true, name: 'P9 Smoke Expedition', writtenOffBp: 1470 }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ deleteVenture });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'delete-venture', ventureId: 'orphan', confirm: true });
+    expect(res.success).toBe(true);
+    expect(res.data.writtenOffBp).toBe(1470);
+  });
+
+  it('notFound verdict → WFRP_ECONOMY_TARGET_NOT_FOUND', async () => {
+    const { settings } = makeSettings();
+    const deleteVenture = vi.fn(async () => ({ notFound: true }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ deleteVenture });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'delete-venture', ventureId: 'ghost', confirm: true });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_TARGET_NOT_FOUND');
+  });
+
+  it('persistedCheckFailed verdict → WFRP_ECONOMY_NOT_PERSISTED (DP-16)', async () => {
+    const { settings } = makeSettings();
+    const deleteVenture = vi.fn(async () => ({ deleted: true, name: 'Ghost', writtenOffBp: 0, persistedCheckFailed: true, detail: 'still present after delete' }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ deleteVenture });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'delete-venture', ventureId: 'v1', confirm: true });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('NOT_PERSISTED');
+  });
+});
+
 describe('venture-ledger — toggle-venture-badge (7d2, D7/D13)', () => {
   it('WITHOUT confirm → WFRP_ECONOMY_CONFIRM_REQUIRED, engine never called', async () => {
     const { settings } = makeSettings();
@@ -2316,14 +2438,15 @@ describe('trading — trading-check-availability', () => {
     const loadCargoCatalog = vi.fn(async () => [{ name: 'Grain' }]);
     const loadTuning = vi.fn(async () => ({ cargoSlots: {} }));
     const calculateCargoSlots = vi.fn(() => 1);
-    const runAvailabilityPipeline = vi.fn(() => ({ slotCount: 1, slots: [{ slotNumber: 1, cargo: { name: 'Grain', category: 'food', probability: 100, weight: 1 }, amountEp: 50 }] }));
+    const runAvailabilityPipeline = vi.fn(() => ({ potentialSlotCount: 1, slotCount: 1, slots: [{ slotNumber: 1, cargo: { name: 'Grain', category: 'food', probability: 100, weight: 1 }, amountEp: 50 }] }));
     (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ resolveSettlement, tradingSeason, loadCargoCatalog, loadTuning, calculateCargoSlots, runAvailabilityPipeline });
     (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings });
-    const rolls = [{ cargoRoll: 50, amountRoll: 50 }];
+    const rolls = [{ availabilityRoll: 1, cargoRoll: 50, amountRoll: 50 }];
     const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-check-availability', settlement: 'ALTDORF', rolls });
     expect(res.success).toBe(true);
     expect(resolveSettlement).toHaveBeenCalledWith('ALTDORF');
     expect(runAvailabilityPipeline).toHaveBeenCalledWith({ settlement: RIVER, season: 'spring', cargoCatalog: [{ name: 'Grain' }], tuning: { cargoSlots: {} }, rolls });
+    expect(res.data.potentialSlotCount).toBe(1);
     expect(res.data.slotCount).toBe(1);
     expect(res.data.settlement).toBe('ALTDORF');
   });
@@ -2332,7 +2455,7 @@ describe('trading — trading-check-availability', () => {
     const resolveSettlement = vi.fn(async () => ({ notFound: true }));
     (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ resolveSettlement });
     (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings });
-    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-check-availability', settlement: 'NOWHERE', rolls: [{ cargoRoll: 1, amountRoll: 1 }] });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-check-availability', settlement: 'NOWHERE', rolls: [{ availabilityRoll: 1, cargoRoll: 1, amountRoll: 1 }] });
     expect(res.success).toBe(false);
     expect(res.error).toContain('WFRP_ECONOMY_TARGET_NOT_FOUND');
   });
@@ -2346,7 +2469,7 @@ describe('trading — trading-check-availability', () => {
     const runAvailabilityPipeline = vi.fn();
     (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ resolveSettlement, tradingSeason, loadCargoCatalog, loadTuning, calculateCargoSlots, runAvailabilityPipeline });
     (globalThis as any).game = makeGame({ active: true, settings: makeSettings().settings });
-    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-check-availability', settlement: 'ALTDORF', rolls: [{ cargoRoll: 1, amountRoll: 1 }] });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'trading-check-availability', settlement: 'ALTDORF', rolls: [{ availabilityRoll: 1, cargoRoll: 1, amountRoll: 1 }] });
     expect(res.success).toBe(false);
     expect(res.error).toContain('WFRP_ECONOMY_TRADING_INSUFFICIENT_ROLLS');
     expect(res.error).toContain('3');
@@ -2574,7 +2697,7 @@ describe('trading — trading-sell-cargo (RAW demand gates)', () => {
     expect(res.success).toBe(true);
     expect(sellCargo).toHaveBeenCalledWith({
       actorId: 'a1', economyId: ECO, lotId: 'lot1', settlementName: 'KEMPERBAD', isTradeSettlement: true, buyerRoll: 20,
-      halfCargoRetryRoll: 40, weeksElapsedSincePurchase: 2, topShelfBuyerRoll: 7,
+      halfCargoRetryRoll: 40, weeksElapsedSincePurchase: 2, topShelfBuyerRoll: 7, acceptFireSale: false,
     });
     expect(Object.keys(sellCargo.mock.calls[0][0])).not.toContain('rumour');
     expect(Object.keys(sellCargo.mock.calls[0][0])).not.toContain('rumourId');

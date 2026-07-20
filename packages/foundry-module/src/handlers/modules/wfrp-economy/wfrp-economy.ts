@@ -636,6 +636,8 @@ export async function dispatchModuleWfrpEconomy(data: unknown): Promise<Envelope
         return await handleSettleVenture(input);
       case 'distribute-venture':
         return await handleDistributeVenture(input);
+      case 'delete-venture':
+        return await handleDeleteVenture(input);
       case 'venture-event':
         return await handleVentureEvent(input);
       // ── venture-ledger (Phase 7d2 — Venture Events v2) ──
@@ -738,6 +740,17 @@ type GetEconomyInput = Extract<WfrpEconomyInputType, { action: 'get-economy' }>;
 function handleGetEconomy(input: GetEconomyInput): Envelope<unknown> {
   const economy = findEconomy(input.economyId);
   if (!economy) return targetNotFound(`economy "${input.economyId}" not found`);
+  // Follow-up plan (2026-07-19): optional propertyFilter — matches the wfrp4e-economy fork UI's
+  // Available/Owned split (owner == null = available). Loose equality (not `!p.owner`) so `null`,
+  // `undefined`, and a missing key all count as unowned regardless of which creation path wrote the
+  // record (memo risk note: update-economy's properties[] doesn't visibly default-merge owner).
+  const allProperties = economy.properties ?? [];
+  const properties =
+    input.propertyFilter === 'owned'
+      ? allProperties.filter((p: any) => p?.owner != null)
+      : input.propertyFilter === 'available'
+        ? allProperties.filter((p: any) => p?.owner == null)
+        : allProperties;
   return {
     success: true,
     data: {
@@ -746,7 +759,7 @@ function handleGetEconomy(input: GetEconomyInput): Envelope<unknown> {
       name: economy.name,
       currency: economy.currency ?? '',
       banks: economy.banks ?? [],
-      properties: economy.properties ?? [],
+      properties,
       stocks: economy.stocks ?? [], // frozen — R7d.7
       ventureCount: ventureCount(), // ADDITIVE, Phase 7d — world-scoped, not per-economy
     },
@@ -2464,6 +2477,22 @@ function ventureQueuedTransferEntry(o: any): {
   };
 }
 
+/**
+ * BUG-822 — the D8 Registry/institution array. It is stored on the deed and DRIVES list-ventures
+ * bankId filtering, and the mcp-server result types have always declared it, but no venture response
+ * ever emitted it: callers could not see which Registry handles a deed without settings access. Shape
+ * mirrors `WfrpEconomyVentureHandledByEntry` exactly (nulls, not undefined, so the field is always
+ * present in JSON rather than silently dropped by serialisation).
+ */
+function ventureHandledByEntry(h: any) {
+  return {
+    role: String(h?.role ?? ''),
+    name: h?.name ?? null,
+    bankId: h?.bankId ?? null,
+    economyId: h?.economyId ?? null,
+  };
+}
+
 function ventureSummaryEntry(inst: any) {
   return {
     ventureId: inst?.id,
@@ -2475,7 +2504,15 @@ function ventureSummaryEntry(inst: any) {
     partsSubscribed: Number(inst?.parts?.subscribed ?? 0),
     priceBp: Number(inst?.parts?.priceBp ?? 0),
     escrowBp: Number(inst?.escrowBp ?? 0),
+    // The capital line (D1/D2) — escrowBp alone is ambiguous, because it holds invested principal
+    // PLUS accumulated profit. Without capitalBp a reader cannot tell a thriving deed from a sterile
+    // one, which is the exact misread the sheet's three-figure breakdown exists to prevent; the read
+    // surface has to make the same distinction the UI does.
+    capitalBp: Number(inst?.capitalBp ?? 0),
     badges: Array.isArray(inst?.badges) ? inst.badges : [],
+    // BUG-822 — this is the field that drives this very list's bankId filtering; not projecting it
+    // meant a caller could filter by Registry but never see which Registry matched.
+    handledBy: (inst?.handledBy ?? []).map(ventureHandledByEntry),
   };
 }
 
@@ -2506,7 +2543,9 @@ async function handleCreateVenture(input: CreateVentureInput): Promise<Envelope<
   notify.created('wfrp-economy', input.name, { summary: `venture ${result.instanceId} (${input.type}, ${input.parts.total} Parts)` });
   return {
     success: true,
-    data: { action: 'create-venture', ventureId: result.instanceId, name: result.name, type: result.type, status: result.status, standing: result.standing, escrowBp: Number(result.escrowBp ?? 0) },
+    // BUG-822 — echo handledBy back from the PERSISTED result, not from `input`, so the caller sees
+    // what was actually stored (the engine normalises/defaults entries) rather than what was sent.
+    data: { action: 'create-venture', ventureId: result.instanceId, name: result.name, type: result.type, status: result.status, standing: result.standing, escrowBp: Number(result.escrowBp ?? 0), handledBy: (result.handledBy ?? []).map(ventureHandledByEntry) },
   };
 }
 
@@ -2528,9 +2567,19 @@ async function handleGetVenture(input: GetVentureInput): Promise<Envelope<unknow
       partsSubscribed: Number(inst.parts?.subscribed ?? 0),
       priceBp: Number(inst.parts?.priceBp ?? 0),
       escrowBp: Number(inst.escrowBp ?? 0),
+      // The three instance fields the capital-line / lifecycle / conditional-decay work added. All
+      // were written correctly by the engine but projected nowhere, so no MCP caller could verify a
+      // capital line, tell a ready-to-launch deed from a merely funded one, or see how close a deed
+      // was to a standing decay. Defensive `?? 0` / `=== true` mirrors the engine's own reads, so a
+      // deed that predates the migration reads as 0/false rather than undefined.
+      capitalBp: Number(inst.capitalBp ?? 0),
+      quietCycles: Number(inst.quietCycles ?? 0),
+      readyToLaunch: inst.readyToLaunch === true,
       holders: (inst.holders ?? []).map(ventureHolderEntry),
       queuedTransfers: (inst.queuedTransfers ?? []).map(ventureQueuedTransferEntry),
       badges: Array.isArray(inst.badges) ? inst.badges : [],
+      // BUG-822 — the Phase 7e contract says handledBy echoes verbatim; it never did.
+      handledBy: (inst.handledBy ?? []).map(ventureHandledByEntry),
       notices: Array.isArray(inst.notices) ? inst.notices : [],
       deedDateText: inst.deedDate?.text ?? null,
     },
@@ -2723,6 +2772,42 @@ async function handleVentureEvent(input: VentureEventInput): Promise<Envelope<un
   };
 }
 
+type DeleteVentureInput = Extract<WfrpEconomyInputType, { action: 'delete-venture' }>;
+async function handleDeleteVenture(input: DeleteVentureInput): Promise<Envelope<unknown>> {
+  if (input.confirm !== true) {
+    return confirmRequired(`delete-venture permanently removes venture deed "${input.ventureId}" from the ledger. Transaction history rows are kept. If the deed still holds escrow that no remaining holder can be paid (every holder is a deleted actor and/or an external name), that coin is WRITTEN OFF — it is not paid to anyone. Re-call with confirm:true.`);
+  }
+  const VentureEngine = await importVentureEngine();
+  const result = await VentureEngine.deleteVenture(input.ventureId);
+
+  if (result?.notFound) return targetNotFound(`venture "${input.ventureId}" not found`);
+  if (result?.escrowNotEmpty) {
+    return {
+      success: false,
+      error: `WFRP_ECONOMY_VENTURE_ESCROW_NOT_EMPTY: venture "${input.ventureId}" still holds ${result.escrowBp} BP and at least one holder can still be paid — distribute or settle it first. (A deed whose holders are ALL unpayable can be deleted; this one is not.)`,
+    };
+  }
+  if (result?.persistedCheckFailed) {
+    return notPersisted(`delete-venture on "${input.ventureId}" failed persistence check: ${result?.detail ?? 'unknown'}`);
+  }
+
+  const writtenOffBp = Number(result?.writtenOffBp ?? 0);
+  notify.deleted('wfrp-economy', String(result?.name ?? input.ventureId), {
+    summary: writtenOffBp > 0
+      ? `venture ${input.ventureId} removed — ${writtenOffBp} BP written off (no holder could be paid); transaction history retained`
+      : `venture ${input.ventureId} removed; transaction history retained`,
+  });
+  return {
+    success: true,
+    data: {
+      action: 'delete-venture',
+      ventureId: input.ventureId,
+      name: String(result?.name ?? ''),
+      writtenOffBp,
+    },
+  };
+}
+
 type ToggleVentureBadgeInput = Extract<WfrpEconomyInputType, { action: 'toggle-venture-badge' }>;
 async function handleToggleVentureBadge(input: ToggleVentureBadgeInput): Promise<Envelope<unknown>> {
   if (input.confirm !== true) {
@@ -2864,19 +2949,22 @@ async function handleTradingCheckAvailability(input: TradingCheckAvailabilityInp
   const [cargoCatalog, tuning] = await Promise.all([GazetteerStore.loadCargoCatalog(), GazetteerStore.loadTuning()]);
   const season = input.season ?? TradingEngine.tradingSeason().season;
   const flags = (resolved.settlement.flags ?? []).map((f: string) => String(f).toLowerCase());
-  const slotCount = TradingMath.calculateCargoSlots(resolved.settlement, flags, tuning);
+  // calculateCargoSlots is the max POTENTIAL slot count (Size + 1 if Trade-flagged) — the RAW availability
+  // gate (P10-4) is rolled and checked per-slot inside runAvailabilityPipeline, so a settlement can return
+  // fewer than this many slots, or none, depending on each slot's availabilityRoll.
+  const potentialSlotCount = TradingMath.calculateCargoSlots(resolved.settlement, flags, tuning);
 
-  if (input.rolls.length < slotCount) {
+  if (input.rolls.length < potentialSlotCount) {
     return {
       success: false,
-      error: `WFRP_ECONOMY_TRADING_INSUFFICIENT_ROLLS: "${input.settlement}" needs ${slotCount} pre-rolled {cargoRoll,amountRoll} pair(s) this season, got ${input.rolls.length}`,
+      error: `WFRP_ECONOMY_TRADING_INSUFFICIENT_ROLLS: "${input.settlement}" needs ${potentialSlotCount} pre-rolled {availabilityRoll,cargoRoll,amountRoll} triple(s) this season, got ${input.rolls.length}`,
     };
   }
 
   const pipeline = TradingMath.runAvailabilityPipeline({ settlement: resolved.settlement, season, cargoCatalog, tuning, rolls: input.rolls });
   return {
     success: true,
-    data: { action: 'trading-check-availability', settlement: resolved.settlement.name, season, slotCount: pipeline.slotCount, slots: pipeline.slots },
+    data: { action: 'trading-check-availability', settlement: resolved.settlement.name, season, potentialSlotCount: pipeline.potentialSlotCount, slotCount: pipeline.slotCount, slots: pipeline.slots },
   };
 }
 
@@ -3052,6 +3140,7 @@ async function handleTradingSellCargo(input: TradingSellCargoInput): Promise<Env
     halfCargoRetryRoll: input.halfCargoRetryRoll,
     weeksElapsedSincePurchase: input.weeksElapsedSincePurchase ?? 1,
     topShelfBuyerRoll: input.topShelfBuyerRoll,
+    acceptFireSale: input.acceptFireSale ?? false,
     economyId: input.economyId,
   });
 
@@ -3080,6 +3169,7 @@ async function handleTradingSellCargo(input: TradingSellCargoInput): Promise<Env
       quantityRemaining: partial ? Number(result.quantityRemaining ?? 0) : 0,
       totalBp: Number(result.totalBp ?? 0),
       walletBalanceBp: Number(result.walletBalanceBp ?? 0),
+      saleType: result.saleType ?? 'normal',
       rumourApplied: result.rumourApplied ?? null,
       linkedDemandApplied: result.linkedDemandApplied ?? null,
     },

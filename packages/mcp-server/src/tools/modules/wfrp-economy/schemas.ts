@@ -670,6 +670,8 @@ export interface WfrpEconomyVentureSummary {
   partsSubscribed: number;
   priceBp: number;
   escrowBp: number;
+  /** Invested principal held inside escrowBp (D1/D2) — escrowBp minus this is distributable profit. */
+  capitalBp: number;
   badges: string[];
   handledBy: WfrpEconomyVentureHandledByEntry[];
 }
@@ -696,6 +698,12 @@ export interface WfrpEconomyGetVentureResult {
   partsSubscribed: number;
   priceBp: number;
   escrowBp: number;
+  /** Invested principal held inside escrowBp (D1/D2) — escrowBp minus this is distributable profit. */
+  capitalBp: number;
+  /** Consecutive cycles with no activity; standing decays at the ventureQuietCyclesBeforeDecay threshold (D6). */
+  quietCycles: number;
+  /** Fully subscribed and awaiting launch — launches at the next cycle or via the GM button (D5b). */
+  readyToLaunch: boolean;
   holders: WfrpEconomyVentureHolder[];
   queuedTransfers: WfrpEconomyVentureQueuedTransfer[];
   badges: string[];
@@ -751,6 +759,18 @@ export interface WfrpEconomyVentureEventResult {
   standingModifier: number;
   critical: 'boon' | 'disaster' | null;
   effectsApplied: string[];
+}
+
+export interface WfrpEconomyDeleteVentureResult {
+  action: 'delete-venture';
+  ventureId: string;
+  name: string;
+  /**
+   * BP that could NOT be paid to anyone and was written off with the deed — non-zero only when every
+   * remaining holder was unpayable (deleted actor and/or external name). This coin was never moved to
+   * a wallet; it ceased to be tracked. Zero on a normal empty-escrow delete.
+   */
+  writtenOffBp: number;
 }
 
 export interface WfrpEconomyToggleVentureBadgeResult {
@@ -826,6 +846,7 @@ export interface WfrpEconomyTradingCheckAvailabilityResult {
   action: 'trading-check-availability';
   settlement: string;
   season: string;
+  potentialSlotCount: number;
   slotCount: number;
   slots: WfrpTradingAvailabilitySlot[];
 }
@@ -918,6 +939,7 @@ export interface WfrpEconomyTradingSellCargoResult {
   quantityRemaining: number;
   totalBp: number;
   walletBalanceBp: number;
+  saleType: 'normal' | 'fireSale';
   rumourApplied: WfrpTradingRumourApplied | null;
   linkedDemandApplied: WfrpTradingLinkedDemandApplied | null;
 }
@@ -1105,6 +1127,7 @@ export type WfrpEconomyResult =
   | WfrpEconomyTransferVentureResult
   | WfrpEconomySettleVentureResult
   | WfrpEconomyDistributeVentureResult
+  | WfrpEconomyDeleteVentureResult
   | WfrpEconomyVentureEventResult
   | WfrpEconomyToggleVentureBadgeResult
   | WfrpEconomyIssuePartsResult
@@ -1200,6 +1223,7 @@ export const WFRP_ECONOMY_ACTIONS = [
   'transfer-venture-parts',
   'settle-venture',
   'distribute-venture',
+  'delete-venture',
   'venture-event',
   'toggle-venture-badge',
   'issue-parts',
