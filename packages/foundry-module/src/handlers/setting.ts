@@ -48,6 +48,24 @@ function getRegisteredConfig(ns: string, key: string): any {
   return reg?.get(fullKey) ?? null;
 }
 
+// BUG-845: `value`'s JS type checked against the setting's REGISTERED type, before it ever reaches
+// game.settings.set(). Foundry coerces a mismatched primitive rather than rejecting it (a string on a
+// Boolean setting follows JS Boolean() truthiness — "false" -> true), and the round-trip verify then
+// reported the same SETTING_WRITE_NOT_PERSISTED for that silent corruption as for a harmless mismatch
+// that happened to coerce to the right value, with no way to tell the two apart from the error text.
+// `null` always passes — a caller explicitly clearing a value is a distinct, legitimate intent this
+// check has no basis to refuse. An unregistered key (cfg null/type undefined) or a registered
+// Object/custom-class type also always passes — this guard targets the four JS primitives Foundry's
+// own coercion silently misbehaves on, not a general schema validator.
+function describeTypeMismatch(type: unknown, value: unknown): string | null {
+  if (value === null) return null;
+  if (type === Boolean) return typeof value === 'boolean' ? null : typeof value;
+  if (type === Number) return typeof value === 'number' && Number.isFinite(value) ? null : typeof value;
+  if (type === String) return typeof value === 'string' ? null : typeof value;
+  if (type === Array) return Array.isArray(value) ? null : typeof value;
+  return null;
+}
+
 function buildViewModel(ns: string, key: string, value: unknown, cfg: any): SettingViewModel {
   return {
     namespace: ns,
@@ -82,6 +100,14 @@ async function handleGet(input: any): Promise<Envelope<any>> {
 async function handleSet(input: any): Promise<Envelope<any>> {
   const { namespace: ns, key, value, force } = input;
   const cfg = getRegisteredConfig(ns, key);
+
+  const typeMismatch = describeTypeMismatch(cfg?.type, value);
+  if (typeMismatch) {
+    return {
+      success: false,
+      error: `SETTING_VALUE_TYPE_MISMATCH: "${ns}.${key}" is registered as ${resolveTypeLabel(cfg?.type)}, but value ${JSON.stringify(value)} is a ${typeMismatch}. Pass a real ${resolveTypeLabel(cfg?.type)} value.`,
+    };
+  }
 
   // Hard blocklist check (enabled / serverHost / serverPort within warhammer-mcp namespace)
   if (ns === 'warhammer-mcp' && SETTING_BLOCKLIST.has(key) && !force) {

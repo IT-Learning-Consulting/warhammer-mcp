@@ -672,6 +672,14 @@ export interface WfrpEconomyVentureSummary {
   escrowBp: number;
   /** Invested principal held inside escrowBp (D1/D2) — escrowBp minus this is distributable profit. */
   capitalBp: number;
+  /**
+   * M7 (BUG-841): F09 added capitalBp/quietCycles/readyToLaunch to get-venture but only capitalBp here,
+   * so a caller surveying which deeds are ready to launch had to call get-venture once per instance.
+   * Consecutive cycles with no activity; standing decays at the ventureQuietCyclesBeforeDecay threshold (D6).
+   */
+  quietCycles: number;
+  /** Fully subscribed and awaiting launch — launches at the next cycle or via the GM button (D5b). */
+  readyToLaunch: boolean;
   badges: string[];
   handledBy: WfrpEconomyVentureHandledByEntry[];
 }
@@ -771,6 +779,33 @@ export interface WfrpEconomyDeleteVentureResult {
    * a wallet; it ceased to be tracked. Zero on a normal empty-escrow delete.
    */
   writtenOffBp: number;
+  /**
+   * C2b (BUG-841): enterprise ownership slots that pointed at this deed and were scrubbed on delete.
+   * Only ever non-zero for ZERO-share slots — a slot carrying a real share refuses the delete instead
+   * (removing it would break the enterprise's 100% ownership split).
+   */
+  scrubbedEnterpriseSlots: number;
+}
+
+// ── BUG-841 M8 — the three GM lifecycle actions ─────────────────────────────────
+export interface WfrpEconomyLaunchVentureResult {
+  action: 'launch-venture';
+  ventureId: string;
+  status: string;
+}
+
+export interface WfrpEconomyWindUpVentureResult {
+  action: 'wind-up-venture';
+  ventureId: string;
+  status: string;
+}
+
+export interface WfrpEconomyCloseOutVentureResult {
+  action: 'close-out-venture';
+  ventureId: string;
+  status: string;
+  /** Total BP actually paid out to holders by the close-out distribution (capital + any proceeds). */
+  distributedBp: number;
 }
 
 export interface WfrpEconomyToggleVentureBadgeResult {
@@ -1128,6 +1163,9 @@ export type WfrpEconomyResult =
   | WfrpEconomySettleVentureResult
   | WfrpEconomyDistributeVentureResult
   | WfrpEconomyDeleteVentureResult
+  | WfrpEconomyLaunchVentureResult
+  | WfrpEconomyWindUpVentureResult
+  | WfrpEconomyCloseOutVentureResult
   | WfrpEconomyVentureEventResult
   | WfrpEconomyToggleVentureBadgeResult
   | WfrpEconomyIssuePartsResult
@@ -1224,6 +1262,9 @@ export const WFRP_ECONOMY_ACTIONS = [
   'settle-venture',
   'distribute-venture',
   'delete-venture',
+  'launch-venture',
+  'wind-up-venture',
+  'close-out-venture',
   'venture-event',
   'toggle-venture-badge',
   'issue-parts',

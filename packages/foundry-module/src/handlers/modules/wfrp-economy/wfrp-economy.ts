@@ -349,6 +349,19 @@ const WRITE_ACTIONS = new Set([
   'settle-venture',
   'distribute-venture',
   'venture-event',
+  // BUG-842 — these five predate BUG-841 M8 and were never added; the engine fns self-guard on isGM()
+  // and silently no-op for a non-GM, so without this gate a non-GM caller got a confusing NOT_PERSISTED
+  // instead of a clean GM refusal.
+  'delete-venture',
+  'toggle-venture-badge',
+  'issue-parts',
+  'set-venture-status',
+  'set-venture-standing',
+  // BUG-841 M8 — the three GM lifecycle actions are real writes (status transitions + a capital-returning
+  // distribution), so they belong in the early GM gate like their siblings.
+  'launch-venture',
+  'wind-up-venture',
+  'close-out-venture',
   'trading-set-season',
   'trading-gossip-test', // Change 2: now mints+stores a rumour on a successful Gossip Test (real write)
   'trading-buy-cargo',
@@ -638,6 +651,13 @@ export async function dispatchModuleWfrpEconomy(data: unknown): Promise<Envelope
         return await handleDistributeVenture(input);
       case 'delete-venture':
         return await handleDeleteVenture(input);
+      // ── BUG-841 M8 — GM lifecycle controls (parity with the deed sheet's buttons) ──
+      case 'launch-venture':
+        return await handleLaunchVenture(input);
+      case 'wind-up-venture':
+        return await handleWindUpVenture(input);
+      case 'close-out-venture':
+        return await handleCloseOutVenture(input);
       case 'venture-event':
         return await handleVentureEvent(input);
       // ── venture-ledger (Phase 7d2 — Venture Events v2) ──
@@ -2509,6 +2529,10 @@ function ventureSummaryEntry(inst: any) {
     // one, which is the exact misread the sheet's three-figure breakdown exists to prevent; the read
     // surface has to make the same distinction the UI does.
     capitalBp: Number(inst?.capitalBp ?? 0),
+    // M7 (BUG-841) — F09 shipped these two onto get-venture but not onto this summary, so a caller
+    // surveying "which deeds are ready to launch / going quiet" had to call get-venture per instance.
+    quietCycles: Number(inst?.quietCycles ?? 0),
+    readyToLaunch: inst?.readyToLaunch === true,
     badges: Array.isArray(inst?.badges) ? inst.badges : [],
     // BUG-822 — this is the field that drives this very list's bankId filtering; not projecting it
     // meant a caller could filter by Registry but never see which Registry matched.
@@ -2534,6 +2558,13 @@ async function handleCreateVenture(input: CreateVentureInput): Promise<Envelope<
   });
 
   if (result?.invalidType) return targetNotFound(`invalid venture type "${input.type}"`);
+  // C6 (BUG-841): createVenture refuses with `economyNotFound` / `economyMismatch` BEFORE any write, and
+  // neither was branched — so a refused create fell through to notify.created + success:true with
+  // `ventureId: undefined`. Both are caller-controllable (economyId / handledBy / linkedEnterpriseId).
+  if (result?.economyNotFound) return targetNotFound(`economy "${input.economyId}" not found`);
+  if (result?.economyMismatch) {
+    return { success: false, error: `WFRP_ECONOMY_ECONOMY_MISMATCH: venture "${input.name}" names a handledBy entry or linkedEnterpriseId belonging to a different economy than "${input.economyId}"` };
+  }
   if (result?.ventureHoldsVentureNotAllowed) {
     return { success: false, error: `WFRP_ECONOMY_VENTURE_HOLDS_VENTURE: a venture can never hold another venture (D19)` };
   }
@@ -2744,6 +2775,12 @@ async function handleDistributeVenture(input: DistributeVentureInput): Promise<E
 
 type VentureEventInput = Extract<WfrpEconomyInputType, { action: 'venture-event' }>;
 async function handleVentureEvent(input: VentureEventInput): Promise<Envelope<unknown>> {
+  // C5 (BUG-841, CCR-4): this is a MUTATING action and was the only venture action with no confirm gate.
+  // One unconfirmed draw can shift standing, move escrow (escrowModPct), force `defaulted` (forceStatus),
+  // issue Parts, or subscribe an off-book patron.
+  if (input.confirm !== true) {
+    return confirmRequired(`venture-event draws a live event band on venture "${input.ventureId}" with natural roll ${input.d100Roll} and APPLIES its effects immediately. Depending on the band this can shift standing, move or destroy escrow, add a Disputed/Seized badge, delay settlement, issue new Parts (diluting holders), or force the deed to defaulted. It cannot be undone. Re-call with confirm:true.`);
+  }
   const VentureEngine = await importVentureEngine();
   const result = await VentureEngine.drawVentureEvent(input.ventureId, { d100Roll: input.d100Roll });
 
@@ -2787,6 +2824,15 @@ async function handleDeleteVenture(input: DeleteVentureInput): Promise<Envelope<
       error: `WFRP_ECONOMY_VENTURE_ESCROW_NOT_EMPTY: venture "${input.ventureId}" still holds ${result.escrowBp} BP and at least one holder can still be paid — distribute or settle it first. (A deed whose holders are ALL unpayable can be deleted; this one is not.)`,
     };
   }
+  // C2b (BUG-841): the deed is held as an ownership slot by an enterprise. Removing a slot with a real
+  // share would break that enterprise's 100% ownership split, so the engine refuses rather than silently
+  // redistributing someone else's shares.
+  if (result?.enterpriseSlotHeld) {
+    return {
+      success: false,
+      error: `WFRP_ECONOMY_VENTURE_ENTERPRISE_SLOT_HELD: ${result.detail}`,
+    };
+  }
   if (result?.persistedCheckFailed) {
     return notPersisted(`delete-venture on "${input.ventureId}" failed persistence check: ${result?.detail ?? 'unknown'}`);
   }
@@ -2804,6 +2850,99 @@ async function handleDeleteVenture(input: DeleteVentureInput): Promise<Envelope<
       ventureId: input.ventureId,
       name: String(result?.name ?? ''),
       writtenOffBp,
+      scrubbedEnterpriseSlots: Number(result?.scrubbedEnterpriseSlots ?? 0),
+    },
+  };
+}
+
+// ── BUG-841 M8 — the three GM lifecycle actions the deed sheet had but MCP did not ────────────────
+
+type LaunchVentureInput = Extract<WfrpEconomyInputType, { action: 'launch-venture' }>;
+async function handleLaunchVenture(input: LaunchVentureInput): Promise<Envelope<unknown>> {
+  if (input.confirm !== true) {
+    return confirmRequired(`launch-venture moves fully-subscribed deed "${input.ventureId}" from Funded to Underway immediately. Launching by hand SKIPS the preparation event the deed would otherwise draw at the next economic cycle (D5b). Re-call with confirm:true.`);
+  }
+  const VentureEngine = await importVentureEngine();
+  const result = await VentureEngine.launchVenture(input.ventureId);
+
+  if (result?.notFound) return targetNotFound(`venture "${input.ventureId}" not found`);
+  if (result?.notReady) {
+    return { success: false, error: `WFRP_ECONOMY_VENTURE_NOT_READY: venture "${input.ventureId}" is ${result.status} and not marked ready to launch — a deed must be Funded AND fully subscribed to launch` };
+  }
+  if (result?.persistedCheckFailed) {
+    return notPersisted(`launch-venture on "${input.ventureId}" failed persistence check: ${result?.detail ?? 'unknown'}`);
+  }
+  notify.updated('wfrp-economy', `venture ${input.ventureId}`, { summary: `launched — status now ${result.status}` });
+  return { success: true, data: { action: 'launch-venture', ventureId: input.ventureId, status: String(result.status) } };
+}
+
+type WindUpVentureInput = Extract<WfrpEconomyInputType, { action: 'wind-up-venture' }>;
+async function handleWindUpVenture(input: WindUpVentureInput): Promise<Envelope<unknown>> {
+  if (input.confirm !== true) {
+    return confirmRequired(`wind-up-venture moves OPEN-ENDED deed "${input.ventureId}" from Underway to Settling, so the Reckoning event table applies and close-out-venture becomes reachable. Self-liquidating types (Expedition/Project) are refused — they close out directly from Underway. Re-call with confirm:true.`);
+  }
+  const VentureEngine = await importVentureEngine();
+  const result = await VentureEngine.windUpVenture(input.ventureId);
+
+  if (result?.notFound) return targetNotFound(`venture "${input.ventureId}" not found`);
+  if (result?.alreadySettles) {
+    return { success: false, error: `WFRP_ECONOMY_VENTURE_ALREADY_SETTLES: venture "${input.ventureId}" is a self-liquidating type (Expedition/Project) — it does not wind up; use close-out-venture directly from Underway` };
+  }
+  if (result?.invalidStatusForWindUp) {
+    return { success: false, error: `WFRP_ECONOMY_VENTURE_INVALID_STATUS_FOR_WIND_UP: venture "${input.ventureId}" is ${result.status} — only an Underway open-ended deed can be wound up` };
+  }
+  if (result?.persistedCheckFailed) {
+    return notPersisted(`wind-up-venture on "${input.ventureId}" failed persistence check: ${result?.detail ?? 'unknown'}`);
+  }
+  notify.updated('wfrp-economy', `venture ${input.ventureId}`, { summary: `wound up — status now ${result.status}` });
+  return { success: true, data: { action: 'wind-up-venture', ventureId: input.ventureId, status: String(result.status) } };
+}
+
+type CloseOutVentureInput = Extract<WfrpEconomyInputType, { action: 'close-out-venture' }>;
+async function handleCloseOutVenture(input: CloseOutVentureInput): Promise<Envelope<unknown>> {
+  if (input.confirm !== true) {
+    return confirmRequired(`close-out-venture releases the WORKING CAPITAL of deed "${input.ventureId}" and distributes it to the holders — the only action that returns principal (distribute-venture pays profit above the capital line only). Reachable from Settling (any type), from Underway for a self-liquidating Expedition/Project, and from Completed when a deed still holds capital nobody was paid. Re-call with confirm:true.`);
+  }
+  const VentureEngine = await importVentureEngine();
+  const result = await VentureEngine.closeOutVenture(input.ventureId, { netBp: input.netBp });
+
+  if (result?.notFound) return targetNotFound(`venture "${input.ventureId}" not found`);
+  if (result?.notCloseable) {
+    return { success: false, error: `WFRP_ECONOMY_VENTURE_NOT_CLOSEABLE: venture "${input.ventureId}" is ${result.status} — an open-ended deed must be wound up to Settling first` };
+  }
+  if (result?.doesNotSettle) {
+    return { success: false, error: `WFRP_ECONOMY_VENTURE_DOES_NOT_SETTLE: venture "${input.ventureId}" is an open-ended type outside Settling — wind it up first` };
+  }
+  if (result?.settlementNotReady) {
+    return { success: false, error: `WFRP_ECONOMY_VENTURE_SETTLEMENT_NOT_READY: venture "${input.ventureId}" is ${result.status} and cannot settle from that state` };
+  }
+  if (result?.escrowSeized) {
+    return { success: false, error: `${ErrorTokens.WFRP_ECONOMY_VENTURE_SEIZED}: venture "${input.ventureId}" escrow is Seized — clear the badge first` };
+  }
+  if (result?.settleDelayed) {
+    return { success: false, error: `${ErrorTokens.WFRP_ECONOMY_VENTURE_SETTLE_DELAYED}: venture "${input.ventureId}" has ${result.delayCycles} delay cycle(s) remaining` };
+  }
+  if (result?.noHolders) {
+    return { success: false, error: `WFRP_ECONOMY_VENTURE_NO_HOLDERS: venture "${input.ventureId}" has no holders to pay — nothing to close out` };
+  }
+  if (result?.noCapitalToReturn) {
+    return { success: false, error: `WFRP_ECONOMY_VENTURE_NO_CAPITAL_TO_RETURN: venture "${input.ventureId}" holds no working capital — nothing to return` };
+  }
+  // H4: the wrapper lifts a failed NESTED distribution, so this branch also catches "closed out but a
+  // holder was never paid" — which previously surfaced as a clean success.
+  if (result?.persistedCheckFailed) {
+    return notPersisted(`close-out-venture on "${input.ventureId}" failed persistence check: ${result?.detail ?? 'unknown'}`);
+  }
+
+  const distributedBp = Number(result?.distributed?.distributedBp ?? 0);
+  notify.updated('wfrp-economy', `venture ${input.ventureId}`, { summary: `closed out — ${distributedBp} BP returned to holders` });
+  return {
+    success: true,
+    data: {
+      action: 'close-out-venture',
+      ventureId: input.ventureId,
+      status: String(result?.status ?? ''),
+      distributedBp,
     },
   };
 }
@@ -2844,7 +2983,9 @@ async function handleIssueParts(input: IssuePartsInput): Promise<Envelope<unknow
 type SetVentureStatusInput = Extract<WfrpEconomyInputType, { action: 'set-venture-status' }>;
 async function handleSetVentureStatus(input: SetVentureStatusInput): Promise<Envelope<unknown>> {
   if (input.confirm !== true) {
-    return confirmRequired(`set-venture-status forces venture "${input.ventureId}" to status "${input.status}". Re-call with confirm:true.`);
+    // M9 (BUG-841): the gate existed but warned of nothing. This is a GM OVERRIDE that bypasses the
+    // whole lifecycle — mirroring delete-venture's explicit write-off warning.
+    return confirmRequired(`set-venture-status FORCES venture "${input.ventureId}" to status "${input.status}", bypassing the entire lifecycle: no subscription, launch, wind-up or settlement check runs, and no delay, badge or holder guard applies. Forcing to a TERMINAL status (completed/defaulted) now also runs the real invariant work — completing a deed that still holds working capital RELEASES that capital to the holders, while defaulting WRITES IT OFF (holders are paid nothing). Forcing backwards out of a terminal status resurrects a closed deed. Prefer launch-venture / wind-up-venture / close-out-venture for the sanctioned transitions. Re-call with confirm:true.`);
   }
   const VentureEngine = await importVentureEngine();
   const result = await VentureEngine.setStatus(input.ventureId, input.status);

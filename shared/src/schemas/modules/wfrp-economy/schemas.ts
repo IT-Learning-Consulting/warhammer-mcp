@@ -624,7 +624,31 @@ export const WfrpEconomyInput = z.discriminatedUnion('action', [
   // off) only when EVERY holder is unpayable, i.e. deleted actors and/or external names nobody can be
   // paid through. That orphan case was previously unrecoverable except by raw settings surgery.
   z.object({ action: z.literal('delete-venture'), ventureId, confirm: z.boolean().optional() }).strict(),
-  z.object({ action: z.literal('venture-event'), ventureId, d100Roll: z.number().int().min(1).max(100) }).strict(),
+  // C5 (BUG-841): venture-event is a MUTATING action — a single draw can shift standing, move escrow
+  // (escrowModPct), force `defaulted` (forceStatus), issue Parts, or subscribe an off-book patron. It was
+  // the only mutating venture action with no confirm gate (CCR-4).
+  z
+    .object({
+      action: z.literal('venture-event'),
+      ventureId,
+      d100Roll: z.number().int().min(1).max(100),
+      confirm: z.boolean().optional(),
+    })
+    .strict(),
+
+  // ── BUG-841 M8 — the three GM lifecycle controls the sheet has but MCP did not ───
+  // Without these, a Completed deed holding unreturned capital was fixable from the deed sheet's Close
+  // Out button but NOT via MCP (settle-venture refuses every non-settling deed).
+  z.object({ action: z.literal('launch-venture'), ventureId, confirm: z.boolean().optional() }).strict(),
+  z.object({ action: z.literal('wind-up-venture'), ventureId, confirm: z.boolean().optional() }).strict(),
+  z
+    .object({
+      action: z.literal('close-out-venture'),
+      ventureId,
+      netBp: z.number().int().nonnegative().optional(),
+      confirm: z.boolean().optional(),
+    })
+    .strict(),
 
   // ── Phase 7d2 (Venture Events v2, D13) — 4 new GM actions ───────────────────────
   z

@@ -2014,17 +2014,32 @@ describe('venture-ledger — distribute-venture', () => {
   });
 });
 
-describe('venture-ledger — venture-event (no confirm gate, mirrors enterprise-event)', () => {
+describe('venture-ledger — venture-event (CONFIRM-GATED since BUG-841 C5)', () => {
   it('forwards ventureId and d100Roll exactly, returns the drawn text + standing', async () => {
     const { settings } = makeSettings();
     const drawVentureEvent = vi.fn(async () => ({ text: 'A bridge toll delays the wagons.', standing: 'uncertain' }));
     (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ drawVentureEvent });
     (globalThis as any).game = makeGame({ active: true, settings });
-    const res: any = await dispatchModuleWfrpEconomy({ action: 'venture-event', ventureId: 'v1', d100Roll: 12 });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'venture-event', ventureId: 'v1', d100Roll: 12, confirm: true });
     expect(res.success).toBe(true);
     expect(drawVentureEvent).toHaveBeenCalledWith('v1', { d100Roll: 12 });
     expect(res.data.text).toBe('A bridge toll delays the wagons.');
     expect(res.data.standing).toBe('uncertain');
+  });
+
+  // BUG-841 C5: venture-event was the ONLY mutating venture action with no confirm gate (CCR-4). A
+  // single unconfirmed call could shift standing, move or destroy escrow, badge, delay, dilute via
+  // issueParts, or force the deed to defaulted. This pins the gate itself — the engine must not even
+  // be reached without confirm:true.
+  it('C5: without confirm:true it returns CONFIRM_REQUIRED and never reaches the engine', async () => {
+    const { settings } = makeSettings();
+    const drawVentureEvent = vi.fn(async () => ({ text: 'should never be drawn', standing: 'reputable' }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ drawVentureEvent });
+    (globalThis as any).game = makeGame({ active: true, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'venture-event', ventureId: 'v1', d100Roll: 50 });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('CONFIRM_REQUIRED');
+    expect(drawVentureEvent).not.toHaveBeenCalled();
   });
 
   it('engine invalidRoll verdict (defensive path — Zod already constrains d100Roll to 1-100) → typed refusal', async () => {
@@ -2032,7 +2047,7 @@ describe('venture-ledger — venture-event (no confirm gate, mirrors enterprise-
     const drawVentureEvent = vi.fn(async () => ({ invalidRoll: true }));
     (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ drawVentureEvent });
     (globalThis as any).game = makeGame({ active: true, settings });
-    const res: any = await dispatchModuleWfrpEconomy({ action: 'venture-event', ventureId: 'v1', d100Roll: 50 });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'venture-event', ventureId: 'v1', d100Roll: 50, confirm: true });
     expect(res.success).toBe(false);
     expect(res.error).toContain('WFRP_ECONOMY_INVALID_ROLL');
   });
@@ -2042,9 +2057,67 @@ describe('venture-ledger — venture-event (no confirm gate, mirrors enterprise-
     const drawVentureEvent = vi.fn(async () => ({ text: 'Fair skies.', standing: 'reputable' }));
     (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ drawVentureEvent });
     (globalThis as any).game = makeGame({ active: true, isGM: false, settings });
-    const res: any = await dispatchModuleWfrpEconomy({ action: 'venture-event', ventureId: 'v1', d100Roll: 50 });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'venture-event', ventureId: 'v1', d100Roll: 50, confirm: true });
     expect(res.success).toBe(false);
     expect(res.error).toContain('WFRP_ECONOMY_ACCESS_DENIED');
+  });
+
+  // BUG-842 — these five predated BUG-841 M8 and were missing from WRITE_ACTIONS; the engine self-guards
+  // on isGM() and silently no-ops for a non-GM, so a non-GM caller previously got a confusing
+  // NOT_PERSISTED instead of the same clean WFRP_ECONOMY_ACCESS_DENIED every other venture write returns.
+  it('BUG-842: a non-GM caller is refused delete-venture with ACCESS_DENIED, not NOT_PERSISTED', async () => {
+    const { settings } = makeSettings();
+    const deleteVenture = vi.fn(async () => ({ deleted: true }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ deleteVenture });
+    (globalThis as any).game = makeGame({ active: true, isGM: false, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'delete-venture', ventureId: 'v1', confirm: true });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_ACCESS_DENIED');
+    expect(deleteVenture).not.toHaveBeenCalled();
+  });
+
+  it('BUG-842: a non-GM caller is refused toggle-venture-badge with ACCESS_DENIED, not NOT_PERSISTED', async () => {
+    const { settings } = makeSettings();
+    const toggleBadge = vi.fn(async () => ({ badges: ['disputed'] }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ toggleBadge });
+    (globalThis as any).game = makeGame({ active: true, isGM: false, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'toggle-venture-badge', ventureId: 'v1', badge: 'disputed', confirm: true });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_ACCESS_DENIED');
+    expect(toggleBadge).not.toHaveBeenCalled();
+  });
+
+  it('BUG-842: a non-GM caller is refused issue-parts with ACCESS_DENIED, not NOT_PERSISTED', async () => {
+    const { settings } = makeSettings();
+    const issuePartsForVenture = vi.fn(async () => ({ partsTotal: 5, priceBp: 100 }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ issuePartsForVenture });
+    (globalThis as any).game = makeGame({ active: true, isGM: false, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'issue-parts', ventureId: 'v1', count: 1, confirm: true });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_ACCESS_DENIED');
+    expect(issuePartsForVenture).not.toHaveBeenCalled();
+  });
+
+  it('BUG-842: a non-GM caller is refused set-venture-status with ACCESS_DENIED, not NOT_PERSISTED', async () => {
+    const { settings } = makeSettings();
+    const setStatus = vi.fn(async () => ({ status: 'completed', from: 'underway' }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ setStatus });
+    (globalThis as any).game = makeGame({ active: true, isGM: false, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'set-venture-status', ventureId: 'v1', status: 'completed', confirm: true });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_ACCESS_DENIED');
+    expect(setStatus).not.toHaveBeenCalled();
+  });
+
+  it('BUG-842: a non-GM caller is refused set-venture-standing with ACCESS_DENIED, not NOT_PERSISTED', async () => {
+    const { settings } = makeSettings();
+    const setStanding = vi.fn(async () => ({ standing: 'troubled' }));
+    (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ setStanding });
+    (globalThis as any).game = makeGame({ active: true, isGM: false, settings });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'set-venture-standing', ventureId: 'v1', standing: 'troubled', confirm: true });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('WFRP_ECONOMY_ACCESS_DENIED');
+    expect(setStanding).not.toHaveBeenCalled();
   });
 
   // 7d2: the response is additive — naturalRoll/modifiedRoll/standingModifier/critical/effectsApplied.
@@ -2057,7 +2130,7 @@ describe('venture-ledger — venture-event (no confirm gate, mirrors enterprise-
     }));
     (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ drawVentureEvent });
     (globalThis as any).game = makeGame({ active: true, settings });
-    const res: any = await dispatchModuleWfrpEconomy({ action: 'venture-event', ventureId: 'v1', d100Roll: 68 });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'venture-event', ventureId: 'v1', d100Roll: 68, confirm: true });
     expect(res.success).toBe(true);
     expect(res.data.naturalRoll).toBe(68);
     expect(res.data.modifiedRoll).toBe(94);
@@ -2071,7 +2144,7 @@ describe('venture-ledger — venture-event (no confirm gate, mirrors enterprise-
     const drawVentureEvent = vi.fn(async () => ({ noEventsForStatus: true, status: 'completed' }));
     (globalThis as any).__wfrpEconomyRuntimeImport = () => ({ drawVentureEvent });
     (globalThis as any).game = makeGame({ active: true, settings });
-    const res: any = await dispatchModuleWfrpEconomy({ action: 'venture-event', ventureId: 'v1', d100Roll: 50 });
+    const res: any = await dispatchModuleWfrpEconomy({ action: 'venture-event', ventureId: 'v1', d100Roll: 50, confirm: true });
     expect(res.success).toBe(false);
     expect(res.error).toContain('WFRP_ECONOMY_VENTURE_NO_EVENTS_FOR_STATUS');
   });

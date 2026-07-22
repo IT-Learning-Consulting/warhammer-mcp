@@ -52,7 +52,7 @@ export class CharacterTools extends BaseTool {
           idempotentHint: true,
           openWorldHint: true,
         },
-        description: 'Retrieve comprehensive character information for a WFRP 4e character. Returns complete character data including: identity (name, species, status), characteristics (WS, BS, S, T, I, Ag, Dex, Int, WP, Fel), status (wounds, fortune, fate, resilience, resolve, corruption, money, toughness), critical wounds (count and details), biography (motivation, ambitions), skills (with advances and totals), talents (with descriptions), traits (creature traits), conditions (injuries, mutations, diseases, psychology), items (physical inventory only - weapons, armor, trappings), and experience.\n\nTOOL-IDEA-006 (2026-05-14): pass `sections: ["characteristics"]` (or any subset) to receive only those sections in the response. Reduces payload size dramatically for narrow queries (e.g. "what is Camila\'s WS?"). `id`, `name`, `type`, `hasImage` are always returned. Available section names: `identity`, `vitals`, `characteristics`, `skills`, `talents`, `conditions`, `items`, `effects`, `biography`. Omit `sections` to receive the full payload as before.',
+        description: 'Retrieve comprehensive character information for a WFRP 4e character. Returns complete character data including: identity (name, species, status), characteristics (WS, BS, S, T, I, Ag, Dex, Int, WP, Fel), status (wounds, fortune, fate, resilience, resolve, corruption, money, toughness), critical wounds (count and details), biography (prose biographyText, motivation, ambitions), skills (with advances and totals), talents (with descriptions), traits (creature traits), conditions (injuries, mutations, diseases, psychology), items (physical inventory only - weapons, armor, trappings), and experience.\n\nTOOL-IDEA-006 (2026-05-14): pass `sections: ["characteristics"]` (or any subset) to receive only those sections in the response. Reduces payload size dramatically for narrow queries (e.g. "what is Camila\'s WS?"). `id`, `name`, `type`, `hasImage` are always returned. Available section names: `identity`, `vitals`, `characteristics`, `skills`, `talents`, `conditions`, `items`, `effects`, `biography`. Omit `sections` to receive the full payload as before.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -432,6 +432,12 @@ export class CharacterTools extends BaseTool {
     // The flat sibling keys (gmNotes, experience, experienceLog) remain at the
     // basicInfo level and are picked by the biography section filter correctly.
     basicInfo.biography = {};
+    // BUG-840: manage-character writes prose biography to system.details.biography.value at two sites
+    // but get-character never read it back — a caller that wrote a biography and then verified via
+    // get-character saw no evidence of its own write. Guarded the same way as every sibling key below.
+    if (system.details?.biography?.value) {
+      basicInfo.biography.biographyText = system.details.biography.value;
+    }
     if (system.details?.motivation?.value) {
       basicInfo.biography.motivation = system.details.motivation.value;
     }
