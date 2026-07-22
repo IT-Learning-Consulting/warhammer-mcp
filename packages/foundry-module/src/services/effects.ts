@@ -35,21 +35,54 @@ export class EffectsService {
       // buildEffectPayload is imported lazily to avoid a top-of-file shuffle.
       const { buildEffectPayload } = await import('@foundry-mcp/shared');
 
-      // BUG-340: an `immediate`-trigger script that returns false self-deletes its own
-      // effect during creation (documented wfrp4e recipe — effects/triggers/immediate.md).
+      // BUG-340/659: an `immediate`-trigger script can self-delete either by returning
+      // false or by explicitly awaiting this.effect.delete() (both are documented recipes).
       // createEmbeddedDocuments then returns [] (the doc was removed inside the create op),
       // or the read-back is absent — but the script DID run. Detect this so the one-shot
       // self-deleting recipe is reported as success (fired + autoDeleted), not failure.
-      const isSelfDeletingImmediate = (eff: any): boolean =>
-        eff?.trigger === 'immediate' &&
-        /\breturn\s+false\b/.test(typeof eff?.script === 'string' ? eff.script : '');
+      const isSelfDeletingImmediate = (eff: any): boolean => {
+        if (eff?.trigger !== 'immediate' || typeof eff?.script !== 'string') return false;
+        const script = eff.script;
+        return /\breturn\s+false\b/.test(script) || script.includes('this.effect.delete(');
+      };
+      // WFRP4e 9.6.3 can reject the surrounding createEmbeddedDocuments promise after an
+      // explicit immediate delete has already succeeded.  The rejection comes from Foundry
+      // attempting a second embedded-collection lookup with the transient effect's null id.
+      // Keep this deliberately narrow: an arbitrary create error must never be reported as a
+      // successful one-shot.
+      const isPostSelfDeleteCreateError = (error: unknown): boolean =>
+        isSelfDeletingImmediate(data.effect)
+        && /undefined id \[null\] does not exist in the EmbeddedCollection collection/i.test(
+          error instanceof Error ? error.message : String(error),
+        );
 
       // --- actor-direct branch: effect lives directly on the actor ---
       if (data.target.scope === 'actor-direct') {
         const actorDirect = data.target as { scope: 'actor-direct'; actorId?: string; actorName?: string };
         const actor = _resolveActor(actorDirect.actorId, actorDirect.actorName);
         const effectPayload = buildEffectPayload(data.effect);
-        const created: any[] = await actor.createEmbeddedDocuments('ActiveEffect', [effectPayload]);
+        let created: any[];
+        try {
+          created = await actor.createEmbeddedDocuments('ActiveEffect', [effectPayload]);
+        } catch (error) {
+          if (!isPostSelfDeleteCreateError(error)) throw error;
+          notify.created('active-effect', data.effect.name, {
+            summary: `on ${actor.name} (immediate one-shot — fired + self-deleted)`,
+          });
+          return {
+            success: true,
+            scope: 'actor-direct',
+            actorId: actor.id,
+            actorName: actor.name,
+            itemId: null,
+            itemName: null,
+            effectId: null,
+            effectName: data.effect.name,
+            parentType: 'Actor' as const,
+            fired: true,
+            autoDeleted: true,
+          };
+        }
         if (!created || created.length === 0) {
           if (isSelfDeletingImmediate(data.effect)) {
             notify.created('active-effect', data.effect.name, {
@@ -122,7 +155,26 @@ export class EffectsService {
       // --- item path (scope:'actor' or scope:'world') — unchanged ---
       const { item, owner, scope } = _resolveItem(_targetToResolverInput(data.target as any));
       const effectPayload = buildEffectPayload(data.effect);
-      const created: any[] = await item.createEmbeddedDocuments('ActiveEffect', [effectPayload]);
+      let created: any[];
+      try {
+        created = await item.createEmbeddedDocuments('ActiveEffect', [effectPayload]);
+      } catch (error) {
+        if (!isPostSelfDeleteCreateError(error)) throw error;
+        notify.created('active-effect', data.effect.name, {
+          summary: `on ${item.name} (immediate one-shot — fired + self-deleted)`,
+        });
+        return {
+          success: true,
+          scope,
+          actorId: owner?.id ?? null,
+          itemId: item.id,
+          itemName: item.name,
+          effectId: null,
+          effectName: data.effect.name,
+          fired: true,
+          autoDeleted: true,
+        };
+      }
       if (!created || created.length === 0) {
         if (isSelfDeletingImmediate(data.effect)) {
           notify.created('active-effect', data.effect.name, {
@@ -147,6 +199,22 @@ export class EffectsService {
       // RC1.1a re-read: mirror the actor-direct branch's :77 verify (CORE-02) — confirm the
       // item-embedded AE actually persisted before returning success.
       if (!item.effects.get(createdEffect.id)) {
+        if (isSelfDeletingImmediate(data.effect)) {
+          notify.created('active-effect', createdEffect.name, {
+            summary: `on ${item.name} (immediate one-shot — fired + self-deleted)`,
+          });
+          return {
+            success: true,
+            scope,
+            actorId: owner?.id ?? null,
+            itemId: item.id,
+            itemName: item.name,
+            effectId: createdEffect.id,
+            effectName: createdEffect.name,
+            fired: true,
+            autoDeleted: true,
+          };
+        }
         throw new Error(`${ErrorTokens.ADD_ACTIVE_EFFECT_NOT_PERSISTED}: effect ${createdEffect.id} absent after create`);
       }
 

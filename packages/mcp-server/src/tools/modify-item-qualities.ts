@@ -52,6 +52,7 @@ export class ModifyItemQualitiesTool extends BaseTool {
               items: {
                 type: 'object',
                 properties: { name: { type: 'string' }, value: { type: 'number' } },
+                required: ['name'],
               },
               description: 'Qualities to add. Optional value for parameterized qualities (e.g. Impact 2).',
             },
@@ -65,6 +66,7 @@ export class ModifyItemQualitiesTool extends BaseTool {
               items: {
                 type: 'object',
                 properties: { name: { type: 'string' }, value: { type: 'number' } },
+                required: ['name'],
               },
               description: 'Flaws to add.',
             },
@@ -75,6 +77,21 @@ export class ModifyItemQualitiesTool extends BaseTool {
             },
           },
           required: ['destination'],
+          allOf: [
+            {
+              anyOf: [
+                {
+                  properties: { itemName: { type: 'string' } },
+                  required: ['itemName'],
+                },
+                {
+                  properties: { itemId: { type: 'string' } },
+                  required: ['itemId'],
+                },
+              ],
+              description: 'One of itemName or itemId is required.',
+            },
+          ],
         },
       },
     ];

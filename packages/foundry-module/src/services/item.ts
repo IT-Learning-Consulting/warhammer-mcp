@@ -177,7 +177,15 @@ export class ItemService {
         if (Array.isArray(cloned.effects)) {
           for (const eff of cloned.effects) delete eff._id;
         }
-        effectiveItemData = (foundry as any).utils.mergeObject(cloned, data.itemData, {
+        // BUG-643: mergeObject treats arrays as atomic — a supplied `data.itemData.effects`
+        // would wholesale-replace `cloned.effects`, contradicting the documented contract
+        // (compendium-clone-patterns.md: "effects[] complements the cloned effect chain...
+        // preserved by fromCompendium; the new entries are appended"). Pre-union the arrays
+        // so mergeObject sees a single already-combined array on the incoming side.
+        const requestedItemData = Array.isArray(data.itemData.effects) && data.itemData.effects.length > 0
+          ? { ...data.itemData, effects: [...(cloned.effects ?? []), ...data.itemData.effects] }
+          : data.itemData;
+        effectiveItemData = (foundry as any).utils.mergeObject(cloned, requestedItemData, {
           recursive: true,
           overwrite: true,
           inplace: false,
@@ -313,23 +321,36 @@ export class ItemService {
       delete cloned._id;
       if (cloned.system?.quantity) cloned.system.quantity.value = data.quantity;
 
-      // Decrement source — capture result for DP-16 verify BEFORE creating destination.
-      // BUG-213: if source decrement fails silently, dest create would duplicate the item.
-      // The throw MUST precede toActor.createEmbeddedDocuments — that ordering IS the fix.
-      const updateResult = await item.update({ 'system.quantity.value': sourceQty - data.quantity });
-      const freshItem = fromActor.items?.get(data.itemId);
-      const freshQty = (freshItem as any)?.system?.quantity?.value ?? sourceQty;
-      if (updateResult === undefined || freshQty !== sourceQty - data.quantity) {
-        throw new Error(
-          `${ErrorTokens.TRADE_ITEM_SOURCE_DECREMENT_NOT_PERSISTED}: source quantity expected ${sourceQty - data.quantity} but found ${freshQty} (updateResult=${updateResult === undefined ? 'undefined' : 'ok'})`,
-        );
-      }
-
-      // Create on destination
+      // BUG-642: create and verify the destination copy BEFORE touching the source.
+      // A destination rejection therefore leaves the source byte-for-byte untouched.
       const destCreated = await toActor.createEmbeddedDocuments('Item', [cloned]);
       const destItem: any = destCreated[0];
       if (!destItem || !toActor.items?.get(destItem.id)) {
         throw new Error(`${ErrorTokens.TRADE_ITEM_DEST_CREATE_NOT_PERSISTED}: destination item absent after create on ${toActor.name}`);
+      }
+
+      // Only after the destination is durable do we decrement the source. If the source
+      // write is rejected, compensate by deleting the destination copy so the trade is
+      // atomic in both directions (BUG-213 duplication guard + BUG-642 loss guard).
+      let sourceUpdateError: unknown;
+      try {
+        await item.update({ 'system.quantity.value': sourceQty - data.quantity });
+      } catch (error) {
+        sourceUpdateError = error;
+      }
+      const freshItem = fromActor.items?.get(data.itemId);
+      const freshQty = (freshItem as any)?.system?.quantity?.value ?? sourceQty;
+      if (freshQty !== sourceQty - data.quantity) {
+        await toActor.deleteEmbeddedDocuments('Item', [destItem.id]);
+        if (toActor.items?.get(destItem.id)) {
+          throw new Error(
+            `TRADE_ITEM_COMPENSATION_FAILED: source quantity remained ${freshQty} and destination item ${destItem.id} could not be removed`,
+          );
+        }
+        const detail = sourceUpdateError instanceof Error ? `; update error: ${sourceUpdateError.message}` : '';
+        throw new Error(
+          `${ErrorTokens.TRADE_ITEM_SOURCE_DECREMENT_NOT_PERSISTED}: source quantity expected ${sourceQty - data.quantity} but found ${freshQty}${detail}`,
+        );
       }
 
       notify.updated('item', itemName, { summary: `traded ${data.quantity} × from ${fromActor.name} → ${toActor.name}` });
@@ -349,18 +370,32 @@ export class ItemService {
       };
     }
 
-    // Full transfer: delete from source, create on destination
+    // Full transfer: create and verify destination first, then delete source. This
+    // ordering is the BUG-642 safety invariant: destination failure cannot lose source.
     const cloned: any = item.toObject();
     delete cloned._id;
 
-    await fromActor.deleteEmbeddedDocuments('Item', [data.itemId]);
-    if (fromActor.items?.get(data.itemId)) {
-      throw new Error(`${ErrorTokens.TRADE_ITEM_SOURCE_DELETE_NOT_PERSISTED}: item ${data.itemId} still present on ${fromActor.name} after delete`);
-    }
     const destCreated = await toActor.createEmbeddedDocuments('Item', [cloned]);
     const destItem: any = destCreated[0];
     if (!destItem || !toActor.items?.get(destItem.id)) {
       throw new Error(`${ErrorTokens.TRADE_ITEM_DEST_CREATE_NOT_PERSISTED}: destination item absent after create on ${toActor.name}`);
+    }
+
+    let sourceDeleteError: unknown;
+    try {
+      await fromActor.deleteEmbeddedDocuments('Item', [data.itemId]);
+    } catch (error) {
+      sourceDeleteError = error;
+    }
+    if (fromActor.items?.get(data.itemId)) {
+      await toActor.deleteEmbeddedDocuments('Item', [destItem.id]);
+      if (toActor.items?.get(destItem.id)) {
+        throw new Error(
+          `TRADE_ITEM_COMPENSATION_FAILED: source item ${data.itemId} remained and destination item ${destItem.id} could not be removed`,
+        );
+      }
+      const detail = sourceDeleteError instanceof Error ? `; delete error: ${sourceDeleteError.message}` : '';
+      throw new Error(`${ErrorTokens.TRADE_ITEM_SOURCE_DELETE_NOT_PERSISTED}: item ${data.itemId} still present on ${fromActor.name} after delete${detail}`);
     }
 
     notify.updated('item', itemName, { summary: `traded from ${fromActor.name} → ${toActor.name}` });
@@ -585,31 +620,28 @@ export class ItemService {
     const persistedItem = item.parent
       ? (item.parent.items?.get(item.id) ?? item)
       : ((game.items as any)?.get(item.id) ?? item);
-    const persistedQualityNames = new Set(
-      ((persistedItem._source as any)?.system?.qualities?.value ?? []).map((entry: any) => String(entry?.name ?? '').toLowerCase())
-    );
-    const persistedFlawNames = new Set(
-      ((persistedItem._source as any)?.system?.flaws?.value ?? []).map((entry: any) => String(entry?.name ?? '').toLowerCase())
-    );
-    for (const quality of parsed.addQualities) {
-      if (!persistedQualityNames.has(String(quality.name).toLowerCase())) {
-        throw new Error(`${ErrorTokens.MODIFY_ITEM_QUALITIES_NOT_PERSISTED}: missing added quality "${quality.name}"`);
-      }
+    // BUG-661: name-only membership lets a rejected fine:1 → fine:2 update pass.
+    // Compare the complete canonical name/value multisets so changed values, removals,
+    // duplicates, and unexpected survivors all participate in DP-16 verification.
+    const canonicalEntries = (entries: any[]) => entries
+      .map((entry: any) => ({
+        name: String(entry?.name ?? '').toLowerCase(),
+        value: entry?.value ?? null,
+      }))
+      .sort((a: any, b: any) => `${a.name}:${String(a.value)}`.localeCompare(`${b.name}:${String(b.value)}`));
+    const expectedQualities = canonicalEntries(nextQualities);
+    const expectedFlaws = canonicalEntries(nextFlaws);
+    const persistedQualities = canonicalEntries((persistedItem._source as any)?.system?.qualities?.value ?? []);
+    const persistedFlaws = canonicalEntries((persistedItem._source as any)?.system?.flaws?.value ?? []);
+    if (JSON.stringify(persistedQualities) !== JSON.stringify(expectedQualities)) {
+      throw new Error(
+        `${ErrorTokens.MODIFY_ITEM_QUALITIES_NOT_PERSISTED}: qualities expected ${JSON.stringify(expectedQualities)} but found ${JSON.stringify(persistedQualities)}`,
+      );
     }
-    for (const quality of parsed.removeQualities) {
-      if (persistedQualityNames.has(quality.toLowerCase())) {
-        throw new Error(`${ErrorTokens.MODIFY_ITEM_QUALITIES_NOT_PERSISTED}: quality "${quality}" was not removed`);
-      }
-    }
-    for (const flaw of parsed.addFlaws) {
-      if (!persistedFlawNames.has(String(flaw.name).toLowerCase())) {
-        throw new Error(`${ErrorTokens.MODIFY_ITEM_QUALITIES_NOT_PERSISTED}: missing added flaw "${flaw.name}"`);
-      }
-    }
-    for (const flaw of parsed.removeFlaws) {
-      if (persistedFlawNames.has(flaw.toLowerCase())) {
-        throw new Error(`${ErrorTokens.MODIFY_ITEM_QUALITIES_NOT_PERSISTED}: flaw "${flaw}" was not removed`);
-      }
+    if (JSON.stringify(persistedFlaws) !== JSON.stringify(expectedFlaws)) {
+      throw new Error(
+        `${ErrorTokens.MODIFY_ITEM_QUALITIES_NOT_PERSISTED}: flaws expected ${JSON.stringify(expectedFlaws)} but found ${JSON.stringify(persistedFlaws)}`,
+      );
     }
 
     notify.updated('item', item.name, {

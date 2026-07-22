@@ -126,8 +126,12 @@ export class ModuleSequencerTool extends BaseTool {
         name: 'module-sequencer',
         title: 'Sequencer — animation, sound, and canvas effects',
         annotations: {
+          // BUG-809: end-all-effects/end-all-sounds permanently remove persistent scene
+          // effects/sounds and permission-write mutates world authorization — matches the
+          // destructiveHint:true convention used by every other mixed read/write module-*
+          // umbrella (item-piles, matt, mortal-needs, macro-trigger).
           readOnlyHint: false,
-          destructiveHint: false,
+          destructiveHint: true,
           idempotentHint: false,
           openWorldHint: false,
         },
@@ -147,13 +151,13 @@ EFFECTS:
     SIMPLIFIED (recommended): sections like {type:"effect", file:"jb2a.flames.orange", atLocation? ({x,y} or token id/name), attachTo?, stretchTo?, scale?, duration?, fadeIn?, fadeOut?, opacity?, delay?, rotate?, tint?, name?, origin?, repeats?, persist?, belowTokens?, waitUntilFinished?} or {type:"sound", file, volume?, duration?, fadeInAudio?, fadeOutAudio?, delay?, repeats?, waitUntilFinished?} — expanded server-side through Sequencer's fluent API. Simplified supports ONLY effect + sound (others → SEQUENCER_UNSUPPORTED_SIMPLE_SECTION).
     SERIALIZED: full Sequence.toJSON() output (every section carries repetitionsDelay[min,max]) — passthrough via fromJSON. Mixing the two styles in one call is rejected.
 - end-effects         { filter? }                     — EffectManager.endEffects(filter)
-- end-all-effects     { sceneId?, confirm:true }      — clears all effects (scene-level, confirm required)
+- end-all-effects     { sceneId?, confirm? }          — clears all effects (scene-level). BUG-810: confirm is optional at parse time; omitting or passing false both return CONFIRM_REQUIRED (a clean re-askable token, not a raw validation error) — pass confirm:true to proceed.
 - get-effects         { filter? }                     — returns serialized effect .data
 - update-effects      { filter?, updates? }           — EffectManager.updateEffects
 SOUNDS:
 - play-sound          { file, options? }              — new Sequence().sound(file).play()
 - end-sounds          { filter? }                     — SoundManager.endSounds
-- end-all-sounds      { confirm:true }                — ends ALL running sounds (all scenes; Sequencer 4.2.x dropped per-scene scoping)
+- end-all-sounds      { confirm? }                    — ends ALL running sounds (all scenes; Sequencer 4.2.x dropped per-scene scoping). BUG-810: confirm optional at parse time; omitted/false → clean CONFIRM_REQUIRED token; pass confirm:true to proceed.
 - get-sounds          { filter? }                     — returns serialized sound state
 DATABASE (read-only):
 - database-search     { path }                        — Database.searchFor(path)
@@ -163,7 +167,7 @@ DATABASE (read-only):
   Returns DATABASE_NOT_POPULATED if autoanimations module is not active.
 PRELOAD:
 - preload             { files, showProgressBar? }     — Preloader.preload (GM client)
-- preload-for-clients { files, showProgressBar?, confirm:true } — broadcasts to ALL clients
+- preload-for-clients { files, showProgressBar?, confirm? } — broadcasts to ALL clients. BUG-810: confirm optional at parse time; omitted/false → clean CONFIRM_REQUIRED token; pass confirm:true to proceed.
 PERMISSIONS:
 - permission-write    { key, value }                  — set Sequencer world permission (0-3)
   keys: permissions-effect-create|delete, permissions-sound-create, permissions-preload, permissions-sidebar-tools
@@ -198,7 +202,7 @@ Examples:
             filter: { type: 'object', description: '[end-effects/get-effects/update-effects/end-sounds/get-sounds] EffectManager InFilters: {name?,sceneId?,source?,target?,origin?,effects?}.' },
             updates: { type: 'object', description: '[update-effects] Property updates to apply to matched effects.' },
             sceneId: { type: 'string', description: '[end-all-effects] Limit to this scene ID. (end-all-sounds no longer accepts a scene — Sequencer 4.2.x ends all sounds globally.)' },
-            confirm: { type: 'boolean', description: '[end-all-effects/end-all-sounds/preload-for-clients] Required true for destructive/broadcast actions.' },
+            confirm: { type: 'boolean', description: '[end-all-effects/end-all-sounds/preload-for-clients] Must be true to proceed with these destructive/broadcast actions. BUG-810: optional at the schema layer (omitting it or passing false both return a clean CONFIRM_REQUIRED token instead of a raw parse error) — but the action will not execute without confirm:true.' },
             file: { type: 'string', description: '[play-sound] Sound file path.' },
             files: { type: 'array', items: { type: 'string' }, description: '[preload/preload-for-clients] File paths to preload.' },
             showProgressBar: { type: 'boolean', description: '[preload/preload-for-clients] Show loading progress bar.' },
@@ -212,6 +216,24 @@ Examples:
             value: { type: 'number', minimum: 0, maximum: 3, description: '[permission-write] Permission role threshold (0=None, 1=Player, 2=Trusted, 3=Assistant/GM).' },
           },
           required: ['action'],
+          // BUG-808 (D1 — tighten in place, never anyOf): per-branch required sets generated
+          // from ModuleSequencerInput's own Zod discriminated union. BUG-810 (2026-07-21):
+          // end-all-effects/end-all-sounds/preload-for-clients no longer require 'confirm' in
+          // Zod — it's optional at parse time now (handler enforces literal true via
+          // `input.confirm !== true`, matching the AA play-animation pattern), so this allOf
+          // correctly omits 'confirm' from their required sets too, keeping published/Zod truth
+          // in sync.
+          allOf: [
+            { if: { properties: { action: { const: 'play-sequence-json' } } }, then: { required: ['sequence'] } },
+            { if: { properties: { action: { const: 'play-sound' } } }, then: { required: ['file'] } },
+            { if: { properties: { action: { const: 'database-search' } } }, then: { required: ['path'] } },
+            { if: { properties: { action: { const: 'database-get-paths' } } }, then: { required: ['path'] } },
+            { if: { properties: { action: { const: 'database-entry-exists' } } }, then: { required: ['path'] } },
+            { if: { properties: { action: { const: 'database-get-entry' } } }, then: { required: ['path'] } },
+            { if: { properties: { action: { const: 'preload' } } }, then: { required: ['files'] } },
+            { if: { properties: { action: { const: 'preload-for-clients' } } }, then: { required: ['files'] } },
+            { if: { properties: { action: { const: 'permission-write' } } }, then: { required: ['key', 'value'] } },
+          ],
         },
       },
     ];

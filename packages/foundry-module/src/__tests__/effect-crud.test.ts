@@ -192,6 +192,80 @@ describe('addActiveEffect', () => {
       })
     ).rejects.toThrow(/World item/);
   });
+
+  it('reports explicit immediate self-delete as fired and autoDeleted (BUG-659)', async () => {
+    const worldItem = makeItemStub('w1', 'One-shot Item');
+    worldItem.createEmbeddedDocuments = vi.fn(async (_type: string, payloads: any[]) => [
+      makeEffectStub('gone-effect', payloads[0].name),
+    ]); // Foundry returns the created doc, but the script removed it before read-back.
+    setupStubs({ worldItems: [worldItem] });
+
+    const result = await makeDA().addActiveEffect({
+      target: { scope: 'world', itemId: 'w1' },
+      effect: {
+        name: 'Immediate Cleanup',
+        trigger: 'immediate',
+        script: 'await this.effect.delete();',
+      },
+    });
+
+    expect(result).toMatchObject({ success: true, fired: true, autoDeleted: true });
+  });
+
+  it('reports the live actor-direct post-delete rejection as fired and autoDeleted (BUG-659)', async () => {
+    const actor: any = makeActorStub('a1', 'One-shot Actor');
+    actor.createEmbeddedDocuments = vi.fn(async () => {
+      throw new Error('undefined id [null] does not exist in the EmbeddedCollection collection.');
+    });
+    setupStubs({ actors: [actor] });
+
+    const result = await makeDA().addActiveEffect({
+      target: { scope: 'actor-direct', actorId: 'a1' },
+      effect: {
+        name: 'Immediate Cleanup',
+        trigger: 'immediate',
+        script: 'await this.effect.delete();',
+      },
+    });
+
+    expect(result).toMatchObject({
+      success: true,
+      parentType: 'Actor',
+      fired: true,
+      autoDeleted: true,
+      effectId: null,
+    });
+  });
+
+  it('does not hide unrelated create failures for a self-deleting recipe (BUG-659 control)', async () => {
+    const actor: any = makeActorStub('a1', 'Broken Actor');
+    actor.createEmbeddedDocuments = vi.fn(async () => {
+      throw new Error('Permission denied');
+    });
+    setupStubs({ actors: [actor] });
+
+    await expect(makeDA().addActiveEffect({
+      target: { scope: 'actor-direct', actorId: 'a1' },
+      effect: {
+        name: 'Immediate Cleanup',
+        trigger: 'immediate',
+        script: 'await this.effect.delete();',
+      },
+    })).rejects.toThrow(/Permission denied/);
+  });
+
+  it('still rejects an ordinary immediate effect that disappears (BUG-659 control)', async () => {
+    const worldItem = makeItemStub('w1', 'Broken Item');
+    worldItem.createEmbeddedDocuments = vi.fn(async (_type: string, payloads: any[]) => [
+      makeEffectStub('missing-effect', payloads[0].name),
+    ]);
+    setupStubs({ worldItems: [worldItem] });
+
+    await expect(makeDA().addActiveEffect({
+      target: { scope: 'world', itemId: 'w1' },
+      effect: { name: 'Should Persist', trigger: 'immediate', script: 'return true;' },
+    })).rejects.toThrow(/ADD_ACTIVE_EFFECT_NOT_PERSISTED/);
+  });
 });
 
 describe('updateActiveEffect', () => {

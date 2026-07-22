@@ -142,6 +142,26 @@ describe('tradeItem — full transfer', () => {
       da.tradeItem({ fromActorId: 'a1', toActorId: 'a2', itemId: 'ghost-item' })
     ).rejects.toThrow(/not found on/);
   });
+
+  it('leaves the source untouched when destination creation fails (BUG-642 full)', async () => {
+    const fromActor = makeActor('a1', 'Hans', [
+      { id: 'item1', name: 'Longsword', type: 'weapon', quantity: 1 },
+    ]);
+    const toActor = makeActor('a2', 'Maria', []);
+    toActor.createEmbeddedDocuments = vi.fn(async () => {
+      throw new Error('destination rejects item');
+    });
+    (globalThis as any).game = {
+      ...(globalThis as any).game,
+      actors: { get: (id: string) => (id === 'a1' ? fromActor : id === 'a2' ? toActor : null) },
+    };
+
+    await expect(makeDA().tradeItem({ fromActorId: 'a1', toActorId: 'a2', itemId: 'item1' }))
+      .rejects.toThrow(/destination rejects item/);
+
+    expect(fromActor.items.get('item1')).not.toBeNull();
+    expect(fromActor.deleteEmbeddedDocuments).not.toHaveBeenCalled();
+  });
 });
 
 describe('tradeItem — partial-quantity transfer', () => {
@@ -190,6 +210,28 @@ describe('tradeItem — partial-quantity transfer', () => {
     // quantity === sourceQty triggers the full-transfer branch (not partial)
     expect(fromActor.deleteEmbeddedDocuments).toHaveBeenCalledOnce();
   });
+
+  it('leaves source quantity untouched when destination creation fails (BUG-642 partial)', async () => {
+    const fromActor = makeActor('a1', 'Hans', [
+      { id: 'stack', name: 'Arrows', type: 'ammunition', quantity: 20 },
+    ]);
+    const toActor = makeActor('a2', 'Maria', []);
+    toActor.createEmbeddedDocuments = vi.fn(async () => {
+      throw new Error('destination rejects stack');
+    });
+    (globalThis as any).game = {
+      ...(globalThis as any).game,
+      actors: { get: (id: string) => (id === 'a1' ? fromActor : id === 'a2' ? toActor : null) },
+    };
+
+    await expect(makeDA().tradeItem({
+      fromActorId: 'a1', toActorId: 'a2', itemId: 'stack', quantity: 5,
+    })).rejects.toThrow(/destination rejects stack/);
+
+    const srcItem: any = fromActor._itemMap.get('stack');
+    expect(srcItem.system.quantity.value).toBe(20);
+    expect(srcItem.update).not.toHaveBeenCalled();
+  });
 });
 
 describe('tradeItem — encumbrance stays system-owned (HC3)', () => {
@@ -216,7 +258,7 @@ describe('tradeItem — encumbrance stays system-owned (HC3)', () => {
 });
 
 describe('tradeItem — BUG-213 duplication guard (partial-quantity silent drop)', () => {
-  it('throws TRADE_ITEM_SOURCE_DECREMENT_NOT_PERSISTED and does NOT call createEmbeddedDocuments when update() returns undefined', async () => {
+  it('compensates the destination copy when the source decrement is rejected', async () => {
     // Simulate a preUpdate hook cancelling the source decrement (update returns undefined).
     // Without the guard, handler would unconditionally create on destination → item duplication.
     const fromActor = makeActor('a1', 'Hans', [
@@ -240,7 +282,10 @@ describe('tradeItem — BUG-213 duplication guard (partial-quantity silent drop)
       da.tradeItem({ fromActorId: 'a1', toActorId: 'a2', itemId: 'stack', quantity: 2 }),
     ).rejects.toThrow(/TRADE_ITEM_SOURCE_DECREMENT_NOT_PERSISTED/);
 
-    // The duplication invariant: destination create must NOT have been called.
-    expect(toActor.createEmbeddedDocuments).not.toHaveBeenCalled();
+    // BUG-642 requires destination-first ordering; BUG-213 now compensates that copy.
+    expect(toActor.createEmbeddedDocuments).toHaveBeenCalledOnce();
+    expect(toActor.deleteEmbeddedDocuments).toHaveBeenCalledOnce();
+    expect(toActor._itemMap.size).toBe(0);
+    expect((fromActor._itemMap.get('stack') as any).system.quantity.value).toBe(5);
   });
 });

@@ -38,7 +38,7 @@ export class AddActiveEffectTool extends BaseTool {
           openWorldHint: true,
         },
         description:
-          'Attach an ActiveEffect to an existing item on an actor or in the world, or place a one-off effect directly on an actor (no carrier item needed). Uses the same flat {name, trigger, script, ...} effect shape as create-custom-item\'s effects[] field — buildEffectPayload (shared) transforms it into the Foundry nested shape.\n\nTarget scopes:\n  - scope="actor" — effect on a specific item owned by an actor (actorId/actorName + itemId/itemName).\n  - scope="world" — effect on a world-scope item (itemId/itemName).\n  - scope="actor-direct" — effect placed directly on the actor itself (actorId or actorName; no item fields). Use this for one-off modifiers such as a −10 WS debuff on an NPC.\n\nname + trigger are the required fields on effect; script defaults to "" and is optional.\n\nReturns:\n  - On success: created effect ID (and full document if returnFullPayload=true). parentType:"Actor" when scope="actor-direct".\n  - On error: throws with an actionable message.\n\nUse when: adding a rule-modifying effect to an item or directly to an actor. Don\'t use when: adding a WFRP4e condition — use apply-condition instead.\n\nSecurity: script / preApplyScript / enableScript fields are executed by Foundry under GM authority. MCP does not sandbox script content. Only invoke with scripts you wrote or audited.',
+          'Attach an ActiveEffect to an existing item on an actor or in the world, or place a one-off effect directly on an actor (no carrier item needed). Uses the same flat {name, trigger, script, ...} effect shape as create-custom-item\'s effects[] field — buildEffectPayload (shared) transforms it into the Foundry nested shape.\n\nTarget scopes:\n  - scope="actor" — effect on a specific item owned by an actor (actorId/actorName + itemId/itemName).\n  - scope="world" — effect on a world-scope item (itemId/itemName).\n  - scope="actor-direct" — effect placed directly on the actor itself (actorId or actorName; no item fields). Use this for one-off modifiers such as a −10 WS debuff on an NPC.\n\nname + trigger are the required fields on effect; script defaults to "" and is optional.\n\nReturns:\n  - On success: created effect ID (and full document if returnFullPayload=true). parentType:"Actor" when scope="actor-direct".\n  - On error: throws with an actionable message.\n\nUse when: adding a rule-modifying effect to an item or directly to an actor. Don\'t use when: adding a WFRP4e condition — use apply-condition instead.\n\nSecurity: script / preApplyScript / enableConditionScript fields are executed by Foundry under GM authority. MCP does not sandbox script content. Only invoke with scripts you wrote or audited.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -67,18 +67,44 @@ export class AddActiveEffectTool extends BaseTool {
                 transfer: {
                   type: 'object',
                   description:
-                    'TransferData config object (not a boolean) — controls how/when the AE is routed off its source document. buildEffectPayload inflates this into system.transferData. Defaults to {type:"document", documentType:"Actor"}, i.e. classic transfer to the owning actor — the right default for talents/traits/passive buffs. BUG-644: the owner-transfer type is "document"; the legacy alias "ownership" is accepted but normalized to "document" (warhammer-lib only ever dispatches on "document", so a raw "ownership" effect silently never applies).',
+                    'TransferData config object (not a boolean) — controls how/when the AE is routed off its source document. buildEffectPayload inflates this into system.transferData (nesting corrected + live-verified against wfrp4e.js\'s own _migrateEffectFlags, BUG-644). Defaults to {type:"document", documentType:"Actor"}, i.e. classic transfer to the owning actor — the right default for talents/traits/passive buffs. The owner-transfer type is "document"; the legacy alias "ownership" is accepted but normalized to "document" (warhammer-lib only ever dispatches on "document", so a raw "ownership" effect silently never applies).',
                   properties: {
                     type: {
                       type: 'string',
-                      enum: ['document', 'damage', 'target', 'area', 'aura', 'other', 'ownership'],
+                      enum: ['document', 'damage', 'target', 'area', 'aura', 'crew', 'other', 'ownership'],
                       description:
-                        'document = transfer to owning actor (default); damage = applied to whoever takes damage from the owner; target = applied to a test target; area/aura = template-based; other = manual routing. "ownership" is a deprecated alias for "document".',
+                        'document = transfer to owning actor (default); damage = applied to whoever takes damage from the owner; target = applied to a test target; area/aura = template-based; crew = vehicle crew transfer; other = manual routing. "ownership" is a deprecated alias for "document". Canonical list: WFRP4E.transferTypes (wfrp4e.js).',
                     },
                     documentType: {
                       type: 'string',
                       enum: ['Actor', 'Item'],
                       description: 'What the effect applies TO once transferred. Default "Actor".',
+                    },
+                    avoidable: { type: 'boolean', description: 'Whether the target can attempt to avoid the effect.' },
+                    avoidTest: { type: 'object', additionalProperties: true, description: 'Avoid-test config (skill/difficulty), passed through as-is.' },
+                    testIndependent: { type: 'boolean', description: 'Effect applies independent of any test outcome.' },
+                    preApplyScript: { type: 'string', description: 'JS run before the effect applies, under GM authority.' },
+                    equipTransfer: { type: 'boolean', description: 'Only transfers while the carrying item is equipped.' },
+                    enableConditionScript: { type: 'string', description: 'JS gating whether the effect is currently active (BUG-644: renamed from the dead "enableScript").' },
+                    filter: {
+                      oneOf: [{ type: 'boolean' }, { type: 'string' }],
+                      description: 'Filter condition gating application; exact leaf shape not fully live-verified (boolean or key into a filter-values config).',
+                    },
+                    prompt: { type: 'boolean', description: 'Prompt the affected party before applying.' },
+                    selfOnly: { type: 'boolean', description: 'Only affects the source actor, never transfers.' },
+                    area: {
+                      type: 'object',
+                      properties: {
+                        radius: { oneOf: [{ type: 'number' }, { type: 'string' }], description: 'Number or overcast-derived formula string.' },
+                        templateData: { type: 'string' },
+                        duration: { type: 'string' },
+                        keep: { type: 'boolean' },
+                        aura: {
+                          type: 'object',
+                          properties: { render: { type: 'boolean' }, transferred: { type: 'boolean' } },
+                        },
+                      },
+                      description: '[type=area/aura] Template + aura sub-config.',
                     },
                   },
                   additionalProperties: true,
@@ -88,10 +114,10 @@ export class AddActiveEffectTool extends BaseTool {
                 statuses: { type: 'array', items: { type: 'string' } },
                 duration: { type: 'object', additionalProperties: true },
                 flags: { type: 'object', additionalProperties: true },
-                equipTransfer: { type: 'boolean' },
-                enableScript: { type: 'string' },
-                preApplyScript: { type: 'string' },
-                testIndependent: { type: 'boolean' },
+                equipTransfer: { type: 'boolean', description: 'Flat shortcut for transfer.equipTransfer.' },
+                enableConditionScript: { type: 'string', description: 'Flat shortcut for transfer.enableConditionScript (BUG-644: renamed from the dead "enableScript").' },
+                preApplyScript: { type: 'string', description: 'Flat shortcut for transfer.preApplyScript.' },
+                testIndependent: { type: 'boolean', description: 'Flat shortcut for transfer.testIndependent.' },
               },
               required: ['name', 'trigger'],
               additionalProperties: true,

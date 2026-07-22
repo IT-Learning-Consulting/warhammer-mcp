@@ -370,8 +370,31 @@ GM required for all write actions.`,
             },
             merchantColumns: {
               type: 'array',
-              items: { type: 'object', properties: { label: { type: 'string' }, path: { type: 'string' } } },
-              description: '[update-pile merchant] Display columns. WFRP4e default: Availability + Encumbrance (pre-wired by item-piles-wfrp4e bridge).',
+              items: {
+                type: 'object',
+                properties: {
+                  label: { type: 'string' },
+                  path: { type: 'string' },
+                  buying: { type: 'boolean', description: 'Show on the buy (merchant) side; upstream defaults true.' },
+                  selling: { type: 'boolean', description: 'Show on the sell (player) side; upstream defaults true.' },
+                  mapping: { type: 'object', description: 'Raw value -> display label/sort-order key, e.g. WFRP availability tiers.' },
+                  formatting: { type: 'string', description: 'e.g. "{#} common" — {#} is replaced with the localized value.' },
+                  condition: {
+                    type: 'object',
+                    properties: {
+                      path: { type: 'string' },
+                      // CCR-V8: value is compared against an arbitrary getProperty() result
+                      // (string/number/boolean per WFRP field), so it's a genuine scalar union —
+                      // oneOf, not an untyped stub (ownership.ts `level` precedent).
+                      value: { oneOf: [{ type: 'string' }, { type: 'number' }, { type: 'boolean' }] },
+                      placeholder: { type: 'string' },
+                    },
+                    description: 'Show placeholder text instead of the raw value when doc[path] === value.',
+                  },
+                },
+                required: ['label', 'path'],
+              },
+              description: '[update-pile merchant] Display columns. WFRP4e default: Availability + Encumbrance (pre-wired by item-piles-wfrp4e bridge). BUG-783: buying/selling/mapping/formatting/condition are real upstream fields — previously silently stripped before reaching update-pile.',
             },
             overheadCost: {
               type: 'array',
@@ -415,6 +438,28 @@ GM required for all write actions.`,
             enabled: { type: 'boolean', description: '[update-pile] Activate an existing actor as a pile. Required for merchant/vault to be valid — sets the enabled flag on the pile data.' },
           },
           required: ['action'],
+          // BUG-782 (D1 — tighten in place, never anyOf): per-branch required sets generated
+          // from ModuleItempilesInput's own Zod discriminated union (17 branches). Wire shape
+          // (type/properties/required at top level) is unchanged; this only adds enforcement.
+          allOf: [
+            { if: { properties: { action: { const: 'create-pile' } } }, then: { required: ['sceneId'] } },
+            { if: { properties: { action: { const: 'update-pile' } } }, then: { required: ['actorUuid'] } },
+            { if: { properties: { action: { const: 'delete-pile' } } }, then: { required: ['tokenUuid'] } },
+            { if: { properties: { action: { const: 'set-pile-state' } } }, then: { required: ['state'] } },
+            { if: { properties: { action: { const: 'get-contents' } } }, then: { required: ['actorUuid'] } },
+            { if: { properties: { action: { const: 'add-items' } } }, then: { required: ['actorUuid', 'items'] } },
+            { if: { properties: { action: { const: 'remove-items' } } }, then: { required: ['actorUuid', 'items'] } },
+            { if: { properties: { action: { const: 'transfer-items' } } }, then: { required: ['sourceUuid', 'targetUuid'] } },
+            { if: { properties: { action: { const: 'add-currency' } } }, then: { required: ['actorUuid', 'currencies'] } },
+            { if: { properties: { action: { const: 'remove-currency' } } }, then: { required: ['actorUuid', 'currencies'] } },
+            { if: { properties: { action: { const: 'transfer-currency' } } }, then: { required: ['sourceUuid', 'targetUuid'] } },
+            { if: { properties: { action: { const: 'split-loot' } } }, then: { required: ['actorUuid', 'targets'] } },
+            { if: { properties: { action: { const: 'vault-info' } } }, then: { required: ['actorUuid'] } },
+            { if: { properties: { action: { const: 'roll-item-table' } } }, then: { required: ['tableUuid'] } },
+            { if: { properties: { action: { const: 'refresh-merchant' } } }, then: { required: ['merchantUuid'] } },
+            { if: { properties: { action: { const: 'trade-items' } } }, then: { required: ['buyerUuid', 'items', 'merchantUuid'] } },
+            { if: { properties: { action: { const: 'update-price-modifiers' } } }, then: { required: ['actorUuid'] } },
+          ],
         },
       },
     ];

@@ -108,6 +108,50 @@ function normalizeSystemOverrides(overrides: Record<string, unknown>): Record<st
   return out;
 }
 
+// BUG-643: every subtype builder returns a FULLY populated system object (unsupplied fields
+// fall back to hardcoded defaults inside buildXSystem, e.g. `p.wounds ?? '1'`). When cloning
+// from a compendium source, sending that fully-populated object to the foundry-module's
+// `mergeObject(cloned, itemData, {recursive:true, overwrite:true})` stomps every field the
+// caller never mentioned back to its bare default — live-confirmed: cloning Core Hand Weapon
+// while overriding only selected fields reset the source's encumbrance/price/availability/
+// reach/ammunitionGroup to zero/empty. Only used when `fromCompendium` is set — a brand-new
+// (non-clone) item legitimately wants the full default-populated system.
+//
+// Fix: build the system TWICE — once from the caller's actual `parsed`, once from a "bare"
+// parsed stripped to only the structurally-required keys (itemType/name/destination, plus
+// prayer's required `type` discriminator) — then keep only the leaves that DIFFER. A leaf
+// equal to the bare default is treated as "caller didn't actually customize this," so the
+// clone source's own value survives the merge instead of being stomped.
+const STRUCTURAL_KEYS = new Set(['itemType', 'name', 'destination', 'type']);
+
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
+function sparseDiff(full: Record<string, unknown>, bare: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const key of Object.keys(full)) {
+    const fv = full[key];
+    const bv = bare[key];
+    if (isPlainObject(fv) && isPlainObject(bv)) {
+      const nested = sparseDiff(fv, bv);
+      if (Object.keys(nested).length > 0) out[key] = nested;
+    } else if (JSON.stringify(fv) !== JSON.stringify(bv)) {
+      out[key] = fv;
+    }
+  }
+  return out;
+}
+
+function buildSparseCloneSystem(parsed: any): Record<string, unknown> {
+  const full = buildSystemForSubtype(parsed);
+  const bareParsed = Object.fromEntries(
+    Object.entries(parsed).filter(([k]) => STRUCTURAL_KEYS.has(k)),
+  );
+  const bare = buildSystemForSubtype(bareParsed as any);
+  return sparseDiff(full, bare);
+}
+
 export class CreateCustomItemTool extends BaseTool {
   constructor(options: BaseToolOptions) {
     super(options);
@@ -150,7 +194,7 @@ weapon, armour, trapping, ammunition, container, spell, prayer, talent, career, 
 - \`wfrp4e-helf.technique\` (The High Elves — UI label "Sword Dance")
 - \`wfrp4e-archives3.cant\`, \`wfrp4e-archives3.armour\` (Archives of the Empire III)
 
-**Active Effects at creation time:** pass \`effects: [{ name, trigger, script, description?, ... }]\`. Trigger keys are the 53 WFRP4e/warhammer-lib trigger slugs (e.g. \`rollWeaponTest\`, \`prePrepareData\`, \`immediate\`, \`endTurn\`). ALWAYS set \`description\` (HTML ok) — it is the user-facing text players/GMs see when expanding the effect on the sheet; without it the effect is opaque (BUG-334). Scripts run in Foundry context — caller trust required.
+**Active Effects at creation time:** pass \`effects: [{ name, trigger, script, description?, ... }]\`. Trigger keys are the 59 WFRP4e/warhammer-lib trigger slugs (e.g. \`rollWeaponTest\`, \`prePrepareData\`, \`immediate\`, \`endTurn\`). ALWAYS set \`description\` (HTML ok) — it is the user-facing text players/GMs see when expanding the effect on the sheet; without it the effect is opaque (BUG-334). Scripts run in Foundry context — caller trust required.
 
 **Compendium seeding:** \`fromCompendium: "Compendium.<pack>.Item.<id>"\` clones the source (preserving its effects), strips source IDs, then merges your overrides on top.
 
@@ -161,13 +205,23 @@ weapon, armour, trapping, ammunition, container, spell, prayer, talent, career, 
 - Weapon cloned at world scope: \`{ itemType: "weapon", name: "Fire Sword", fromCompendium: "Compendium.wfrp4e-core.items.Item.<longsword-id>", damage: "SB+6", destination: { type: "world", folder: ["Homebrew", "Armor"] } }\`
 - Grimoire: \`{ itemType: "forien-armoury.grimoire", name: "Tome of Ulric", spells: [{name: "Wolf Form", uuid: "..."}], destination: { type: "world" } }\`
 
-Security: script / preApplyScript / enableScript fields are executed by Foundry under GM authority. MCP does not sandbox script content. Only invoke with scripts you wrote or audited.`,
+Security: script / preApplyScript / enableConditionScript fields are executed by Foundry under GM authority. MCP does not sandbox script content. Only invoke with scripts you wrote or audited.`,
         inputSchema: {
           type: 'object',
           additionalProperties: true,
           properties: {
             itemType: {
               type: 'string',
+              // BUG-660: previously no enum — any string passed the published schema and only
+              // failed at the Zod discriminated-union parse. Generated from the live Zod union.
+              enum: [
+                'weapon', 'armour', 'trapping', 'ammunition', 'container', 'spell', 'prayer',
+                'talent', 'career', 'skill', 'trait', 'mutation', 'critical', 'disease',
+                'template', 'cargo', 'injury', 'money', 'psychology',
+                'forien-armoury.grimoire', 'forien-armoury.scroll', 'wfrp4e-dwarfs.rune',
+                'wfrp4e-soc.chanty', 'wfrp4e-helf.technique', 'wfrp4e-archives3.cant',
+                'wfrp4e-archives3.armour',
+              ],
               description:
                 'Item subtype discriminator. One of 19 core names or 7 dotted module keys. See tool description.',
             },
@@ -183,7 +237,7 @@ Security: script / preApplyScript / enableScript fields are executed by Foundry 
             effects: {
               type: 'array',
               description:
-                'Optional Active Effects to attach. Each entry: { name, trigger (one of 53 keys), script, description (user-facing sheet text — always set it), ...optional system fields }.',
+                'Optional Active Effects to attach. Each entry: { name, trigger (one of 59 keys), script, description (user-facing sheet text — always set it), ...optional system fields }.',
               items: { type: 'object', additionalProperties: true },
             },
             destination: {
@@ -249,7 +303,7 @@ Security: script / preApplyScript / enableScript fields are executed by Foundry 
             lore: { type: 'string', description: '[spell] Lore key (e.g. "fire"); [wfrp4e-archives3.cant] lore the cant draws SL from.' },
             cn: { type: 'number', description: '[spell] Casting Number.' },
             target: { type: 'string', description: '[spell/prayer] Target expression.' },
-            duration: { oneOf: [{ type: 'string' }, { type: 'object', properties: { value: { type: 'string' }, unit: { type: 'string', enum: ['hours', 'days', 'weeks'] }, active: { type: 'boolean' } } }], description: '[spell/prayer] duration STRING; [disease] { value?, unit?("hours"|"days"|"weeks"), active? } OBJECT.' },
+            duration: { oneOf: [{ type: 'string' }, { type: 'object', properties: { value: { type: 'string' }, unit: { type: 'string' }, active: { type: 'boolean' } } }], description: '[spell/prayer] duration STRING; [disease] { value?, unit?, active? } OBJECT. BUG-648: unit is an unconstrained string (live wfrp4e interpolates it directly, no validation) — the published corpus includes "minutes" and blank "" alongside hours/days/weeks.' },
             magicMissile: { type: 'boolean', description: '[spell] Magic missile.' },
             memorized: { type: 'boolean', description: '[spell] Memorized.' },
             ingredients: { type: 'array', items: { type: 'string' }, description: '[spell] Ingredient names.' },
@@ -284,11 +338,11 @@ Security: script / preApplyScript / enableScript fields are executed by Foundry 
             rollable: { type: 'object', additionalProperties: true, description: '[trait] Rollable block: { value?, damage?, skill?, rollCharacteristic?, bonusCharacteristic?, dice?, defaultDifficulty?, SL?, attackType?("melee"|"ranged") }.' },
             specification: { oneOf: [{ type: 'string' }, { type: 'number' }], description: '[trait] Specification — STRING or NUMBER (e.g. Weapon +8 → 8).' },
             // Mutation / critical / disease / injury:
-            mutationType: { type: 'string', enum: ['physical', 'mental'], description: '[mutation] Mutation type.' },
+            mutationType: { type: 'string', enum: ['physical', 'mental'], description: '[mutation] REQUIRED for itemType:"mutation" — omitting it throws CREATE_CUSTOM_ITEM_MUTATION_TYPE_REQUIRED (BUG-649: previously the Zod schema, handler, and docs disagreed on this; the handler-level requirement is now the single source of truth).' },
             modifiesSkills: { type: 'boolean', description: '[mutation] Modifies skills.' },
-            wounds: { type: 'string', description: '[critical] Wounds expression.' },
+            wounds: { type: 'string', description: '[critical] A plain integer as a string (e.g. "4") or the literal "death". NOT a dice formula — WFRP4e never rolls this field, it only parses the leading integer (BUG-646). Rejected if it looks like dice notation (e.g. "1d10+SB").' },
             contraction: { type: 'string', description: '[disease] Contraction text.' },
-            incubation: { type: 'object', properties: { value: { type: 'string' }, unit: { type: 'string', enum: ['hours', 'days', 'weeks'] } }, description: '[disease] Incubation { value (formula string), unit }.' },
+            incubation: { type: 'object', properties: { value: { type: 'string' }, unit: { type: 'string' } }, description: '[disease] Incubation { value (formula string), unit }. BUG-648: unit is unconstrained (e.g. "minutes", "" are both real published values, not just hours/days/weeks).' },
             symptoms: { type: 'string', description: '[disease] Symptom names (comma-separated).' },
             permanent: { type: 'string', description: '[disease] Permanent effect text.' },
             // Cargo / money:
@@ -316,6 +370,20 @@ Security: script / preApplyScript / enableScript fields are executed by Foundry 
             cost: { type: 'object', properties: { value: { type: 'number' }, variable: { type: 'boolean' }, max: { type: 'string' } }, description: '[wfrp4e-archives3.cant] SL cost block.' },
           },
           required: ['itemType', 'name', 'destination'],
+          // BUG-660 (D1 — tighten in place, never anyOf): of the 26 branches, 25 need nothing
+          // beyond the globally-required itemType/name/destination above; 'prayer' additionally
+          // requires 'type' (blessing|miracle, PrayerSchema — no default). BUG-649: 'mutation'
+          // requires 'mutationType' — enforced at the HANDLER level (not Zod, see mutation.ts's
+          // own comment for why), but declared here too so the published contract accurately
+          // reflects real behavior rather than silently under-claiming it.
+          allOf: [
+            // AJV strictRequired needs a local `properties` stub for each `then.required` key on
+            // THIS tool's schema, even when the property is already declared at the top level
+            // (unlike item-piles.ts's 17 allOf clauses, which don't need this — root cause not
+            // fully isolated; empirically required here, harmless to include either way).
+            { if: { properties: { itemType: { const: 'prayer' } } }, then: { required: ['type'], properties: { type: { type: 'string' } } } },
+            { if: { properties: { itemType: { const: 'mutation' } } }, then: { required: ['mutationType'], properties: { mutationType: { type: 'string' } } } },
+          ],
         },
         outputSchema: CREATE_CUSTOM_ITEM_OUTPUT_JSON_SCHEMA,
       },
@@ -334,7 +402,10 @@ Security: script / preApplyScript / enableScript fields are executed by Foundry 
       );
     }
 
-    const system = buildSystemForSubtype(parsed);
+    // BUG-643: when cloning, use a sparse (caller-customized-only) system object so the
+    // clone-merge in item.ts doesn't stomp source fields the caller never mentioned.
+    // A non-clone create still wants the full default-populated system.
+    const system = parsed.fromCompendium ? buildSparseCloneSystem(parsed) : buildSystemForSubtype(parsed);
     const normalizedOverrides = parsed.systemOverrides
       ? normalizeSystemOverrides(parsed.systemOverrides)
       : null;

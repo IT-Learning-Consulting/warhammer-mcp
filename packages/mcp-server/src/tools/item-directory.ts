@@ -46,6 +46,12 @@ interface ItemDirectoryGetResponse {
   folderId: FolderId | null;
   system: Record<string, unknown>;
   flags: Record<string, unknown>;
+  // BUG-663: genuinely full document fields, now actually populated (previously the handler
+  // silently returned only the 7 fields above despite promising "the full serialized item").
+  effects?: unknown[];
+  ownership?: Record<string, number>;
+  sort?: number;
+  [key: string]: unknown;
 }
 
 interface ItemDirectorySearchResponse {
@@ -255,25 +261,17 @@ export class ItemDirectoryTool extends BaseTool {
   private async handleGet(args: ArgsFor<'get'>) {
     try {
       const data = await this.query<ItemDirectoryGetResponse>('item-directory', args);
-      // BUG-338: "Returns full serialized item" — the handler returns the full
-      // system + flags trees, so render them (not just the 4-field header) so
-      // callers can read back created-item data (e.g. DP-16 post-write verify).
-      const fullDoc = {
-        id: data.id,
-        name: data.name,
-        type: data.type,
-        img: data.img ?? null,
-        folderId: data.folderId ?? null,
-        system: data.system ?? {},
-        flags: data.flags ?? {},
-      };
+      // BUG-663: previously reconstructed a 7-field subset here (id/name/type/img/folderId/
+      // system/flags) even though the handler itself only ever returned those 7 — "full
+      // serialized item" was aspirational, not actual. The handler now returns Foundry's own
+      // toObject() (effects/ownership/sort included), so render the WHOLE data object.
       const text =
         `📦 **World Item** \`${data.id}\`\n\n` +
         `- **Name:** ${data.name}\n` +
         `- **Type:** ${data.type}\n` +
         `- **img:** ${data.img ?? '_(none)_'}\n` +
         `- **folderId:** ${data.folderId ?? '_(root)_'}\n\n` +
-        `**Full serialized item:**\n\`\`\`json\n${JSON.stringify(fullDoc, null, 2)}\n\`\`\``;
+        `**Full serialized item:**\n\`\`\`json\n${JSON.stringify(data, null, 2)}\n\`\`\``;
       return { content: [{ type: 'text' as const, text }], structuredContent: data as unknown as Record<string, unknown> };
     } catch (e) {
       return this.errorResponse('get', e instanceof Error ? e.message : String(e));

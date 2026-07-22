@@ -3,7 +3,11 @@
 import { z } from 'zod';
 import { CreateCustomItemCommon } from '../common.js';
 
-const DurationUnit = z.enum(['hours', 'days', 'weeks']);
+// BUG-648: live-verified as an unconstrained string — wfrp4e.js:28723-28724 interpolates
+// `this.incubation.unit`/`this.duration.unit` directly into localized display text with no
+// type/enum validation. The published corpus (44 diseases) includes "minutes" and blank ("")
+// units alongside hours/days/weeks; the prior enum rejected both, which schema probes confirmed.
+const DurationUnit = z.string();
 
 export const DiseaseSchema = CreateCustomItemCommon.extend({
   itemType: z.literal('disease'),

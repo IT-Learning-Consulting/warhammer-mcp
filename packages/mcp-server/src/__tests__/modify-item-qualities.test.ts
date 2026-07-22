@@ -89,6 +89,23 @@ describe('modify-item-qualities — schema', () => {
     expect(parsed.addQualities).toEqual([]);
     expect(parsed.removeFlaws).toEqual([]);
   });
+
+  it('publishes the item selector and nested quality/flaw requirements (BUG-661)', () => {
+    const { tool } = makeTool();
+    const schema: any = tool.getToolDefinitions()[0].inputSchema;
+    expect(schema.allOf[0].anyOf).toEqual([
+      {
+        properties: { itemName: { type: 'string' } },
+        required: ['itemName'],
+      },
+      {
+        properties: { itemId: { type: 'string' } },
+        required: ['itemId'],
+      },
+    ]);
+    expect(schema.properties.addQualities.items.required).toEqual(['name']);
+    expect(schema.properties.addFlaws.items.required).toEqual(['name']);
+  });
 });
 
 describe('modify-item-qualities — tool dispatch', () => {

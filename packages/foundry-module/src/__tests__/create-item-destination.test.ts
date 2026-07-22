@@ -328,4 +328,42 @@ describe('createItem — fromCompendium seeding', () => {
     // Name override applied
     expect(payload.name).toBe('Fire Sword');
   });
+
+  // BUG-643: the documented contract (compendium-clone-patterns.md) is that a caller-supplied
+  // effects[] APPENDS to the cloned effect chain — previously it wholesale-replaced it, since
+  // mergeObject treats arrays as atomic values rather than merging them element-by-element.
+  it('appends caller-supplied effects to the cloned effect chain, not replaces it (BUG-643)', async () => {
+    const actor = makeActorStub('a1', 'Hans');
+    setupFoundryStubs({ actors: [actor] });
+    const da = makeDA();
+    await da.createItem({
+      itemData: {
+        name: 'Creeping Atrophy',
+        system: {},
+        effects: [{ name: 'end-turn tick', trigger: 'endTurn' }],
+      },
+      destination: { type: 'actor', actorName: 'Hans' },
+      fromCompendium: 'Compendium.wfrp4e-core.items.Item.source-id',
+    });
+    const [, payloads] = (actor.createEmbeddedDocuments as any).mock.calls[0];
+    const payload = payloads[0];
+    expect(payload.effects).toHaveLength(2);
+    expect(payload.effects.some((e: any) => e.name === 'E')).toBe(true); // source's own effect survived
+    expect(payload.effects.some((e: any) => e.name === 'end-turn tick')).toBe(true); // new one appended
+  });
+
+  it('leaves the cloned effect chain untouched when the caller supplies no effects', async () => {
+    const actor = makeActorStub('a1', 'Hans');
+    setupFoundryStubs({ actors: [actor] });
+    const da = makeDA();
+    await da.createItem({
+      itemData: { name: 'Plain Clone', system: {} },
+      destination: { type: 'actor', actorName: 'Hans' },
+      fromCompendium: 'Compendium.wfrp4e-core.items.Item.source-id',
+    });
+    const [, payloads] = (actor.createEmbeddedDocuments as any).mock.calls[0];
+    const payload = payloads[0];
+    expect(payload.effects).toHaveLength(1);
+    expect(payload.effects[0].name).toBe('E');
+  });
 });

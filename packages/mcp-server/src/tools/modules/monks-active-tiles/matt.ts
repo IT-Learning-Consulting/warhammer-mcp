@@ -406,7 +406,7 @@ Examples:
             events: { type: 'array', items: { type: 'string' }, description: '[link-region-trigger] Region event names (optional; defaults to standard token-enter/exit).' },
             usetiletrigger: { type: 'boolean', description: '[link-region-trigger] Map region events to tile trigger methods (default true).' },
             regionId: { type: 'string', description: '[link-region-trigger] Region document id on the scene.' },
-            name: { type: 'string', description: '[create-trigger-tile/update-trigger-config/link-region-trigger] Display name. [find-trigger-tile] Exact MATT tile name to search for.' },
+            name: { type: 'string', description: '[create-trigger-tile/link-region-trigger] Display name. [find-trigger-tile] Exact MATT tile name to search for. NOT used by update-trigger-config — that action reads name from the nested config.name field instead (BUG-763).' },
             confirm: { type: 'boolean', description: 'Required (true) for dangerous action authoring, fire-trigger, and fire-trigger-as. Review the impact report first.' },
             tokenIds: { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 10, description: '[fire-trigger-as] Canvas token ids (1–10) to use as the triggering token(s). Use scene.tokens ids, not actor ids.' },
             method: { type: 'string', description: '[fire-trigger-as] Trigger method string passed to TileDocument.prototype.trigger (default "manual"; e.g. "enter", "click").' },
@@ -416,6 +416,28 @@ Examples:
             returnFullPayload: { type: 'boolean', description: '[get-trigger-tile] When true, return the full machine-readable bundle (geometry + texture + full actions[] with data + variables + region-link metadata) as JSON for tilepack export round-trips, instead of the prose summary.' },
           },
           required: ['action'],
+          // BUG-763 (D1 — tighten in place, never anyOf): per-branch required sets generated
+          // from ModuleMattInput's own Zod discriminated union (16 of 19 branches carry a
+          // required set beyond `action`; the other 3 require nothing extra). Wire shape
+          // (type/properties/required at top level) is unchanged; this only adds enforcement.
+          allOf: [
+            { if: { properties: { action: { const: 'get-trigger-tile' } } }, then: { required: ['tileUuid'] } },
+            { if: { properties: { action: { const: 'validate-sequence' } } }, then: { required: ['actions'] } },
+            { if: { properties: { action: { const: 'create-trigger-tile' } } }, then: { required: ['sceneId', 'trigger', 'x', 'y'] } },
+            { if: { properties: { action: { const: 'update-trigger-config' } } }, then: { required: ['tileUuid'] } },
+            { if: { properties: { action: { const: 'replace-action-sequence' } } }, then: { required: ['actions', 'tileUuid'] } },
+            { if: { properties: { action: { const: 'add-action' } } }, then: { required: ['mattAction', 'tileUuid'] } },
+            { if: { properties: { action: { const: 'insert-action' } } }, then: { required: ['index', 'mattAction', 'tileUuid'] } },
+            { if: { properties: { action: { const: 'update-action' } } }, then: { required: ['actionId', 'data', 'tileUuid'] } },
+            { if: { properties: { action: { const: 'remove-action' } } }, then: { required: ['actionId', 'tileUuid'] } },
+            { if: { properties: { action: { const: 'reorder-actions' } } }, then: { required: ['order', 'tileUuid'] } },
+            { if: { properties: { action: { const: 'duplicate-action' } } }, then: { required: ['actionId', 'tileUuid'] } },
+            { if: { properties: { action: { const: 'set-variables' } } }, then: { required: ['tileUuid', 'variables'] } },
+            { if: { properties: { action: { const: 'reset-history' } } }, then: { required: ['tileUuid'] } },
+            { if: { properties: { action: { const: 'fire-trigger' } } }, then: { required: ['tileUuid'] } },
+            { if: { properties: { action: { const: 'fire-trigger-as' } } }, then: { required: ['tileUuid', 'tokenIds'] } },
+            { if: { properties: { action: { const: 'link-region-trigger' } } }, then: { required: ['regionId', 'sceneId', 'tileUuid'] } },
+          ],
         },
         // Phase 11 (R11.1): permissive passthrough outputSchema (user Q&A 2026-06-17).
         // structuredContent is attached on the 14 mutation actions only (see run()).

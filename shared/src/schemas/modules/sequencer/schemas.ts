@@ -45,7 +45,11 @@ export const ModuleSequencerInput = z.discriminatedUnion('action', [
 
   // EffectManager actions
   z.object({ action: z.literal('end-effects'), filter: EffectFilter.optional(), confirm: z.boolean().optional() }).strict(),
-  z.object({ action: z.literal('end-all-effects'), sceneId: z.string().optional(), confirm: z.boolean() }).strict(),
+  // BUG-810: confirm optional at parse time (matches sibling 'end-effects' above and the
+  // repaired AA play-animation pattern) — the handler's `if (input.confirm !== true)` gate
+  // already treats undefined identically to false, so omitting confirm now reaches the clean
+  // CONFIRM_REQUIRED token instead of throwing a raw Zod validation error first.
+  z.object({ action: z.literal('end-all-effects'), sceneId: z.string().optional(), confirm: z.boolean().optional() }).strict(),
   z.object({ action: z.literal('get-effects'), filter: EffectFilter.optional() }).strict(),
   z.object({ action: z.literal('update-effects'), filter: EffectFilter.optional(), updates: z.record(z.unknown()).optional() }).strict(),
 
@@ -53,7 +57,8 @@ export const ModuleSequencerInput = z.discriminatedUnion('action', [
   z.object({ action: z.literal('play-sound'), file: z.string().min(1), options: z.record(z.unknown()).optional() }).strict(),
   z.object({ action: z.literal('end-sounds'), filter: SoundFilter.optional() }).strict(),
   // Sequencer 4.2.x dropped the sceneId param from SoundManager.endAllSounds — it now ends all sounds globally.
-  z.object({ action: z.literal('end-all-sounds'), confirm: z.boolean() }).strict(),
+  // BUG-810: confirm optional at parse time — same reasoning as end-all-effects above.
+  z.object({ action: z.literal('end-all-sounds'), confirm: z.boolean().optional() }).strict(),
   z.object({ action: z.literal('get-sounds'), filter: SoundFilter.optional() }).strict(),
 
   // Database actions (read-only)
@@ -64,7 +69,8 @@ export const ModuleSequencerInput = z.discriminatedUnion('action', [
 
   // Preloader
   z.object({ action: z.literal('preload'), files: z.array(z.string().min(1)).min(1), showProgressBar: z.boolean().optional() }).strict(),
-  z.object({ action: z.literal('preload-for-clients'), files: z.array(z.string().min(1)).min(1), showProgressBar: z.boolean().optional(), confirm: z.boolean() }).strict(),
+  // BUG-810: confirm optional at parse time — same reasoning as end-all-effects above.
+  z.object({ action: z.literal('preload-for-clients'), files: z.array(z.string().min(1)).min(1), showProgressBar: z.boolean().optional(), confirm: z.boolean().optional() }).strict(),
 
   // Permission write
   z.object({

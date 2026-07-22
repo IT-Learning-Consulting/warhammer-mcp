@@ -324,6 +324,21 @@ export async function handleUpdatePriceModifiers(input: UpdatePriceModifiersInpu
     const API = getItemPilesAPI();
     const subAction = input.subAction ?? 'get-modifiers';
 
+    // BUG-773: omitting `subAction` silently defaults to the read-only 'get-modifiers' — every
+    // authored recipe supplying buy/sell/relative/override fields but no explicit subAction
+    // therefore executed a no-op read while reporting success. Fail loud instead: a write field
+    // present on a read subAction is almost certainly a missing `subAction:"update-modifiers"`,
+    // not deliberate.
+    const writeFieldsPresent = ['buyPriceModifier', 'sellPriceModifier', 'relative', 'override'].filter(
+      (f) => (input as any)[f] !== undefined,
+    );
+    if (subAction !== 'update-modifiers' && writeFieldsPresent.length > 0) {
+      return {
+        success: false,
+        error: `MODULE_ITEMPILES_WRITE_FIELDS_ON_READ_SUBACTION: [${writeFieldsPresent.join(', ')}] supplied but subAction is "${subAction}" (read-only) — did you mean subAction:"update-modifiers"? These fields are ignored by ${subAction} and would silently no-op if not rejected here.`,
+      };
+    }
+
     if (subAction === 'get-prices') {
       if (!input.itemUuid) {
         return { success: false, error: 'MISSING_ITEM_UUID: itemUuid is required for get-prices' };

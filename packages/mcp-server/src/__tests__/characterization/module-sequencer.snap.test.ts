@@ -78,6 +78,23 @@ describe('ModuleSequencerTool — characterization', () => {
     expect((r as any).content[0].text).toMatchSnapshot();
   });
 
+  // BUG-810: confirm used to be Zod-required for these 3 actions, so an omitted confirm threw
+  // a raw ZodError at .parse() time in THIS tool, before the call ever reached the foundry-module
+  // handler's clean CONFIRM_REQUIRED gate. Pin that the schema layer now accepts omission — the
+  // call reaches this.query() (mocked here to throw the SAME token the real handler would
+  // return, per BaseTool.query()'s unwrap-throws-on-failure contract) instead of failing at
+  // Zod .parse() with a generic validation error.
+  it('end-all-effects — omitted confirm parses cleanly and reaches the handler, not a ZodError (BUG-810)', async () => {
+    const r = await tool(
+      null,
+      'CONFIRM_REQUIRED: end-all-effects clears all effects on the scene. Re-send with confirm:true.',
+    ).execute({ action: 'end-all-effects' });
+    const text = (r as any).content[0].text as string;
+    expect(text).not.toContain('ZodError');
+    expect(text).not.toContain('invalid_type');
+    expect(text).toContain('CONFIRM_REQUIRED');
+  });
+
   // ── Database reads ────────────────────────────────────────────────────────────
   it('database-entry-exists — entry found', async () => {
     const r = await tool({

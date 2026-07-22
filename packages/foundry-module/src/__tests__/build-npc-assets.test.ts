@@ -282,10 +282,11 @@ describe.skipIf(!HAS_VAULT)('build-npc assets — config.json', () => {
   const NPC_CONFIG = 'E:/warhammer_system/.claude/skills/wfrp-build-npc/assets';
   const config = HAS_VAULT ? JSON.parse(fs.readFileSync(path.join(NPC_CONFIG, 'config.json'), 'utf8')) : {};
 
-  it('has all 9 top-level keys', () => {
+  it('has all 10 top-level keys', () => {
     // BUG-427: criminal_mode added for /wfrp-build-npc --mode criminal (SKILL.md §criminal mode).
+    // BUG-708 (task 4.2): class_mode added for /wfrp-build-npc --mode riverfolk.
     expect(Object.keys(config).sort()).toEqual([
-      'career_overrides', 'coin_items', 'criminal_mode', 'default_actor_type', 'legality_mode',
+      'career_overrides', 'class_mode', 'coin_items', 'criminal_mode', 'default_actor_type', 'legality_mode',
       'money_roll', 'species_overrides', 'talent_policy', 'with_details_default',
     ]);
   });

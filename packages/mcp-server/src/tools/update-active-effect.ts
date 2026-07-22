@@ -38,7 +38,7 @@ export class UpdateActiveEffectTool extends BaseTool {
           openWorldHint: true,
         },
         description:
-          'Modify an existing ActiveEffect on an item or directly on an actor. Partial update — only fields supplied in `updates` are applied; other fields on the effect are preserved. effectId is authoritative; effectName is the ergonomic fallback. Supply one.\n\nTarget scopes: scope="actor" (item on actor), scope="world" (world item), scope="actor-direct" (effect directly on the actor — actorId or actorName, no item fields).\n\nSecurity: script / preApplyScript / enableScript fields are executed by Foundry under GM authority. MCP does not sandbox script content. Only invoke with scripts you wrote or audited.',
+          'Modify an existing ActiveEffect on an item or directly on an actor. Partial update — only fields supplied in `updates` are applied; other fields on the effect are preserved. effectId is authoritative; effectName is the ergonomic fallback. Supply one.\n\nTarget scopes: scope="actor" (item on actor), scope="world" (world item), scope="actor-direct" (effect directly on the actor — actorId or actorName, no item fields).\n\nSecurity: script / preApplyScript / enableConditionScript fields are executed by Foundry under GM authority. MCP does not sandbox script content. Only invoke with scripts you wrote or audited.',
         inputSchema: {
           type: 'object',
           properties: {

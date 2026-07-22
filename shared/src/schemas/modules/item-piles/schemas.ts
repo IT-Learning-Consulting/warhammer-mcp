@@ -96,9 +96,21 @@ export const ModuleItempilesInput = z.discriminatedUnion('action', [
     closedSound: z.string().optional(),
     openedSound: z.string().optional(),
     // merchant-specific
+    // BUG-783: upstream CustomColumn (item-piles.js:57676-57694, 75797-75831 setup; column
+    // render at ~52700-52745) reads buying/selling/mapping/formatting/condition per column —
+    // the schema previously stripped all but label/path before update-pile forwarded the array.
     merchantColumns: z.array(z.object({
       label: z.string(),
       path: z.string(),
+      buying: z.boolean().optional(),   // shown on buy (merchant) side; upstream defaults true
+      selling: z.boolean().optional(),  // shown on sell (player) side; upstream defaults true
+      mapping: z.record(z.string(), z.string()).optional(),   // raw value -> display label/sort key
+      formatting: z.string().optional(),                      // e.g. "{#} common" — {#} = localized value
+      condition: z.object({
+        path: z.string(),
+        value: z.unknown(),
+        placeholder: z.string().optional(),
+      }).optional(),
     })).optional(),
     overheadCost: z.array(OverheadCostEntry).optional(),
     // vault-specific

@@ -345,19 +345,65 @@ describe('core: mutation', () => {
         ...worldDest(),
       })
     ).not.toThrow());
+  // BUG-649: Zod stays optional deliberately (see mutation.ts's own comment) — the handler is
+  // the single canonical enforcement point. Pin that the handle() path actually throws.
+  it('handle() throws CREATE_CUSTOM_ITEM_MUTATION_TYPE_REQUIRED when mutationType is omitted', async () => {
+    const { tool } = makeTool();
+    await expect(
+      tool.handle({ itemType: 'mutation', name: 'No Type', ...actorDest() })
+    ).rejects.toThrow('CREATE_CUSTOM_ITEM_MUTATION_TYPE_REQUIRED');
+  });
+  it('systemOverrides does NOT satisfy the mutationType requirement (BUG-649)', async () => {
+    const { tool } = makeTool();
+    await expect(
+      tool.handle({
+        itemType: 'mutation',
+        name: 'No Type',
+        systemOverrides: { 'mutationType.value': 'physical' },
+        ...actorDest(),
+      })
+    ).rejects.toThrow('CREATE_CUSTOM_ITEM_MUTATION_TYPE_REQUIRED');
+  });
 });
 
 describe('core: critical', () => {
-  it('accepts wounds formula', () => {
+  // BUG-646 (2026-07-21): this test previously asserted the opposite — that a dice
+  // formula like '1d10+SB' is accepted and preserved. Live-verified against
+  // wfrp4e.js:28575-28602: CriticalModel._onCreate calls Number.parseInt(this.wounds.value)
+  // and never rolls anything, so a formula string silently truncates to its leading integer.
+  // The test itself was encoding the bug's false premise; corrected to pin real behavior.
+  it('accepts a plain integer wounds string', () => {
     const parsed = CreateCustomItemInputSchema.parse({
       itemType: 'critical',
       name: 'Broken Arm',
-      wounds: '1d10+SB',
+      wounds: '4',
       location: 'lArm',
       ...actorDest(),
     });
     const sys = buildSystemForSubtype(parsed) as any;
-    expect(sys.wounds.value).toBe('1d10+SB');
+    expect(sys.wounds.value).toBe('4');
+  });
+  it('accepts the literal "death" wounds token', () => {
+    const parsed = CreateCustomItemInputSchema.parse({
+      itemType: 'critical',
+      name: 'Instant Death',
+      wounds: 'death',
+      ...actorDest(),
+    });
+    const sys = buildSystemForSubtype(parsed) as any;
+    expect(sys.wounds.value).toBe('death');
+  });
+  it('rejects dice-notation wounds strings (BUG-646)', () => {
+    for (const bad of ['1d10+SB', '1d5', '2d6+3']) {
+      expect(() =>
+        CreateCustomItemInputSchema.parse({
+          itemType: 'critical',
+          name: 'Broken Arm',
+          wounds: bad,
+          ...actorDest(),
+        })
+      ).toThrow();
+    }
   });
   it('accepts world dest', () =>
     expect(() =>
@@ -389,6 +435,22 @@ describe('core: disease', () => {
         ...worldDest(),
       })
     ).not.toThrow());
+  // BUG-648: unit was previously z.enum(['hours','days','weeks']) — the published corpus (44
+  // diseases) also uses 'minutes' and blank '', both live-verified as valid (wfrp4e.js:28723-
+  // 28724 interpolates the value directly with no validation). Pinned so a future edit can't
+  // silently re-narrow this back to an enum.
+  it('accepts "minutes" and blank "" as unit values (BUG-648)', () => {
+    const parsed = CreateCustomItemInputSchema.parse({
+      itemType: 'disease',
+      name: 'Fast Fever',
+      incubation: { value: '10', unit: 'minutes' },
+      duration: { value: 'Instant', unit: '' },
+      ...actorDest(),
+    });
+    const sys = buildSystemForSubtype(parsed) as any;
+    expect(sys.incubation.unit).toBe('minutes');
+    expect(sys.duration.unit).toBe('');
+  });
 });
 
 describe('core: template', () => {
@@ -653,6 +715,55 @@ describe('tool dispatch — payload composition', () => {
     });
     expect(calls[0].args.fromCompendium).toBe('Compendium.wfrp4e-core.items.Item.abc');
   });
+  // BUG-643: when cloning, only caller-customized fields should be sent — anything left at
+  // its bare default must be ABSENT (not present-with-a-default-value) so the foundry-module's
+  // clone-merge preserves the compendium source's own value instead of stomping it.
+  it('sends a sparse system (customized fields only) when fromCompendium is set', async () => {
+    const { tool, calls } = makeTool();
+    await tool.handle({
+      itemType: 'weapon',
+      name: 'Copy',
+      damage: 'SB+4',
+      fromCompendium: 'Compendium.wfrp4e-core.items.Item.abc',
+      ...actorDest(),
+    });
+    const sys: any = calls[0].args.itemData.system;
+    // Leaf-level diffing: `dice` is unchanged from its bare default ('') even though `damage`
+    // as a whole differs, so only the genuinely-customized leaf survives — the compendium
+    // source's own `dice` value (if any) is preserved rather than stomped with ''.
+    expect(sys.damage).toEqual({ value: 'SB+4' });
+    expect(sys.encumbrance).toBeUndefined();
+    expect(sys.price).toBeUndefined();
+    expect(sys.availability).toBeUndefined();
+    expect(sys.reach).toBeUndefined();
+    expect(sys.ammunitionGroup).toBeUndefined();
+    expect(sys.weaponGroup).toBeUndefined(); // 'basic' default, not customized
+  });
+  it('sends the FULL default-populated system for a non-clone create (no fromCompendium)', async () => {
+    const { tool, calls } = makeTool();
+    await tool.handle({
+      itemType: 'weapon',
+      name: 'Fresh',
+      damage: 'SB+4',
+      ...actorDest(),
+    });
+    const sys: any = calls[0].args.itemData.system;
+    expect(sys.damage).toEqual({ value: 'SB+4', dice: '' });
+    expect(sys.weaponGroup).toEqual({ value: 'basic' }); // full defaults present, unlike the clone path
+    expect(sys.encumbrance).toEqual({ value: 0 });
+  });
+  it('systemOverrides still lands even if it happens to equal the bare default (clone path)', async () => {
+    const { tool, calls } = makeTool();
+    await tool.handle({
+      itemType: 'weapon',
+      name: 'Copy',
+      fromCompendium: 'Compendium.wfrp4e-core.items.Item.abc',
+      systemOverrides: { weaponGroup: { value: 'basic' } },
+      ...actorDest(),
+    });
+    const sys: any = calls[0].args.itemData.system;
+    expect(sys.weaponGroup).toEqual({ value: 'basic' });
+  });
   it('forwards returnFullPayload flag through the call', async () => {
     const { tool, calls } = makeTool();
     await tool.handle({
@@ -668,7 +779,7 @@ describe('tool dispatch — payload composition', () => {
     await tool.handle({
       itemType: 'critical',
       name: 'Guts',
-      wounds: '1d10',
+      wounds: '4',
       ...actorDest(),
     });
     expect(calls[0].args.itemData.type).toBe('critical');
@@ -829,7 +940,66 @@ describe('buildEffectPayload — compendium clone regression', () => {
     } as any);
     expect(out.transfer).toBe(false);
   });
-  it('includes all 53 triggers in enum (spot-check)', () => {
+
+  // BUG-644 full rewrite (2026-07-21): fields moved from wrong top-level system.* paths
+  // to their correct nested home under system.transferData, matching wfrp4e.js's own
+  // _migrateEffectFlags output shape — the system's own "this is the current valid
+  // shape" reference. Pinned so a future edit can't silently regress the nesting.
+  it('nests testIndependent/preApplyScript/equipTransfer/enableConditionScript/avoidTest under system.transferData, not top-level system.* (BUG-644)', () => {
+    const out: any = buildEffectPayload({
+      name: 'E',
+      trigger: 'APCalc',
+      script: '',
+      testIndependent: true,
+      preApplyScript: 'return true',
+      equipTransfer: true,
+      enableConditionScript: 'return false',
+    } as any);
+    expect(out.system.transferData.testIndependent).toBe(true);
+    expect(out.system.transferData.preApplyScript).toBe('return true');
+    expect(out.system.transferData.equipTransfer).toBe(true);
+    expect(out.system.transferData.enableConditionScript).toBe('return false');
+    expect(out.system.testIndependent).toBeUndefined();
+    expect(out.system.preApplyScript).toBeUndefined();
+    expect(out.system.equipTransfer).toBeUndefined();
+    expect(out.system.enableScript).toBeUndefined();
+  });
+  it('accepts "crew" as a valid transfer type (BUG-644 — live-confirmed via WFRP4E.transferTypes, contradicting a prior "unverified" ledger note)', () => {
+    const out: any = buildEffectPayload({ name: 'E', trigger: 'APCalc', script: '', transfer: { type: 'crew' } } as any);
+    expect(out.system.transferData.type).toBe('crew');
+  });
+  it('writes system.zone as an object and adds system.sourceData (BUG-644)', () => {
+    const out: any = buildEffectPayload({ name: 'E', trigger: 'APCalc', script: '' } as any);
+    expect(out.system.zone).toEqual({});
+    expect(out.system.sourceData).toEqual({ item: null, test: null, area: null });
+  });
+  it('nests area.templateData/duration/keep/aura under transfer.area (BUG-644)', () => {
+    const out: any = buildEffectPayload({
+      name: 'E',
+      trigger: 'APCalc',
+      script: '',
+      transfer: { type: 'area', area: { templateData: 'tmpl-1', duration: 'Instant', keep: true, aura: { render: true, transferred: true } } },
+    } as any);
+    expect(out.system.transferData.area.templateData).toBe('tmpl-1');
+    expect(out.system.transferData.area.duration).toBe('Instant');
+    expect(out.system.transferData.area.keep).toBe(true);
+    expect(out.system.transferData.area.aura.render).toBe(true);
+    expect(out.system.transferData.area.aura.transferred).toBe(true);
+  });
+  it('silently strips the removed dead transferDocument field — never reaches buildEffectPayload (BUG-644)', () => {
+    // ActiveEffectDataSchema is not .strict() — Zod's default behavior for an unrecognized
+    // key is to strip it, not throw. Pinned so the field's removal is visible: previously
+    // it parsed AND was accepted-then-ignored by the builder; now it's stripped at parse time.
+    const parsed = CreateCustomItemInputSchema.parse({
+      itemType: 'talent',
+      name: 'T',
+      effects: [{ name: 'e', trigger: 'endRound', script: '', transferDocument: true }],
+      ...actorDest(),
+    });
+    expect((parsed.effects?.[0] as any).transferDocument).toBeUndefined();
+  });
+
+  it('includes all 59 triggers in enum (spot-check)', () => {
     expect(() =>
       CreateCustomItemInputSchema.parse({
         itemType: 'talent',
@@ -846,6 +1016,18 @@ describe('buildEffectPayload — compendium clone regression', () => {
         ...actorDest(),
       })
     ).not.toThrow();
+  });
+  it('accepts the 6 triggers added by BUG-645 (targeted, rollIncomeTest, castSpellPrayer, targetPrefillDialog, startCombat, startRound)', () => {
+    for (const trigger of ['targeted', 'rollIncomeTest', 'castSpellPrayer', 'targetPrefillDialog', 'startCombat', 'startRound'] as const) {
+      expect(() =>
+        CreateCustomItemInputSchema.parse({
+          itemType: 'talent',
+          name: 'T',
+          effects: [{ name: 'e', trigger, script: '' }],
+          ...actorDest(),
+        })
+      ).not.toThrow();
+    }
   });
 });
 

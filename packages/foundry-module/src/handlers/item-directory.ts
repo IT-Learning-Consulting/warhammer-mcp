@@ -56,11 +56,12 @@ type Envelope<T> = { success: true; data: T };
 function listWorldItems(input: Extract<ItemDirectoryToolInputType, { action: 'list' }>): Envelope<unknown> {
   const allItems: any[] = Array.from((game.items as any)?.contents ?? []);
 
-  const filtered = input.typeFilter
-    ? allItems.filter((i: any) => i.type === input.typeFilter)
-    : input.folderId
-    ? allItems.filter((i: any) => (i._source?.folder ?? null) === input.folderId)
-    : allItems;
+  // BUG-662: typeFilter and folderId are independent, composable predicates.
+  // The former ternary silently discarded folderId whenever typeFilter was present.
+  const filtered = allItems.filter((item: any) =>
+    (!input.typeFilter || item.type === input.typeFilter) &&
+    (!input.folderId || (item._source?.folder ?? null) === input.folderId)
+  );
 
   const page = input.page ?? 1;
   const pageSize = input.pageSize ?? MAX_PAGE_SIZE;
@@ -86,7 +87,16 @@ function getWorldItem(input: Extract<ItemDirectoryToolInputType, { action: 'get'
   if (!item) {
     throw new Error(`ITEM_NOT_FOUND: no world item with id "${input.itemId}"`);
   }
-  return { success: true, data: serializeWorldItem(item) };
+  // BUG-663: this previously reused serializeWorldItem — the same narrow, pagination-safe
+  // summary shape (id/name/type/img/folderId/system/flags) that `list`/`search` use — despite
+  // the tool's own description promising "the full serialized item" for a single-item `get`.
+  // Effects, ownership, sort, and other document fields were silently absent, making this
+  // response unsuitable for clone/effect verification. `get` is a single-document read, not a
+  // paginated list, so there's no response-size reason to withhold the full document. Spread
+  // toObject() (Foundry's own full-serialization) and overlay the pre-existing `id`/`folderId`
+  // convenience aliases on top so existing callers relying on those exact key names still work.
+  const full = item.toObject();
+  return { success: true, data: { ...full, id: item.id, folderId: item._source?.folder ?? null } };
 }
 
 function searchWorldItems(input: Extract<ItemDirectoryToolInputType, { action: 'search' }>): Envelope<unknown> {

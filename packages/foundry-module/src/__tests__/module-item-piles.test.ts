@@ -529,6 +529,43 @@ describe('BUG-445: quantity-dimension verifies (stack-merge / partial-stack / ra
 
     expect(result.success).toBe(true);
   });
+
+  // BUG-773: subAction defaults to the read-only 'get-modifiers' — every authored recipe
+  // supplying buy/sell/relative/override fields but no explicit subAction silently executed a
+  // no-op read while reporting success. Fail loud instead of letting write fields go ignored.
+  it('rejects buy/sell/relative/override fields when subAction is omitted (defaults to read) (BUG-773)', async () => {
+    const api = makeRealItemPilesAPI({ isItemPileMerchant: vi.fn().mockReturnValue(true) });
+    (globalThis as any).game = makeGame({ 'item-piles': { active: true } }, api);
+
+    const result = await dispatchModuleItempiles({
+      action: 'update-price-modifiers',
+      actorUuid: 'Actor.merchant',
+      targetActorUuid: 'Actor.buyer',
+      buyPriceModifier: 1.2,
+      sellPriceModifier: 0.5,
+      relative: false,
+    });
+
+    expect(result.success).toBe(false);
+    expect((result as any).error).toContain('MODULE_ITEMPILES_WRITE_FIELDS_ON_READ_SUBACTION');
+    expect((result as any).error).toContain('buyPriceModifier');
+  });
+
+  it('rejects write fields on an explicit get-prices subAction too', async () => {
+    const api = makeRealItemPilesAPI({ isItemPileMerchant: vi.fn().mockReturnValue(true) });
+    (globalThis as any).game = makeGame({ 'item-piles': { active: true } }, api);
+
+    const result = await dispatchModuleItempiles({
+      action: 'update-price-modifiers',
+      subAction: 'get-prices',
+      actorUuid: 'Actor.merchant',
+      itemUuid: 'Item.abc',
+      override: true,
+    });
+
+    expect(result.success).toBe(false);
+    expect((result as any).error).toContain('MODULE_ITEMPILES_WRITE_FIELDS_ON_READ_SUBACTION');
+  });
 });
 
 // ── BUG-461: item-piles hygiene — readable split-loot preview + quantity-dimension verifies ──

@@ -111,8 +111,12 @@ export class ModuleAutoAnimationsTool extends BaseTool {
         name: 'module-autoanimations',
         title: 'Automated Animations — item-flag authoring, Autorec config, director play',
         annotations: {
+          // BUG-809: clear-item-animation permanently deletes authored flags and
+          // merge-autorec-entry/play-animation mutate world Autorec config / broadcast to
+          // clients — matches the destructiveHint:true convention used by every other
+          // mixed read/write module-* umbrella (item-piles, matt, mortal-needs, macro-trigger).
           readOnlyHint: false,
-          destructiveHint: false,
+          destructiveHint: true,
           idempotentHint: false,
           openWorldHint: false,
         },
@@ -169,6 +173,15 @@ Examples:
             confirm: { type: 'boolean', description: '[play-animation] Required true (transient effect, no undo).' },
           },
           required: ['action'],
+          // BUG-808 (D1 — tighten in place, never anyOf): per-branch required sets generated
+          // from ModuleAutoAnimationsInput's own Zod discriminated union.
+          allOf: [
+            { if: { properties: { action: { const: 'get-item-animation' } } }, then: { required: ['uuid'] } },
+            { if: { properties: { action: { const: 'set-item-animation' } } }, then: { required: ['animation', 'uuid'] } },
+            { if: { properties: { action: { const: 'clear-item-animation' } } }, then: { required: ['uuid'] } },
+            { if: { properties: { action: { const: 'merge-autorec-entry' } } }, then: { required: ['animation', 'category', 'label'] } },
+            { if: { properties: { action: { const: 'play-animation' } } }, then: { required: ['sourceTokenUuid'] } },
+          ],
         },
       },
     ];
