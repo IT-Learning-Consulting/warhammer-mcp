@@ -32,7 +32,7 @@ export class ApplyNpcCareerAdvanceTool extends BaseTool {
           openWorldHint: true,
         },
         description:
-          'Apply a career\'s auto-advancement to an npc-type actor. Invokes StandardActorModel.advance(career) (wfrp4e.js:6623) which runs the Advancement class\'s dialog-free advance() method — stamps characteristics, skills, and talents per the career\'s schema. BYPASSES THE WFRP4E CONFIRMATION DIALOG, unlike clicking "Complete" on the career card. Requires actor.type === "npc" and a career-type item already embedded on the actor.',
+          'Apply a career\'s auto-advancement to an npc-type actor. Invokes StandardActorModel.advance(career) (wfrp4e.js:6623) which runs the Advancement class\'s dialog-free advance() method — stamps characteristics, skills, and talents per the career\'s schema. BYPASSES THE WFRP4E CONFIRMATION DIALOG, unlike clicking "Complete" on the career card. Requires actor.type === "npc" and a career-type item already embedded on the actor. Verifies the actual characteristic/skill/talent deltas landed (not just that the actor/career still exist) and fails loud on a genuine advance timeout instead of silently reporting success.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -43,6 +43,11 @@ export class ApplyNpcCareerAdvanceTool extends BaseTool {
             careerItemId: {
               type: 'string',
               description: 'Embedded career-type Item ID on the actor.',
+            },
+            talentPolicy: {
+              type: 'string',
+              enum: ['all', 'min'],
+              description: 'wfrp4e always embeds every career talent with no count control of its own. "all" (default) keeps that behavior. "min" trims the result to a single talent after advance() commits, for a lighter-weight NPC.',
             },
           },
           required: ['actorId', 'careerItemId'],
@@ -56,6 +61,7 @@ export class ApplyNpcCareerAdvanceTool extends BaseTool {
     this.logger.info('apply-npc-career-advance', {
       actorId: parsed.actorId,
       careerItemId: parsed.careerItemId,
+      talentPolicy: parsed.talentPolicy ?? 'all',
     });
     return await this.query<any>('applyNpcCareerAdvance', parsed);
   }

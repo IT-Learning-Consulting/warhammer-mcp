@@ -118,6 +118,11 @@ export const DuplicateActorInput = z.object({
 export const ApplyNpcCareerAdvanceInput = z.object({
   actorId: ActorId,
   careerItemId: ItemId,
+  // BUG-696: wfrp4e's Advancement.advance() always embeds EVERY career talent with no
+  // count policy of its own — 'min' trims the service-side result to a single talent after
+  // advance() commits (see services/actor.ts applyNpcCareerAdvance). Defaults to 'all'
+  // (prior behavior, unchanged).
+  talentPolicy: z.enum(['all', 'min']).optional(),
 }).strict();
 
 export const ListActorItemsInput = z.object({

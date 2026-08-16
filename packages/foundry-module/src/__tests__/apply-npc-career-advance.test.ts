@@ -11,6 +11,21 @@ function makeHandlers(): QueryHandlers {
   return qh;
 }
 
+// Mirrors Foundry's real EmbeddedCollection contract just enough for BUG-692's delta-verify
+// (which needs .get() for career lookup AND array-like .filter()/iteration for the fresh
+// characteristic/skill/talent read-back) — a plain {get} stub is not iterable/filterable.
+class MockItemCollection extends Map<string, any> {
+  filter(fn: (it: any) => boolean): any[] {
+    return Array.from(this.values()).filter(fn);
+  }
+  find(fn: (it: any) => boolean): any {
+    return Array.from(this.values()).find(fn);
+  }
+  [Symbol.iterator](): IterableIterator<any> {
+    return this.values();
+  }
+}
+
 function mockActor(opts: {
   id: string;
   name: string;
@@ -18,12 +33,16 @@ function mockActor(opts: {
   items?: Array<{ id: string; name: string; type: string; system?: any }>;
   advance?: (career: any) => void;
 }) {
-  const items = new Map((opts.items ?? []).map((i) => [i.id, i]));
+  const items = new MockItemCollection((opts.items ?? []).map((i) => [i.id, i]));
   return {
     id: opts.id,
     name: opts.name,
     type: opts.type,
-    items: { get: (k: string) => items.get(k) },
+    items,
+    deleteEmbeddedDocuments: async (_docType: string, ids: string[]) => {
+      for (const id of ids) items.delete(id);
+      return ids;
+    },
     system: { advance: opts.advance ?? (() => {}) },
   };
 }
@@ -92,6 +111,12 @@ describe('handleApplyNpcCareerAdvance — Zod boundary', () => {
 
 describe('dataAccess.applyNpcCareerAdvance — type + item guards', () => {
   it('invokes actor.system.advance(career) on happy path', async () => {
+    // BUG-692: waitForActorUpdateCommit's timeout is now an explicit failure, so this
+    // fixture's advance() must fire the updateActor hook — matching what a real (awaited)
+    // actor.update() commit would do — or the call now correctly throws.
+    const hooks = makeHooksMock();
+    (globalThis as any).Hooks = hooks;
+
     const qh = makeHandlers();
     const advanceCalls: any[] = [];
     const career = { id: 'c1', name: 'Apothecary', type: 'career', system: { level: { value: 2 } } };
@@ -100,7 +125,10 @@ describe('dataAccess.applyNpcCareerAdvance — type + item guards', () => {
       name: 'Marius',
       type: 'npc',
       items: [career],
-      advance: (c) => advanceCalls.push(c),
+      advance: (c) => {
+        advanceCalls.push(c);
+        hooks.fire('updateActor', { id: 'npc-1' });
+      },
     });
     (globalThis as any).game.actors = new Map([['npc-1', actor]]);
 
@@ -264,5 +292,128 @@ describe('applyNpcCareerAdvance — BUG-217/218 observer + post-verify', () => {
     await expect(
       (qh.actorService as any).applyNpcCareerAdvance({ actorId: 'npc-6', careerItemId: 'c1' }),
     ).rejects.toThrow(/APPLY_NPC_CAREER_ADVANCE_NOT_PERSISTED/);
+  });
+});
+
+// BUG-692 — timeout is now an explicit failure, and success requires the PROMISED
+// characteristic/skill/talent deltas to have actually landed, not just document existence.
+
+describe('applyNpcCareerAdvance — BUG-692 explicit timeout failure + real delta verify', () => {
+  it('throws APPLY_NPC_CAREER_ADVANCE_NOT_PERSISTED when the updateActor hook never fires (genuine timeout)', async () => {
+    const hooks = makeHooksMock(); // hook never fired by advance() below — simulates a slow/contended write
+    (globalThis as any).Hooks = hooks;
+
+    const career = { id: 'c1', name: 'Apothecary', type: 'career', system: { level: { value: 1 } } };
+    const actor = mockActor({
+      id: 'npc-7',
+      name: 'Timeout',
+      type: 'npc',
+      items: [career],
+      advance() { /* never fires the hook */ },
+    });
+    (globalThis as any).game.actors = new Map([['npc-7', actor]]);
+
+    const qh = makeHandlers();
+    await expect(
+      (qh.actorService as any).applyNpcCareerAdvance({ actorId: 'npc-7', careerItemId: 'c1' }),
+    ).rejects.toThrow(/APPLY_NPC_CAREER_ADVANCE_NOT_PERSISTED.*timed out/);
+  }, 1000);
+
+  it('throws when the hook fires but the promised characteristic advance never landed', async () => {
+    const hooks = makeHooksMock();
+    (globalThis as any).Hooks = hooks;
+
+    const career = {
+      id: 'c1', name: 'Apothecary', type: 'career',
+      system: { level: { value: 2 }, characteristics: { ws: true }, skills: [], talents: [] },
+    };
+    const actor = mockActor({
+      id: 'npc-8', name: 'Half-Advanced', type: 'npc', items: [career],
+      advance(c: any) {
+        hooks.fire('updateActor', { id: 'npc-8' }); // hook fires — commit "observed"
+        void c; // but the characteristic write never actually happened (system stays default)
+      },
+    });
+    (actor as any).system.characteristics = { ws: { advances: 0 } }; // below the expected 10 (level 2 * 5)
+    (globalThis as any).game.actors = new Map([['npc-8', actor]]);
+
+    const qh = makeHandlers();
+    await expect(
+      (qh.actorService as any).applyNpcCareerAdvance({ actorId: 'npc-8', careerItemId: 'c1' }),
+    ).rejects.toThrow(/promised deltas did not fully land.*characteristic "ws"/);
+  });
+
+  it('succeeds when every promised characteristic/skill/talent delta is actually present', async () => {
+    const hooks = makeHooksMock();
+    (globalThis as any).Hooks = hooks;
+
+    const career = {
+      id: 'c1', name: 'Apothecary', type: 'career',
+      system: { level: { value: 1 }, characteristics: { ws: true }, skills: ['Heal'], talents: ['Savvy'] },
+    };
+    const healSkill = { id: 'sk1', name: 'Heal', type: 'skill', system: { advances: { value: 5 } } };
+    const actor = mockActor({
+      id: 'npc-9', name: 'Fully-Advanced', type: 'npc', items: [career, healSkill],
+      advance(c: any) {
+        (actor as any).items.set('tal1', { id: 'tal1', name: 'Savvy', type: 'talent' });
+        hooks.fire('updateActor', { id: 'npc-9' });
+        void c;
+      },
+    });
+    (actor as any).system.characteristics = { ws: { advances: 5 } }; // meets expected 5 (level 1 * 5)
+    (globalThis as any).game.actors = new Map([['npc-9', actor]]);
+
+    const qh = makeHandlers();
+    const result = await (qh.actorService as any).applyNpcCareerAdvance({ actorId: 'npc-9', careerItemId: 'c1' });
+    expect(result.success).toBe(true);
+    expect(result.talentsAdded).toBe(1);
+    expect(result.talentsTrimmed).toBe(0);
+  });
+});
+
+// BUG-696 — wfrp4e's advance() has no talent-count policy of its own; talentPolicy:'min'
+// is a post-hoc trim of the newly-added talents after advance() commits.
+
+describe('applyNpcCareerAdvance — BUG-696 talentPolicy', () => {
+  function setupTwoTalentAdvance(actorId: string) {
+    const hooks = makeHooksMock();
+    (globalThis as any).Hooks = hooks;
+    const career = {
+      id: 'c1', name: 'Apothecary', type: 'career',
+      system: { level: { value: 1 }, characteristics: {}, skills: [], talents: ['Savvy', 'Suave'] },
+    };
+    const actor = mockActor({
+      id: actorId, name: 'Multi-Talent', type: 'npc', items: [career],
+      advance() {
+        (actor as any).items.set('tal1', { id: 'tal1', name: 'Savvy', type: 'talent' });
+        (actor as any).items.set('tal2', { id: 'tal2', name: 'Suave', type: 'talent' });
+        hooks.fire('updateActor', { id: actorId });
+      },
+    });
+    (globalThis as any).game.actors = new Map([[actorId, actor]]);
+    return actor;
+  }
+
+  it('talentPolicy "all" (default) keeps every newly-added talent', async () => {
+    setupTwoTalentAdvance('npc-10');
+    const qh = makeHandlers();
+    const result = await (qh.actorService as any).applyNpcCareerAdvance({ actorId: 'npc-10', careerItemId: 'c1' });
+    expect(result.talentPolicy).toBe('all');
+    expect(result.talentsAdded).toBe(2);
+    expect(result.talentsTrimmed).toBe(0);
+  });
+
+  it('talentPolicy "min" trims all but one newly-added talent', async () => {
+    const actor = setupTwoTalentAdvance('npc-11');
+    const qh = makeHandlers();
+    const result = await (qh.actorService as any).applyNpcCareerAdvance({
+      actorId: 'npc-11', careerItemId: 'c1', talentPolicy: 'min',
+    });
+    expect(result.talentPolicy).toBe('min');
+    expect(result.talentsAdded).toBe(1);
+    expect(result.talentsTrimmed).toBe(1);
+    // The actor's actual talent item collection reflects the trim.
+    const remaining = Array.from((actor as any).items.values()).filter((it: any) => it.type === 'talent');
+    expect(remaining).toHaveLength(1);
   });
 });

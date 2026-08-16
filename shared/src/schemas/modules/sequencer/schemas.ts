@@ -29,10 +29,15 @@ const EffectFilter = z.object({
   effects: z.array(z.unknown()).optional(),
 }).strict();
 
+// BUG-792: live Sequencer v4.2.2 SoundManager._validateFilters expects `sounds` (plus supports
+// `origin`), NOT `effects` — the schema previously exposed `effects`, which upstream silently
+// ignores, so an intended single-sound-scoped filter fell through to the default whole-scene
+// filter and stopped every sound on the scene.
 const SoundFilter = z.object({
   name: z.string().optional(),
   sceneId: z.string().optional(),
-  effects: z.array(z.unknown()).optional(), // SoundManager reuses 'effects' key for its array param
+  origin: z.string().optional(),
+  sounds: z.array(z.unknown()).optional(),
 }).strict();
 
 export const ModuleSequencerInput = z.discriminatedUnion('action', [
@@ -44,6 +49,9 @@ export const ModuleSequencerInput = z.discriminatedUnion('action', [
   }).strict(),
 
   // EffectManager actions
+  // BUG-791: an omitted/empty filter matches every effect on the viewed scene — same
+  // destructive-confirmation-bypass shape as end-all-effects, so `confirm` is required here too
+  // whenever the effective filter doesn't genuinely narrow the scope (handler-enforced).
   z.object({ action: z.literal('end-effects'), filter: EffectFilter.optional(), confirm: z.boolean().optional() }).strict(),
   // BUG-810: confirm optional at parse time (matches sibling 'end-effects' above and the
   // repaired AA play-animation pattern) — the handler's `if (input.confirm !== true)` gate
@@ -55,7 +63,9 @@ export const ModuleSequencerInput = z.discriminatedUnion('action', [
 
   // SoundManager actions
   z.object({ action: z.literal('play-sound'), file: z.string().min(1), options: z.record(z.unknown()).optional() }).strict(),
-  z.object({ action: z.literal('end-sounds'), filter: SoundFilter.optional() }).strict(),
+  // BUG-791: same destructive-confirmation-bypass shape as end-all-sounds — confirm required
+  // whenever the effective filter doesn't genuinely narrow the scope (handler-enforced).
+  z.object({ action: z.literal('end-sounds'), filter: SoundFilter.optional(), confirm: z.boolean().optional() }).strict(),
   // Sequencer 4.2.x dropped the sceneId param from SoundManager.endAllSounds — it now ends all sounds globally.
   // BUG-810: confirm optional at parse time — same reasoning as end-all-effects above.
   z.object({ action: z.literal('end-all-sounds'), confirm: z.boolean().optional() }).strict(),

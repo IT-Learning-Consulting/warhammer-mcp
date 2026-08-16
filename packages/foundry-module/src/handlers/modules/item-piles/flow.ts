@@ -95,7 +95,7 @@ export async function handleAddItems(input: AddItemsInput): Promise<Envelope<unk
         return notPersisted(ErrorTokens.ITEM_PILES_ADD_ITEMS_NOT_PERSISTED, `add-items to ${input.actorUuid} did not increase the added item family's total quantity (before: ${beforeQty}, after: ${readQty()})`);
       }
     }
-    const afterItems = API.getActorItems(input.actorUuid);
+    const afterItems = API.getActorItems(input.actorUuid, { getItemCurrencies: true }); // BUG-775
     const count = Array.isArray(afterItems) ? afterItems.length : 0;
     // Money-leak closure (Phase 4): a generic add-items call can add type:'money' items, which never
     // touches the wfrp-economy ledger otherwise. Post-write delta, fail-open, never gates the op.
@@ -162,7 +162,7 @@ export async function handleRemoveItems(input: RemoveItemsInput): Promise<Envelo
         return notPersisted(ErrorTokens.ITEM_PILES_REMOVE_ITEMS_NOT_PERSISTED, `remove-items from ${input.actorUuid} left the removed item family's total quantity unchanged (before: ${beforeQty}, after: ${readQty()})`);
       }
     }
-    const afterItems = API.getActorItems(input.actorUuid);
+    const afterItems = API.getActorItems(input.actorUuid, { getItemCurrencies: true }); // BUG-775
     const count = Array.isArray(afterItems) ? afterItems.length : 0;
     // Money-leak closure (Phase 4): mirrors add-items above.
     const moneyDelta = beforeMoneyBp - actorMoneyBp(API, input.actorUuid);
@@ -217,7 +217,7 @@ export async function handleTransferItems(input: TransferItemsInput): Promise<En
         if (obj['id'] !== undefined) transferredIds.add(String(obj['id']));
       }
     }
-    const sourceItemsPre = API.getActorItems(input.sourceUuid);
+    const sourceItemsPre = API.getActorItems(input.sourceUuid, { getItemCurrencies: true }); // BUG-775: money items must be visible for the moneyMayMove detection below
     const transferredNames = new Set<string>(
       (Array.isArray(sourceItemsPre) ? sourceItemsPre : [])
         .filter((it: any) => transferredIds.has(String(it?.id ?? it?._id ?? '')))
@@ -253,7 +253,7 @@ export async function handleTransferItems(input: TransferItemsInput): Promise<En
     // DP-16 (BUG-461b): post-write verify — the transferred family's total quantity on the
     // target must not drop after any transfer mode (a transfer only adds to the target).
     const afterTargetQty = totalQuantity(API, input.targetUuid, targetFamily);
-    const targetItems = API.getActorItems(input.targetUuid);
+    const targetItems = API.getActorItems(input.targetUuid, { getItemCurrencies: true }); // BUG-775
     const targetCount = Array.isArray(targetItems) ? targetItems.length : 0;
     if (dto.itemsTransferred.length > 0 && afterTargetQty < beforeTargetQty) {
       return notPersisted(ErrorTokens.ITEM_PILES_TRANSFER_ITEMS_NOT_PERSISTED, `transfer-items to ${input.targetUuid} target total quantity dropped (before: ${beforeTargetQty}, after: ${afterTargetQty})`);
@@ -319,9 +319,17 @@ export function currencyTotal(entries: unknown): number {
     .reduce((acc: number, c: any) => acc + (Number(c?.quantity) || 0) * (Number(c?.exchangeRate) || 0), 0);
 }
 
+// BUG-769/775: item-piles.js:99325 defaults getActorCurrencies to `{getAll:false}`, which
+// silently drops every ZERO-quantity denomination from the result. Every call in this file
+// now passes `{getAll:true}` (item-piles.js:34922 shows the module's OWN internal callers use
+// getAll:true for exactly this reason) — omitting it meant applyAbsoluteCurrencies() below
+// could never CREATE a denomination that was zero before the operation (it only iterates
+// `current`, which wouldn't contain that denomination at all), and absoluteSetSettled()'s
+// `entries.every()` vacuously passed when the actor's positive-coin list was empty.
+
 /** An actor's balance as entries + primary-unit total + a currency string calculateCurrencies accepts. */
 function readBalance(API: any, actorUuid: string): { entries: any[]; total: number; str: string } {
-  const entries: any[] = API.getActorCurrencies(actorUuid) ?? [];
+  const entries: any[] = API.getActorCurrencies(actorUuid, { getAll: true }) ?? [];
   const total = currencyTotal(entries);
   let str = '';
   if (entries.length > 0) {
@@ -384,7 +392,7 @@ async function applyAbsoluteCurrencies(API: any, actorUuid: string, setString: s
   const actor: any = await (globalThis as any).fromUuid(actorUuid);
   if (!actor) throw new Error(`actor ${actorUuid} did not resolve via fromUuid`);
 
-  const current: any[] = API.getActorCurrencies(actorUuid) ?? [];
+  const current: any[] = API.getActorCurrencies(actorUuid, { getAll: true }) ?? [];
   const updates: Record<string, unknown>[] = [];
   const creations: string[] = [];
   for (const cur of current) {
@@ -415,7 +423,7 @@ async function applyAbsoluteCurrencies(API: any, actorUuid: string, setString: s
  * (upstream +1 drift) also "changes" the balance and would pass a difference check.
  */
 function absoluteSetSettled(API: any, actorUuid: string, targets: Map<string, number>): boolean {
-  const entries: any[] = API.getActorCurrencies(actorUuid) ?? [];
+  const entries: any[] = API.getActorCurrencies(actorUuid, { getAll: true }) ?? [];
   return entries.every((cur: any) => {
     if (cur?.type === 'attribute') return true;
     const abbr = String(cur?.abbreviation ?? '');
@@ -436,7 +444,7 @@ export async function handleAddCurrency(input: AddCurrencyInput): Promise<Envelo
 
   try {
     const API = getItemPilesAPI();
-    const beforeCurrencies = API.getActorCurrencies(input.actorUuid);
+    const beforeCurrencies = API.getActorCurrencies(input.actorUuid, { getAll: true });
     const addCurrResult = await API.addCurrencies(input.actorUuid, input.currencies);
     // M-2: socket returns false when GM disconnects mid-call
     if (addCurrResult === false) {
@@ -445,11 +453,11 @@ export async function handleAddCurrency(input: AddCurrencyInput): Promise<Envelo
 
     // DP-16: post-write verify (settle-polled) — closure-diff against the pre-call snapshot.
     const beforeJson = JSON.stringify(beforeCurrencies);
-    const persisted = await settlePoll(() => JSON.stringify(API.getActorCurrencies(input.actorUuid)) !== beforeJson);
+    const persisted = await settlePoll(() => JSON.stringify(API.getActorCurrencies(input.actorUuid, { getAll: true })) !== beforeJson);
     if (!persisted) {
       return notPersisted(ErrorTokens.ITEM_PILES_ADD_CURRENCY_NOT_PERSISTED, `add-currency "${input.currencies}" to ${input.actorUuid} left currencies unchanged`);
     }
-    const currentCurrencies = API.getActorCurrencies(input.actorUuid);
+    const currentCurrencies = API.getActorCurrencies(input.actorUuid, { getAll: true });
     notify.updated('item-piles', `Added currencies "${input.currencies}" to ${input.actorUuid}`, {});
     await recordEconomyTransaction({
       actorId: input.actorUuid,
@@ -526,7 +534,7 @@ export async function handleRemoveCurrency(input: RemoveCurrencyInput): Promise<
     if (!persisted) {
       return notPersisted(ErrorTokens.ITEM_PILES_REMOVE_CURRENCY_NOT_PERSISTED, `remove-currency "${input.currencies}" from ${input.actorUuid} did not settle at the computed target quantities`);
     }
-    const afterCurrencies = API.getActorCurrencies(input.actorUuid);
+    const afterCurrencies = API.getActorCurrencies(input.actorUuid, { getAll: true });
     notify.updated('item-piles', `Removed currencies "${input.currencies}" from ${input.actorUuid}`, {});
     await recordEconomyTransaction({
       actorId: input.actorUuid,
@@ -564,7 +572,7 @@ export async function handleTransferCurrency(input: TransferCurrencyInput): Prom
 
   try {
     const API = getItemPilesAPI();
-    const beforeTargetCurrencies = API.getActorCurrencies(input.targetUuid);
+    const beforeTargetCurrencies = API.getActorCurrencies(input.targetUuid, { getAll: true });
     let result: unknown;
 
     if (mode === 'all') {
@@ -623,7 +631,7 @@ export async function handleTransferCurrency(input: TransferCurrencyInput): Prom
       // DP-16: add side must land on the target too — a timeout here is still a
       // partial transfer (source already debited), not a plain no-op.
       const beforeTargetJson2 = JSON.stringify(beforeTargetCurrencies);
-      const addPersisted = await settlePoll(() => JSON.stringify(API.getActorCurrencies(input.targetUuid)) !== beforeTargetJson2);
+      const addPersisted = await settlePoll(() => JSON.stringify(API.getActorCurrencies(input.targetUuid, { getAll: true })) !== beforeTargetJson2);
       if (!addPersisted) {
         return { success: false, error: `ITEM_PILES_PARTIAL_TRANSFER: removed "${input.currencies}" from ${input.sourceUuid} but target ${input.targetUuid} currencies never changed — manual reconcile needed (transfer is non-atomic, no automatic rollback)` };
       }
@@ -637,8 +645,8 @@ export async function handleTransferCurrency(input: TransferCurrencyInput): Prom
           .map(([abbr, qty]) => ({ abbreviation: abbr, quantity: qty - (sourceBefore.get(abbr) ?? 0) })),
         attributeDeltas: {},
       };
-      const sourceAfter = API.getActorCurrencies(input.sourceUuid);
-      const targetAfter = API.getActorCurrencies(input.targetUuid);
+      const sourceAfter = API.getActorCurrencies(input.sourceUuid, { getAll: true });
+      const targetAfter = API.getActorCurrencies(input.targetUuid, { getAll: true });
       notify.updated('item-piles', `Transferred currencies (mode: ${mode}) from ${input.sourceUuid} to ${input.targetUuid}`, {});
       // ONE record covers the whole transfer (source→target), not two — targetActorId carries
       // the destination.
@@ -677,13 +685,13 @@ export async function handleTransferCurrency(input: TransferCurrencyInput): Prom
     // actually differ.
     if (dto.ok) {
       const beforeTargetJson = JSON.stringify(beforeTargetCurrencies);
-      const persisted = await settlePoll(() => JSON.stringify(API.getActorCurrencies(input.targetUuid)) !== beforeTargetJson);
+      const persisted = await settlePoll(() => JSON.stringify(API.getActorCurrencies(input.targetUuid, { getAll: true })) !== beforeTargetJson);
       if (!persisted) {
         return notPersisted(ErrorTokens.ITEM_PILES_TRANSFER_CURRENCY_NOT_PERSISTED, `transfer-currency (mode: ${mode}) to ${input.targetUuid} reported ok but left target currencies unchanged`);
       }
     }
-    const sourceCurrencies = API.getActorCurrencies(input.sourceUuid);
-    const targetCurrencies = API.getActorCurrencies(input.targetUuid);
+    const sourceCurrencies = API.getActorCurrencies(input.sourceUuid, { getAll: true });
+    const targetCurrencies = API.getActorCurrencies(input.targetUuid, { getAll: true });
     notify.updated('item-piles', `Transferred currencies (mode: ${mode}) from ${input.sourceUuid} to ${input.targetUuid}`, {});
     if (dto.ok) {
       // mode:"all" has no single currency string to re-derive a total from — sum itemDeltas

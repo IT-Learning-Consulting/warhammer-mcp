@@ -234,19 +234,58 @@ export async function handleTradeItems(input: TradeItemsInput): Promise<Envelope
     // copies get new embedded ids (or stack-merge into an existing same-name item), so the
     // name family is the only stable join for the quantity-delta verify below.
     const merchantItemsPre = API.getActorItems(input.merchantUuid);
+    const merchantItemsArr = Array.isArray(merchantItemsPre) ? merchantItemsPre : [];
     const tradedIds = new Set(input.items.map((i) => String(i.itemId)));
-    const tradedNames = new Set<string>(
-      (Array.isArray(merchantItemsPre) ? merchantItemsPre : [])
-        .filter((it: any) => tradedIds.has(String(it?.id ?? it?._id ?? '')))
+    const tradedMerchantItems = merchantItemsArr.filter((it: any) => tradedIds.has(String(it?.id ?? it?._id ?? '')));
+    const tradedNames = new Set<string>(tradedMerchantItems.map((it: any) => String(it?.name ?? '')));
+    // BUG-770: item-piles.js:85727 (`if (itemFlagData.isService) continue;`) deliberately never
+    // embeds a purchased service item on the buyer — that's by design, the effect is delivered
+    // by the item's macro instead. The MCP verifier previously still required the buyer's
+    // quantity for EVERY traded name to grow, so a pure-service purchase would false-fail
+    // ITEM_PILES_TRADE_ITEMS_NOT_PERSISTED after the buyer had already been charged. Exclude
+    // service item names from the "must grow" family — services are verified by committed
+    // payment (dto.ok) alone, matching upstream's own contract for them.
+    const serviceNames = new Set<string>(
+      tradedMerchantItems
+        .filter((it: any) => Boolean(it?.flags?.['item-piles']?.isService))
         .map((it: any) => String(it?.name ?? '')),
     );
-    const beforeBuyerQty = totalQuantity(API, input.buyerUuid, { names: tradedNames });
+    const growthCheckNames = new Set<string>([...tradedNames].filter((n) => !serviceNames.has(n)));
+    const beforeBuyerQty = totalQuantity(API, input.buyerUuid, { names: growthCheckNames });
     // Net currency delta for the ledger append below: before/after snapshot of the buyer's
     // currency, NOT itemDeltas (shape unverified for a mixed merchandise+payment trade — memo
     // flags this; the snapshot approach sidesteps it entirely).
     const beforeBuyerCurrencyTotal = currencyTotal(API.getActorCurrencies(input.buyerUuid));
 
-    const result = await API.tradeItems(input.merchantUuid, input.buyerUuid, items);
+    let result: unknown;
+    try {
+      result = await API.tradeItems(input.merchantUuid, input.buyerUuid, items);
+    } catch (e) {
+      // BUG-770 (macro branch): upstream commits BOTH transactions before running the
+      // purchased item's macro (item-piles.js:85756-85797) — a missing named macro THROWS
+      // from inside tradeItems, after payment already landed. Distinguish "payment committed,
+      // then something downstream broke" from a plain trade failure so the caller does not
+      // retry and double-charge the buyer.
+      const afterThrowBuyerCurrencyTotal = currencyTotal(API.getActorCurrencies(input.buyerUuid));
+      const paidDespiteThrow = Math.max(0, beforeBuyerCurrencyTotal - afterThrowBuyerCurrencyTotal);
+      if (paidDespiteThrow > 0) {
+        await recordEconomyTransaction({
+          actorId: input.buyerUuid,
+          targetActorId: input.merchantUuid,
+          amount: paidDespiteThrow,
+          type: 'trade-items',
+          source: 'itempiles',
+          description: `Item Piles: bought ${input.items.length} item(s) from merchant (post-payment error — see ITEM_PILES_TRADE_POST_PAYMENT_ERROR)`,
+        });
+      }
+      const msg = e instanceof Error ? e.message : String(e);
+      return {
+        success: false,
+        error: paidDespiteThrow > 0
+          ? `ITEM_PILES_TRADE_POST_PAYMENT_ERROR: buyer ${input.buyerUuid} was already charged (${paidDespiteThrow}) before this error — do NOT retry the trade, it would double-charge. Cause: ${msg}`
+          : `TRADE_ITEMS_ERROR: ${msg}`,
+      };
+    }
     // M-2: socket returns false when GM disconnects mid-call
     if (result === false) {
       return { success: false, error: 'NO_ACTIVE_GM: item-piles socket returned false — GM may have disconnected' };
@@ -269,13 +308,14 @@ export async function handleTradeItems(input: TradeItemsInput): Promise<Envelope
     // moved (dto.ok), the buyer's TOTAL QUANTITY over the traded item family must have grown.
     // Distinct-item count is the wrong dimension: a stack-merge (buyer already holds the item)
     // leaves the count static while quantity 1→2, and false-failed successful trades.
-    // Empty name family (traded ids unresolvable pre-trade) → dto.ok stands alone; a
-    // whole-actor sum would net-DECREASE on the currency side (money items are items too).
-    if (dto.ok && tradedNames.size > 0) {
-      const readBuyerQty = () => totalQuantity(API, input.buyerUuid, { names: tradedNames });
+    // Empty name family (traded ids unresolvable pre-trade, or every traded item is a service
+    // per BUG-770 above) → dto.ok stands alone; a whole-actor sum would net-DECREASE on the
+    // currency side (money items are items too).
+    if (dto.ok && growthCheckNames.size > 0) {
+      const readBuyerQty = () => totalQuantity(API, input.buyerUuid, { names: growthCheckNames });
       const persisted = await settlePoll(() => readBuyerQty() > beforeBuyerQty);
       if (!persisted) {
-        return notPersisted(ErrorTokens.ITEM_PILES_TRADE_ITEMS_NOT_PERSISTED, `trade-items to buyer ${input.buyerUuid} reported ok but the traded item family's total quantity failed to grow (before: ${beforeBuyerQty}, after: ${readBuyerQty()})`);
+        return notPersisted(ErrorTokens.ITEM_PILES_TRADE_ITEMS_NOT_PERSISTED, `trade-items to buyer ${input.buyerUuid} reported ok but the traded (non-service) item family's total quantity failed to grow (before: ${beforeBuyerQty}, after: ${readBuyerQty()})`);
       }
     }
     const buyerCurrencies = API.getActorCurrencies(input.buyerUuid);

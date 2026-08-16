@@ -10,6 +10,28 @@ import type { MattActionObjType } from '@foundry-mcp/shared';
 
 export const MATT_FLAG = 'monks-active-tiles';
 
+// BUG-746: native MATT actions each read their own audience/visibility field — there is no
+// generic `for` field. Verified against monks-active-tiles/actions.js (v13.06):
+//   notification (2866), chatmessage (2931), tempimage (1881), dialog (5881),
+//   openjournal (3830), openactor (4054) all read `data.showto`.
+//   showimage (2626) reads `data.showfor`. playanimation (3691) reads `data.animatefor`.
+// The skill previously authored a generic `for` (including `for:"gm"`), which every one of
+// these actions silently ignores — falling back to each action's own default audience
+// (frequently "everyone"/"all"), which is how a GM-only chatmessage/notification/dialog
+// leaked to players. This map translates the skill's `for` alias to the correct native key
+// per action; actions NOT in this map are left untouched (either they have no audience concept,
+// or — like closedialog/scrollingtext/preload — they natively read `for` already).
+const AUDIENCE_FIELD_BY_ACTION: Record<string, string> = {
+  notification: 'showto',
+  chatmessage: 'showto',
+  tempimage: 'showto',
+  dialog: 'showto',
+  openjournal: 'showto',
+  openactor: 'showto',
+  showimage: 'showfor',
+  playanimation: 'animatefor',
+};
+
 // ── Local helpers (mirror region.ts; kept package-local, CCR-5) ───────────────
 
 export function getSceneOrThrow(sceneId: string): any {
@@ -58,6 +80,16 @@ export function normalizeActionData(action: string, raw: Record<string, unknown>
 
   if (action === 'chatmessage' && data.language === undefined) {
     data.language = '';
+  }
+
+  // BUG-746: translate the ambiguous `for` alias to the action's real native audience field,
+  // then remove `for` so it can never silently pass through as an inert/ignored key.
+  const audienceField = AUDIENCE_FIELD_BY_ACTION[action];
+  if (audienceField !== undefined && data.for !== undefined) {
+    if (data[audienceField] === undefined) {
+      data[audienceField] = data.for;
+    }
+    delete data.for;
   }
 
   if (action === 'scrollingtext') {

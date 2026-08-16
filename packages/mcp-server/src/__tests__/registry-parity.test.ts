@@ -58,8 +58,11 @@ describe('declarative tool registry parity (R8.1/R8.2)', () => {
     // wfrp_economy_system Phase 6: 114 → 114 (HC8 — 9 new actions [legitimate-business-enterprises
     // idiom] + a declared flag on apply-levies, on the existing module-wfrp-economy umbrella;
     // zero new tools, count unchanged — action count 35 → 44).
-    expect(names.length).toBe(114);
-    expect(new Set(names).size).toBe(114); // no duplicate registrations (Risk 8.A)
+    // skills_vault machine_port Phase 3: 114 → 115 with the module-tokenizer umbrella (7 actions
+    // over Tokenizer 2's headless API). __tools-list-snapshot__.json regenerated 2026-08-16
+    // alongside this update (was drifted +1 unbaselined by the same addition).
+    expect(names.length).toBe(115);
+    expect(new Set(names).size).toBe(115); // no duplicate registrations (Risk 8.A)
   });
 
   it('every registration carries a callable handler', () => {

@@ -18,7 +18,13 @@ export interface ItemFamily {
  * name/id family. Items without a numeric quantity count as 1.
  */
 export function totalQuantity(API: any, actorUuid: string, family?: ItemFamily): number {
-  const items = API.getActorItems(actorUuid);
+  // BUG-775: item-piles.js:34919 excludes every currency-registered item from getActorItems
+  // by DEFAULT (getItemCurrencies:false); WFRP4e registers money items as item-type currencies,
+  // so a generic add-items/remove-items call that only touched money was invisible to this
+  // verify — before/after totals read identical, and a genuinely successful coin mutation
+  // false-failed as *_NOT_PERSISTED. Upstream's own internal transfer callers (item-piles.js
+  // :98491,98543,98630,98841,98897) pass getItemCurrencies:true for exactly this reason.
+  const items = API.getActorItems(actorUuid, { getItemCurrencies: true });
   return (Array.isArray(items) ? items : [])
     .filter((item: any) => {
       if (!family) return true;

@@ -460,7 +460,7 @@ export class ActorService {
    * no DialogV2). The Advancement class is module-local and not exposed on
    * game.wfrp4e.apps, so the actor.system.advance() entry point is the only path.
    */
-  async applyNpcCareerAdvance(data: { actorId: string; careerItemId: string }): Promise<any> {
+  async applyNpcCareerAdvance(data: { actorId: string; careerItemId: string; talentPolicy?: 'all' | 'min' | undefined }): Promise<any> {
     this.validateState();
 
     try {
@@ -486,18 +486,77 @@ export class ActorService {
         throw new Error(`Actor ${actor.name} (type ${(actor as any).type}) has no system.advance method; wfrp4e system may have changed`);
       }
 
-      // BUG-217: StandardActorModel.advance() is synchronous but fire-and-forgets async actor.update().
-      // HC1: bare `await model.advance()` is a NON-FIX (returns undefined). Observer pattern mirrors
-      // updateActor:4231-4234 exactly — register BEFORE the sync call, await AFTER.
+      // BUG-692: the promised career-derived deltas, snapshotted BEFORE advance() so the
+      // post-write verify below checks the actual advancement, not just "the actor and career
+      // still exist" (BUG-218's weaker check). Verified against wfrp4e.js Advancement.advance()
+      // (:2742-2761): characteristics flagged true on the career get .advances set to
+      // 5*career.level; every career.system.skills entry gets an item at that same advances
+      // value; every career.system.talents entry gets a talent item added.
+      const careerSystem: any = (career as any).system ?? {};
+      const careerLevel: number = Number(careerSystem.level?.value ?? 1);
+      const advancesNeeded = careerLevel * 5;
+      const flaggedChars: string[] = Object.keys(careerSystem.characteristics ?? {}).filter((k) => careerSystem.characteristics[k]);
+      const careerSkillNames: string[] = Array.isArray(careerSystem.skills) ? careerSystem.skills.map((s: any) => String(s)) : [];
+      const careerTalentNames: string[] = Array.isArray(careerSystem.talents) ? careerSystem.talents.map((t: any) => String(t)) : [];
+      const preTalentIds = new Set<string>(
+        ((actor as any).items ?? []).filter((it: any) => it.type === 'talent').map((it: any) => String(it.id)),
+      );
+
+      // BUG-692/BUG-217: StandardActorModel.advance() (wfrp4e.js:7036) is itself synchronous but
+      // fire-and-forgets `adv.advance()`, which is `async` yet ALSO calls `this.actor.update()`
+      // (wfrp4e.js:2760) without awaiting it — two un-awaited layers between this call and the
+      // actual actor write settling. Observer pattern: register BEFORE the sync call, await AFTER.
       const commitObserved = waitForActorUpdateCommit(String(actor.id), 250);
       model.advance(career);
-      await commitObserved;
+      const committed = await commitObserved;
+      // BUG-692: a timeout is now an EXPLICIT failure — the old implementation resolved
+      // identically on hook-fire and on timeout, so a genuinely-incomplete advance (e.g. under
+      // contention) was silently reported as success.
+      if (!committed) {
+        throw new Error(`${ErrorTokens.APPLY_NPC_CAREER_ADVANCE_NOT_PERSISTED}: timed out waiting for actor ${data.actorId}'s updateActor hook after advance() — no commit observed within 250ms`);
+      }
 
-      // BUG-218: re-read actor + career after commit to confirm persistence.
+      // BUG-218 (existence) + BUG-692 (actual deltas): re-read actor + career, then verify every
+      // promised characteristic/skill/talent delta actually landed — not just that the documents
+      // still exist.
       const fresh = game.actors?.get(data.actorId);
       const freshCareer = fresh?.items?.get(data.careerItemId);
       if (!fresh || !freshCareer) {
         throw new Error(`${ErrorTokens.APPLY_NPC_CAREER_ADVANCE_NOT_PERSISTED}: actor ${data.actorId} or career ${data.careerItemId} missing after advance`);
+      }
+
+      const freshSystem: any = (fresh as any).system ?? {};
+      const shortfalls: string[] = [];
+      for (const ch of flaggedChars) {
+        const advances = Number(freshSystem.characteristics?.[ch]?.advances ?? 0);
+        if (advances < advancesNeeded) shortfalls.push(`characteristic "${ch}" advances ${advances} < expected ${advancesNeeded}`);
+      }
+      const freshItems: any[] = Array.from((fresh as any).items ?? []);
+      for (const skillName of careerSkillNames) {
+        const skillItem = freshItems.find((it: any) => it.type === 'skill' && String(it.name).toLowerCase() === skillName.toLowerCase());
+        const advances = Number(skillItem?.system?.advances?.value ?? -1);
+        if (!skillItem || advances < advancesNeeded) {
+          shortfalls.push(`skill "${skillName}" advances ${advances} < expected ${advancesNeeded}`);
+        }
+      }
+      const postTalentItems = freshItems.filter((it: any) => it.type === 'talent' && !preTalentIds.has(String(it.id)));
+      if (careerTalentNames.length > 0 && postTalentItems.length === 0) {
+        shortfalls.push(`expected ${careerTalentNames.length} new talent item(s) from [${careerTalentNames.join(', ')}], found 0`);
+      }
+      if (shortfalls.length > 0) {
+        throw new Error(`${ErrorTokens.APPLY_NPC_CAREER_ADVANCE_NOT_PERSISTED}: advance() reported commit but the promised deltas did not fully land — ${shortfalls.join('; ')}`);
+      }
+
+      // BUG-696: wfrp4e's Advancement.advance() (wfrp4e.js:2756-2757) has no talent-count
+      // policy — it always embeds EVERY career.system.talents entry, and no parameter on
+      // StandardActorModel.advance() can change that. talentPolicy:'min' is a post-hoc trim:
+      // keep only the FIRST newly-added talent from this call, delete the rest. Default 'all'
+      // preserves prior behavior exactly.
+      let removedTalentIds: string[] = [];
+      if (data.talentPolicy === 'min' && postTalentItems.length > 1) {
+        const toRemove = postTalentItems.slice(1).map((it: any) => String(it.id));
+        await (fresh as any).deleteEmbeddedDocuments('Item', toRemove);
+        removedTalentIds = toRemove;
       }
 
       notify.updated('actor', fresh.name ?? 'unknown', { summary: `advancing via ${freshCareer.name}`, uuid: (fresh as any).uuid });
@@ -508,7 +567,10 @@ export class ActorService {
         actorName: fresh.name,
         careerItemId: freshCareer.id,
         careerName: freshCareer.name,
-        careerLevel: (freshCareer as any).system?.level?.value ?? null
+        careerLevel: (freshCareer as any).system?.level?.value ?? null,
+        talentPolicy: data.talentPolicy ?? 'all',
+        talentsAdded: postTalentItems.length - removedTalentIds.length,
+        talentsTrimmed: removedTalentIds.length,
       };
     } catch (error) {
       throw new Error(`Failed to apply NPC career advance: ${error instanceof Error ? error.message : 'Unknown error'}`);

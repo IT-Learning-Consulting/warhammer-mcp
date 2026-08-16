@@ -77,7 +77,11 @@ export const ACTION_CATALOG: Record<string, ActionSpec> = {
   runcode: { group: 'actions', danger: true, required: ['code'] },
   rolltable: { group: 'actions', danger: false, required: ['rolltable'] },
   resetfog: { group: 'actions', danger: true },
-  activeeffect: { group: 'actions', danger: false, required: ['entity', 'effect', 'action'] },
+  // BUG-748: native MATT `activeeffect` reads `effectid` (CONFIG.statusEffects id) + optional
+  // `addeffect` ('add'|'remove'|'toggle', defaults to 'add') — verified against
+  // monks-active-tiles/actions.js:3660-3690 (`token.object.toggleEffect(effect, {overlay:false})`).
+  // There is no `effect`/`action` field pair; that was a fictional arbitrary-AE-UUID contract.
+  activeeffect: { group: 'actions', danger: false, required: ['entity', 'effectid'] },
   playanimation: { group: 'actions', danger: false, required: ['entity'] },
   openjournal: { group: 'actions', danger: false, required: ['entity'] },
   openactor: { group: 'actions', danger: false, required: ['entity'] },
@@ -183,7 +187,7 @@ export const STRICT_ACTION_DATA: Record<string, z.ZodTypeAny> = {
     }),
   permissions: z.object({ entity: entityField, permission: z.union([z.string(), z.number()]) }).passthrough(),
   changedoor: z.object({ entity: entityField, state: z.string() }).passthrough(),
-  activeeffect: z.object({ entity: entityField, effect: z.union([z.string(), z.record(z.unknown())]), action: z.string() }).passthrough(),
+  activeeffect: z.object({ entity: entityField, effectid: z.string().min(1), addeffect: z.enum(['add', 'remove', 'toggle']).optional() }).passthrough(),
 };
 
 // ── makeid — MATT's 16-char alphanumeric action id (monks-active-tiles.js:35) ──

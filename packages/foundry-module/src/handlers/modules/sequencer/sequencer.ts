@@ -262,6 +262,17 @@ type UpdateEffectsInput = Extract<ModuleSequencerInputType, { action: 'update-ef
 
 async function handleEndEffects(input: EndEffectsInput): Promise<Envelope<unknown>> {
   if (!isGM()) return { success: false, error: 'GM_REQUIRED' };
+  // BUG-791: an omitted/empty filter matches every deletable effect on the viewed scene
+  // (Sequencer fills it with game.user.viewedScene) — require the same explicit confirmation
+  // as end-all-effects whenever the filter doesn't genuinely narrow the scope.
+  if (!input.filter || Object.keys(input.filter).length === 0) {
+    if (input.confirm !== true) {
+      return {
+        success: false,
+        error: 'CONFIRM_REQUIRED: an empty/omitted filter matches every effect on the viewed scene (same scope as end-all-effects). Re-send with confirm:true, or narrow the filter.',
+      };
+    }
+  }
   try {
     const Sequencer = getSequencer();
     await Sequencer.EffectManager.endEffects(input.filter ?? {});
@@ -348,6 +359,17 @@ async function handlePlaySound(input: PlaySoundInput): Promise<Envelope<unknown>
 
 async function handleEndSounds(input: EndSoundsInput): Promise<Envelope<unknown>> {
   if (!isGM()) return { success: false, error: 'GM_REQUIRED' };
+  // BUG-791/792: an omitted/empty filter (or one whose only key upstream ignores) matches
+  // every sound on the viewed scene — require the same explicit confirmation as end-all-sounds
+  // whenever the filter doesn't genuinely narrow the scope.
+  if (!input.filter || Object.keys(input.filter).length === 0) {
+    if (input.confirm !== true) {
+      return {
+        success: false,
+        error: 'CONFIRM_REQUIRED: an empty/omitted filter matches every sound on the viewed scene (same scope as end-all-sounds). Re-send with confirm:true, or narrow the filter.',
+      };
+    }
+  }
   try {
     const Sequencer = getSequencer();
     await Sequencer.SoundManager.endSounds(input.filter ?? {});
