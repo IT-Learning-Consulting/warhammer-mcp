@@ -116,7 +116,8 @@ export type NotifyKind =
   | 'narrator'
   | 'macro-trigger'
   | 'backpack'
-  | 'trading-places';
+  | 'trading-places'
+  | 'tokenizer';
 
 export type NotifySeverity =
   | 'created'

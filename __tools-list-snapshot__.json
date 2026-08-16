@@ -1,5 +1,5 @@
 {
-  "count": 114,
+  "count": 115,
   "capturedVia": "standalone-backend :31414 list_tools",
   "names": [
     "actor-config",
@@ -92,6 +92,7 @@
     "module-token-attacher",
     "module-token-presentation",
     "module-tokenbar",
+    "module-tokenizer",
     "module-trading-places",
     "module-wfrp-economy",
     "note",

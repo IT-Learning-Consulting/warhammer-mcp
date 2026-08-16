@@ -186,6 +186,12 @@ export const ErrorTokens = {
   PORTAL_CANVAS_NOT_READY: 'PORTAL_CANVAS_NOT_READY',
   PORTAL_WRONG_SCENE_ACTIVE: 'PORTAL_WRONG_SCENE_ACTIVE',
   PORTAL_SPAWN_FAILED: 'PORTAL_SPAWN_FAILED',
+  // tokenizer-2-integration plan Phase 2 (module-tokenizer) — dispatch-level rejections
+  // (no rollback). API_UNAVAILABLE: module active but the tokenizer-2.ready hook hasn't
+  // fired yet (distinct from MODULE_NOT_ACTIVE). CONFIRM_REQUIRED: tokenize-batch or
+  // cleanup-flags fired without confirm:true (bulk write across many actors/files).
+  TOKENIZER_API_UNAVAILABLE: 'TOKENIZER_API_UNAVAILABLE',
+  TOKENIZER_CONFIRM_REQUIRED: 'TOKENIZER_CONFIRM_REQUIRED',
 
   // ── *_NOT_PERSISTED post-write-verification tokens (DP-16) ──
   WRITE_NOT_PERSISTED: 'WRITE_NOT_PERSISTED',
@@ -317,6 +323,9 @@ export const ErrorTokens = {
   TILE_ZORDER_NOT_PERSISTED: 'TILE_ZORDER_NOT_PERSISTED',
   TIMEKEEPING_EVENT_FLAG_NOT_PERSISTED: 'TIMEKEEPING_EVENT_FLAG_NOT_PERSISTED',
   TIMEKEEPING_SYNC_NOT_PERSISTED: 'TIMEKEEPING_SYNC_NOT_PERSISTED',
+  // tokenizer-2-integration plan Phase 2 (module-tokenizer) — post-write verify: settle-poll
+  // re-read of actor.prototypeToken.texture.src did not reflect api.tokenize()'s exported path.
+  TOKENIZE_NOT_PERSISTED: 'TOKENIZE_NOT_PERSISTED',
   TOKENMAGIC_PRESET_NOT_PERSISTED: 'TOKENMAGIC_PRESET_NOT_PERSISTED',
   TOKEN_ATTACHER_CANVAS_NOT_READY: 'TOKEN_ATTACHER_CANVAS_NOT_READY',
   TOKEN_ATTACHER_NOT_PERSISTED: 'TOKEN_ATTACHER_NOT_PERSISTED',

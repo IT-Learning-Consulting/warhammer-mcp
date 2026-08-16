@@ -69,6 +69,7 @@ import { CombatantTool } from '../combatant.js';
 import { ModuleProbeTool } from '../modules/probe/probe.js';
 import { ModuleMattTool } from '../modules/monks-active-tiles/matt.js';
 import { ModuleTaggerTool } from '../modules/tagger/tagger.js';
+import { ModuleTokenizerTool } from '../modules/tokenizer/tokenizer.js';
 import { ModuleSequencerTool } from '../modules/sequencer/sequencer.js';
 import { ModuleLevelsTool } from '../modules/levels/levels.js';
 import { ModuleAutoAnimationsTool } from '../modules/autoanimations/autoanimations.js';
@@ -172,6 +173,7 @@ export function buildTools(deps: BaseToolOptions): BaseTool[] {
     new ModuleProbeTool(deps),
     new ModuleMattTool(deps),
     new ModuleTaggerTool(deps),
+    new ModuleTokenizerTool(deps),
     new ModuleSequencerTool(deps),
     new ModuleLevelsTool(deps),
     new ModuleAutoAnimationsTool(deps),

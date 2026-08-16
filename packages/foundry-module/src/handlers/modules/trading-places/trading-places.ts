@@ -1,3 +1,4 @@
+// DIALOG-PATH: DIALOG_FREE — every action is a retired short-circuit returning TRADING_PLACES_ACTION_RETIRED; no handler logic runs, no dialog paths.
 // RETIRED (Phase 7g, D2/D6/D7): module-trading-places is fully retired — module-wfrp-economy's ported
 // Phase 7f trading engine (24 trading-* actions) replaces it, live-proven before this retirement landed.
 // Every one of the 19 legacy actions is intercepted below and returns a typed TRADING_PLACES_ACTION_RETIRED

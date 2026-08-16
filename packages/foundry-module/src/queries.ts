@@ -104,6 +104,8 @@ import { dispatchModuleProbe as dispatchModuleProbeHandler } from './handlers/mo
 import { dispatchModuleMatt as dispatchModuleMattHandler } from './handlers/modules/monks-active-tiles/matt.js';
 // Phase 5 module_integration_v1 — module-tagger + module-sequencer umbrellas.
 import { dispatchModuleTagger as dispatchModuleTaggerHandler } from './handlers/modules/tagger/tagger.js';
+// tokenizer-2-integration plan Phase 2 — module-tokenizer umbrella.
+import { dispatchModuleTokenizer as dispatchModuleTokenizerHandler } from './handlers/modules/tokenizer/tokenizer.js';
 import { dispatchModuleSequencer as dispatchModuleSequencerHandler } from './handlers/modules/sequencer/sequencer.js';
 // Phase 4 module_integration_v1 — module-levels umbrella.
 import { dispatchModuleLevels as dispatchModuleLevelsHandler } from './handlers/modules/levels/levels.js';
@@ -500,6 +502,7 @@ export class QueryHandlers {
       'module-probe': this.handleModuleProbe.bind(this),
       'module-matt': this.handleModuleMatt.bind(this),
       'module-tagger': this.handleModuleTagger.bind(this),
+      'module-tokenizer': this.handleModuleTokenizer.bind(this),
       'module-sequencer': this.handleModuleSequencer.bind(this),
       'module-levels': this.handleModuleLevels.bind(this),
       'module-autoanimations': this.handleModuleAutoAnimations.bind(this),
@@ -767,6 +770,14 @@ export class QueryHandlers {
   private async handleModuleTagger(data: unknown): Promise<any> {
     return wrapQuery('Failed to dispatch module-tagger action', async () => {
       return await dispatchModuleTaggerHandler(data);
+    });
+  }
+
+  // tokenizer-2-integration plan Phase 2 — module-tokenizer dispatcher.
+  // requireModuleActive('tokenizer-2') guard runs inside dispatchModuleTokenizer.
+  private async handleModuleTokenizer(data: unknown): Promise<any> {
+    return wrapQuery('Failed to dispatch module-tokenizer action', async () => {
+      return await dispatchModuleTokenizerHandler(data);
     });
   }
 

@@ -47,6 +47,7 @@ export * from './tagger/schemas.js';
 export * from './token-attacher/schemas.js';
 export * from './token-presentation/schemas.js';
 export * from './tokenbar/schemas.js';
+export * from './tokenizer/schemas.js';
 export * from './trading-places/schemas.js';
 export * from './wfrp-economy/schemas.js';
 export * from './wfrp4e-gm-toolkit/schemas.js';
