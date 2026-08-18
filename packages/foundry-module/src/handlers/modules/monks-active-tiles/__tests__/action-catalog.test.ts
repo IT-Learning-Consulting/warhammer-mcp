@@ -19,14 +19,18 @@ import {
 import { normalizeActions } from '../matt.js';
 
 describe('MATT action catalog — completeness (parity target, dossier §8)', () => {
-  it('exposes the 78 source-verified native built-in actions', () => {
+  it('exposes the 77 source-verified native built-in actions', () => {
     // Why: HC9 capability-complete — under-counting silently drops authorable actions.
-    // animate (actions.js:1955) re-verified live in MATT v13.06 — 2026-06-10 audit (BUG-333).
-    expect(ACTION_KEYS.length).toBe(78);
+    // BUG-757: 'animate' is dead, block-commented source (actions.js ~1954-2018), never
+    // registered with MATT's live action registry — confirmed regression of BUG-333, which
+    // incorrectly treated the commented-out text as a live registration. isKnownAction('animate')
+    // must be false: advertising a phantom action lets sequences validate/write/fire while the
+    // animation step is silently discarded at runtime.
+    expect(ACTION_KEYS.length).toBe(77);
     expect(isKnownAction('append')).toBe(true);
     expect(isKnownAction('permissions')).toBe(true);
     expect(isKnownAction('tokencount')).toBe(true);
-    expect(isKnownAction('animate')).toBe(true);
+    expect(isKnownAction('animate')).toBe(false);
   });
 
   it('exposes all 24 trigger modes (zero missing — audit §3)', () => {
@@ -160,6 +164,45 @@ describe('normalizeActions — MATT source defaults and aliases', () => {
 
     expect(macro.data.macroid).toBe('Macro.abc123');
     expect(scene.data.entity).toBe('Scene.scene123');
+  });
+
+  describe('BUG-754 — runmacro entity/macroid precedence', () => {
+    // Why: native MATT's runmacro fn resolves the macro via `entity` whenever it is present
+    // at all (`if (!action.data.entity) {...macroid...} else {getEntities(args,"macros")}`),
+    // silently ignoring `macroid`. Five shipped assets set entity:{id:"tile"} alongside a real
+    // macroUuid, so the intended macro never fired — the Tile got (mis)resolved instead.
+
+    it('strips a non-Macro entity (e.g. the current Tile) when macroid is present', () => {
+      const [macro] = normalizeActions([
+        { action: 'runmacro', data: { entity: { id: 'tile' }, macroUuid: 'Macro.abc123' } },
+      ]);
+      expect(macro.data.macroid).toBe('Macro.abc123');
+      expect(macro.data.entity).toBeUndefined();
+    });
+
+    it('strips a redundant Macro-typed entity that matches macroid (harmless duplication)', () => {
+      const [macro] = normalizeActions([
+        { action: 'runmacro', data: { entity: 'Macro.abc123', macroid: 'Macro.abc123' } },
+      ]);
+      expect(macro.data.macroid).toBe('Macro.abc123');
+      expect(macro.data.entity).toBeUndefined();
+    });
+
+    it('rejects a Macro-typed entity that conflicts with a different macroid', () => {
+      expect(() =>
+        normalizeActions([
+          { action: 'runmacro', data: { entity: 'Macro.other456', macroid: 'Macro.abc123' } },
+        ]),
+      ).toThrow(/RUNMACRO_ENTITY_MACROID_CONFLICT/);
+    });
+
+    it('leaves a bare entity-as-macro (no macroid/macroUuid sibling) untouched — BUG-255 pattern', () => {
+      const [macro] = normalizeActions([
+        { action: 'runmacro', data: { entity: 'Macro.abc123', runas: 'gm' } },
+      ]);
+      expect(macro.data.entity).toBe('Macro.abc123');
+      expect(macro.data.macroid).toBeUndefined();
+    });
   });
 });
 

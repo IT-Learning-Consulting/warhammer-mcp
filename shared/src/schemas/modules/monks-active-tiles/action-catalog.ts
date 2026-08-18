@@ -31,7 +31,11 @@ export function isKnownTrigger(key: string): boolean {
   return TRIGGER_SET.has(key);
 }
 
-// ── Action catalog (78 native keys across 3 groups) — audit §4 + BUG-333 ──────
+// ── Action catalog (77 native keys across 3 groups) — audit §4 + BUG-333/BUG-757 ──
+// BUG-757: 'animate' removed — its entire actions.js block (~1954-2018) is dead,
+// block-commented source, never registered with MATT's live action registry. BUG-333
+// (2026-06-10) incorrectly treated the commented-out source text as a live registration;
+// this is the confirmed regression fix.
 
 export interface ActionSpec {
   /** MATT action group. */
@@ -107,7 +111,6 @@ export const ACTION_CATALOG: Record<string, ActionSpec> = {
   scrollingtext: { group: 'actions', danger: false, required: ['entity', 'content'] },
   preload: { group: 'actions', danger: false, required: ['entity'] },
   append: { group: 'actions', danger: false, required: ['entity', 'text'] },
-  animate: { group: 'actions', danger: false, required: ['entity'] },
   // group: logic
   runbatch: { group: 'logic', danger: false },
   checkdata: { group: 'logic', danger: false, required: ['attribute', 'value'] },

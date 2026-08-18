@@ -74,6 +74,18 @@ export function readMattFlags(tile: any): Record<string, any> {
   return (tile._source?.flags?.[MATT_FLAG] ?? tile.flags?.[MATT_FLAG] ?? {}) as Record<string, any>;
 }
 
+/** Extract a Macro UUID/id from an entity value if it refers to a Macro, else null (BUG-754). */
+function extractMacroRef(entity: unknown): string | null {
+  if (typeof entity === 'string') {
+    return entity.startsWith('Macro.') ? entity : null;
+  }
+  if (entity && typeof entity === 'object' && !Array.isArray(entity)) {
+    const id = (entity as Record<string, unknown>).id;
+    if (typeof id === 'string' && id.startsWith('Macro.')) return id;
+  }
+  return null;
+}
+
 /** Fill source-observed MATT defaults and aliases before catalog validation/write. */
 export function normalizeActionData(action: string, raw: Record<string, unknown> | undefined, sceneId?: string): Record<string, unknown> {
   const data = deepStripUndefined({ ...(raw ?? {}) }) as Record<string, unknown>;
@@ -109,6 +121,23 @@ export function normalizeActionData(action: string, raw: Record<string, unknown>
 
   if (action === 'runmacro' && data.macroid === undefined && data.macroUuid !== undefined) {
     data.macroid = data.macroUuid;
+  }
+
+  // BUG-754: native MATT's runmacro `fn` (actions.js ~3155) resolves the macro via
+  // `entity` whenever `entity` is present at all — `if (!action.data.entity) { ...macroid...}
+  // else { entities = await MonksActiveTiles.getEntities(args, "macros"); }` — so `macroid`
+  // is silently ignored while `entity` (frequently the current Tile, per BUG-255-era authoring)
+  // wins instead. Strip the precedence-breaking `entity` so `macroid` actually fires; but if
+  // `entity` is ITSELF a Macro reference pointing at a different macro than `macroid`, that is
+  // a genuine ambiguous conflict — reject rather than silently guess which one the author meant.
+  if (action === 'runmacro' && data.macroid !== undefined && data.entity !== undefined) {
+    const entityMacroRef = extractMacroRef(data.entity);
+    if (entityMacroRef !== null && entityMacroRef !== String(data.macroid)) {
+      throw new Error(
+        `RUNMACRO_ENTITY_MACROID_CONFLICT: runmacro action specifies both entity (${entityMacroRef}) and macroid (${String(data.macroid)}) referring to different macros — remove one.`,
+      );
+    }
+    delete data.entity;
   }
 
   // BUG-260: upstream MATT runs a bare "true"/"false" setvariable value through a broken

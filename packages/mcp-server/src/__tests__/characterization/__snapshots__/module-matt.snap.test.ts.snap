@@ -17,8 +17,12 @@ exports[`ModuleMattTool — characterization > fire-trigger — formats uuid and
 
 exports[`ModuleMattTool — characterization > get-capabilities — formats trigger counts, groups, deps 1`] = `
 "MATT capabilities — 3 trigger modes, 78 built-in actions (groups: system/token/scene).
+Triggers: enter, exit, click.
+Action catalog by group:
+  - system (2): chatmessage, pause
 Dangerous (need confirm): pause, resetfog.
-Optional deps: sequencer:off, tagger:on."
+Optional deps: sequencer:off, tagger:on.
+Settings: use-core-macro=false."
 `;
 
 exports[`ModuleMattTool — characterization > get-trigger-tile — prose summary with actions and variables 1`] = `

@@ -160,6 +160,10 @@ interface FireTriggerAsResponse {
   method: string;
   tokenIds: TokenId[];
   tokensUsed: number;
+  // BUG-766 — already returned by handleFireTriggerAs (matt-runtime.ts) but previously
+  // undeclared here and dropped by the text formatter.
+  skipped: number;
+  message?: string;
 }
 
 interface FindTriggerTileResponse {
@@ -204,12 +208,39 @@ const text = (s: string) => ({ content: [{ type: 'text' as const, text: s }] });
 
 // ── Formatters (emit real return fields — DP-19) ──────────────────────────────
 
+// BUG-766 — bounded projection cap: don't dump the full ~78-action catalog raw, but do
+// surface it (the tool description tells callers get-capabilities is where to look).
+const CAPABILITIES_ACTION_SAMPLE_CAP = 6;
+
 function formatCapabilities(d: CapabilitiesResponse): string {
   const deps = Object.entries(d.optionalDeps).map(([k, v]) => `${k}:${v ? 'on' : 'off'}`).join(', ');
   const reg = d.registeredActions.length ? `\nRegistered (third-party) actions: ${d.registeredActions.join(', ')}` : '';
+  const triggersStr = d.triggers.length ? d.triggers.join(', ') : '(none)';
+
+  const byGroup = new Map<string, string[]>();
+  for (const a of d.actions) {
+    const list = byGroup.get(a.group) ?? [];
+    list.push(a.key);
+    byGroup.set(a.group, list);
+  }
+  const catalogLines = Array.from(byGroup.entries()).map(([group, keys]) => {
+    const sample = keys.slice(0, CAPABILITIES_ACTION_SAMPLE_CAP).join(', ');
+    const more = keys.length > CAPABILITIES_ACTION_SAMPLE_CAP ? `, +${keys.length - CAPABILITIES_ACTION_SAMPLE_CAP} more` : '';
+    return `  - ${group} (${keys.length}): ${sample}${more}`;
+  });
+
+  const settingsEntries = Object.entries(d.settings);
+  const settingsStr = settingsEntries.length
+    ? settingsEntries.map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(', ')
+    : '(none read)';
+
   return `MATT capabilities — ${d.counts.triggers} trigger modes, ${d.counts.builtinActions} built-in actions (groups: ${d.groups.join('/')}).
+Triggers: ${triggersStr}.
+Action catalog by group:
+${catalogLines.join('\n')}
 Dangerous (need confirm): ${d.dangerousActions.join(', ')}.
-Optional deps: ${deps}.${reg}`;
+Optional deps: ${deps}.${reg}
+Settings: ${settingsStr}.`;
 }
 
 function formatTriggerTile(d: TriggerTileResponse): string {
@@ -249,13 +280,23 @@ function formatValidate(d: ValidateSequenceResponse): string {
 }
 
 // Phase 5C — render author-time tagger resolution (DP-19: handler returns these; surface them).
+// BUG-766 — taggerResolution and taggerWarnings are DISTINCT fields (matt-helpers.ts
+// resolveTaggerSelectorsInSequence): a resolution FAILURE (Tagger.getByTag threw) pushes only
+// to warnings, never to taggerResolution, so taggerWarnings must always be printed on its own,
+// not gated behind taggerResolution having entries.
 function formatTaggerResolution(d: { taggerResolution?: TaggerResolutionEntry[]; taggerWarnings?: string[] }): string {
-  if (!d.taggerResolution?.length) return '';
-  const lines = d.taggerResolution.map((r) => {
-    const flag = r.warn === 'ZERO_MATCH' ? ' — ZERO_MATCH (tag may not exist yet; WARN only)' : '';
-    return `  - action[${r.actionIndex}].${r.field} tagger:"${r.tag}" → ${r.matchedCount} match${r.matchedCount === 1 ? '' : 'es'}${flag}`;
-  });
-  return `\nTagger resolution:\n${lines.join('\n')}`;
+  const parts: string[] = [];
+  if (d.taggerResolution?.length) {
+    const lines = d.taggerResolution.map((r) => {
+      const flag = r.warn === 'ZERO_MATCH' ? ' — ZERO_MATCH (tag may not exist yet; WARN only)' : '';
+      return `  - action[${r.actionIndex}].${r.field} tagger:"${r.tag}" → ${r.matchedCount} match${r.matchedCount === 1 ? '' : 'es'}${flag}`;
+    });
+    parts.push(`Tagger resolution:\n${lines.join('\n')}`);
+  }
+  if (d.taggerWarnings?.length) {
+    parts.push(`Tagger warnings:\n  - ${d.taggerWarnings.join('\n  - ')}`);
+  }
+  return parts.length ? `\n${parts.join('\n')}` : '';
 }
 
 function formatCreate(d: CreateTileResponse): string {
@@ -285,8 +326,11 @@ function formatFire(d: FireTriggerResponse): string {
   return `Fired MATT tile ${d.uuid} (fired=${d.fired}${d.tokensUsed != null ? `, tokens=${d.tokensUsed}` : ''}).`;
 }
 
+// BUG-766 — surface requested/used/skipped token counts + the typed no-eligible message so a
+// partial or zero fire (all tokens ineligible per pertoken history) can't be misread as a full fire.
 function formatFireAs(d: FireTriggerAsResponse): string {
-  return `Fired MATT tile ${d.uuid} as tokens [${d.tokenIds.join(', ')}] (method="${d.method}", fired=${d.fired}).`;
+  const msgStr = d.message ? ` ${d.message}` : '';
+  return `Fired MATT tile ${d.uuid} as tokens [${d.tokenIds.join(', ')}] (method="${d.method}", fired=${d.fired}, requested=${d.tokenIds.length}, used=${d.tokensUsed}, skipped=${d.skipped}).${msgStr}`;
 }
 
 function formatFindTriggerTile(d: FindTriggerTileResponse): string {
