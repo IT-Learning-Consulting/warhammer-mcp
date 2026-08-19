@@ -51,6 +51,7 @@ export class FoundryClient {
     });
   }
 
+  // `method` is the fully-qualified Foundry query key (e.g. 'warhammer-mcp.ping'), dispatched by name in the module's query registry — an unregistered key rejects on the module side and surfaces through the transport catch below.
   async query<T = unknown>(method: string, data?: any): Promise<T> {
     if (!this.connector.isConnected()) {
       throw new Error('Foundry VTT module not connected. Please ensure Foundry is running and the MCP Bridge module is enabled.');
