@@ -79,12 +79,24 @@ IDEMPOTENT: grant-language/grant-literacy pre-check actor.items for a same-name 
 
 CONFIRM-GATED (CCR-4): revoke-language, revoke-literacy (destructive item-delete) — require confirm:true. grant-language, grant-literacy, send-in-language, tag-journal-page stay UNGATED (additive/reversible).
 
+Use this when:
+- Granting or revoking a Speak-language skill (or Read/Write literacy) on a PC/NPC actor.
+- Checking whether an actor knows a specific language, or is literate at all, before deciding how to present in-fiction text.
+- Sending a chat message scrambled into a fantasy font for a specific language, gated on each reader's known languages.
+- Tagging a span of journal-page content (or the whole page) as written in a specific in-world language.
+- Listing the world's configured Polyglot languages for GM reference.
+
 9 actions:
 reads: list-world-languages {} · check-knows-language { entityId, language } · check-literacy { entityId }.
 writes (ungated): send-in-language { content, language, speaker?, whisper?, rollMode?, style? } (style default OTHER) · grant-language { entityId, language } · grant-literacy { entityId } · tag-journal-page { pageUuid, language, text? } (text omitted = wrap whole page content).
 writes (confirm-gated): revoke-language { entityId, language, confirm } · revoke-literacy { entityId, confirm }.
 
-Example: { action: "grant-language", entityId: "abc123", language: "Reikspiel" }`,
+Example: { action: "grant-language", entityId: "abc123", language: "Reikspiel" }
+
+Do NOT use this tool for a plain unobfuscated chat post — use \`chat-message\` for that. module-polyglot's send-in-language specifically scrambles the message into a fantasy font gated on each reader's known languages; it is not a general chat tool.
+
+Performance Notes:
+- All 9 actions return a small fixed-shape result (a language/literacy check, a grant/revoke confirmation, or a sent-message id) — no response modes, no pagination; cost does not scale with world size.`,
         inputSchema: {
           type: 'object',
           properties: {

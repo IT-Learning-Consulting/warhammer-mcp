@@ -22,6 +22,13 @@ Returns COMPANION_NOT_ACTIVE for wound-* actions when tokenmagic-automatic-wound
 Returns SOCKETLIB_NOT_ACTIVE for play-transition/end-transition when socketlib is absent.
 Pre-flight: use get-bundle-status to check which members are active.
 
+Use this when:
+- Playing weather/atmosphere particle or filter FX (rain, fog, thunderstorm) on a scene, or applying a per-token/tile visual filter (glow, burning, invisible).
+- Switching a scene's background variation (day/night, ruined/intact) or playing a cinematic scene-transition overlay.
+- Cycling a multiface tile's texture between pre-registered image faces.
+- Applying or healing wound-splatter FX on a token tied to current HP.
+- Activating a mood-routed dynamic soundscape playlist, or adjusting its layer volumes/enabled state.
+
 Phase 2 (fxmaster) + Phase 3 (tokenmagic + wounds) + Phase 4B (scenery + scene-transitions + multiface-tiles) + Phase 5 (dynamic-soundscapes) live — 67 actions available.
 
 SCENERY — scene background variations (requires scenery module active):
@@ -174,7 +181,13 @@ Examples:
 - { action: "set-layer-volume", playlistId: "abc123", soundId: "snd001", volume: 0.6 }
 - { action: "create-soundscape", name: "Tavern Ambience" }
 - { action: "add-sound", playlistId: "abc123", name: "Fireplace", path: "modules/soundscapes/fire.ogg" }
-- { action: "update-blocks", playlistId: "abc123", blocks: [{ title: "Ambient", sounds: ["snd001"], mode: "ambient" }], confirm: true }`,
+- { action: "update-blocks", playlistId: "abc123", blocks: [{ title: "Ambient", sounds: ["snd001"], mode: "ambient" }], confirm: true }
+
+Do NOT use this tool for plain document field writes (a light's radius, a sound's volume, a scene's grid) — use \`light\`/\`sound\`/\`scene\` (core tools) for those. module-scene-atmosphere is scoped to the 6 third-party atmosphere-bundle members' FX/audio/transition layer (fxmaster, tokenmagic, scenery, scene-transitions, multiface-tiles, dynamic-soundscapes), not core document properties.
+
+Performance Notes:
+- Most actions return a small fixed-shape result (an effect id, a variation record, a soundscape confirmation) — no response modes, no pagination.
+- This is an especially large action surface (67 actions across 6 members) — always pass a specific \`action\` rather than probing; get-bundle-status is the cheap way to check member availability before dispatching a member-specific action.`,
     inputSchema: {
       type: 'object',
       properties: {

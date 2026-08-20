@@ -51,6 +51,15 @@ export class NotifyTool extends BaseTool {
         description:
           `Emit a GM-visible notification through the Foundry-side 5-channel dispatcher (console + toast + chat + tooltip + hook). Intended as bookends for composite skill workflows (start/end of /wfrp-build-npc, /wfrp-encounter-builder, /wfrp-combat) and for ad-hoc GM info/warn lines from skill orchestration. GM-only (non-GM callers receive an Access denied envelope).
 
+Use this when:
+- Marking the start of a composite skill workflow (severity:"info", e.g. "Building NPC: Grendel Ironjaw").
+- Marking the end of a composite skill workflow (severity:"lifecycle", lifecycleEvent:"workflow-end") so the GM sees a sticky confirmation with an audit-log chat entry.
+- Surfacing a soft-failure inside a workflow that shouldn't abort it (severity:"warn", e.g. "Some species rolls produced duplicates").
+- Recording a fatal/exceptional condition the GM must see immediately (severity:"error") — sparingly, prefer letting real errors propagate through their normal envelopes.
+- Announcing a document-shaped event ("wrote X" / "changed Y" / "removed Z") with severity created/updated/deleted as a workflow bookend, not a substitute for the actual write's own response.
+
+Do NOT use this for routine chat-log posting — use \`chat-message\` (core tool) for a plain, non-dispatcher chat post; \`notify\` is specifically for GM-visible multi-channel workflow signals, not everyday chat text.
+
 **Severities (7):**
 - **created / updated / deleted** — document-shaped events. Use for "wrote X" / "changed Y" / "removed Z" bookends. Routes through notify.created/updated/deleted under kind="mcp".
 - **warn** — non-fatal warning (yellow toast). Use for soft-failure paths inside a workflow.
@@ -67,6 +76,9 @@ export class NotifyTool extends BaseTool {
 **Skill bookend pattern:**
 - Workflow start: notify({ severity: "info", message: "Building NPC: \${name}", summary: "\${species} \${career} Lv\${tier}" })
 - Workflow end: notify({ severity: "lifecycle", lifecycleEvent: "workflow-end", message: "NPC built: \${name}" })
+
+Performance Notes:
+- Flat, mode-less: single small fixed-shape response { acknowledged: boolean } regardless of severity — no response modes, no pagination, no size bound of practical concern.
 
 **Examples:**
 - info bookend: {severity:"info", message:"Building encounter: 5 hostiles"}

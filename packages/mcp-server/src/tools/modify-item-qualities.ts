@@ -32,7 +32,18 @@ export class ModifyItemQualitiesTool extends BaseTool {
           openWorldHint: true,
         },
         description:
-          'Add or remove qualities / flaws on an existing weapon, armour, trapping, etc. Works on actor-embedded items (destination.type="actor" + actorId/actorName + itemName/itemId) or world-scope items (destination.type="world" + itemName/itemId). Qualities and flaws are WFRP4e-canonical (damaging, accurate, fast, slow, tiring, etc.); arbitrary strings accepted but rule effects only apply to known keys. Pass-through to the Foundry-module modifyItemQualities query.',
+          `Add or remove qualities / flaws on an existing weapon, armour, trapping, etc. Works on actor-embedded items (destination.type="actor" + actorId/actorName + itemName/itemId) or world-scope items (destination.type="world" + itemName/itemId). Qualities and flaws are WFRP4e-canonical (damaging, accurate, fast, slow, tiring, etc.); arbitrary strings accepted but rule effects only apply to known keys. Pass-through to the Foundry-module modifyItemQualities query.
+
+Use this when:
+- Adding a quality to an existing weapon/armour item (e.g. enchanting a sword with "damaging", or fitting armour with "impenetrable").
+- Removing a quality or flaw that no longer applies (e.g. a curse lifted, a repair removing "shoddy").
+- Adjusting a parameterized quality's value (e.g. changing Impact from 1 to 2) by re-adding it with a new value.
+- Making this change on either an actor-embedded item or a world-scope item, using the same destination discriminator as create-custom-item.
+
+Do NOT use this for generic item field edits outside qualities/flaws — use update-item instead.
+
+Performance Notes:
+- Single small response: the item's updated qualities/flaws lists, no full item payload echoed back. Mode-less — no response-mode variance.`,
         inputSchema: {
           type: 'object',
           properties: {

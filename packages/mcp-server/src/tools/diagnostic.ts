@@ -65,6 +65,15 @@ export class DiagnosticTool extends BaseTool {
           `Read Foundry VTT runtime diagnostics — errors, world-issues, support snapshot. ` +
           `GM-only; off by default (GM enables via "Enable Diagnostic Tools" world setting).
 
+Use this when:
+- Triaging a live error or warning that just occurred, via the 200-entry ring buffer (action:"recent-errors").
+- Checking Foundry's own compatibility/usability/validation issue hub before filing a bug report (action:"world-issues").
+- Attaching environment context (versions, world id, module list) to a bug report (action:"support-snapshot").
+- Running a WFRP4e content-health scan — broken @UUID links, unresolved career skill/talent refs, malformed Active Effect scripts — before or after a content edit (action:"scan-broken-uuids"/"scan-career-refs"/"validate-ae-scripts").
+- Introspecting a single document, the live hook registry, or the active module/settings inventory during development (action:"inspect-document"/"hook-inventory"/"module-inventory"/"settings-inventory").
+
+Do NOT use this for compat-health triage across the whole module list — use action:"module-inventory" instead of "support-snapshot" for that; "support-snapshot" is for bug-report environment context only (see Module overlap below). World-scope scans without confirmExpensive:true return counts-only by design — see Performance Notes.
+
 **v1 actions (Tier 1):**
 - **recent-errors**: Read the runtime error/warning ring buffer (200-entry FIFO). Captures window.error, unhandledrejection, Hooks.on('error'), and console.warn since module init, plus init-phase errors (source:'init'). Filter by severity ('error'|'warn'), source ('window'|'unhandledrejection'|'hooks'|'console.warn'|'init'), limit (1-200), or since (epoch ms). Returns {events, bufferSize, bufferFull}.
 - **world-issues**: Read game.issues — the central diagnostic hub Foundry populates with package compatibility issues, usability issues, and validation failures. Filter by buckets:["packageCompatibility","usability","validation"]. Returns each bucket as a Record<id,issue> plus per-bucket counts.
@@ -85,6 +94,9 @@ export class DiagnosticTool extends BaseTool {
 - **settings-inventory**: Walk game.settings.settings — every registered setting with {namespace, key, scope, typeLabel ("Boolean" | "String" | "Number" | "Object" | "DataModel:<name>" | fallback), default, current}. Optional namespaceFilter (exact-match) restricts to one namespace.
 
 **Module overlap:** use support-snapshot for bug-report environment context (modules: id/title/version only); use module-inventory for compat-health triage (adds active, availability, incompatibleWithCoreVersion, unavailable).
+
+Performance Notes:
+- recent-errors is bounded to the 200-entry ring buffer (limit 1-200 per call). scan-broken-uuids/scan-career-refs/validate-ae-scripts on scope.type="world" WITHOUT confirmExpensive:true return counts-only (details omitted) — pass confirmExpensive:true only when you need the full per-item details list, since a full world walk is measurably slower. inspect-document previews effects/items arrays at 10 entries by default; pass includeFull:true for the complete arrays.
 
 **Examples:**
 - {action:"recent-errors"} — all events in ring buffer

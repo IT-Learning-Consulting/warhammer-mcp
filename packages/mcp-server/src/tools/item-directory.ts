@@ -124,6 +124,15 @@ export class ItemDirectoryTool extends BaseTool {
         description:
           `Browse and manage the Foundry world Item directory (game.items) via 5 actions.
 
+Use this when:
+- Listing or paginating world Items sidebar entries, optionally filtered by type or folder (action:"list").
+- Fetching one world item's full serialized data by id (action:"get").
+- Searching world items by name substring or type/folder filter, with pagination (action:"search").
+- Cloning an existing world item under a new name (action:"duplicate").
+- Importing a compendium entry into the world Items directory for later editing (action:"import-from-compendium").
+
+Do NOT use this for actor-embedded items — use list-actor-items instead. Do NOT use this for compendium reads — use search-compendium / get-compendium-entry-full. Do NOT use this for placed-token art — use \`token {action:"update", changes:{texture:{src}}}\`.
+
 **Scope:** world game.items only.
 - Actor-embedded items → list-actor-items.
 - Compendium reads → search-compendium / get-compendium-entry-full.
@@ -141,7 +150,11 @@ export class ItemDirectoryTool extends BaseTool {
 - get: {action:"get", itemId:"abc123"}
 - search: {action:"search", query:"Healing", filters:{type:"trapping"}}
 - duplicate: {action:"duplicate", itemId:"abc123", newName:"My Custom Copy"}
-- import-from-compendium: {action:"import-from-compendium", packId:"wfrp4e-core.items", itemId:"gxdjLQoQUTYgD6fm"}`,
+- import-from-compendium: {action:"import-from-compendium", packId:"wfrp4e-core.items", itemId:"gxdjLQoQUTYgD6fm"}
+
+Performance Notes:
+- list/search: paginated (list default pageSize 100; search default limit 50, max 500 — results carry totalAvailable + truncated).
+- get/duplicate/import-from-compendium: single-item response, no pagination.`,
         inputSchema: {
           type: 'object',
           properties: {

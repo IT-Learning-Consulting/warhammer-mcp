@@ -36,7 +36,18 @@ export class WorldDeleteTools extends BaseTool {
           openWorldHint: true,
         },
         description:
-          'Delete a world-level Actor by ID. Use after `/wfrp-encounter-builder`, `/wfrp-build-npc`, or any clone-then-cleanup flow. GM-only. Irreversible — removes the actor and all embedded items.',
+          `Permanently delete a world-level Actor by id, including all its embedded Items. GM-only, irreversible.
+
+Use this when:
+- Cleaning up throwaway/disposable actors created for a smoke test (never a real PC).
+- Removing a cloned or scratch encounter actor left over after \`/wfrp-encounter-builder\` or \`/wfrp-build-npc\` finishes.
+- Discarding a duplicate produced by \`duplicate-actor\` that turned out unneeded.
+- Retiring an NPC actor that will never be reused (e.g. a one-scene bandit that has been fully resolved in play).
+
+Do NOT use this for a non-destructive edit — use \`update-actor\` instead; this tool has no undo and removes the actor's embedded items with it.
+
+Performance Notes:
+- Single small confirmation response, no response modes, no pagination.`,
         inputSchema: {
           type: 'object',
           properties: {

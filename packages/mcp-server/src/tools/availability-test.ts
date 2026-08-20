@@ -43,11 +43,21 @@ export class AvailabilityTestTool extends BaseTool {
         description:
           `Resolve WFRP4e market availability (Core p.293 / MarketWFRP4e) for an item of a given rarity in a settlement, from a PRE-ROLLED d100. Posts a GM-visible market-result chat card and returns the resolved availability + stock.
 
+Use this when:
+- Resolving whether an item of a given rarity is available in a village/town/city, once the d100 Availability Test has already been rolled.
+- Posting a GM-visible market-result chat card documenting the resolved availability + stock.
+- Resolving dice-formula Town stock (e.g. "2d10") once you've pre-rolled the stock quantity and can pass it as stockRolled.
+
+Do NOT use this to roll the d100 itself — roll it first (e.g. via dice-roll or the sheet) and pass the modified total as \`rolledTotal\`; this tool never rolls (HC2).
+
 This tool NEVER rolls — the d100 Availability Test is a sheet/GM roll (HC2). Roll it (e.g. via dice-roll or the sheet) and pass the modified total as \`rolledTotal\`. For dice-formula stock (Town stock is "2d10"/"1d10"/"1d5"), also pre-roll the quantity and pass it as \`stockRolled\`; Village/Rare static stock and City "∞" need no \`stockRolled\`.
 
 **Lookup:** village/town/city × common/scarce/rare/exotic → {test target, stock}. Item is available when target > 0 and rolledTotal <= target. **Exotic is never available** (target 0) in any settlement.
 
-**Errors:** AVAILABILITY_TEST_INVALID_SETTLEMENT / _INVALID_RARITY (bad key); AVAILABILITY_TEST_STOCK_ROLL_REQUIRED (dice-formula stock with no stockRolled); AVAILABILITY_TEST_NOT_PERSISTED (the result chat message failed to post).`,
+**Errors:** AVAILABILITY_TEST_INVALID_SETTLEMENT / _INVALID_RARITY (bad key); AVAILABILITY_TEST_STOCK_ROLL_REQUIRED (dice-formula stock with no stockRolled); AVAILABILITY_TEST_NOT_PERSISTED (the result chat message failed to post).
+
+Performance Notes:
+- Single small response: resolved availability + stock for one item/settlement/rarity combination, no full gazetteer or compendium dump. Mode-less — no response-mode variance.`,
         inputSchema: {
           type: 'object',
           properties: {

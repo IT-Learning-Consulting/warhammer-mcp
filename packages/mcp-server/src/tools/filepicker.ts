@@ -58,6 +58,14 @@ export class FilePickerTool extends BaseTool {
         },
         description: `Manage Foundry asset uploads, listing, and directory creation via 4 actions. Auto-converts PNG/JPG→WebP (sharp), MP4/MOV→WebM/VP9 (ffmpeg-static), MP3/WAV/FLAC→OGG/Vorbis (ffmpeg-static). Conversion runs Node-side in mcp-server before posting to Foundry /upload. Already-optimized formats (image/webp, video/webm, audio/ogg) pass through unchanged.
 
+Use this when:
+- Uploading a map/token/audio asset from a URL, data URL, base64 string, or local path, with automatic web-optimized conversion (action:"upload").
+- Browsing an existing asset directory before referencing a path in a Scene/Actor/Item update (action:"list").
+- Previewing what a conversion would produce (format, size) without persisting anything to Foundry (action:"convert").
+- Creating a new subdirectory to organize uploads before writing into it (action:"create-directory").
+
+Do NOT use action:"convert" as a final delivery step — it does not persist to Foundry; use action:"upload" for that. The base64 payload size on upload/convert responses is a real cost — see Performance Notes.
+
 **Actions:**
 - **upload**: Convert (if applicable) + POST to Foundry /upload. Required: source, file. Optional: target (default: 'default-converted-folder' world-setting OR worlds/<id>/assets/converted/), filename, skipConversion. Returns {path, original_size, converted_size, format, conversionWarnings: []}.
 - **list**: Browse Foundry asset paths. Required: source, target. Optional options: {bucket, extensions[], recursive}. Recursive flattens subdirs via Promise.all fan-out. Returns Foundry FilePicker.browse shape {target, dirs[], files[], private, gridSize, privateDirs[], extensions[]}.
@@ -69,6 +77,9 @@ export class FilePickerTool extends BaseTool {
 **Conversion failure UX**: lenient — converter throw triggers notify.warn round-trip to GM + populates conversionWarnings: [String] in envelope + uploads ORIGINAL buffer with original extension. GM workflow never blocks on a quirky codec.
 
 **File input** accepts: URL (http:// | https://), data URL ("data:image/png;base64,..."), pure base64 string (no prefix), absolute local path.
+
+Performance Notes:
+- upload/convert responses embed the file's base64 payload (convert) or size metadata (upload) — cost scales with asset size, not a fixed bound; large video/audio conversions also take real wall-clock time (ffmpeg). list has no pagination — a deeply nested directory with options.recursive:true fans out via Promise.all and can be slow on large trees.
 
 **Examples:**
 - upload from URL: {action:"upload", source:"data", target:"worlds/aitww/assets/maps", file:"https://example.com/map.png", filename:"tavern.png"} → returns {path: "worlds/aitww/assets/maps/tavern.webp", format: "webp", original_size: 1245678, converted_size: 312456, conversionWarnings: []}

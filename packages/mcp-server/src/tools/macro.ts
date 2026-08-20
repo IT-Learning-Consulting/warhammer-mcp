@@ -238,6 +238,15 @@ export class MacroTool extends BaseTool {
         description:
           `Manage Foundry VTT Macro documents and execute them with explicit consent gating. 11 actions: create, update, delete, get, list, execute, execute-by-name, import-from-compendium, set-execution-target, list-world-scripts, get-execution-target.
 
+Use this when:
+- Authoring a new chat or script macro for reuse, e.g. a common roll shortcut or a scripted status-effect applier (action:"create").
+- Running an existing macro on explicit GM consent, optionally injecting actor/token/speaker scope (action:"execute"/"execute-by-name").
+- Auditing or editing an existing macro's command body, folder, or scope before running it (action:"get"/"update"/"list").
+- Importing a macro from a compendium pack into the world for local editing (action:"import-from-compendium").
+- Managing advanced-macros execution-routing (GM-only or world-script-load hooks) when that module is active (action:"set-execution-target"/"list-world-scripts"/"get-execution-target").
+
+Do NOT use this expecting execute/execute-by-name to run without explicit consent — both require confirmedExecution:true (arbitrary script execution trust gate); missing/false rejects at parse time. There is no natural sibling tool for this misuse boundary — it is intrinsic to running arbitrary macro code.
+
 **Actions:**
 - **create**: Create a new Macro. Required: name, type (chat or script). Optional: scope (global/actors/actor, default global), command, img, folder, flags. Returns macroId + macro view + requestedChanges.
 - **update**: Partial-diff update. macroId + changes (≥1 of: name, type, scope, command, img, folder, flags). Returns macro view + changedFields.
@@ -256,6 +265,9 @@ export class MacroTool extends BaseTool {
 **Trust gates:**
 - delete requires confirm: true — bare confirm: false returns CCR-Delete-Safety reject.
 - execute requires confirmedExecution: true — Zod literal(true) rejects missing/false at parse time.
+
+Performance Notes:
+- list is paginated (page/pageSize, max 100, default 20) with commandPreview truncation per item; pass countOnly:true for a cheap total. Other actions return a single small fixed-shape response (a macro record, an execution result, or a mutation confirmation).
 
 **Examples:**
 - create chat: {action:"create", name:"Roll Initiative", type:"chat", command:"/roll 1d10", scope:"global"}

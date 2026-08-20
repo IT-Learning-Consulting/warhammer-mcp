@@ -35,7 +35,17 @@ export class ListActorItemsTool extends BaseTool {
           openWorldHint: true,
         },
         description:
-          'List all embedded items on an actor with their IDs, optionally filtered by type. Thin pass-through to the Foundry-module listActorItems query. Surfaces the raw {id, name, type, advances} shape that get-character hides under its formatted projection. Needed by /wfrp-build-npc Branch 3 to look up skill/talent item IDs for update-item advances writes.',
+          `List all embedded items on an actor with their IDs, optionally filtered by type. Thin pass-through to the Foundry-module listActorItems query. Surfaces the raw {id, name, type, advances} shape that get-character hides under its formatted projection. Needed by /wfrp-build-npc Branch 3 to look up skill/talent item IDs for update-item advances writes.
+
+Use this when:
+- Resolving an item's raw id before a follow-up update-item call (e.g. writing skill/talent advances).
+- Filtering an actor's embedded items down to one type (typeFilter:"skill", "talent", "career", "trait", etc.).
+- Enumerating every embedded item on an actor with their ids, when get-character's formatted projection doesn't expose the raw id you need.
+
+Do NOT use this for a formatted, human-readable summary of a character's inventory/stats — use get-character instead; this tool's raw {id, name, type, advances} shape exists specifically to feed update-item follow-ups, not for display.
+
+Performance Notes:
+- Response scales with the actor's embedded item count; \`typeFilter\` narrows it to one item type. No pagination — flat list.`,
         inputSchema: {
           type: 'object',
           properties: {

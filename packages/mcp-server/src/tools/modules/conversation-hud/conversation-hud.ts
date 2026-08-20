@@ -124,6 +124,13 @@ Two surfaces:
 • PERSISTED documents (verifiable JournalEntries) — create/get/list/update/delete-conversation; create/update/get/list-faction; set-scene-conversation; set-token-conversation.
 • TRANSIENT runtime control (socket-synced, NOT persisted — cleared on reload) — activate-conversation (journalId only), deactivate-conversation, get-active-state, set-active-participant, add-participants, update-active-conversation, reorder-participants, set-visibility, set-background, toggle-speaking-as, set-minimize.
 
+Use this when:
+- Authoring a reusable NPC dialogue scene (participants, portraits, faction badges) as a persisted JournalEntry before a session.
+- Running that dialogue scene live — activating it on the HUD, switching the active speaker, or toggling HUD visibility during play.
+- Linking a conversation to a scene or a specific token so it auto-suggests/opens in context.
+- Maintaining faction documents (name, logo, banner styling) referenced by conversation participants.
+- Auditing which conversations/factions exist, or checking the currently active runtime state.
+
 22 actions:
 Reads — list-conversations {}; get-conversation { journalId }; get-active-state {}; list-factions {}; get-faction { journalId }.
 Doc writes (GM) — create-conversation { name?, background?, participants[], defaultActiveParticipant? }; update-conversation { journalId, name?, background?, participants?, defaultActiveParticipant? }; create-faction { name?, faction }; update-faction { journalId, faction }; set-scene-conversation { sceneId, journalId?(OMIT to clear the link; blank "" is Zod-rejected — BUG-467), visibilityOff? }; set-token-conversation { tokenId, journalId?(OMIT to clear the link; blank "" is Zod-rejected — BUG-467), excludeFromPull? }.
@@ -132,7 +139,12 @@ Runtime control (GM; transient) — activate-conversation { journalId, visibilit
 
 Participant shape: { name (required), img?, displayName?, imgScale?, portraitAnchor?{vertical,horizontal}, faction?{...}, linkedActor?, linkedJournal? }.
 Collective mode is NOT supported (CCR-v2-A) — only gm-controlled.
-Example: { action: "create-conversation", name: "Tavern Encounter", participants: [{ name: "Gustav", img: "icons/svg/mystery-man.svg" }] }`,
+Example: { action: "create-conversation", name: "Tavern Encounter", participants: [{ name: "Gustav", img: "icons/svg/mystery-man.svg" }] }
+
+Do NOT use this tool for regular OOC/IC chat text — use \`chat-message\` for that. module-conversation-hud only manages ConversationHUD's dialogue-scene documents and the live HUD runtime state; it never posts to the chat log.
+
+Performance Notes:
+- All 22 actions return a small fixed-shape summary (a conversation/faction record, a list, or a runtime-state confirmation) — no response modes, no pagination; cost scales only with participant/faction count on a given document, not with world size.`,
         inputSchema: {
           type: 'object',
           properties: {

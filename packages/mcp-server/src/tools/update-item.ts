@@ -37,7 +37,18 @@ export class UpdateItemTool extends BaseTool {
           openWorldHint: true,
         },
         description:
-          'Apply an arbitrary update to an item. Supports both actor-embedded and world-scope items. Thin pass-through to the Foundry-module updateItem query — does not enforce WFRP rules. Legacy shape `{actorId, itemId, updateData}` still accepted for backward compat. New shape: `{destination: {type:"actor"|"world", ...}, itemId? or itemName?, updateData}`. Used by skills like /wfrp-advance to write skill.system.advances.value or talent.system.advances.value, and by world-item maintenance flows. Pass verifyPersistence:false to opt out of post-write drift check for auto-derived fields.',
+          `Apply an arbitrary update to an item. Supports both actor-embedded and world-scope items. Thin pass-through to the Foundry-module updateItem query — does not enforce WFRP rules. Legacy shape \`{actorId, itemId, updateData}\` still accepted for backward compat. New shape: \`{destination: {type:"actor"|"world", ...}, itemId? or itemName?, updateData}\`. Used by skills like /wfrp-advance to write skill.system.advances.value or talent.system.advances.value, and by world-item maintenance flows. Pass verifyPersistence:false to opt out of post-write drift check for auto-derived fields.
+
+Use this when:
+- A skill-layer flow has already computed a WFRP-rule-compliant value and needs to write it to an arbitrary item dot-path (e.g. skill/talent advances) with no built-in validation.
+- Editing a world-scope item (destination:{type:"world"}) — this is the only primitive that reaches world Items sidebar entries directly.
+- Suppressing the wfrp4e advancement-cost dialog on a character skill-advance write via options.skipExperienceChecks:true (BUG-089).
+- Making a one-off correction to a field that has no dedicated structured tool.
+
+Do NOT use this for structured inventory operations (add/remove/track ammo/encumbrance) — use manage-inventory. Do NOT use this for weapon/armor quality edits — use modify-item-qualities, which validates the quality list against the compendium.
+
+Performance Notes:
+- Single small response: the updated item's changed fields, no full item/actor payload echoed back. Mode-less — no response-mode variance.`,
         inputSchema: {
           type: 'object',
           properties: {

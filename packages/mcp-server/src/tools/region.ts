@@ -167,6 +167,15 @@ export class RegionTool extends BaseTool {
         description:
           `Manage Foundry v13 Region documents and their embedded RegionBehaviors via 9 actions.
 
+Use this when:
+- Defining a persistent zone on a scene that triggers logic on token enter/exit (e.g. a trap, an ambush trigger, a lighting-change area) — create + createBehavior.
+- Attaching a RegionBehavior (teleportToken, executeMacro, adjustDarknessLevel, displayScrollingText, etc.) to an existing region.
+- Auditing or listing every region on a scene, optionally with full behavior detail (action:"list"/"get").
+- Appending one shape to a region's geometry without clobbering its existing shapes (action:"add-shape").
+- Removing a region or one of its behaviors permanently (action:"delete"/"deleteBehavior").
+
+Do NOT use this for a one-shot spell/ability area-of-effect — use \`template\` instead; regions are persistent zones, not transient AoE placements. For scene-wide effects (not geofenced to a shape), use the \`scene\` umbrella's clear-layer/lighting-transition actions instead.
+
 **Base Region (5 actions):**
 - **create**: New Region on a scene. Required: sceneId, name. Optional: color, shapes (4 variants — rectangle/circle/ellipse/polygon, all share hole:boolean), elevation:{bottom,top} (nested SchemaField — NOT flat), visibility (0=LAYER 1=GAMEMASTER 2=ALWAYS), locked, flags. Returns RegionViewModel.
 - **update**: Partial-diff. Required: sceneId, regionId, changes (≥1 field). Same writable surface as create.
@@ -191,7 +200,10 @@ export class RegionTool extends BaseTool {
 
 **events** (for executeMacro/displayScrollingText/executeScript) — CONST.REGION_EVENTS: tokenEnter, tokenExit, tokenMoveIn, tokenMoveOut, tokenMoveWithin, tokenTurnStart, tokenTurnEnd, tokenRoundStart, tokenRoundEnd, regionBoundary, behaviorActivated, behaviorDeactivated, behaviorViewed, behaviorUnviewed, tokenAnimateIn, tokenAnimateOut.
 
-**Shapes:** rectangle:{x,y,width,height,rotation?} · circle:{x,y,radius} · ellipse:{x,y,radiusX,radiusY,rotation?} · polygon:{points:[x1,y1,...] ≥6}. All accept hole:bool.`,
+**Shapes:** rectangle:{x,y,width,height,rotation?} · circle:{x,y,radius} · ellipse:{x,y,radiusX,radiusY,rotation?} · polygon:{points:[x1,y1,...] ≥6}. All accept hole:bool.
+
+Performance Notes:
+- create/update/delete/get/behavior-CRUD/add-shape return a single region (or behavior) record — no pagination. list is paginated (page/pageSize, max 100/page); pass countOnly:true for a cheap total without the item array.`,
         inputSchema: {
           type: 'object',
           properties: {

@@ -128,6 +128,15 @@ export class ChatMessageTool extends BaseTool {
                 description:
                     `Manage Foundry ChatMessage documents through one umbrella tool. 7 actions: create, update, delete, get, list, export-chat-log, clear-chat-log.
 
+Use this when:
+- Posting narration, a roll result, or a GM-whispered secret to the chat log (action:"create", with rollMode controlling visibility).
+- Editing or removing a message already in the chat log, e.g. correcting a typo or retracting an accidental reveal (action:"update"/"delete", delete requires confirm:true).
+- Auditing recent chat history, filtered by author/speaker/type/style (action:"list"/"get").
+- Exporting a bounded window of the chat log as text/markdown for a session recap (action:"export-chat-log").
+- Bulk-clearing old chat history, previewed with dryRun:true first (action:"clear-chat-log").
+
+Do NOT use this for GM-visible multi-channel workflow signals (console+toast+chat+tooltip+hook) — use \`notify\` instead; this tool is for routine chat-log posting, not the dispatcher-backed workflow-bookend channel. Also: never pass the legacy \`user\` field — it is a shimData alias that silently no-ops; always use \`author\`.
+
 IMPORTANT — author vs user trap: always pass the Foundry user ID in the \`author\` field. The legacy \`user\` accessor is a shimData backward-compat alias; passing it will silently fail.
 
 rollMode (server-side convenience, resolved via ChatMessage.applyRollMode):
@@ -153,6 +162,9 @@ Key rules:
 - get: returns full ChatMessageViewModel including speaker sub-object, whisper array, rolls, flags.
 - export-chat-log (Phase 9C, BOUNDED per BUG-490): read-only render of a chat-log WINDOW as text/markdown. Defaults to the most recent \`limit\` messages (default 200, max 500); pass \`offset\` to page chronologically from the start. Returns {format, messageCount, content, totalAvailable, truncated, offset, limit} — truncated:true means messages outside the window were omitted. Oversize responses fail loud with RESPONSE_TOO_LARGE naming limit/offset.
 - clear-chat-log (Phase 9C): ⚠️ bulk-delete the chat log. confirm:true REQUIRED. Pass dryRun:true first for a {totalCount, byVisibility:{public,gmOnly,whispered}, oldest, newest} preview. Optional olderThanDays filter to delete only old messages.
+
+Performance Notes:
+- list is always paginated (default pageSize 20). export-chat-log is BOUNDED — default 200/max 500 messages per call, offset-paginated from the start; fails loud with RESPONSE_TOO_LARGE naming limit/offset if you exceed the response budget anyway. create/update/delete/get/clear-chat-log return a single small fixed-shape response.
 
 Examples:
 - {action:"create", content:"The bray-shaman raises its staff.", speaker:{alias:"Narrator"}, rollMode:"publicroll"}

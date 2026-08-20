@@ -103,7 +103,12 @@ export class ModuleTradingPlacesTool extends BaseTool {
           idempotentHint: false,
           openWorldHint: false,
         },
-        description: `RETIRED (Phase 7g): every action below now returns a typed TRADING_PLACES_ACTION_RETIRED error naming its module-wfrp-economy trading-* successor (or, for the 3 currency ops, the existing wallet action) — the retirement fires whether trading-places is active, inactive, or uninstalled. Route new work to module-wfrp-economy's trading-* actions instead (get-currency/add-currency/deduct-currency → get-wallet-balance/wallet-add/wallet-remove). Schema/enum below are UNCHANGED (HC8 — registry stays stable) so a caller mid-migration still gets a typed, actionable refusal rather than a hard schema break; this description is the only thing that changed.
+        description: `RETIRED (Phase 7g). This tool has no legitimate use for new work: every action below now returns a typed TRADING_PLACES_ACTION_RETIRED error naming its module-wfrp-economy trading-* successor (or, for the 3 currency ops, the existing wallet action) — the retirement fires whether trading-places is active, inactive, or uninstalled. Route new work to module-wfrp-economy's trading-* actions instead (get-currency/add-currency/deduct-currency → get-wallet-balance/wallet-add/wallet-remove). Schema/enum below are UNCHANGED (HC8 — registry stays stable) so a caller mid-migration still gets a typed, actionable refusal rather than a hard schema break; this description is the only thing that changed.
+
+Use this when:
+- You need the typed TRADING_PLACES_ACTION_RETIRED error's payload to discover the exact module-wfrp-economy successor action name for a specific legacy action you're migrating off of.
+- A caller/integration is still hard-coded against module-trading-places and you need to confirm it fails LOUD and typed (not silently) rather than actually executing.
+- Almost never otherwise — for any real trading/economy work, skip this tool entirely and call module-wfrp-economy's trading-* actions (or wallet-* for currency) directly.
 
 Historical (pre-retirement) purpose, kept for context on what the successor replaces: drove the Trading Places module (trading-places) — settlement/cargo reference data, seasonal availability checks, purchase/sale price calculation, haggle/gossip test resolution, the shared cargo hold, and REAL actor coin movement. Bulk-EP cargo economy (Death on the Reik companion algorithm) — complements /module-itempiles (item-level shops) and availability-test (Core-RAW single-item market availability).
 Conditional: returns MODULE_NOT_ACTIVE when trading-places is absent/inactive. Pre-flight: module-probe.is-active trading-places. All amounts are integer Brass Pennies (BP); 1 GC = 240 BP, 1 SS = 12 BP.
@@ -135,7 +140,12 @@ currency: get-currency { actorId } · deduct-currency { actorId, amountBp, descr
 merchant-generation: merchant-generation { settlement, cargoType, merchantType: producer|seeker, percentile? }.
 price-dial: get-price-modifiers {} · set-price-modifiers { global?, perCargo?, reset? }.
 
-Example: { action: "check-availability", settlement: "Altdorf", availabilityRoll: 42 }`,
+Example: { action: "check-availability", settlement: "Altdorf", availabilityRoll: 42 }
+
+Do NOT use this tool for any trading/economy work — module-wfrp-economy's trading-* actions (and wallet-* for currency) are the successor and the only path that actually executes; every action here is RETIRED and returns a typed refusal, never a real result. The bullets above and the actions catalog below describe the tool's HISTORICAL (pre-retirement) shape only, kept for migration context.
+
+Performance Notes:
+- Every action returns one small fixed-shape TRADING_PLACES_ACTION_RETIRED error object naming the successor — no response modes, no pagination, no world-size-dependent cost (nothing is executed).`,
         inputSchema: {
           type: 'object',
           properties: {

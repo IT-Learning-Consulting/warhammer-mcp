@@ -57,7 +57,18 @@ export class WorldTool extends BaseTool {
           openWorldHint: true,
         },
         description:
-          'Get basic information about the Foundry world and game system (e.g., D&D 5e, WFRP 4e). Use this to understand what system is being used and tailor responses accordingly.',
+          `Get a point-in-time snapshot of the Foundry world: title, id, game system (e.g. wfrp4e) + version, Foundry core version, and connected-user roster (GM/player, active/inactive).
+
+Use this when:
+- Starting a session and you need to know which game system is active (e.g. wfrp4e vs dnd5e) before choosing system-specific tools like get-wfrp-config.
+- Checking who is currently connected and which of them are GMs before sending a GM-visible notify or running a player-facing macro.
+- Confirming the Foundry core/system version to reason about which API surface is available.
+- Reporting world identity (title, id) back to the user at the start of a task.
+
+Do NOT use this to poll for live user-presence changes — it is a single snapshot, not a subscription; call it again for a fresh read rather than expecting push updates.
+
+Performance Notes:
+- Single small fixed-shape response (world metadata + user list), no response modes, no pagination, no size bound of practical concern.`,
         inputSchema: {
           type: 'object',
           properties: {},

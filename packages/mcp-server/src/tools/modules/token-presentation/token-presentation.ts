@@ -84,6 +84,13 @@ Conditional: a member action returns MODULE_NOT_ACTIVE when that member is absen
 
 boss-splash is TRANSIENT — it broadcasts an overlay and persists NOTHING; verification is currentOverlay (overlayActive). token-notes writes flags.token-notes.* (server-verifiable).
 
+Use this when:
+- Revealing a boss/major NPC to all clients with a full-screen cinematic splash (image, video, or message) at an encounter's start.
+- Dismissing an active boss-splash overlay, or reading/writing its world appearance settings.
+- Recording a GM-only note on a specific token (scene-local) or on an actor (persists across scenes).
+- Toggling whether a token displays actor-level notes instead of its own token-scoped note.
+- Checking which of the two bundle members (boss-splash, token-notes) are currently active before dispatching a member action.
+
 10 actions:
 boss-splash.show { actor? | video? | (message + actorImg), subText?, tokenName?, timerMs?(0=stay open), sound?, fill? } — needs at least one identity; refuses if a splash is already up (BOSS_SPLASH_ALREADY_ACTIVE). timerMs is MILLISECONDS.
 boss-splash.close {} — dismiss the splash on all clients.
@@ -94,7 +101,12 @@ token-notes.read-note { scope, ids } — read the note text ('' if none).
 token-notes.set-use-actor { sceneId?, tokenId, useActor } — toggle whether the token shows actor notes.
 token-notes.get-config {} / token-notes.set-config { allowplayers:0|1|2 } — player permission (none/readonly/readwrite); gates the player UI, not MCP.
 get-bundle-status {} — { members:[{id,active,title,version}] } for boss-splash + token-notes (UNGUARDED).
-Example: { action: "boss-splash.show", actor: "actorId", message: "{{actor.name}} appears!", timerMs: 6000 }`,
+Example: { action: "boss-splash.show", actor: "actorId", message: "{{actor.name}} appears!", timerMs: 6000 }
+
+Do NOT use token-notes for freeform GM scratch notes not tied to a specific token/actor — use the \`journal\` (core) tool for that. token-notes is per-token/per-actor bound (scene-local or actor-persistent); it is not a general-purpose notes surface.
+
+Performance Notes:
+- All 10 actions return a small fixed-shape result (an overlay-state confirmation, a note's text, a config record, or the bundle status) — no response modes, no pagination; cost does not scale with world size.`,
         inputSchema: {
           type: 'object',
           properties: {

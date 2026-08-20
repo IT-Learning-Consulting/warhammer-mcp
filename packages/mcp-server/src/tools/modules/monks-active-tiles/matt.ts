@@ -376,6 +376,13 @@ GM required for all writes. Destructive/elevated-risk MATT actions (delete/permi
 must be confirmed: send confirm:true after reviewing the impact report. fire-trigger also requires confirm:true.
 fire-trigger-as also requires confirm:true after reviewing the explicit-token impact preview.
 
+Use this when:
+- Authoring a trap/puzzle/scripted-encounter tile (enter/click/turn trigger) with an ordered action sequence (chat message, macro, teleport, damage, etc.).
+- Inspecting an existing MATT tile's full config, action sequence, variables, and trigger history before editing it.
+- Editing an already-authored action sequence — inserting, updating, removing, reordering, or duplicating one action.
+- Manually firing a tile's sequence for testing or a scripted story beat, either via controlled tokens or an explicit token list.
+- Bridging a Region's enter/exit events to a MATT tile's trigger sequence (link-region-trigger).
+
 19 actions:
 - get-capabilities                       — 24 trigger modes + source-audited native 78-action catalog + registered/3rd-party actions + optional deps + MATT settings (including use-core-macro).
 - get-trigger-tile { tileUuid, returnFullPayload? } — full MATT config + ordered actions + variables + history for one tile. returnFullPayload:true emits a machine-readable JSON bundle (geometry + texture + full actions[] + regionLinks) for tilepack export.
@@ -399,7 +406,14 @@ Examples:
 - { action: "create-trigger-tile", sceneId: "abc", x: 1000, y: 1000, trigger: ["enter"], actions: [{ action: "chatmessage", data: { text: "A trap!" } }] }
 - { action: "fire-trigger", tileUuid: "Scene.abc.Tile.xyz", confirm: true }
 - { action: "fire-trigger-as", tileUuid: "Scene.abc.Tile.xyz", tokenIds: ["tokenId1"], method: "enter", confirm: true }
-- { action: "find-trigger-tile", name: "Main Gate Trap" }`,
+- { action: "find-trigger-tile", name: "Main Gate Trap" }
+
+Do NOT use this tool to fire a macro directly outside a Tile-trigger context — use \`macro\`/\`module-macro-trigger\` for that. module-matt is scoped to Tile-attached MATT automations (their sequences, config, and firing); it is not a general macro-execution surface.
+
+Performance Notes:
+- get-trigger-tile/create-trigger-tile/*-action/set-variables/reset-history/fire-trigger/fire-trigger-as/link-region-trigger: small fixed-shape response per tile — no pagination. get-trigger-tile with returnFullPayload:true returns a larger machine-readable JSON bundle (geometry + texture + full action data) for tilepack export; omit it for the normal prose summary.
+- get-capabilities: a bounded catalog summary (action keys sampled per group, not the full ~78-action detail dump).
+- list-trigger-tiles/find-trigger-tile: size scales with matching tile count on the scene/world scope queried.`,
         inputSchema: {
           type: 'object',
           properties: {

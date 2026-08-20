@@ -119,6 +119,17 @@ export class TemplateTool extends BaseTool {
         description:
           `Manage Foundry VTT MeasuredTemplate documents via 6 actions (embedded-doc CRUD + list + Phase 9C duplicate). Templates live on scenes (scene.templates collection).
 
+Use this when:
+- Placing a one-shot spell/ability area-of-effect on a scene (circle/cone/rect/ray) for a specific cast or attack.
+- Adjusting an already-placed template's shape, position, or visibility (action:"update").
+- Cleaning up a template after its effect resolves (action:"delete").
+- Auditing what templates currently exist on a scene, e.g. before a new round (action:"list"/"get").
+- Cloning an existing template's shape/settings onto a new placement (action:"duplicate").
+
+NOTE — namesake collision: this is NOT the same concept as Slice B's \`apply-template\`/\`apply-template-to-token\` (actor/character build templates) — different domain entirely, same word.
+
+Do NOT use this for a persistent zone that should stay on the scene and re-trigger on token enter/exit — use \`region\` instead; MeasuredTemplates here are one-shot AoE placements, not durable geofenced areas.
+
 **GM-only:** All write actions (create/update/delete) require GM access. Non-GM callers are refused by the Foundry-side handler. Read actions (get/list) are unrestricted.
 
 **Actions:**
@@ -134,6 +145,9 @@ export class TemplateTool extends BaseTool {
 **author:** Auto-set by Foundry; read-only in all responses; excluded from write surface.
 
 **texture:** Bare FilePathField (string or null) — not a TextureData sub-object.
+
+Performance Notes:
+- create/update/delete/get/duplicate return a single template record — no pagination. list is paginated (page/pageSize, max 100, default 20); pass countOnly:true for a cheap total without the item array.
 
 **Examples:**
 - create: {action:"create", sceneId:"abc", x:500, y:300, t:"circle", distance:10, fillColor:"#ff0000"}

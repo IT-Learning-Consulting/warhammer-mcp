@@ -125,7 +125,19 @@ export class UserTool extends BaseTool {
                 description:
                     `Manage Foundry User documents through one umbrella tool. 9 actions cover list/get/update, role changes, hotbar maintenance, and flag housekeeping.
 
+Use this when:
+- Auditing connected/registered users and their roles before a permissions decision (action:"list"/"get").
+- Changing a user's profile fields — name, color, avatar, pronouns, linked character, or per-user permission overrides (action:"update").
+- Promoting/demoting a user's role, e.g. PLAYER to TRUSTED (action:"set-role" — surfaces reloadRequired).
+- Managing a user's hotbar macro slots, including finding orphaned slots pointing at deleted macros (action:"hotbar-list"/"hotbar-assign"/"hotbar-clear").
+- Reading or writing a module/world-scoped flag on a user account (action:"flag-set"/"flag-clear").
+
+Do NOT use this for per-document ownership grants (who can see/edit a specific Actor, Scene, etc.) — use \`ownership\` instead; this tool is User account/role/hotbar/flag admin, not document permissions.
+
 Actions: list, get, update, set-role, hotbar-list, hotbar-assign, hotbar-clear, flag-set, flag-clear.
+
+Performance Notes:
+- list is paginated via limit/offset (max 100 per call, default 50). get/update/set-role/hotbar-*/flag-* return a single small fixed-shape record — no pagination.
 
 Key rules:
 - update accepts only name, color, avatar, pronouns, character, permissions.

@@ -46,7 +46,19 @@ export class KeybindingTools extends BaseTool {
         description:
           `Inspect and change Foundry keybindings over \`game.keybindings\`.
 
+Use this when:
+- Auditing which keybinding actions are currently registered and what they're bound to (action:"list").
+- Looking up a single action's current/default binding before deciding whether to rebind it (action:"get").
+- Rebinding one action for the GM's own client, e.g. to avoid a conflict with a module's hotkey (action:"set").
+- Restoring one action, or every action, to its registered defaults after an experimental rebind (action:"reset-action" / "reset-all").
+- Finding key+modifier combos bound to more than one action before assigning a new binding (action:"find-conflicts").
+
+Do NOT use this expecting it to affect other players' bindings — it is GM-client-only (localStorage-backed); there is no natural sibling tool for this scope, the misuse boundary is: keybindings changed here never propagate to other connected clients.
+
 **⚠ CLIENT-ONLY:** keybindings are a CLIENT-scope setting (the GM browser's localStorage). Writes affect ONLY the GM client this MCP runs on — other players' bindings are unreachable, and registration is init-time, so only already-registered actions appear in \`list\`/\`get\`.
+
+Performance Notes:
+- Each action returns a single small fixed-shape response (action list, one action's detail, or a set/reset confirmation), no response modes, no pagination.
 
 **Actions:**
 - **list**: Enumerate every registered keybinding action with its current bindings. Optional: namespace (filter, e.g. "core"). Returns {actions:[{id, namespace, name, hint?, precedence, restricted, editable[], current[], humanized[]}], total}.

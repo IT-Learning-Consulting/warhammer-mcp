@@ -92,12 +92,24 @@ OCCUPIED-SLOT GUARD: add-item (explicit slotIndex) and move-item (toSlot) reject
 
 RESET BLAST RADIUS (honest, narrower than the name implies): reset wipes ONLY the per-user backpack limit records and resets the GLOBAL DEFAULT slot limit to 5 — it does NOT touch stored items, per-actor limits, or slot locks. CONFIRM-GATED (confirm:true required, else BACKPACK_CONFIRM_REQUIRED).
 
+Use this when:
+- Depositing an actor's embedded item into their off-sheet Backpack storage overlay, or withdrawing one back onto the actor.
+- Reading an actor's current backpack contents/slot limit, or the global default limit + per-user override records.
+- Reorganizing backpack contents (moving an item between slots) or adjusting a per-actor or per-user slot-count limit.
+- Locking a run of slots to a leader item (e.g. modeling a bulky two-handed item taking multiple slots), or clearing those locks.
+- Resetting the global default limit and per-user limit records back to a known baseline.
+
 10 actions:
 read (ungated): { actorId? } — actorId present: per-actor { items, limit, locks }; absent: global { defaultLimit, players, userRecords }.
 writes (GM-only): add-item { actorId, itemId, slotIndex?, overwrite? } · remove-item { actorId, slotIndex } · move-item { actorId, fromSlot, toSlot, overwrite? } · set-limit { target: "actor"|"default", actorId?, limit } (5..100, self-imposed — the data layer has no max of its own) · set-user-limit { userId, limit } (5..100) · remove-user { userId } · lock-slots { actorId, leaderSlot, itemId, length? OR indices? — exactly one required } · clear-locks { actorId, itemId? OR leaderSlot? — exactly one required }.
 writes (GM-only, CONFIRM-GATED — destructive): reset { confirm:true }.
 
-Example: { action: "add-item", actorId: "abc123", itemId: "def456" }`,
+Example: { action: "add-item", actorId: "abc123", itemId: "def456" }
+
+Do NOT use this tool for items that stay on the actor's normal embedded-item sheet — use \`manage-inventory\`/\`update-item\` for those. Backpack storage lives ENTIRELY in world settings, invisible to actor.items once deposited; this tool is only for the off-sheet overlay itself.
+
+Performance Notes:
+- All actions return a small fixed-shape result (a slot record, a write confirmation, or the global read summary) — no response modes, no pagination; cost does not scale with world size beyond the target actor/global record.`,
         inputSchema: {
           type: 'object',
           properties: {

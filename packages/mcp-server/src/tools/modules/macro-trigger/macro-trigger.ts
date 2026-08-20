@@ -78,12 +78,23 @@ macroId SOFT-WARN: macroId may be a world-macro id (game.macros) OR a UUID (incl
 
 MULTI-CLIENT CAVEAT: macro-trigger registers all 38 hooks on every connected client with no GM/socket gating — a bound macro may execute once PER CONNECTED CLIENT for hooks that fire client-side, not just once globally.
 
+Use this when:
+- Wiring a world macro to auto-fire whenever a specific Foundry lifecycle hook occurs (e.g. announce every new Actor, react to combat start).
+- Renaming or re-targeting an existing hook binding to a different macro or event.
+- Auditing which hooks currently have bindings, optionally filtered to one event.
+- Removing one obsolete binding, or clearing all bindings during a module cleanup pass.
+
 5 actions:
 read (ungated): list { event? } — all bindings, optionally filtered to one hook.
 writes (GM-only): create { name, event, macroId } · update { bindingId, name?, event?, macroId? }.
 writes (GM-only, CONFIRM-GATED — destructive): delete { bindingId, confirm:true } · clear { confirm:true } (removes ALL bindings).
 
-Example: { action: "create", name: "Announce new actor", event: "createActor", macroId: "abc123" }`,
+Example: { action: "create", name: "Announce new actor", event: "createActor", macroId: "abc123" }
+
+Do NOT use this tool to fire a macro immediately — use the \`macro\` (core) tool for that. module-macro-trigger only manages PERSISTENT hook-to-macro bindings that fire automatically in the future; it never executes a macro itself.
+
+Performance Notes:
+- All 5 actions return a small fixed-shape result (a binding record, a list, or a delete/clear count) — no response modes, no pagination; cost scales only with the number of registered bindings, typically a short list.`,
         inputSchema: {
           type: 'object',
           properties: {

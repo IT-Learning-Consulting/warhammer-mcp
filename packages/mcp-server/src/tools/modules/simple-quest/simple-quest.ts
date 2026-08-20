@@ -150,6 +150,13 @@ export class ModuleSimpleQuestTool extends BaseTool {
 Conditional: returns MODULE_NOT_ACTIVE when simple-quest is absent/inactive.
 Pre-flight: module-probe.is-active simple-quest before using this tool.
 
+Use this when:
+- Authoring a new quest with checkable/failable/hideable objectives, or reading/updating one already tracked.
+- Ticking, failing, or hiding a specific objective (or a whole sub-quest) as the party progresses.
+- Sharing a quest to chat or pushing it to specific players' quest logs.
+- Placing/updating/removing a map marker or configuring a quest map's scale/pin-lock/fog-of-war mask.
+- Managing lore pages or player achievements (creation, listing, awarding/revoking).
+
 24 actions:
 Quest (15) — list-quests {}; get-quest { pageUuid }; create-quest { name, content?, category? }; set-quest-state { pageUuid, completed?, tickAll?(0|1|2) }; set-objective-state { pageUuid, objectiveText, state(0|1|2), acknowledgeRename? }; set-objective-visibility { pageUuid, objectiveText, hidden, acknowledgeRename? }; set-quest-visibility { pageUuid, hidden }; set-subquest-state { pageUuid, headerText, completed }; move-quest { pageUuid, targetCategory }; mark-quest-updated { pageUuid }; share-quest { pageUuid }; show-quest-to-players { pageUuid, userIds? }; set-counter { pageUuid, counterId, value }; duplicate-quest { pageUuid }; delete-quest { pageUuid, confirm }.
 Map (4) — create-map-marker { pageUuid, marker{ x(0-1, required), y(0-1, required), title?, icon?, color?, hidden?, journal? } }; update-map-marker { pageUuid, markerId, marker{...} }; remove-map-marker { pageUuid, markerId }; set-map-config { pageUuid, measure?, pinsLocked?, fowMask? } (at least one of measure/pinsLocked/fowMask).
@@ -158,7 +165,13 @@ Achievements (3) — list-achievements {}; create-achievement { name, content?, 
 
 Objective addressing (HC-v2-5): objectives are keyed by their text — the tool derives the key the same way the module does (strip tags + decode HTML entities + remove whitespace/dots, max 50 chars). Renaming an objective changes its key and orphans its checkbox/secret state; an objective write whose key matches none of the page's actual <li> objectives returns SIMPLE_QUEST_RENAME_WARNING (re-send with acknowledgeRename:true to proceed). A valid objective that simply hasn't been ticked yet does NOT warn.
 delete-quest requires confirm:true (CCR-4).
-Example: { action: "create-quest", name: "The Missing Caravan", content: "<ul><li>Find the wreck</li><li>Recover the ledger</li></ul>" }`,
+Example: { action: "create-quest", name: "The Missing Caravan", content: "<ul><li>Find the wreck</li><li>Recover the ledger</li></ul>" }
+
+Do NOT use this tool for freeform GM notes with no quest structure — use the \`journal\` (core) tool for that. module-simple-quest is specifically Simple Quest's structured quest/objective/map/lore/achievement documents (flags.simple-quest.*), not a general journal-authoring surface.
+
+Performance Notes:
+- Most actions return a small fixed-shape result (a quest/marker/achievement record, or a write confirmation) — no response modes, no pagination.
+- list-quests/list-lore/list-achievements: size scales with the number of tracked entries in the relevant folder; no built-in pagination, so a large campaign's full quest log returns as one list.`,
         inputSchema: {
           type: 'object',
           properties: {

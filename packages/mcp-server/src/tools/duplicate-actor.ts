@@ -32,7 +32,18 @@ export class DuplicateActorTool extends BaseTool {
           openWorldHint: true,
         },
         description:
-          'Clone a world actor by ID, optionally renaming. Thin pass-through to the Foundry-module duplicateActor query — persists the clone via Actor.create(source.toObject()) with _id/folder/sort stripped. Preferred over createActorFromCompendium when the source is a user-curated world template (e.g. clean NPC-type species bases for /wfrp-build-npc).',
+          `Clone a world actor by ID, optionally renaming. Thin pass-through to the Foundry-module duplicateActor query — persists the clone via Actor.create(source.toObject()) with _id/folder/sort stripped. Preferred over create-actor-from-compendium when the source is a user-curated world template (e.g. clean NPC-type species bases for /wfrp-build-npc).
+
+Use this when:
+- Cloning a user-curated world-actor template (e.g. a clean species base) to produce a new named NPC/creature.
+- Spinning up several similar actors from one hand-built source without re-authoring items/system data each time.
+- Renaming the clone at creation time via newName, instead of duplicating then updating the name separately.
+- Bypassing the wfrp4e basic-skills dialog on a bare (item-less) source via options.skipItems:true (BUG-458).
+
+Do NOT use this when the source should be a published compendium stat block rather than a world actor — use create-actor-from-compendium instead.
+
+Performance Notes:
+- Single small response: the new clone's id/name, no full sheet payload echoed back. Mode-less — no response-mode variance.`,
         inputSchema: {
           type: 'object',
           properties: {

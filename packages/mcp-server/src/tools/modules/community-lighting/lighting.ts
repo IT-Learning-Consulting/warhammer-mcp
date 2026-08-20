@@ -81,6 +81,12 @@ flags.CommunityLighting.customProperties.
 Conditional: returns MODULE_NOT_ACTIVE when CommunityLighting is absent/inactive.
 Pre-flight: module-probe.is-active CommunityLighting before using this tool.
 
+Use this when:
+- Discovering which flicker/pulse/etc animation-type keys CommunityLighting has registered before configuring a light.
+- Checking whether a candidate animation key takes custom flavor parameters (customPropertyKeys) before writing them via the core \`light\` tool.
+- Building a scene-dressing menu of available light animations for the GM to pick from.
+- Auditing the CommunityLighting registry after installing/updating the module or a light-animation-providing add-on.
+
 1 action:
 - list-animations { } — enumerate the effective CommunityLighting animations (separator + disabled
   entries filtered out). Each entry: { key, label, author, hasCustomProperties, customPropertyKeys }.
@@ -89,7 +95,12 @@ Pre-flight: module-probe.is-active CommunityLighting before using this tool.
   { type: "<key>", speed: 5, intensity: 5 } } } }.
 
 Examples:
-- { action: "list-animations" }`,
+- { action: "list-animations" }
+
+Do NOT use this tool to actually APPLY an animation key to a light — use the core \`light\` tool's update action (changes.config.animation.type) for that. module-lighting only DISCOVERS/READS the registry of available animation keys; it never writes to a Light document itself.
+
+Performance Notes:
+- list-animations returns the full effective registry in one response — no response modes, no pagination. Size scales with how many CommunityLighting-providing modules/animations are installed, typically a short list (tens of entries).`,
         inputSchema: {
           type: 'object',
           properties: {

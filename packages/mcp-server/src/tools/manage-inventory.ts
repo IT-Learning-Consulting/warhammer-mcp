@@ -97,6 +97,14 @@ export class ManageInventoryTool extends BaseTool {
             },
             description: `Manage inventory for WFRP 4e characters including items, encumbrance, and ammunition.
 
+Use this when:
+- Reading a character's full inventory + encumbrance state via action:"get-status" or action:"check-encumbrance".
+- Adding or removing an existing weight-tracked item on a character's sheet (action:"add-item" / action:"remove-item").
+- Tracking ammunition consumption during ranged combat (action:"track-ammunition", negative amount for shots fired).
+- Wiring a ranged weapon to a specific ammunition item before it can fire (action:"wire-ammo"), or advancing a loading weapon's reload status (action:"check-reload").
+
+Do NOT use action:"add-item" to add a new item — it is deprecated in favor of create-custom-item (homebrew item, full item data) or add-item-from-compendium (adding a real compendium-sourced item). This tool's other actions (get-status, remove-item, track-ammunition, check-encumbrance, wire-ammo, check-reload) remain the correct choice for their purposes.
+
 WFRP Encumbrance System:
 - Maximum Encumbrance = system-computed (Strength Bonus + Toughness Bonus, plus any Active-Effect modifiers and size multipliers, e.g. Ogre ×2)
 - Encumbrance Levels:
@@ -137,7 +145,10 @@ Examples:
 - Check weight: action="check-encumbrance", characterName="Hans"
 - Wire ammo: action="wire-ammo", characterName="Hans", weaponName="Bow", ammoName="Arrows"
 - Clear wiring: action="wire-ammo", characterName="Hans", weaponName="Bow", ammoName=null
-- Check reload: action="check-reload", characterName="Hans", weaponName="Crossbow"`,
+- Check reload: action="check-reload", characterName="Hans", weaponName="Crossbow"
+
+Performance Notes:
+- Action-based umbrella, no response-mode variance: each action returns a small text summary (added/removed item, ammo count, encumbrance total, or reload status) scoped to one character's inventory — never the full sheet payload.`,
             inputSchema: {
                 type: "object",
                 properties: {

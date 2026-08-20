@@ -37,18 +37,26 @@ export class ApplyTemplateTool extends BaseTool {
           openWorldHint: true,
         },
         description:
-          'Server-side reimplementation of wfrp4e TemplateModel.apply (wfrp4e.js:32647) — ' +
-          'applies an advancement template (Item of type "template" from owb1/owb2/owb3/core) to ' +
-          'any actor (creature or npc), resolving skills, talents, lores+spells, traits, and ' +
-          'trappings tree in a single batch call. BYPASSES THE 5 INTERACTIVE DIALOGS ' +
-          '(skill-group pick, skill-specialisation pick, lore pick, spell pick, trappings tree pick) ' +
-          'the native path opens — makes batch encounter generation possible. Pass preResolvedChoices ' +
-          'to override any dialog pick; otherwise each is resolved by a random pick (with skill↔weapon ' +
-          'correlation biasing the trappings OR-branch toward weapons matching the actor\'s Melee/Ranged ' +
-          'specialisations). Supports stacking: calling apply-template twice on the same actor with ' +
-          'different template UUIDs composes both layers (role + rank, e.g. Scout + Veterans from ' +
-          'owb3 Hahnbrandt). Embedded child items carry flags.wfrp4e.fromTemplate = <templateId> for ' +
-          'future undo symmetry. Use via /wfrp-encounter-builder in direct or band mode.',
+          `Server-side reimplementation of wfrp4e TemplateModel.apply (wfrp4e.js:32647) — ` +
+          `applies an advancement template (Item of type "template" from owb1/owb2/owb3/core) to ` +
+          `any actor (creature or npc), resolving skills, talents, lores+spells, traits, and ` +
+          `trappings tree in a single batch call. BYPASSES THE 5 INTERACTIVE DIALOGS ` +
+          `(skill-group pick, skill-specialisation pick, lore pick, spell pick, trappings tree pick) ` +
+          `the native path opens — makes batch encounter generation possible. Pass preResolvedChoices ` +
+          `to override any dialog pick; otherwise each is resolved by a random pick (with skill↔weapon ` +
+          `correlation biasing the trappings OR-branch toward weapons matching the actor's Melee/Ranged ` +
+          `specialisations). Supports stacking: calling apply-template twice on the same actor with ` +
+          `different template UUIDs composes both layers (role + rank, e.g. Scout + Veterans from ` +
+          `owb3 Hahnbrandt). Embedded child items carry flags.wfrp4e.fromTemplate = <templateId> for ` +
+          `future undo symmetry. Use via /wfrp-encounter-builder in direct or band mode.\n\n` +
+          `Use this when:\n` +
+          `- Batch-generating an encounter roster by applying a role/rank template to a world actor (creature or npc) headlessly.\n` +
+          `- Stacking two templates on the same actor (e.g. a role template plus a rank template) to compose layered advancement.\n` +
+          `- Overriding specific dialog picks (skill group, specialisation, lore, spell, trappings) via preResolvedChoices instead of accepting the random default.\n` +
+          `- Previewing the planned template application with dryRun:true before committing writes.\n\n` +
+          `Do NOT use this for a placed unlinked scene token whose ActorDelta needs the write instead of the world actor — use apply-template-to-token for that case.\n\n` +
+          `Performance Notes:\n` +
+          `- dryRun:true returns the same planned-change shape as a live run, with zero mutations — same response size either way.`,
         inputSchema: {
           type: 'object',
           properties: {

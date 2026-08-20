@@ -110,12 +110,24 @@ export class ModuleArmouryTool extends BaseTool {
 Conditional: returns MODULE_NOT_ACTIVE when forien-armoury is absent/inactive.
 Pre-flight: module-probe.is-active forien-armoury before using this tool.
 
+Use this when:
+- Tracking a caster's Magical Endurance pool (reading or spending ME) instead of Wounds/Fate for spellcasting cost.
+- Creating or reading a Magic Scroll or Grimoire item, or equipping/unequipping a Grimoire to grant/remove its bound spells.
+- Recording weapon/armour damage-and-repair state, or resolving an item repair.
+- Managing the ammo-reclamation queue or combat-fatigue tracking for an active combat.
+- Firing a one-shot Armoury integration (currency setup, rolltable import, ATL preset reset) or resolving a cantrip cast.
+
 14 actions:
 Reads — get-me { actorId }; read-scroll { actorId, itemId }; read-grimoire-spells { actorId, itemId }; check-damage { actorId }; read-ammo-queue { combatId? }; read-combat-fatigue { combatId?, combatantId? }; add-species-career-content { filter? } (catalogs the forien-armoury pack — embed via add-item-from-compendium).
 Writes (GM) — spend-me { actorId, amount } (returns willTriggerEnduranceTest when ME drops below 0 — the module fires a silent Endurance test); create-scroll { spellUuid, actorId?, language?, quantity? }; create-grimoire { spells[], actorId? }; repair-item { actorId, itemId, location?, newValue }.
 Confirm-gated writes (GM + confirm:true) — equip-grimoire { actorId, itemId, equipped?, confirm } (auto-grants/removes spells); configure-integration { integration, confirm } (irreversible one-shot currency/preset/rolltable rewrite); cantrip { tokenId, requiredSL?, lore?, confirm } (controls the token, spends channelled SL, posts chat).
 
-Example: { action: "get-me", actorId: "Actor.abc123" }`,
+Example: { action: "get-me", actorId: "Actor.abc123" }
+
+Do NOT use this tool for generic actor resource or currency edits — use \`update-actor\` for those. module-armoury is specifically Forien's Armoury mechanics (Magical Endurance, scrolls/grimoires, item repair, ammo/fatigue tracking); it has no general-purpose actor-field write.
+
+Performance Notes:
+- All 14 actions return a small fixed-shape result (a resource value, an item record, or a per-combat list bounded by combatant count) — no response modes, no pagination; cost does not scale with world size.`,
         inputSchema: {
           type: 'object',
           properties: {

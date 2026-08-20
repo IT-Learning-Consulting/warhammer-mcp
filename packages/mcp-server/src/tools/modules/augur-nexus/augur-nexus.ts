@@ -108,6 +108,13 @@ Conditional: returns MODULE_NOT_ACTIVE when augur-nexus is absent/inactive. Pre-
 
 CONFIRM-GATED (irreversible): delete-scene-branch (deletes the scene + all child scenes + embedded docs + journals) and delete-custom-category (re-assigns all edges to "unassigned") require confirm:true. Cinematic scene transitions + canvas ghost placement are UI-only and NOT exposed. create-linked-site + apply-scene-visibility are LIVE-SMOKE-ONLY (touch canvas placeables).
 
+Use this when:
+- Building or re-parenting a hierarchical scene tree (e.g. wiring a tavern's interior scene as a child of the town's overview scene).
+- Recording a world-relationship "connection" between two scenes, sites, or arbitrary Foundry documents (NPC ↔ faction, item ↔ location) for later graph traversal.
+- Setting or overriding player-facing visibility policy for scene navigation, the nexus graph, or individual connections/sites.
+- Reading the lineage tree, a scene's parent/children, or a node's connections for GM planning or player-facing recap.
+- Deleting an entire scene branch or a custom connection category once a subtree/category is confirmed obsolete.
+
 28 actions:
 scene-jump: get-scene-navigation { sceneId } · set-scene-navigation { sceneId, parentSceneId?, parentSiteId?, transitionStyle? } (omit parentSceneId to clear).
 link-scene: create-linked-site { parentSceneId, linkedSceneId, siteData? } · read-site-records { sceneId } · remove-site-record { sceneId, siteId }.
@@ -120,7 +127,12 @@ lineage-read: get-lineage-tree {} · get-parent-scene { sceneId } · get-child-s
 deletes: delete-scene-branch { sceneId, confirm } · delete-custom-category { categoryId, confirm }.
 
 A connection "target" is one of: { kind:"nexus-scene", sceneId } | { kind:"nexus-site", parentSceneId, siteId } | { kind:"foundry-document", uuid, category? } | { id } (prebuilt node id). policy ∈ all|explicit; scene-view value ∈ inherit|allow|block; nexus/connection/site visibility value ∈ inherit|show|hide.
-Example: { action: "add-connection", source: { kind: "nexus-scene", sceneId: "abc" }, related: { kind: "foundry-document", uuid: "Actor.def" }, category: "faction" }`,
+Example: { action: "add-connection", source: { kind: "nexus-scene", sceneId: "abc" }, related: { kind: "foundry-document", uuid: "Actor.def" }, category: "faction" }
+
+Do NOT use this tool for cinematic scene-transition playback or canvas ghost-pin placement — those are Augur: Nexus UI-only interactions with no MCP primitive; this tool only manages the underlying tree/graph/policy DATA (scene lineage, site records, connections, visibility settings), never the live canvas presentation.
+
+Performance Notes:
+- Most actions return a small fixed-shape result (a single node/edge/policy record). get-connections-graph and get-lineage-tree scale with world size (all nodes/edges, or the full scene tree) — no pagination; on a very large world these can be the largest responses this tool returns.`,
         inputSchema: {
           type: 'object',
           properties: {

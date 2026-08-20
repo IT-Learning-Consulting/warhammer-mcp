@@ -343,6 +343,15 @@ export class CompendiumUmbrellaTools extends BaseTool {
         description:
           `Manage Foundry VTT Compendium packs and their contained documents. 10 actions span pack CRU + document CRU + in-pack folder management. **HC3: NO pack-delete and NO document-delete** — packs are not deleted by this tool (remove via Foundry's compendium sidebar); documents are not deleted. delete-folder-in-pack IS available (a folder is organizational metadata, not a pack or document — deleteContents defaults false so contained docs survive at pack root).
 
+Use this when:
+- Creating a new world-scope compendium pack to hold homebrew content, e.g. custom weapons or NPCs (action:"create-pack").
+- Adding a world document (by UUID, copy semantics) or an inline-authored document into a pack (action:"add-document-to-pack").
+- Editing a document already inside a pack, including renaming or moving it to a different in-pack folder (action:"update-document-in-pack").
+- Browsing a pack's contents with pagination, or fetching one document's full/summary detail (action:"read-pack"/"read-document-from-pack").
+- Organizing pack contents with in-pack folders (action:"create-folder-in-pack"/"list-folders-in-pack"/"update-folder-in-pack"/"delete-folder-in-pack").
+
+Do NOT use this for read-only keyword search or discovery across packs — use \`search-compendium\`/\`list-compendium-packs\` (compendium.ts) instead; this umbrella is CRU pack/document/folder management, with NO delete-pack/delete-document per HC3 (only delete-folder-in-pack is available, since a folder is organizational metadata).
+
 **Actions:**
 - **create-pack**: Create a new world-scope compendium pack. Required: name (slug), label (display title), type (Actor/Item/JournalEntry/RollTable/Macro/Scene/Playlist). Optional: system (defaults to game.system.id), scope ("world" only — module-scope refused per probe finding: Foundry silently downgrades), moduleId (required iff scope==="module"). Returns packId, metadata, entryCount, ownership.
 - **update-pack**: Update pack metadata via pack.configure(). packId + changes (≥1 of: folder, sort, locked). Returns changedFields + post-update metadata. NOTE (BUG-099, 2026-05-18): \`label\` is NOT configurable post-create — Foundry v13's pack.configure() silently drops label changes; schema rejects label at the input layer. To rename a world-scope pack, delete + re-create via Foundry UI.
@@ -362,6 +371,9 @@ export class CompendiumUmbrellaTools extends BaseTool {
 **Lock semantics:** locked packs reject all writes with COMPENDIUM_PACK_LOCKED before any Foundry call is made. WFRP4e core packs (\`wfrp4e-core.*\`) are locked by default; create a world-scope pack for homebrew authoring.
 
 **HC3 (no delete):** This tool does NOT expose delete-pack or delete-document-from-pack. Attempting either via the action discriminator rejects at Zod parse time. Pack deletion is a Foundry UI operation (file-level state) and outside the MCP write surface.
+
+Performance Notes:
+- read-pack is paginated (page/pageSize, 1-500, default 100); its folders[] tree is NOT paginated. read-document-from-pack defaults to projection:"full" (whole toObject() output) — a large document fails loud with RESPONSE_TOO_LARGE (a full actor read measured ~72.5k chars live); pass projection:"summary" for a compact id/name/type/img + bounded preview instead. Other actions return a single small fixed-shape response.
 
 **Examples:**
 - create-pack: {action:"create-pack", name:"homebrew-weapons", label:"Homebrew Weapons", type:"Item"}

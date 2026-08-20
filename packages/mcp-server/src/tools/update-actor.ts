@@ -37,7 +37,18 @@ export class UpdateActorTool extends BaseTool {
           openWorldHint: true,
         },
         description:
-          'Apply an arbitrary system.* update to an actor. Thin pass-through to the Foundry-module updateActor query — does not enforce WFRP rules. Skills (e.g. /wfrp-advance, /wfrp-resources, /wfrp-status) own the rules and call this primitive to write the result. Use Foundry update syntax for nested paths (e.g. {"system.characteristics.ws.advances": 3, "system.details.experience.spent": 75}). Pass verifyPersistence:false to opt out of post-write drift check for auto-derived fields.',
+          `Apply an arbitrary system.* update to an actor. Thin pass-through to the Foundry-module updateActor query — does not enforce WFRP rules. Skills (e.g. /wfrp-advance, /wfrp-resources, /wfrp-status) own the rules and call this primitive to write the result. Use Foundry update syntax for nested paths (e.g. {"system.characteristics.ws.advances": 3, "system.details.experience.spent": 75}). Pass verifyPersistence:false to opt out of post-write drift check for auto-derived fields.
+
+Use this when:
+- A skill-layer flow (e.g. /wfrp-advance) has already computed a WFRP-rule-compliant value and needs to write it to an arbitrary system.* dot-path with no built-in validation.
+- Writing a field that has no dedicated structured tool (no matching actor-config / manage-character action).
+- Making a one-off GM correction to a raw system field, understanding this tool performs no rule enforcement.
+- Opting out of the post-write drift check (verifyPersistence:false) for a field Foundry auto-rewrites via prepareDerivedData.
+
+Do NOT use this for prototype-token or artwork fields — use actor-config instead. Do NOT use this for structured stat/skill/XP writes that have a dedicated action — use manage-character instead (it validates and shapes the write; this tool does not).
+
+Performance Notes:
+- Single small response: the updated field paths/values, no full actor payload echoed back. Mode-less — no response-mode variance.`,
         inputSchema: {
           type: 'object',
           properties: {

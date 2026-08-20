@@ -59,6 +59,12 @@ export class ModuleTokenbarTool extends BaseTool {
 Conditional: returns MODULE_NOT_ACTIVE when monks-tokenbar is absent/inactive.
 Pre-flight: module-probe.is-active monks-tokenbar before using this tool.
 
+Use this when:
+- Locking down all token movement globally during a cutscene, puzzle, or GM-narrated moment.
+- Restricting movement to only the current combatant during combat turns.
+- Freeing movement globally again once the lockdown/turn restriction should end.
+- Overriding movement for specific tokens only, independent of the global setting.
+
 1 action:
 - change-movement { movement, tokens? }
   - movement: "free" (all move) | "none" (all blocked) | "combat" (only current combatant)
@@ -74,7 +80,12 @@ GM required. No confirm (easily reversed world/token write).
 
 Example:
 - { action: "change-movement", movement: "none" }                              // full global lockdown
-- { action: "change-movement", movement: "free", tokens: ["Scene.a.Token.b"] } // free one token`,
+- { action: "change-movement", movement: "free", tokens: ["Scene.a.Token.b"] } // free one token
+
+Do NOT use this tool for combat turn/round control — use \`advance-combat\` for that. module-tokenbar only locks/unlocks token movement; it never advances turns, rounds, or the combat tracker itself.
+
+Performance Notes:
+- change-movement returns a single small fixed-shape confirmation (the applied movement mode and affected token count) — no response modes, no pagination.`,
         inputSchema: {
           type: 'object',
           properties: {

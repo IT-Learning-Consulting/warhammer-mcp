@@ -129,6 +129,13 @@ export class ModuleTimekeepingTool extends BaseTool {
 Conditional: returns MODULE_NOT_ACTIVE when simple-timekeeping is absent/inactive.
 Pre-flight: module-probe.is-active simple-timekeeping before using this tool.
 
+Use this when:
+- Reading the current in-world date/time, moon phases, and season for GM narration or scene framing.
+- Advancing or jumping the world clock (travel time, a rest, dawn/dusk/midday/midnight) during play.
+- Scheduling or updating a recurring calendar event (a festival, a deadline) tied to a journal page.
+- Configuring per-scene or global darkness sync, weather badges, or moon/custom badge display.
+- Wiring a macro to auto-fire at dawn/dusk/midday/new-day, or switching the active calendar preset.
+
 19 actions:
 Reads — get-time {} (worldTime, components, date text, dayTimePercent, season, Mannslieb/Morrslieb phase, activeCalendar); list-events { includeExpired?, journalName? }; get-config {} (the module's world configuration object).
 GM writes — advance { seconds? | minutes? | hours? | days? } (negative = reverse; one required); set-time { worldTime? | year?, month? (name or 0-index), dayOfMonth?, hour?, minute?, second? } (month/dayOfMonth persist — the handler recomputes the day-of-year ordinal Foundry actually consumes, BUG-493; out-of-range dayOfMonth fails loud); advance-to { target: dawn|dusk|midday|midnight, dawnHour?, duskHour? } (surfaces a no-op when already at target); set-scene-sync { sceneId, sync: sync|darknessOnly|weatherOnly|noSync|default }; add-event { name, eventTime (worldTime seconds), eventEnd?, repeat?: day|week|month|year, journalName? }; update-event { pageUuid, name?, eventTime?, eventEnd?, repeat? }; set-clock-paused { paused }; set-darkness-sync-global { sync }; set-weather { label, color?, sceneId?, weatherEffect? }; generate-weather { latitude?, dayOfYear?, seasonIndex? } (GM-client widget required); set-moon-badge { … }; set-custom-badge { badgeId: 1|2|3, … }; set-macro-triggers { trigger: dawn|dusk|midday|newDay, op: add|remove, macroUuid }.
@@ -136,7 +143,13 @@ Confirm-gated writes — delete-event { pageUuid, confirm:true }; set-config { c
 
 NOTE: advance/set-time mutate the LIVE world clock — capture get-time first if you intend to restore it. Darkness sync only updates scenes active/viewed on the GM client. Month-name set-time enumerates all calendar months (Imperial feast days have no intercalary flag).
 
-Example: { action: "advance", hours: 4 }`,
+Example: { action: "advance", hours: 4 }
+
+Do NOT use advance/set-time expecting a reversible preview — there is no dry-run mode here; both mutate the LIVE world clock immediately. Capture get-time first if a restore is intended (explicit caveat above); there is no exact sibling tool for this misuse boundary since world-clock control is this tool's sole domain.
+
+Performance Notes:
+- get-time/advance/set-time/advance-to/set-scene-sync/add-event/update-event/get-config/activate-calendar and the generic writes: small fixed-shape response (current time state, one event, or a write confirmation) — no response modes, no pagination.
+- list-events: size scales with the number of calendar events in scope (filterable via journalName/includeExpired); no built-in limit, so a long-running campaign's full event list returns as one response.`,
         inputSchema: {
           type: 'object',
           properties: {

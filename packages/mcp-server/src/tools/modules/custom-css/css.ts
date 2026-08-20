@@ -119,6 +119,12 @@ world stylesheet; every connected client re-injects it live (socket broadcast). 
 Conditional: returns MODULE_NOT_ACTIVE when custom-css is absent/inactive.
 Pre-flight: module-probe.is-active custom-css before using this tool.
 
+Use this when:
+- Applying a world-wide visual theme (e.g. a parchment palette for journals, custom chat-card borders) that every connected client should see.
+- Reading the currently-active world CSS before editing or appending to it.
+- Layering additional CSS onto an existing theme without discarding what's already there (append).
+- Reverting the world stylesheet back to empty after a themed session/event.
+
 4 actions:
 - get    { includeUserStylesheet? }   — read worldStylesheet (+ GM-own userStylesheet if requested)
 - set    { css, userStylesheet? }      — overwrite worldStylesheet; broadcast to all clients
@@ -136,7 +142,12 @@ Examples:
 - { action: "get" }
 - { action: "set", css: ".grim-page { background: #e8dcc0; }" }
 - { action: "append", css: "/* night theme */ .grim-codex { background:#1c1108; }" }
-- { action: "reset" }`,
+- { action: "reset" }
+
+Do NOT use this tool to theme a single document's content (e.g. one journal page) — use the \`journal\` tool for that, embedding scoped inline styles or a page-local class. module-css writes the GLOBAL world stylesheet, affecting every connected client's entire UI, not one document.
+
+Performance Notes:
+- get/set/append/reset return a small fixed summary plus the (possibly large) CSS text, truncated to 4000 chars in the rendered text block — the full string is always available in structuredContent regardless of truncation.`,
         inputSchema: {
           type: 'object',
           properties: {

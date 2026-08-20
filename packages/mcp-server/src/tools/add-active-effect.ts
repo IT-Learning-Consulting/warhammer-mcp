@@ -38,7 +38,31 @@ export class AddActiveEffectTool extends BaseTool {
           openWorldHint: true,
         },
         description:
-          'Attach an ActiveEffect to an existing item on an actor or in the world, or place a one-off effect directly on an actor (no carrier item needed). Uses the same flat {name, trigger, script, ...} effect shape as create-custom-item\'s effects[] field — buildEffectPayload (shared) transforms it into the Foundry nested shape.\n\nTarget scopes:\n  - scope="actor" — effect on a specific item owned by an actor (actorId/actorName + itemId/itemName).\n  - scope="world" — effect on a world-scope item (itemId/itemName).\n  - scope="actor-direct" — effect placed directly on the actor itself (actorId or actorName; no item fields). Use this for one-off modifiers such as a −10 WS debuff on an NPC.\n\nname + trigger are the required fields on effect; script defaults to "" and is optional.\n\nReturns:\n  - On success: created effect ID (and full document if returnFullPayload=true). parentType:"Actor" when scope="actor-direct".\n  - On error: throws with an actionable message.\n\nUse when: adding a rule-modifying effect to an item or directly to an actor. Don\'t use when: adding a WFRP4e condition — use apply-condition instead.\n\nSecurity: script / preApplyScript / enableConditionScript fields are executed by Foundry under GM authority. MCP does not sandbox script content. Only invoke with scripts you wrote or audited.',
+          `Attach an ActiveEffect to an existing item on an actor or in the world, or place a one-off effect directly on an actor (no carrier item needed). Uses the same flat {name, trigger, script, ...} effect shape as create-custom-item's effects[] field — buildEffectPayload (shared) transforms it into the Foundry nested shape.
+
+Use this when:
+- Attaching a rule-modifying script effect to an existing item (e.g. a magic sword's "damaging" trigger script) via scope="actor" or scope="world".
+- Placing a one-off modifier directly on an actor with no carrier item, such as a −10 WS debuff on an NPC, via scope="actor-direct".
+- Authoring a custom trigger-based effect (e.g. "prePrepareData", "applyDamage", "rollTest") that has no equivalent in the WFRP4e condition set.
+- Building a transferable effect that should route to the owning actor when its carrier item is equipped (transfer config).
+
+Do NOT use this for a standard WFRP4e condition (Fatigued, Poisoned, Broken, etc.) — use manage-conditions (apply-condition action) instead, which manages the canonical condition set correctly.
+
+Target scopes:
+  - scope="actor" — effect on a specific item owned by an actor (actorId/actorName + itemId/itemName).
+  - scope="world" — effect on a world-scope item (itemId/itemName).
+  - scope="actor-direct" — effect placed directly on the actor itself (actorId or actorName; no item fields). Use this for one-off modifiers such as a −10 WS debuff on an NPC.
+
+name + trigger are the required fields on effect; script defaults to "" and is optional.
+
+Returns:
+  - On success: created effect ID (and full document if returnFullPayload=true). parentType:"Actor" when scope="actor-direct".
+  - On error: throws with an actionable message.
+
+Performance Notes:
+- Default response is a small created-effect-id summary. Pass returnFullPayload:true for the full effect document — larger response, opt-in only when the caller needs to inspect the full shape.
+
+Security: script / preApplyScript / enableConditionScript fields are executed by Foundry under GM authority. MCP does not sandbox script content. Only invoke with scripts you wrote or audited.`,
         inputSchema: {
           type: 'object',
           properties: {

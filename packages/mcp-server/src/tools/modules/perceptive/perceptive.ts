@@ -92,6 +92,13 @@ export class ModulePerceptiveTool extends BaseTool {
 Conditional: returns MODULE_NOT_ACTIVE when perceptive is absent/inactive — EXCEPT wfrp-stealth-delegate, which FAILS OPEN (returns a soft message, applied:false) so a WFRP stealth flow is never blocked.
 Pre-flight: module-probe.is-active perceptive before using this tool.
 
+Use this when:
+- Toggling a token's Perceptive stealth state, or resetting its lingering spotted-by/stealth flags after a scene change.
+- Recording that one token has spotted another (set-spotting), or configuring whether/how a token can be spotted (set-spottable).
+- Writing a resolved WFRP4e Stealth test's Success Level into Perceptive's spotting DCs (wfrp-stealth-delegate).
+- Peeking through or manually swinging/sliding a door for one or more tokens.
+- Reading a token's current stealth/spotting/DC/light-level state for GM situational awareness.
+
 DOOR OPS need a GM (warhammer-mcp runs as GM) — peek-door/move-door call Perceptive's GM-direct path (no socket, no confirm dialog). They create persistent invisible aux Wall docs; delete-before-recreate to avoid orphan accumulation.
 
 8 actions:
@@ -105,7 +112,12 @@ wfrp-stealth-delegate { tokenId|tokenName, sceneId?, sl } — write PPDCFlag=APD
 get-state { tokenId|tokenName, sceneId? } — read stealthing / spottedBy / PPDC / APDC / canbeSpotted / lightLevel.
 
 Token targets accept id OR name. sceneId defaults to the active scene. Doors are addressed by Wall id (walls have no name).
-Example: { action: "set-spottable", tokenName: "Sneaky Thief", canbeSpotted: true, ppdc: 40, apdc: 30 }`,
+Example: { action: "set-spottable", tokenName: "Sneaky Thief", canbeSpotted: true, ppdc: 40, apdc: 30 }
+
+Do NOT use this tool to actually ROLL the WFRP4e Stealth/Perception test — use \`dice-roll\`/actor test tools for that. module-perceptive only records the resulting outcome (stealth flags, spotting DCs) after a test is already resolved elsewhere.
+
+Performance Notes:
+- All 8 actions return a small fixed-shape result (one token's or door's flag state) — no response modes, no pagination; cost does not scale with world size.`,
         inputSchema: {
           type: 'object',
           properties: {

@@ -188,7 +188,19 @@ export class CrossDocFkTool extends BaseTool {
                 description:
                     `Audit and repair stale cross-document foreign-key references across the world catalog. Phase 10 ships 3 actions over the FK catalog at shared/src/fk-catalog.ts.
 
+Use this when:
+- Doing a world-wide sweep for stale FK residue after bulk deletes (Foundry does NOT auto-null FK fields on referent delete) — action:"audit-orphans".
+- Checking one specific document's FK health before deleting it, both what it points at and what points at it — action:"audit-document".
+- Clearing a batch of already-identified stale refs, previewed with dryRun:true first — action:"repair-orphans".
+- Diagnosing a broken @UUID link, a dangling Scene.journal reference, or a stale hotbar macro slot after the target document was removed.
+
+Do NOT use this for routine single-document editing — use the per-doc-type CRUD tool (e.g. \`scene\`, \`journal\`) for a known single-FK fix; this tool is for world-wide sweep/repair, not everyday editing. \`includeCompendiums:true\` on audit-orphans is explicitly slow — see Performance Notes.
+
 Actions: audit-orphans, audit-document, repair-orphans.
+
+Performance Notes:
+- audit-orphans is paginated (page/pageSize; default 100/page, max 500) — a full-world sweep on a large catalog can take multiple pages. includeCompendiums:true additionally scans compendium-prefixed UUIDs and is measurably slower; leave it false unless you need compendium-ref coverage.
+- audit-document and repair-orphans return small fixed-shape responses scoped to the documents/refs you pass in — no pagination needed.
 
 Key rules:
 - audit-orphans is paginated (page/pageSize; default 100/page, max 500). includeCompendiums defaults false (world FKs only).

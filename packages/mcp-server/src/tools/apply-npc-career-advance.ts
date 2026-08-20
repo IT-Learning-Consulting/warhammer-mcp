@@ -32,7 +32,17 @@ export class ApplyNpcCareerAdvanceTool extends BaseTool {
           openWorldHint: true,
         },
         description:
-          'Apply a career\'s auto-advancement to an npc-type actor. Invokes StandardActorModel.advance(career) (wfrp4e.js:6623) which runs the Advancement class\'s dialog-free advance() method — stamps characteristics, skills, and talents per the career\'s schema. BYPASSES THE WFRP4E CONFIRMATION DIALOG, unlike clicking "Complete" on the career card. Requires actor.type === "npc" and a career-type item already embedded on the actor. Verifies the actual characteristic/skill/talent deltas landed (not just that the actor/career still exist) and fails loud on a genuine advance timeout instead of silently reporting success.',
+          `Apply a career's auto-advancement to an npc-type actor. Invokes StandardActorModel.advance(career) (wfrp4e.js:6623) which runs the Advancement class's dialog-free advance() method — stamps characteristics, skills, and talents per the career's schema. BYPASSES THE WFRP4E CONFIRMATION DIALOG, unlike clicking "Complete" on the career card. Requires actor.type === "npc" and a career-type item already embedded on the actor. Verifies the actual characteristic/skill/talent deltas landed (not just that the actor/career still exist) and fails loud on a genuine advance timeout instead of silently reporting success.
+
+Use this when:
+- Advancing an npc-type actor's already-embedded career headlessly (autonomous NPC generation flows), where clicking "Complete" on the career card isn't available.
+- Applying the full career advancement schema (characteristics + skills + talents) in one call, with post-write verification of the actual deltas.
+- Trimming the resulting talent set to a single talent (talentPolicy:"min") for a lighter-weight NPC, instead of the default "all".
+
+Do NOT use this on a creature-type actor — creature-type actors auto-advance via the wfrp4e _onCreate hook and need no MCP call for this. This tool is npc-type only.
+
+Performance Notes:
+- Single small response: the actual characteristic/skill/talent deltas that landed, no full sheet payload. Mode-less — no response-mode variance.`,
         inputSchema: {
           type: 'object',
           properties: {

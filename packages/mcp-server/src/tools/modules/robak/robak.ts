@@ -67,6 +67,12 @@ actor's sheet ("Perception", "Cool", "Stealth (Rural)"). A characteristic name/k
 ROBAK_ROLL_FAILED (no skill by that name). For a pure characteristic test, use a wfrp4e system macro
 or the dice-roll tool instead.
 
+Use this when:
+- Resolving a GM-secret skill test the player should never see the dialog for (an ambush Perception check, a passive Cool test under fire).
+- Triggering a passive-talent check silently (Sixth Sense, Trapper, Nose for Trouble) without interrupting play with a dialog.
+- Applying a difficulty band or flat modifier to a skill roll while keeping the result hidden or GM-only via rollMode.
+- Resolving any skill test where waiting on a player-facing dialog (request-player-rolls) would be the wrong UX.
+
 1 action:
 - roll-skill-silent { actorId, skill, options? } — rolls a named skill immediately, no dialog.
   - skill: exact skill name as it appears on the actor ("Perception", "Cool", "Dodge"). Characteristic names/keys are NOT supported.
@@ -77,7 +83,12 @@ or the dice-roll tool instead.
 GM required. No confirm needed (no destructive state change beyond the chat record).
 
 Example:
-- { action: "roll-skill-silent", actorId: "Actor.abc123", skill: "Perception", options: { difficulty: "average" } }`,
+- { action: "roll-skill-silent", actorId: "Actor.abc123", skill: "Perception", options: { difficulty: "average" } }
+
+Do NOT use this tool for a pure characteristic test — use \`dice-roll\` for that. module-robak resolves SKILL names only (via actor.setupSkill); a characteristic name/key ("Agility", "ag") returns ROBAK_ROLL_FAILED (BUG-359).
+
+Performance Notes:
+- roll-skill-silent returns a single small fixed-shape result (roll, SL, outcome) — no response modes, no pagination.`,
         inputSchema: {
           type: 'object',
           properties: {

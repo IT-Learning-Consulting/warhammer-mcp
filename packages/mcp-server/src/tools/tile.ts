@@ -133,6 +133,15 @@ export class TileTool extends BaseTool {
         description:
           `Manage Foundry VTT TileDocument objects via 8 actions (embedded-doc CRUD + list + Phase 9C duplicate/z-order). Tiles live on scenes (scene.tiles collection).
 
+Use this when:
+- Placing an image-based decorative element on a scene (a rug, a rubble pile, an overhead roof) with texture, position, and occlusion settings.
+- Adjusting an existing tile's position, texture, elevation, or occlusion mode (action:"update").
+- Reordering a tile's stacking order relative to other tiles (action:"bring-to-front"/"send-to-back").
+- Auditing tiles on a scene, e.g. listing only overhead tiles before adjusting vision occlusion (action:"list"/"get").
+- Cloning an existing tile's texture/settings onto a new placement (action:"duplicate").
+
+Do NOT use this for actor-linked tokens — use \`token\` instead; a tile is decorative and carries no actor link.
+
 **Actions:**
 - **create**: Place a new tile on a scene. Required: sceneId, width, height. Optional: x, y, elevation, sort, rotation, alpha, hidden, locked, texture (TextureData), restrictions, occlusion, video, flags. Returns full TileViewModel.
 - **update**: Partial-diff update. sceneId + tileId + changes (≥1 field). Same writable surface as create.
@@ -147,6 +156,9 @@ export class TileTool extends BaseTool {
 **occlusion.mode values:** 0=NONE, 1=FADE, 3=RADIAL, 4=VISION (gap at 2). Tiles with elevation>0 or mode=4 are treated as overhead tiles.
 
 **texture fields (TextureData):** src, anchorX, anchorY, offsetX, offsetY, fit, scaleX, scaleY, rotation, tint, alphaThreshold.
+
+Performance Notes:
+- create/update/delete/get/duplicate/bring-to-front/send-to-back return a single tile record — no pagination. list is paginated (page/pageSize, max 100, default 50); pass countOnly:true for a cheap total without items.
 
 **Examples:**
 - create: {action:"create", sceneId:"abc", width:200, height:200, texture:{src:"modules/foo/tile.webp"}}

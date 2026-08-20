@@ -141,6 +141,15 @@ export class SceneTool extends BaseTool {
         description:
           `Manage Foundry VTT Scenes via 14 actions: create, update, delete, clone, activate, view, thumbnail, get, list, clear-layer, reset-fog, lighting-transition, preload, import-from-compendium. Token placement lives on the dedicated \`token\` umbrella.
 
+Use this when:
+- Creating a new map/battle scene from a background image, with grid/lighting/fog configuration (action:"create").
+- Switching which scene is world-active for all players, vs. changing only your own local camera (action:"activate" vs "view" — a real Foundry API split).
+- Bulk-clearing one embedded collection (lights/sounds/tiles/templates/regions/drawings/notes) after a scene redesign, previewed with dryRun:true first (action:"clear-layer").
+- Animating and persisting a darkness/day-night transition on a scene (action:"lighting-transition").
+- Auditing scenes, including FK-stale journal/playlist/folder links, before a cleanup pass (action:"list"/"get").
+
+Do NOT use this for placing/moving tokens on a scene — use \`token\` instead; scene ownership of embedded collections excludes tokens by design (they're on the dedicated \`token\` umbrella).
+
 **Actions:**
 - **create**: Create a Scene. Required: name. Optional: full SceneConfig surface (background, grid, fog, environment, foreground, dimensions, padding, FK fields journal/playlist/folder, ownership, flags, navigation). Returns full SceneView. **Dimension auto-fit (BUG-080 fix):** when \`background.src\` is set and both \`width\` and \`height\` are omitted (or null), the handler probes the texture and sets scene dimensions to the image's natural width/height. Pass explicit \`width\`/\`height\` to override.
 - **update**: Partial-diff update. sceneId + changes (≥1 field). Same writable surface as create; name optional.
@@ -160,6 +169,9 @@ export class SceneTool extends BaseTool {
 **FK fields:** journal, journalEntryPage, playlist, playlistSound, folder are ForeignDocumentFields that Foundry does NOT auto-NULL on referent delete. get's formatter flags stale FKs via \`journalLinked: false\`.
 
 **Grid type enum** (CONST.GRID_TYPES): 0=GRIDLESS, 1=SQUARE, 2=HEXODDR, 3=HEXEVENR, 4=HEXODDQ, 5=HEXEVENQ.
+
+Performance Notes:
+- create/update/delete/clone/activate/view/thumbnail/get return a single scene record (get with includeTokens:true adds the token list — larger on token-heavy scenes). list is paginated (page/pageSize, max 100); pass countOnly:true for a cheap total. clear-layer's dryRun:true preview returns the full {count, items} set for the target layer — can be large on a densely-populated scene.
 
 **Examples:**
 - create: {action:"create", name:"Red Moon Inn", background:{src:"worlds/aitww/maps/tavern.webp"}, grid:{type:1, size:100, distance:5, units:"yds"}, journal:"abc123"}

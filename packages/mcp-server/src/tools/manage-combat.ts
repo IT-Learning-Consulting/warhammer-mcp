@@ -57,7 +57,17 @@ export class ManageCombatTools extends BaseTool {
           idempotentHint: true,
           openWorldHint: true,
         },
-        description: 'Get the current WFRP 4e combat state (id, round, turn, active combatant summary). Returns null if no active combat. Read-only.',
+        description: `Get the current WFRP 4e combat state (id, round, turn, active combatant summary). Returns null if no active combat. Read-only.
+
+Use this when:
+- Checking whether combat is currently active on the scene before advancing it.
+- Reading the current round/turn/active-combatant summary for narration or decision-making.
+- Confirming a specific combat's state by id, when combatId is known.
+
+Do NOT use this to enumerate every combatant with initiative/defeated/hidden state — use list-combatants instead, which returns the full per-combatant array this tool's summary omits.
+
+Performance Notes:
+- Single small response: id/round/turn/active-combatant summary, no full combatant array. Mode-less — no response-mode variance.`,
         inputSchema: {
           type: 'object',
           properties: {
@@ -77,7 +87,18 @@ export class ManageCombatTools extends BaseTool {
           idempotentHint: true,
           openWorldHint: true,
         },
-        description: 'List combatants in the current or specified WFRP 4e combat. Returns {combatId, combatants:[]} envelope: combatId=null means no active combat on the scene; combatId="<id>" with combatants=[] means active combat with zero combatants. Each combatant entry has id, actorId, tokenId, name, initiative (null if not yet rolled), defeated, and hidden. Read-only.',
+        description: `List combatants in the current or specified WFRP 4e combat. Returns {combatId, combatants:[]} envelope: combatId=null means no active combat on the scene; combatId="<id>" with combatants=[] means active combat with zero combatants. Each combatant entry has id, actorId, tokenId, name, initiative (null if not yet rolled), defeated, and hidden. Read-only.
+
+Use this when:
+- Enumerating every combatant currently in the tracker with their initiative/defeated/hidden state.
+- Resolving a combatant's id before a follow-up combatant read/write call.
+- Checking whether a specific actor is already in the current combat.
+- Distinguishing "no active combat" (combatId=null) from "active combat with zero combatants" (combatId set, combatants=[]).
+
+Do NOT use this for per-combatant field reads/writes — use combatant instead. Do NOT use this for a compact round/turn summary — use get-combat.
+
+Performance Notes:
+- Response scales with the number of combatants in the tracker — flat array, no pagination.`,
         inputSchema: {
           type: 'object',
           properties: {
@@ -97,7 +118,17 @@ export class ManageCombatTools extends BaseTool {
           idempotentHint: false,
           openWorldHint: true,
         },
-        description: 'Advance WFRP 4e combat state. action="rollNPC" and "next/prev/nextRound/prevRound" are dialog-free and fire-and-forget. action="rollAll" and "start" open the Foundry initiative dialog and BLOCK the MCP call until the GM dismisses it — use these only when an interactive GM is at the keyboard. For autonomous flows (no GM at keyboard), use rollNPC to roll initiative for all NPCs, then next to advance turns — this is the dialog-free pattern and is what eval probes use. Use end-combat to clear the tracker.',
+        description: `Advance WFRP 4e combat state. action="rollNPC" and "next/prev/nextRound/prevRound" are dialog-free and fire-and-forget. action="rollAll" and "start" open the Foundry initiative dialog and BLOCK the MCP call until the GM dismisses it — use these only when an interactive GM is at the keyboard. For autonomous flows (no GM at keyboard), use rollNPC to roll initiative for all NPCs, then next to advance turns — this is the dialog-free pattern and is what eval probes use. Use end-combat to clear the tracker.
+
+Use this when:
+- Rolling initiative for all NPCs autonomously via action:"rollNPC" (dialog-free).
+- Advancing to the next/previous turn or round via action:"next"/"prev"/"nextRound"/"prevRound" (dialog-free, fire-and-forget).
+- Starting combat or rolling initiative for everyone (action:"start"/"rollAll") ONLY when an interactive GM is present to dismiss the resulting Foundry dialog.
+
+Do NOT use action:"start"/"rollAll" from an autonomous flow with no GM at the keyboard — the call will block on the initiative dialog. Do NOT use this to permanently clear the combat tracker — use end-combat instead.
+
+Performance Notes:
+- Single small response: the resulting combat state (round/turn), no full combatant array. Mode-less — no response-mode variance.`,
         inputSchema: {
           type: 'object',
           properties: {
@@ -124,7 +155,17 @@ export class ManageCombatTools extends BaseTool {
           idempotentHint: false,
           openWorldHint: true,
         },
-        description: 'Add actors to a WFRP 4e combat as combatants. Requires at least one actor ID.',
+        description: `Add actors to a WFRP 4e combat as combatants. Requires at least one actor ID.
+
+Use this when:
+- Bringing new actors (PCs, NPCs, creatures) into an ongoing or newly started combat.
+- Adding multiple actors to the tracker in one call via actorIds.
+- Placing added combatants' tokens on a specific scene via the optional sceneId.
+
+Do NOT use this to remove combatants — use remove-combatants (the inverse operation) instead.
+
+Performance Notes:
+- Single small response: the added combatant ids, no full combatant array. Mode-less — no response-mode variance.`,
         inputSchema: {
           type: 'object',
           properties: {
@@ -156,7 +197,17 @@ export class ManageCombatTools extends BaseTool {
           idempotentHint: true,
           openWorldHint: true,
         },
-        description: 'Remove combatants from a WFRP 4e combat by combatant ID.',
+        description: `Remove combatants from a WFRP 4e combat by combatant ID.
+
+Use this when:
+- Pulling a defeated or fled actor out of the tracker without ending combat entirely.
+- Removing multiple combatants in one call via combatantIds.
+- Correcting an erroneous add-combatants call.
+
+Do NOT use this to add combatants — use add-combatants (the inverse operation) instead.
+
+Performance Notes:
+- Single small response: the removed combatant ids, no full combatant array. Mode-less — no response-mode variance.`,
         inputSchema: {
           type: 'object',
           properties: {
@@ -184,7 +235,24 @@ export class ManageCombatTools extends BaseTool {
           idempotentHint: true,
           openWorldHint: true,
         },
-        description: 'End (delete) a WFRP 4e combat encounter, clearing the tracker and releasing all combatants.\n\nArgs:\n  - combatId (string, optional): Specific combat UUID. Omit to target the active combat on the current scene.\n\nReturns:\n  - On success: confirmation that the combat was deleted.\n  - On error: throws with an actionable message (e.g. no active combat found).\n\nUse when: the encounter is resolved and you need to clear the combat tracker. Don\'t use when: you only want to pause combat — this permanently deletes the tracker.',
+        description: `End (delete) a WFRP 4e combat encounter, clearing the tracker and releasing all combatants.
+
+Use this when:
+- The encounter is fully resolved and the combat tracker should be cleared.
+- Cleaning up a stray/test combat that should never have persisted.
+- Releasing all combatants from the tracker in one call, without deleting the underlying actors.
+
+Do NOT use this to pause or temporarily step away from combat — this permanently deletes the tracker. Use advance-combat (action:"next"/"prev"/etc.) to pause between turns instead.
+
+Args:
+  - combatId (string, optional): Specific combat UUID. Omit to target the active combat on the current scene.
+
+Returns:
+  - On success: confirmation that the combat was deleted.
+  - On error: throws with an actionable message (e.g. no active combat found).
+
+Performance Notes:
+- Single small response: deletion confirmation, no combatant array. Mode-less — no response-mode variance.`,
         inputSchema: {
           type: 'object',
           properties: {

@@ -210,6 +210,15 @@ export class PlaylistTool extends BaseTool {
         description:
           `Manage Foundry VTT Playlist + embedded PlaylistSound documents. 14 actions span world-level Playlist CRUD, embedded sound CRUD, playback control, and Phase 9C convenience (duplicate / pause-sound / bulk-import / preload).
 
+Use this when:
+- Setting up a music/ambience playlist with one or more tracks, e.g. a tavern loop or a combat stinger set (action:"create-playlist").
+- Starting, stopping, or pausing playback for a playlist or an individual track (action:"play"/"stop"/"pause-sound").
+- Bulk-importing every audio file in a folder as PlaylistSounds in one call (action:"bulk-import-sounds").
+- Adding, adjusting, or removing individual tracks within an existing playlist (action:"add-sound"/"update-sound"/"delete-sound").
+- Auditing playlists before deciding which to play, or cloning one as a starting point (action:"list-playlists"/"get-playlist"/"duplicate-playlist").
+
+Do NOT use this for scene-placed positional ambient sound sources — use \`sound\` instead; \`playlist\` is for playlist-driven music/audio tracks, not the AmbientSound document type.
+
 **Actions:**
 - **create-playlist**: Create a new Playlist. Required: name. Optional: description, channel (environment/interface/music), mode (-1 disabled / 0 sequential / 1 shuffle / 2 simultaneous), playing, fade (ms), seed, sorting (a/m), sort, folder, ownership, flags, and inline sounds array (each sound: name, path required + description, channel, repeat, fade, sort, volume 0-1, playing, pausedTime, flags). Returns id, name, soundIds, requestedChanges, playlist view.
 - **update-playlist**: Partial-diff update. playlistId + changes (≥1 of: name, description, channel, mode, playing, fade, seed, sorting, sort, folder, ownership, flags). Returns playlist view + changedFields.
@@ -225,6 +234,9 @@ export class PlaylistTool extends BaseTool {
 - **pause-sound** (Phase 9C): Pause a PlaylistSound (sets playing:false + optional pausedTime). Required: playlistId, soundId. Optional pausedTime (seconds). Dedicated wrapper over update-sound.
 - **bulk-import-sounds** (Phase 9C): Create one PlaylistSound per audio file in a folder (FilePicker.browse). Required: playlistId, folder. Optional source (data/public/s3, default data). Returns imported count + file list.
 - **preload-sound** (Phase 9C): Preload an audio path to all clients (game.audio.preload). Required: src. Transient — no persisted state.
+
+Performance Notes:
+- list-playlists is paginated (page/pageSize, max 100); pass countOnly:true for a cheap total. get-playlist returns the full nested sounds array — can be large on a playlist with many tracks. bulk-import-sounds' cost scales with the folder's file count (one create per file). All other actions return a single small fixed-shape response.
 
 **Examples:**
 - create: {action:"create-playlist", name:"Tavern", channel:"environment", mode:1, sounds:[{path:"music/tavern.ogg", volume:0.4}]}

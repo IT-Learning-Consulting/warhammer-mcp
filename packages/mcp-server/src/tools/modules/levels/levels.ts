@@ -120,6 +120,13 @@ Pre-flight: module-probe.is-active levels before using this tool.
 
 Always writes core \`elevation\` (NEVER the deprecated flags.levels.rangeBottom). GM required for all actions.
 
+Use this when:
+- Setting a token's floor elevation (and optional LOS eye-height) for a multi-floor scene.
+- Configuring a tile's visible elevation range so it acts as a floor/roof/basement overlay.
+- Defining named floor bands for a scene, or wiring a region as a stair/elevator between them.
+- Checking which Levels-family modules (levels, wall-height, volumetric templates, layer effects) are active and their migration status before authoring elevation data.
+- Bulk-rescaling every elevation-bearing document after changing a scene's grid distance (dry-run first, then confirm:true).
+
 11 actions:
 - get-capabilities      {}                                                  — family/active state + migration status + settings (read)
 - get-elevation-data    { uuid }                                            — elevation + flags.levels/wall-height for one doc (read)
@@ -142,7 +149,14 @@ Examples:
 - { action: "set-token-elevation", sceneId: "abc", tokenId: "xyz", elevation: 10 }
 - { action: "set-tile-range", sceneId: "abc", tileId: "t1", elevation: 10, rangeTop: 19, showIfAbove: true, allWallBlockSight: true }
 - { action: "set-region-elevation", sceneId: "abc", regionId: "r1", bottom: 0, top: 10, stairMode: "stair" }
-- { action: "rescale-grid-distance", sceneId: "abc", prevDistance: 5, currDistance: 2 }`,
+- { action: "rescale-grid-distance", sceneId: "abc", prevDistance: 5, currDistance: 2 }
+
+Do NOT use this tool for a document's base fields (position, name, light radius) — use the core \`scene\`/\`tile\`/\`light\` tools for those. module-levels is scoped strictly to the elevation-family fields (elevation, range, wall-height, region stairs); it has no canvas/3D-rendering control of its own.
+
+Performance Notes:
+- get-elevation-data/set-*/define-scene-levels/set-region-elevation: small fixed-shape response (one document's elevation fields) — no response modes, no pagination.
+- get-capabilities: small fixed summary of family/migration/settings state.
+- rescale-grid-distance: response size scales with affected-document counts across the scene (or world when sceneId omitted) — still one summary object, not per-document detail, so cost stays bounded even on a large scene.`,
         inputSchema: {
           type: 'object',
           properties: {

@@ -35,7 +35,18 @@ export class ApplyDamageTool extends BaseTool {
           idempotentHint: false,
           openWorldHint: true,
         },
-        description: 'Apply WFRP 4e damage to an actor via the system\'s actor.applyBasicDamage path (AP + TB automatically applied by the system per damageType/hitLocation). Returns before/after status snapshot (wounds, conditions, advantage). IGNORE_ALL bypasses AP and TB soak, but does NOT bypass creature trait-based reductions (e.g. Undead). Effective wounds removed may be less than amount.',
+        description: `Apply WFRP 4e damage to an actor via the system's actor.applyBasicDamage path (AP + TB automatically applied by the system per damageType/hitLocation). Returns before/after status snapshot (wounds, conditions, advantage). IGNORE_ALL bypasses AP and TB soak, but does NOT bypass creature trait-based reductions (e.g. Undead). Effective wounds removed may be less than amount.
+
+Use this when:
+- Applying live combat damage to a single actor, letting the system compute AP/TB soak per damageType and hitLocation.
+- Applying damage that should bypass armor or toughness soak (IGNORE_AP / IGNORE_TB / IGNORE_ALL) for effects that ignore protection.
+- Checking the before/after wounds/conditions/advantage snapshot as proof the damage landed.
+- Dry-running a damage calculation with amount:0 to preview soak without mutating the actor.
+
+Do NOT use this for batch offline-simulator casualty writes to unlinked scene tokens — use apply-token-casualties instead, which is built for bulk token-level casualty application rather than a single live actor's damage roll.
+
+Performance Notes:
+- Single small response: before/after status snapshot for one actor, no full sheet payload. Mode-less — no response-mode variance.`,
         inputSchema: {
           type: 'object',
           properties: {

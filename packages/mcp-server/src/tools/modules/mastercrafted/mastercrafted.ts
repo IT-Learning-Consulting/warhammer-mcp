@@ -144,13 +144,26 @@ export class ModuleMastercraftedTool extends BaseTool {
 Conditional: returns MODULE_NOT_ACTIVE when mastercrafted is absent/inactive.
 Pre-flight: module-probe.is-active mastercrafted before using this tool.
 
+Use this when:
+- Browsing or searching a recipe book's recipes (by name or by ingredient) before offering a crafting option to a player.
+- Checking whether an actor currently has the ingredients to craft a specific recipe.
+- Executing a craft — instant or timed — that consumes ingredients and delivers products to an actor.
+- Resolving a timed recipe's delayed-delivery queue once its craft time has elapsed.
+- Authoring new recipes/recipe books, or granting a specific player discovery access to a hidden recipe.
+
 7 actions:
 Reads — list-recipes { filter? }; get-recipe { pageUuid }; check-craftable { pageUuid, actorUuid, inventoryActorUuid? }; list-pending-crafts { actorUuids? }.
 GM writes — execute-craft { pageUuid, actorUuid, inventoryActorUuid?, componentSelections? {ingredientId:componentId}, productId?, confirm:true } (consumes ingredients, delivers products; timed recipes queue a pending flag); process-delayed-crafts { actorUuids? } (resolves crafts past their worldTime); grant-recipe-discovery { pageUuid, userId, level?: 0|1|2 } (default 1/Observer; level:0 REVOKES the per-user discovery override — BUG-468).
 
 WFRP4e: execute-craft auto-sets the world setting customQuantityPath = "quantity.value" (when unset / the broken "quantity" default) so item quantities stack correctly. Timed recipe "time" is in MINUTES.
 
-Example: { action: "execute-craft", pageUuid: "JournalEntry.x.JournalEntryPage.y", actorUuid: "Actor.z", confirm: true }`,
+Example: { action: "execute-craft", pageUuid: "JournalEntry.x.JournalEntryPage.y", actorUuid: "Actor.z", confirm: true }
+
+Do NOT use this tool for a plain item grant with no ingredient consumption or crafting-time logic — use \`create-custom-item\`/\`add-item-from-compendium\` for that. module-mastercrafted is specifically for recipe-driven crafting (ingredient consumption, timed queues, discovery gating).
+
+Performance Notes:
+- Most actions return a small fixed-shape result (a recipe/book record, a craftability check, or a write confirmation) — no response modes, no pagination.
+- list-recipes/search-by-ingredient/list-pending-crafts: size scales with recipe/pending-craft count in scope (filterable via filter/actorUuids params to narrow).`,
         inputSchema: {
           type: 'object',
           properties: {

@@ -32,7 +32,17 @@ export class AddItemFromCompendiumTool extends BaseTool {
           openWorldHint: true,
         },
         description:
-          'Embed a compendium item onto an actor. Accepts the full Foundry UUID via itemUuid (preferred) or the legacy compendiumId alias (deprecated). Thin pass-through to the Foundry-module addItemFromCompendium query — preserves the source item\'s Active Effects chain (e.g. critical-wound bleeding, mutation stat penalties, disease incubation). Used by /wfrp-critical, /wfrp-mutation, /wfrp-disease, /wfrp-corruption. Does not enforce WFRP rules. Exactly one of {itemUuid, compendiumId} must be supplied. Pass skipSpecialisationChoice:true when adding bare isSpec skills (e.g. "Lore ()") to suppress the WFRP4e specialisation-choice dialog that would otherwise block autonomous flows.',
+          `Embed a compendium item onto an actor. Accepts the full Foundry UUID via itemUuid (preferred) or the legacy compendiumId alias (deprecated). Thin pass-through to the Foundry-module addItemFromCompendium query — preserves the source item's Active Effects chain (e.g. critical-wound bleeding, mutation stat penalties, disease incubation). Used by /wfrp-critical, /wfrp-mutation, /wfrp-disease, /wfrp-corruption. Does not enforce WFRP rules. Exactly one of {itemUuid, compendiumId} must be supplied. Pass skipSpecialisationChoice:true when adding bare isSpec skills (e.g. "Lore ()") to suppress the WFRP4e specialisation-choice dialog that would otherwise block autonomous flows.
+
+Use this when:
+- Applying a published critical wound, mutation, disease, or corruption item (with its full Active Effects chain intact) to an actor.
+- Embedding an unmodified published compendium item (weapon, armor, trapping, talent, skill) onto a character or NPC.
+- Adding a bare specialisation skill (e.g. "Lore ()") autonomously via skipSpecialisationChoice:true, bypassing the WFRP4e dialog.
+
+Do NOT use this to author a homebrew item not sourced from a compendium — use create-custom-item instead.
+
+Performance Notes:
+- Single small response: the embedded item's id/name, no full item payload echoed back. Mode-less — no response-mode variance.`,
         inputSchema: {
           type: 'object',
           properties: {

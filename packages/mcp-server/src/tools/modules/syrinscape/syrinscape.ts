@@ -73,14 +73,26 @@ VERIFIABILITY CEILING: play/stop calls only confirm Syrinscape ACCEPTED the comm
 
 CACHE-ONLY LIST ACTIONS: list-soundsets/list-moods read the world's cached settings directly (populated only when a GM has opened the Syrinscape Browser at least once with a valid session) — they NEVER hit Syrinscape's REST API (which itself needs auth and can throw on a missing token). A cold/never-populated world returns an empty list plus a hint to refresh via the Syrinscape Browser — this is a valid state, not an error.
 
+Use this when:
+- Triggering a mood or one-shot element on a live Syrinscape cloud session to match the current scene's tone.
+- Stopping a specific mood/element, or stopping all Syrinscape playback at once (scene transition, combat end).
+- Checking whether a specific mood/element is currently believed to be playing (local WS-echo state).
+- Browsing the cached soundset/mood catalog to find a valid id before calling set-mood/play-element.
+
 8 actions:
 set-mood { id } / stop-mood { id } / play-element { id } / stop-element { id } — GM-only, auth-gated.
 stop-all {} — GM-only, auth-gated.
 is-playing { elementId } — ungated, pure in-memory read, works without an authToken.
-list-soundsets { limit?, offset?, filter? } — ungated cache read, returns [] + hint when cold. BOUNDED (BUG-490/464): default page 50 (max 500); response carries totalAvailable + truncated; filter = case-insensitive name substring. The live warm cache holds 500+ soundsets / 4,500+ moods — unbounded dumps overflowed the response budget.
+list-soundsets { limit?, offset?, filter? } — ungated cache read, returns [] + hint when cold; filter = case-insensitive name substring.
 list-moods { soundsetName?, limit?, offset?, filter? } — ungated cache read, same bounded contract; soundsetName narrows to one soundset slug, filter matches mood names.
 
-Example: { action: "set-mood", id: "m:12345" }`,
+Example: { action: "set-mood", id: "m:12345" }
+
+Do NOT use this tool for standard Foundry audio playback — use \`playlist\`/\`sound\` (core tools) for that. module-syrinscape controls an EXTERNAL Syrinscape cloud session (needs a paid account + authToken); it never touches a Foundry Playlist/PlaylistSound document.
+
+Performance Notes:
+- set-mood/stop-mood/play-element/stop-element/stop-all/is-playing: small fixed-shape response (an accepted/playing confirmation) — no pagination.
+- list-soundsets/list-moods: BOUNDED (BUG-490/464) — default page 50 rows (max 500); response carries totalAvailable + truncated so a page boundary is always visible. The live warm cache holds 500+ soundsets / 4,500+ moods — always page with limit/offset or narrow with filter/soundsetName rather than requesting the max in one call.`,
         inputSchema: {
           type: 'object',
           properties: {

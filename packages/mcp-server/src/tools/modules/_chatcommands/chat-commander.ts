@@ -105,12 +105,24 @@ export class ModuleChatCommanderTool extends BaseTool {
 Conditional: returns MODULE_NOT_ACTIVE when _chatcommands is absent/inactive.
 Pre-flight: module-probe.is-active _chatcommands before using this tool.
 
+Use this when:
+- Listing which /slash commands are currently registered, optionally filtered by module id, role gate, or name substring.
+- Looking up a specific command's callback/autocomplete metadata by name or alias, e.g. before deciding whether a new registration would conflict.
+- Registering a new GM-authored /slash command backed by a persistent world-script macro (e.g. a custom "/roll-fate" shortcut).
+- Removing a command — and optionally its backing macro — that is no longer needed.
+- Auditing whether a built-in WFRP4e slash command (registered under module id "wfrp4e") has been shadowed by a same-named third-party registration.
+
 4 actions:
 Reads — list-commands { filter? { module?, requiredRole?, nameSubstring? } }; get-command { name } (primary name or alias; null if absent).
 Confirm-gated writes — register-command { name (must start with "/"), callbackBody, module?, description?, icon?, requiredRole?, aliases?, closeOnComplete?, autocompleteBody?, confirm:true } (HIGH: callbackBody is raw JS run in Foundry — always show the body + require confirm; DEPENDENCY_GATED — needs advanced-macros active to persist via a world-script macro); unregister-command { name, deleteWorldScript?, immediateUnregister?, confirm:true } (MEDIUM: destructive — warns when unregistering a built-in WFRP4e slash command — those are registered under module id "wfrp4e" and re-register on reload).
 
 Persistence: register-command creates a world-script macro (advanced-macros runAsWorldScript + chatCommandsReady hook) so the command re-registers on every world reload, AND registers it immediately in the current session. Without advanced-macros, register-command fails with ADVANCED_MACROS_NOT_ACTIVE.
 Naming conflicts: _chatcommands auto-namespaces collisions to /<moduleId>.<name>; register-command returns the ACTUAL commandName (compare to requestedName).
+
+Do NOT use this tool to post ordinary chat text or messages — use the \`chat-message\` tool for that. module-chat-commander only manages the /slash command REGISTRY (listing, inspecting, registering, unregistering the commands themselves); it never sends a chat message itself.
+
+Performance Notes:
+- All 4 actions return a small fixed-shape summary (command list/detail, or a register/unregister result) — no response modes, no pagination; cost does not scale with world size.
 
 Example: { action: "list-commands", filter: { module: "wfrp4e" } } — the WFRP4e built-ins register under module id "wfrp4e" (BUG-502: filtering by the module PACKAGE id returns 0).`,
         inputSchema: {

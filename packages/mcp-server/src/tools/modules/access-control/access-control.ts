@@ -71,6 +71,13 @@ LocknKey corrections: WFRP4e has NO default break/pickpocket formula (REPAIR_GAT
 configure). Key item type defaults to "cargo"; recommend the KeyItemtype setting = "trapping".
 LockView corrections: there is NO token-lock and NO zoom min/max — LockView is canvas-view only.
 
+Use this when:
+- Configuring a lock (DC, jam state, passkey, key linkage) on an EXISTING door Wall, Token, or Tile.
+- Creating and linking a key Item to a lock, or granting keyless/identity-based access.
+- Resolving a player's lockpick/break/passkey attempt and applying the GM-adjudicated outcome.
+- Locking/unlocking a scene's pan, zoom, or bounding box, or forcing a player's viewport to a specific position.
+- Checking which access-control bundle members (LocknKey, LockView, lib-wrapper) are currently active before dispatching a member-specific action.
+
 — BUNDLE —
 - get-bundle-status                         — report active state of LocknKey, LockView, lib-wrapper
 
@@ -106,7 +113,12 @@ LockView corrections: there is NO token-lock and NO zoom min/max — LockView is
 - set-view-dialog   { userIds, data, confirm:true } — raw dialog-style view push (SWC)
 - set-view-with-pan-mode { userIds, pan?, zoom?, coordinates?, gridSpaces?, scale?, confirm:true } — named pan/zoom modes (SWC)
 
-GM required for all write actions. Forced-viewport + circumvent + transfer require confirm:true.`,
+GM required for all write actions. Forced-viewport + circumvent + transfer require confirm:true.
+
+Do NOT use this tool to create the underlying Wall/Token/Tile — use the \`scene\`/\`tile\` (core) document tools for that. module-access-control only configures locks and view-control state on documents that ALREADY EXIST; it never creates or deletes a placeable.
+
+Performance Notes:
+- All actions return a small fixed-shape status/result object (bundle status, lock metadata, or a write confirmation) — no response modes, no pagination; cost does not scale with scene or world size.`,
         inputSchema: {
           type: 'object',
           properties: {

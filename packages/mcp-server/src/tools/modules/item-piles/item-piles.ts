@@ -261,6 +261,13 @@ Conditional: returns MODULE_NOT_ACTIVE when item-piles is absent/inactive.
 Pre-flight: module-probe.is-active item-piles before using this tool.
 WFRP4e bridge (item-piles-wfrp4e): GC/SS/BP currencies at 240/12/1 bp. Currency strings: "Xgc Yss Zbp" (case-insensitive).
 
+Use this when:
+- Spawning a loot pile, container, merchant, or vault token on a scene, or reading/reconfiguring one already placed.
+- Depositing or withdrawing items/currency on a pile actor, or transferring between two pile/actor UUIDs.
+- Distributing a pile's contents among multiple party-member actors (split-loot).
+- Running a scripted merchant purchase (trade-items) or restocking a merchant from its configured roll tables.
+- Checking/adjusting a vault's grid capacity or a merchant's buy/sell price modifiers.
+
 17 actions:
 PILE LIFECYCLE:
 - create-pile         { sceneId, type?, position?, items?, createDedicatedActor?, ... }  — create token (sceneId REQUIRED — C5); createDedicatedActor required for merchant/vault
@@ -311,7 +318,13 @@ INSUFFICIENT_CURRENCY, VAULT_FULL, INVALID_PILE_TYPE (set-pile-state on non-cont
 INVALID_PILE_UUID (delete-pile only), INVALID_CURRENCY_STRING, ITEM_PILES_PARTIAL_TRANSFER,
 TOKEN_NOT_FOUND, CONFIRM_REQUIRED
 
-GM required for all write actions.`,
+GM required for all write actions.
+
+Do NOT use this tool for plain non-piled inventory/currency edits on a regular actor sheet — use \`trade-item\`/\`update-actor\` (core tools) for those. module-itempiles is specifically for pile/container/merchant/vault ACTORS created and managed via the Item Piles API; it does not touch an ordinary PC's normal embedded items outside a pile interaction.
+
+Performance Notes:
+- Most actions return a small fixed-shape confirmation (pile metadata, a transfer/trade result, or a price-modifier record) — no response modes, no pagination.
+- get-contents/vault-info: size scales with pile contents; item lists beyond 10 entries are truncated in the rendered text (full data still in structuredContent).`,
         inputSchema: {
           type: 'object',
           properties: {

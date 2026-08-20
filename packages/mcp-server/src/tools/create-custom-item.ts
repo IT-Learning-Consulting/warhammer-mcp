@@ -177,6 +177,14 @@ export class CreateCustomItemTool extends BaseTool {
         },
         description: `Create a custom WFRP4e Item — world-scope (the Items sidebar, Foundry's canonical item library, see https://foundryvtt.com/article/items/) or actor-embedded. Supports 26 subtypes (19 core + 7 module-contributed) with optional Active Effects at creation time and optional compendium-clone seeding.
 
+Use this when:
+- Authoring a homebrew item (weapon, spell, talent, etc.) that has no compendium source — e.g. a custom magic sword or a GM-invented mutation.
+- Cloning a compendium item and then overriding specific fields (fromCompendium + field overrides), rather than embedding the unmodified published item.
+- Creating a world-scope item in a specific folder for later distribution, or an actor-embedded item directly on a character/NPC.
+- Attaching custom Active Effects at creation time (e.g. a bespoke magic item's on-hit script).
+
+Do NOT use this to embed an unmodified published compendium item — use add-item-from-compendium instead (simpler call, preserves the item's own Active Effects chain without re-specifying fields).
+
 **Destination (required, no default — caller decides):**
 - World scope (primary use case): \`destination: { type: "world", folder?: ["Custom", "Weapons"] }\` — folder chain is auto-created if missing; omit \`folder\` for root placement.
 - Actor scope: \`destination: { type: "actor", actorName: "Hans" }\` OR \`{ type: "actor", actorId: "<id>" }\` — embeds on the resolved actor.
@@ -199,6 +207,10 @@ weapon, armour, trapping, ammunition, container, spell, prayer, talent, career, 
 **Compendium seeding:** \`fromCompendium: "Compendium.<pack>.Item.<id>"\` clones the source (preserving its effects), strips source IDs, then merges your overrides on top.
 
 **Response:** lean by default — \`{itemId, itemName, itemType, scope, folderId?, folderPath?}\`. Pass \`returnFullPayload: true\` for the full itemData echo (opt-in to avoid bandwidth on bulk creates).
+
+Performance Notes:
+- Default response is a small lean summary (\`{itemId, itemName, itemType, scope, folderId?, folderPath?}\`) — cheap on bulk creates.
+- \`returnFullPayload: true\` echoes the complete created itemData — larger response, opt-in only when the caller needs to inspect the full item shape.
 
 **Examples:**
 - Spell at actor scope: \`{ itemType: "spell", name: "Firebolt", lore: "fire", cn: 5, destination: { type: "actor", actorName: "Hans" } }\`

@@ -38,7 +38,22 @@ export class UpdateActiveEffectTool extends BaseTool {
           openWorldHint: true,
         },
         description:
-          'Modify an existing ActiveEffect on an item or directly on an actor. Partial update — only fields supplied in `updates` are applied; other fields on the effect are preserved. effectId is authoritative; effectName is the ergonomic fallback. Supply one.\n\nTarget scopes: scope="actor" (item on actor), scope="world" (world item), scope="actor-direct" (effect directly on the actor — actorId or actorName, no item fields).\n\nSecurity: script / preApplyScript / enableConditionScript fields are executed by Foundry under GM authority. MCP does not sandbox script content. Only invoke with scripts you wrote or audited.',
+          `Modify an existing ActiveEffect on an item or directly on an actor. Partial update — only fields supplied in \`updates\` are applied; other fields on the effect are preserved. effectId is authoritative; effectName is the ergonomic fallback. Supply one.
+
+Use this when:
+- Changing an existing effect's script, trigger, or description without recreating it.
+- Disabling or re-enabling an effect in place (updates.disabled).
+- Adjusting an effect's transfer config (e.g. switching equipTransfer on/off) after it was created.
+- Correcting a typo or value on an effect you just created via add-active-effect, once you have its effectId (from get-active-effect-by-name or list-active-effects).
+
+Do NOT use this to discover an effect's id/name before mutating it — use get-active-effect-by-name or list-active-effects first, then call this tool with the resolved effectId.
+
+Target scopes: scope="actor" (item on actor), scope="world" (world item), scope="actor-direct" (effect directly on the actor — actorId or actorName, no item fields).
+
+Performance Notes:
+- Default response is a small updated-effect-id confirmation. Pass returnFullPayload:true for the full updated effect document — larger response, opt-in only when needed.
+
+Security: script / preApplyScript / enableConditionScript fields are executed by Foundry under GM authority. MCP does not sandbox script content. Only invoke with scripts you wrote or audited.`,
         inputSchema: {
           type: 'object',
           properties: {

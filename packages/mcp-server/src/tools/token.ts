@@ -197,6 +197,15 @@ export class TokenTool extends BaseTool {
         description:
           `Manage Foundry VTT TokenDocument objects via 9 actions (embedded-doc CRUD + list + bulk-add + delete-token + wfrp4e mount/dismount). Tokens live on scenes (scene.tokens collection).
 
+Use this when:
+- Placing, updating, or removing a raw TokenDocument's placement/art/vision/disposition fields on a scene (create/update/delete/delete-token).
+- Reading a single token's state, optionally including its effective synthetic WFRP Actor combat snapshot (get + includeCombatSnapshot:true).
+- Listing/filtering tokens on a scene cheaply via countOnly:true, or with full pagination for a detailed roster.
+- Bulk-placing prototype tokens for one or more actors in one call (add).
+- Linking/unlinking a rider token to a mount using the wfrp4e system's native mount mechanics (mount/dismount).
+
+Do NOT use this for WFRP advancement writes to a token's ActorDelta (e.g. applying a template) — use apply-template-to-token instead, which targets the synthetic actor's advancement data rather than raw TokenDocument fields.
+
 **Actions:**
 - **create**: Place a new Token on a scene. Required: sceneId, name, x, y. Optional: full write surface (actorId, actorLink, width/height, texture, shape, elevation, sort, locked, lockRotation, rotation, alpha, hidden, disposition, displayName, displayBars, bar1, bar2, light, sight, occludable, ring, turnMarker, movementAction, flags). Returns full TokenViewModel.
 - **update**: Partial-diff update. sceneId + tokenId + changes (≥1 field). Same writable surface as create.
@@ -223,7 +232,12 @@ export class TokenTool extends BaseTool {
 - add: {action:"add", actorIds:["actor1","actor2"], quantities:[2,1], placement:"grid"}
 - delete-token: {action:"delete-token", sceneId:"abc", tokenId:"tok1"}
 - mount: {action:"mount", sceneId:"abc", riderTokenId:"tokKnight", mountTokenId:"tokHorse"}
-- dismount: {action:"dismount", sceneId:"abc", riderTokenId:"tokKnight"}`,
+- dismount: {action:"dismount", sceneId:"abc", riderTokenId:"tokKnight"}
+
+Performance Notes:
+- get: full TokenViewModel by default; includeCombatSnapshot:true adds the synthetic Actor combat state (characteristics, wounds, armour, conditions, skills, traits, weapons) — noticeably larger response, opt-in only when needed.
+- list: countOnly:true returns just {total} for a cheap probe; otherwise paginated (page/pageSize, max 100 per page).
+- create/update/delete/delete-token/add/mount/dismount: single small response scoped to the affected token(s), no scene-wide payload.`,
         inputSchema: {
           type: 'object',
           properties: {

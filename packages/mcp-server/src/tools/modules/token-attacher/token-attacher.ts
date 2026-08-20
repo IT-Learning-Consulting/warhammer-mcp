@@ -72,6 +72,11 @@ export class ModuleTokenAttacherTool extends BaseTool {
 Conditional: returns MODULE_NOT_ACTIVE when token-attacher is absent/inactive, MODULE_DEPENDENCY_NOT_ACTIVE when its hard dep lib-wrapper is off.
 Pre-flight: module-probe.is-active token-attacher before using this tool.
 
+Use this when:
+- Binding scene decoration (lights, sounds, tiles, drawings) to a moving token so they travel together (a torch-bearing NPC, a wagon with its lights).
+- Detaching one or more previously-attached placeables from a base token, or clearing all attachments at once.
+- Reading what's currently attached to a base token, either the full type-grouped map or just one placeable type.
+
 CANVAS-MANDATORY for attach/detach/detach-all: Token Attacher reads live placeable geometry, so the scene must be open and the canvas ready (else TOKEN_ATTACHER_CANVAS_NOT_READY). query-* are headless flag reads.
 
 5 actions:
@@ -83,7 +88,13 @@ query-by-type { baseTokenId, sceneId?, type } — read the attached ids of one t
 
 Element type is the placeable document name: AmbientLight | AmbientSound | Drawing | MeasuredTemplate | Note | Tile | Token | Wall | Region. ids are scene-embedded placeable ids. sceneId defaults to the active scene.
 NOT wrapped (UI-gated): JSON import/export, Quick Edit Mode, the Attach UI (Dialog.prompt deadlock risk).
-Example: { action: "attach", baseTokenId: "abc123", elements: [{ type: "Tile", id: "tile456" }, { type: "AmbientLight", id: "light789" }] }`,
+Example: { action: "attach", baseTokenId: "abc123", elements: [{ type: "Tile", id: "tile456" }, { type: "AmbientLight", id: "light789" }] }
+
+Do NOT use this tool to move a single placeable independently — use \`token\`/\`tile\` (core tools) for that. module-token-attacher specifically binds MULTIPLE placeables to a base Token so they move together; it is not a general placeable-movement tool.
+
+Performance Notes:
+- attach/detach/detach-all: small fixed-shape result (the affected element list + current attached-count) — no response modes, no pagination.
+- query-attached/query-by-type: size scales with how many placeables are attached to the base token — typically a short list, still no built-in pagination.`,
         inputSchema: {
           type: 'object',
           properties: {

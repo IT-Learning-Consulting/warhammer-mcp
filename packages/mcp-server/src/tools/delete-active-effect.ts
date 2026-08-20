@@ -38,7 +38,27 @@ export class DeleteActiveEffectTool extends BaseTool {
           openWorldHint: true,
         },
         description:
-          'Remove an ActiveEffect from an item or directly from an actor. effectId is authoritative; effectName is the ergonomic fallback. Supply one.\n\nArgs:\n  - target (ActiveEffectTarget): scope=actor (actorId/actorName + itemId/itemName), scope=world (itemId/itemName), or scope=actor-direct (actorId or actorName; no item fields).\n  - effectId (string, optional): Effect ID — use when available (authoritative).\n  - effectName (string, optional): Effect name — first match wins. Use when effectId is unknown.\n\nReturns:\n  - On success: deletion confirmation with the removed effectId. parentType:"Actor" when scope="actor-direct".\n  - On error: throws with an actionable message.\n\nUse when: removing a script-injected or one-off effect from an item or actor. Don\'t use when: removing a WFRP4e condition (use remove-condition instead).',
+          `Remove an ActiveEffect from an item or directly from an actor. effectId is authoritative; effectName is the ergonomic fallback. Supply one.
+
+Use this when:
+- Removing a custom script-injected effect from an item once it's no longer needed (e.g. an expired one-off buff).
+- Removing a one-off actor-direct modifier via scope="actor-direct" (e.g. clearing a manually applied −10 WS debuff).
+- Cleaning up an effect created via add-active-effect that was mis-specified, after re-authoring it.
+- Removing an effect by known effectId, or by effectName when the id is unknown (first match wins).
+
+Do NOT use this to remove a standard WFRP4e condition (Fatigued, Poisoned, Broken, etc.) — use manage-conditions (remove-condition action) instead, which manages the canonical condition set correctly.
+
+Args:
+  - target (ActiveEffectTarget): scope=actor (actorId/actorName + itemId/itemName), scope=world (itemId/itemName), or scope=actor-direct (actorId or actorName; no item fields).
+  - effectId (string, optional): Effect ID — use when available (authoritative).
+  - effectName (string, optional): Effect name — first match wins. Use when effectId is unknown.
+
+Returns:
+  - On success: deletion confirmation with the removed effectId. parentType:"Actor" when scope="actor-direct".
+  - On error: throws with an actionable message.
+
+Performance Notes:
+- Single small response: deletion confirmation with the removed effectId, no full document payload. Mode-less — no response-mode variance.`,
         inputSchema: {
           type: 'object',
           properties: {

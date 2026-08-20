@@ -97,7 +97,14 @@ export class CombatantTool extends BaseTool {
           openWorldHint: true,
         },
         description:
-          `Per-combatant control over a single Combatant inside a Combat encounter — beside the flat manage-combat tools (which stay for combat-level turn/round flow and add/remove/list). GM-only. 7 actions.
+          `Per-combatant control over a single Combatant inside a Combat encounter — beside the flat combat-level tools (advance-combat for turn/round flow, add-combatants / remove-combatants / list-combatants for the roster). GM-only. 7 actions.
+
+Use this when:
+- Reading or writing fields on ONE known combatant (name, img, flags, hidden, defeated) via get-combatant / update-combatant.
+- Setting, clearing, or rerolling a single combatant's initiative safely (set-initiative / clear-initiative / reroll-initiative) without corrupting the turn-order pointer.
+- Toggling one combatant's hidden or defeated flag (set-hidden / set-defeated).
+
+Do NOT use this for combat-level turn/round flow (start/next/prev) or bulk add/remove/list of combatants — use advance-combat (turn/round flow) or add-combatants / remove-combatants instead. Do NOT enumerate all combatants with this tool — use list-combatants for the flat per-combat listing.
 
 **Actions:**
 - **get-combatant**: Read one combatant's fields. Required: combatantId. Optional: combatId (defaults to the active combat).
@@ -117,7 +124,10 @@ export class CombatantTool extends BaseTool {
 - update-combatant: {action:"update-combatant", combatantId:"abc", changes:{name:"Slain Ogre"}}
 - set-initiative: {action:"set-initiative", combatantId:"abc", value:15}
 - reroll-initiative: {action:"reroll-initiative", combatantId:"abc"}
-- set-defeated: {action:"set-defeated", combatantId:"abc", defeated:true}`,
+- set-defeated: {action:"set-defeated", combatantId:"abc", defeated:true}
+
+Performance Notes:
+- Action-based umbrella, no response-mode variance: each action returns a small structured result scoped to one combatant — never the full combat/combatant array.`,
         inputSchema: {
           type: 'object',
           properties: {

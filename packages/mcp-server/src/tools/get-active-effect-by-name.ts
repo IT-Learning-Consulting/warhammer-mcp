@@ -41,7 +41,25 @@ export class GetActiveEffectByNameTool extends BaseTool {
           openWorldHint: true,
         },
         description:
-          'Look up an ActiveEffect by id or name without mutating it. TOOL-IDEA-003 (2026-05-14). effectId is authoritative; effectName is a case-insensitive exact-name fallback (first match wins). Pure read — no .update() or deleteEmbeddedDocuments calls.\n\nTarget scopes:\n  - scope="actor" — searches item.effects on a specific item owned by an actor.\n  - scope="world" — searches item.effects on a world-scope item.\n  - scope="actor-direct" — searches actor.effects directly (actorId or actorName; no item fields). Returns parentType:"Actor".\n\nUse when: you need an AE\'s id or projection before calling update/delete-active-effect.\n\nReturns: `{success, scope, actorId, itemId, itemName, effectId, effectName, parentType:"Actor"|"Item", parentId, parentName, effect: {id, name, img, statuses, disabled, duration, origin, changes}}`.',
+          `Look up an ActiveEffect by id or name without mutating it. TOOL-IDEA-003 (2026-05-14). effectId is authoritative; effectName is a case-insensitive exact-name fallback (first match wins). Pure read — no .update() or deleteEmbeddedDocuments calls.
+
+Use this when:
+- Resolving an effect's id/full projection by name before calling update-active-effect or delete-active-effect.
+- Confirming an effect created via add-active-effect actually persisted, by looking it up afterward.
+- Inspecting a single known effect's changes/duration/disabled state without listing every effect on the item/actor.
+- Reading an actor-direct effect (scope="actor-direct") such as a one-off modifier placed straight on the actor.
+
+Do NOT use this when the effect's name/id is unknown and needs enumeration first — use list-active-effects to enumerate, then call this tool with the resolved name/id.
+
+Target scopes:
+  - scope="actor" — searches item.effects on a specific item owned by an actor.
+  - scope="world" — searches item.effects on a world-scope item.
+  - scope="actor-direct" — searches actor.effects directly (actorId or actorName; no item fields). Returns parentType:"Actor".
+
+Returns: \`{success, scope, actorId, itemId, itemName, effectId, effectName, parentType:"Actor"|"Item", parentId, parentName, effect: {id, name, img, statuses, disabled, duration, origin, changes}}\`.
+
+Performance Notes:
+- Single small response: one effect's projection, no full item/actor payload. Mode-less — no response-mode variance.`,
         inputSchema: {
           type: 'object',
           properties: {

@@ -130,6 +130,15 @@ export class DrawingTool extends BaseTool {
         description:
           `Manage Foundry VTT DrawingDocument objects via 6 actions (embedded-doc CRUD + list + duplicate). Drawings live on scenes (scene.drawings collection) — rectangles, ellipses, polygons, and text annotations a GM marks on the canvas.
 
+Use this when:
+- Marking a freeform shape (rectangle/circle/ellipse/polygon, including freehand-smoothed polygons) directly on the canvas, e.g. to outline a hazard zone or highlight an area.
+- Placing GM text annotations on the canvas independent of any document (the text overlay field, not a journal note).
+- Adjusting an existing drawing's style (fill/stroke/colours), position, or visibility (action:"update").
+- Auditing or cleaning up drawings on a scene, optionally filtered by shape type (action:"list"/"get"/"delete").
+- Cloning an existing drawing's shape/style onto a new placement (action:"duplicate").
+
+Do NOT use this for a journal-linked map pin — use \`note\` instead, which anchors a JournalEntryPage to a scene location. Do NOT use this for image-based decoration — use \`tile\` instead.
+
 **Actions:**
 - **create**: Place a new drawing on a scene. Required: sceneId, x, y, shape. Optional: bezierFactor, text, font fields, fill/stroke/text colours + alphas, fillType, strokeWidth, texture, rotation, elevation, sort, hidden, locked, interface, flags. Returns full DrawingViewModel.
 - **update**: Partial-diff update. sceneId + drawingId + changes (≥1 field). Same writable surface as create (x/y/shape optional here).
@@ -143,6 +152,9 @@ export class DrawingTool extends BaseTool {
 **Colours** (fillColor, strokeColor, textColor) must be 6-digit hex like #ff0000. **texture** is a file path — pass null to clear (never "").
 
 **advancedDrawing (advanced-drawing-tools delegate, optional):** when the advanced-drawing-tools module is active, pass an \`advancedDrawing\` block on create (top-level) or update (inside \`changes\`) to set its 34 server-authorable flags: \`invisible\`; \`lineStyle.dash\` ([dashLen,gapLen] to enable, null for solid — NEVER pass dashEnabled); \`fillStyle.texture.{width,height}\` + \`fillStyle.transform.*\` (only render when fillType=2 PATTERN + a texture is set); \`textStyle.*\` (arc -360..360, gradient fill[] — note fill[0] is the SECOND gradient stop, textColor is first — stroke, dropShadow*, fontWeight/Style/Variant, spacing, align). FAIL-OPEN: if advanced-drawing-tools is inactive the block is silently ignored and the core drawing still writes (no error).
+
+Performance Notes:
+- create/update/delete/get/duplicate return a single drawing record — no pagination. list is paginated (page/pageSize, max 100, default 50); pass countOnly:true for a cheap total without items.
 
 **Examples:**
 - create: {action:"create", sceneId:"abc", x:100, y:100, shape:{type:"rectangle", width:200, height:120}, strokeColor:"#ff0000", text:"Hazard"}

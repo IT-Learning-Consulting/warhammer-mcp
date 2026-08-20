@@ -164,6 +164,15 @@ export class OwnershipTool extends BaseTool {
       },
       description: `Polymorphic ownership manager — assign/remove/list/bulk-set/reset permissions across 7 document types in Foundry VTT (actor, item, journal, scene, rolltable, folder, macro). Folder is read-only here (BaseFolder has no ownership field; grant on contained docs).
 
+Use this when:
+- Granting a specific player observer/owner access to one document (action:"assign", e.g. a PC's Actor sheet or a shared handout Journal).
+- Revoking a user's access to a document entirely (action:"remove").
+- Auditing who currently has what level of access on a document before changing it (action:"list").
+- Applying the same ownership grant to many documents at once, e.g. giving a party observer access to every NPC in an encounter (action:"bulk-set").
+- Clearing all per-user overrides on a document back to its default level (action:"reset").
+
+Do NOT use this for User account/role/hotbar/flag admin — use \`user\` instead; this tool is per-document ownership grants across 7 doc types, not account-level administration.
+
 **Foundry Ownership Levels:**
 - **none** (0) — No access
 - **limited** (1) — Sees name + limited info
@@ -196,7 +205,10 @@ export class OwnershipTool extends BaseTool {
 - Folder writes reject with OWNERSHIP_FOLDER_NOT_SUPPORTED.
 - Compendium UUIDs reject with OWNERSHIP_COMPENDIUM_NOT_SUPPORTED.
 - META levels (-10, -20) reject with OWNERSHIP_META_LEVEL_FORBIDDEN.
-- Setting OWNER on a SCRIPT macro does NOT enable arbitrary-user execution — Foundry separately gates SCRIPT execution on author === user.id.`,
+- Setting OWNER on a SCRIPT macro does NOT enable arbitrary-user execution — Foundry separately gates SCRIPT execution on author === user.id.
+
+Performance Notes:
+- Each action returns a single small fixed-shape response (an ownership map, or a mutation confirmation) — no response modes, no pagination. bulk-set's cost scales with the targets[] array you pass, not a server-side bound.`,
       inputSchema: {
         type: "object",
         properties: {

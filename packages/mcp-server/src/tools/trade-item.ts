@@ -32,7 +32,18 @@ export class TradeItemTool extends BaseTool {
           openWorldHint: true,
         },
         description:
-          'Move an embedded Item from one actor to another atomically. Transaction-wrapped — if the destination create fails, the source is not touched. Encumbrance on both actors recomputes automatically via the Foundry prepareData pipeline (HC3). Optional `quantity` supports partial transfers on stackable items (arrows, etc.) — source decrements; destination receives a new stack with the requested count. Both actors must exist; the item must be on the source actor. Used by GM workflows for item hand-off between PCs or NPC loot distribution.',
+          `Move an embedded Item from one actor to another atomically. Transaction-wrapped — if the destination create fails, the source is not touched. Encumbrance on both actors recomputes automatically via the Foundry prepareData pipeline (HC3). Optional \`quantity\` supports partial transfers on stackable items (arrows, etc.) — source decrements; destination receives a new stack with the requested count. Both actors must exist; the item must be on the source actor. Used by GM workflows for item hand-off between PCs or NPC loot distribution.
+
+Use this when:
+- Handing an item off between two PCs (party loot distribution).
+- Distributing a defeated NPC's item to a PC's inventory.
+- Splitting a stackable item (e.g. giving 5 of 20 arrows) via the optional \`quantity\` field, leaving the remainder on the source actor.
+- Moving an item between two actors atomically, where a failed destination write must not silently remove it from the source.
+
+Do NOT use this for a single-actor item field edit — use update-item. Do NOT use this to add a brand-new item to one actor with no source actor to move it from — use add-item-from-compendium or create-custom-item.
+
+Performance Notes:
+- Single small response: the trade receipt (itemName, fromActorId, toActorId, resulting quantities), no full inventory payload echoed back. Mode-less — no response-mode variance.`,
         inputSchema: {
           type: 'object',
           properties: {

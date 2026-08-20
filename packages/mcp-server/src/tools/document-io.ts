@@ -117,8 +117,15 @@ export class DocumentIoTool extends BaseTool {
         description:
           `Export, import-as-new, or preview Foundry world documents as inline JSON. Supports 8 document types: Actor, Item, JournalEntry, Macro, Scene, Playlist, RollTable, Cards.
 
+Use this when:
+- Cloning an existing Actor/Item/etc. as a starting template for a new document, in the same world or a different one (export from source, import-as-new into target).
+- Migrating hand-authored content (a custom NPC, a homebrew Item, a JournalEntry) between two Foundry worlds via copy-pasted JSON — there is no cross-world compendium-transfer tool.
+- Inspecting a document's full toObject() payload for debugging, or as the basis for a hand-built update-item/update-actor patch.
+- Previewing what an import-as-new would create (embedded counts, folder/ownership state, @UUID link count) before committing the write.
+- Auditing a document's structure (e.g. how many embedded Items an Actor carries) without mutating anything.
+
 IMPORTANT: This tool implements CLONE / TEMPLATE semantics, NOT backup/restore.
-- Ids are REGENERATED on import (keepId is false). Do NOT use as a faithful backup.
+- Ids are REGENERATED on import (keepId is false). Do NOT use as a faithful backup — for backup/restore, use a compendium pack or Foundry's own world export instead.
 - World-scope only (no compendium packs).
 - @UUID links in the document text reference the OLD id and will need re-linking after import (v2 remap deferred).
 - Cards round-trips: embedded Card "origin" fields still reference the SOURCE stack after import. Cross-stack deal/draw/recall will not work correctly between the cloned and original stacks.
@@ -135,6 +142,10 @@ IMPORTANT: This tool implements CLONE / TEMPLATE semantics, NOT backup/restore.
 
 - **preview**: Read-only. Constructs the document in-memory (no DB write) and returns {name, embeddedCounts, hasFolder, hasOwnership, uuidLinkCount, warnings[]}. No confirm required.
   Required: documentType, data.
+
+Performance Notes:
+- export: single whole-document response, no response modes/pagination. Budget ~64k chars; fails loud with RESPONSE_TOO_LARGE above that (a live Actor export measured ~96.5k chars) — use action:"preview" instead for large documents.
+- import-as-new / preview: response size is a small fixed structured summary (idMap/warnings, or embeddedCounts/warnings) — it does not echo the full document back, so cost scales with the data payload YOU send, not with anything server-side.
 
 **Examples:**
 - {action:"export", documentType:"Actor", id:"5kYn49mOZa9krFJ0"}

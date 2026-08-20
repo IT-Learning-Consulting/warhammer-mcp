@@ -87,6 +87,14 @@ export class ActorConfigTool extends BaseTool {
         description:
           `Validated replacement for update-actor dot-path writes. Manages actor prototype-token configuration and artwork via 4 actions.
 
+Use this when:
+- Reading or writing an actor's prototype-token fields (disposition, displayName, bars, ring, movementAction, etc.) via action:"get-prototype-token" / action:"update-prototype-token".
+- Reading or setting an actor's or item's artwork path via action:"get-art" / action:"set-art".
+- Resetting an actor's or item's art to the document-type default icon (empty-string src).
+- Making any prototype-token or art change where the field is modeled here, in preference to a raw update-actor dot-path write.
+
+Do NOT use this for generic actor field writes outside prototype-token/art (system-tree stats, career, biography, etc.) — use update-actor for those. Do NOT use set-art to change an already-placed scene token's art — use \`token {action:"update", changes:{texture:{src}}}\` instead (see CCR-9 boundary below).
+
 **Actions:**
 - **get-prototype-token**: Read the full prototypeToken object for an actor. Required: actorId.
 - **update-prototype-token**: Write validated prototype-token fields. Required: actorId, changes (≥1 field). Optional: extraFields (passthrough for unmodeled fields). Post-write verify via verifyDocWrite({readSource:true}).
@@ -111,7 +119,10 @@ Use extraFields for any unmodeled field.
 - get-art: {action:"get-art", target:{type:"actor", id:"abc"}}
 - set-art: {action:"set-art", target:{type:"actor", id:"abc"}, src:"icons/svg/mystery-man.svg", which:"both"}
 - set-art (item): {action:"set-art", target:{type:"item", id:"xyz"}, src:"icons/equipment/sword.webp"}
-- set-art (art-clear): {action:"set-art", target:{type:"actor", id:"abc"}, src:"", which:"img"}`,
+- set-art (art-clear): {action:"set-art", target:{type:"actor", id:"abc"}, src:"", which:"img"}
+
+Performance Notes:
+- Action-based umbrella, no response-mode variance: each action returns a small structured result (the prototype-token object, or the resolved art path(s)) scoped to one actor/item — never a full sheet payload.`,
         inputSchema: {
           type: 'object',
           properties: {

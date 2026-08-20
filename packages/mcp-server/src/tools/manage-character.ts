@@ -261,6 +261,15 @@ export class ManageCharacterTool extends BaseTool {
             },
             description: `Unified character management for WFRP 4e - update stats, skills, talents, notes, and experience logs.
 
+Use this when:
+- Setting a characteristic or status value directly (e.g. GM correction, character creation) via action:"update-stats".
+- Adjusting an existing skill/talent's advances or modifier via action:"update-skill-talent", or adding a new one from the compendium via action:"add-skill-talent".
+- Logging an XP award (action:"add-xp-log") or writing GM notes/biography prose (action:"update-notes").
+- Resolving an Earning Dramatic Test payout (action:"roll-income") or crediting/deducting coin (action:"add-money" / action:"direct-pay").
+- Reading the actor's current career projection (action:"get-career-info") or applying a Fear/Terror encounter (action:"apply-fear" / action:"apply-terror").
+
+Do NOT use this for generic dot-path actor field writes outside these actions — use update-actor. For read-only full-sheet queries, use get-character instead of get-career-info's narrower projection.
+
 **Actions:**
 - **update-stats**: Set characteristics, status values, physical details, PC creation fields (GM override - no restrictions)
 - **update-skill-talent**: Modify existing skill/talent advances or modifiers
@@ -296,7 +305,10 @@ Use for quick stat changes, character creation, testing, or corrections where yo
 - Apply fear: action="apply-fear", actorId="abc123...", rating=2, sourceName="Chaos Warrior"
 - Apply terror: action="apply-terror", actorId="abc123...", rating=1, sourceName="Greater Daemon"
 - Add money: action="add-money", actorId="abc123...", amountString="5g"
-- Direct pay: action="direct-pay", actorId="abc123...", amountString="2gc4ss"`,
+- Direct pay: action="direct-pay", actorId="abc123...", amountString="2gc4ss"
+
+Performance Notes:
+- Action-based umbrella, no response-mode variance: each action returns a small structured result scoped to the write/read it performed (e.g. updated fields, career projection, payout amount) — no full-sheet payload is echoed back.`,
             inputSchema: {
                 type: "object",
                 properties: {

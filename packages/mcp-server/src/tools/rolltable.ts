@@ -276,6 +276,15 @@ export class RollTableTool extends BaseTool {
             },
             description: `Manage roll tables in Foundry VTT — 13 actions: create, list, get, roll, delete, update, add-results, update-results, delete-results, normalize, reset, draw-many, import-from-compendium.
 
+Use this when:
+- Rolling a single random result for a GM decision (loot, weather, random encounter) — action:"roll".
+- Drawing several results at once, e.g. stocking a merchant or rolling a group of encounters — action:"draw-many" (1-50 per call).
+- Authoring a new table with text/document/compendium-typed results, or importing one from a compendium pack — action:"create"/"import-from-compendium".
+- Editing an existing table's results (add/update/delete rows) or resetting drawn flags for a non-replacement table — action:"add-results"/"update-results"/"delete-results"/"reset".
+- Auditing which tables exist before deciding which one to roll on — action:"list" (bounded summary rows) / "get" (full detail for one table).
+
+Do NOT use this for a literal deck-state subsystem (initiative decks, fortune cards, discard piles) — use \`cards\` instead; rolltable is for random-draw-and-narrate content (loot/encounter tables), not persistent deck state. draw-many is capped at 1-50 per call and \`list\` is bounded (max 500) — see Performance Notes.
+
 **Actions:**
 - **create**: Create a table with entries (legacy text-only) or results (text/document/compendium). Supports folder/img/sort (BUG-524).
 - **list**: BOUNDED list of roll tables — summary rows only (id/name/formula/resultCount, NO embedded results; the old full dump overflowed the response budget). Accepts limit (default 50, max 500) + offset; response carries totalAvailable + truncated. Oversize responses fail loud with RESPONSE_TOO_LARGE naming these params. Use 'get' for one table's results.
@@ -297,6 +306,9 @@ export class RollTableTool extends BaseTool {
 - text: {type:"text", text:"...", weight?, range?}
 - document: {type:"document", documentCollection:"Actor", documentId:"abc"}
 - compendium: {type:"compendium", documentCollection:"wfrp4e-core.Actor", documentId:"xyz"}
+
+Performance Notes:
+- list is BOUNDED — summary rows only (no embedded results), limit default 50/max 500, offset paging; fails loud with RESPONSE_TOO_LARGE if you exceed the response budget anyway. draw-many is capped at 1-50 results per call. get/roll/create/update/add-results/update-results/delete-results/normalize/reset/import-from-compendium return a single small fixed-shape response.
 
 **Examples:**
 - create: {action:"create", name:"Encounters", formula:"1d20", results:[{type:"text",text:"Goblin"}]}

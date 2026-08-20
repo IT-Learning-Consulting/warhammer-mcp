@@ -145,6 +145,13 @@ Allowed types: ["effect","sound","scrollingText","canvasPan","wait"].
 Any other type (macro, animation, crosshair, thenDo, unknown) → UNSAFE_SECTION_EXCLUDED.
 This is an ALLOWLIST, not a denylist — unknown future types are denied by default.
 
+Use this when:
+- Playing an author-driven visual/audio effect sequence (a spell impact, an ambient loop, a scrolling-text cue) at a specific location or attached to a token.
+- Preloading effect/sound files onto the GM client or all clients ahead of a scripted moment to avoid load stutter.
+- Ending or updating currently-running effects/sounds by filter (name, scene, source, target).
+- Looking up available Sequencer database entries (e.g. autoanimations.melee.*) before authoring a sequence.
+- Adjusting who is permitted to create/delete effects, create sounds, preload, or use Sequencer's sidebar tools.
+
 ~16 actions:
 EFFECTS:
 - play-sequence-json  { sequence, options? }          — TWO payload styles (BUG-462):
@@ -178,7 +185,13 @@ Examples:
 - { action: "database-search", path: "autoanimations.melee" }
 - { action: "play-sequence-json", sequence: [{"type":"effect","file":"jb2a.flames.orange","atLocation":{"x":1000,"y":1000},"duration":3000}] }
 - { action: "end-all-effects", sceneId: "abc123", confirm: true }
-- { action: "get-effects", filter: { name: "firebolt" } }`,
+- { action: "get-effects", filter: { name: "firebolt" } }
+
+Do NOT use this tool for combat-roll-triggered automatic animations — use \`module-autoanimations\` for that. module-sequencer is for author-driven manual animation/sound sequences (play-sequence-json, play-sound); it never intercepts or fires automatically from a roll.
+
+Performance Notes:
+- play-*/end-*/permission-write: small fixed-shape confirmation (a play/end result or verified permission write) — no response modes, no pagination.
+- get-effects/get-sounds/database-*: size scales with matching effect/sound count or database result count — no built-in limit, so an unfiltered get-effects/database-search on a busy scene or broad path can return a large list; narrow with filter/path.`,
         inputSchema: {
           type: 'object',
           properties: {

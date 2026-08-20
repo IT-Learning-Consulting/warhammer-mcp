@@ -115,6 +115,13 @@ EVERY need write idempotently tracks the actor first (api.actors.track) — the 
 
 CONFIRM-GATED (CCR-4): reset-all, untrack-actor, long-rest with NO entityId (party-wide), unregister-custom-need — require confirm:true. Single-actor writes and batch-stress/batch-relieve stay UNGATED (additive/reversible).
 
+Use this when:
+- Tracking a PC/NPC's survival stats (hunger, thirst, exhaustion, cold, etc.) that decay over game time as travel/rest passes.
+- Stressing or relieving one or more actors' needs after an in-fiction event (a forced march, a missed meal, a warm meal at an inn).
+- Wiring a need threshold to an automatic consequence — applying a status condition or modifying an attribute when a need crosses a limit.
+- Resting the party (short/long rest) to relieve accumulated stress across tracked actors.
+- Querying which tracked actors are currently critical or above a threshold for a given need, for GM situational awareness.
+
 26 actions:
 reads: get-needs { entityId } · get-need { entityId, needId } · list-tracked {} · get-need-config { needId? } · query-critical {} · query-above-threshold { needId, threshold? } · get-need-history { entityId, needId?, limit? }.
 single writes: stress-need { entityId, needId, amount? } · relieve-need { entityId, needId, amount? } · set-need { entityId, needId, value } · reset-need { entityId, needId } · track-actor { entityId }.
@@ -127,7 +134,13 @@ custom needs: register-custom-need { needConfig } · unregister-custom-need { ne
 destructive: reset-all { entityId, confirm } · untrack-actor { entityId, confirm }.
 
 WFRP4e idiom: exhaustion need + apply-consequence(condition-apply, statusId:"fatigued") wires the Fatigued condition. attribute-modify with path "system.status.fatigue.value" is the alternate fatigue path — writability under WFRP4e derived-data recompute is unverified (live-smoke caveat); prefer condition-apply.
-Example: { action: "stress-need", entityId: "abc123", needId: "hunger", amount: 25 }`,
+Example: { action: "stress-need", entityId: "abc123", needId: "hunger", amount: 25 }
+
+Do NOT use this tool for WFRP4e's own Corruption/mutation mechanic — that is the Cool/Endurance test + mutation table owned by /wfrp-corruption. module-mortal-needs' "corruption" need is an unrelated abstract stress meter that happens to share the name; the two are never interchangeable (see the naming-collision warning above).
+
+Performance Notes:
+- Most actions return a small fixed-shape result (one need's value, a write confirmation, or a config record) — no response modes, no pagination.
+- list-tracked/query-critical/query-above-threshold/get-need-history: size scales with tracked-actor count or history length; get-need-history accepts a limit param (default 50) to bound the response — the query-* actions have no limit and can return every matching tracked actor.`,
         inputSchema: {
           type: 'object',
           properties: {

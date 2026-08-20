@@ -36,19 +36,27 @@ export class ApplyTemplateToTokenTool extends BaseTool {
           openWorldHint: true,
         },
         description:
-          'Token-delta variant of apply-template. Writes an advancement template (Item of type ' +
-          '"template" from owb1/owb2/owb3/core) into a single unlinked token\'s ActorDelta instead ' +
-          'of a world actor. World actor stays pristine; sibling tokens sharing the same base are ' +
-          'unaffected. Use case: /wfrp-encounter-builder prototype-sheet routing — when multiple ' +
-          'entries share the same bestiary base but vary templates or weapons per entry (e.g. a ' +
-          '10-Goblin party of 4 Skirmishers + 3 Soldiers + 3 Elites), compose with ' +
-          'add-actors-to-scene { quantities: [N] } to drop N unlinked tokens from ONE world actor, ' +
-          'then call this tool per token with the varying template. Result: 1 sidebar entry rather ' +
-          'than N. Rejects actorLink:true tokens cleanly — their delta is a passthrough to the ' +
-          'world actor, so writes would be semantically wrong; caller should use apply-template ' +
-          'with the world actor ID in that case. Same preResolvedChoices surface as apply-template ' +
-          '(skillGroups / talentGroups / specialisations / lores / spells / trappings) and same ' +
-          'stacking semantics (two calls on the same token compose both layers into its delta).',
+          `Token-delta variant of apply-template. Writes an advancement template (Item of type ` +
+          `"template" from owb1/owb2/owb3/core) into a single unlinked token's ActorDelta instead ` +
+          `of a world actor. World actor stays pristine; sibling tokens sharing the same base are ` +
+          `unaffected. Use case: /wfrp-encounter-builder prototype-sheet routing — when multiple ` +
+          `entries share the same bestiary base but vary templates or weapons per entry (e.g. a ` +
+          `10-Goblin party of 4 Skirmishers + 3 Soldiers + 3 Elites), compose with ` +
+          `add-actors-to-scene { quantities: [N] } to drop N unlinked tokens from ONE world actor, ` +
+          `then call this tool per token with the varying template. Result: 1 sidebar entry rather ` +
+          `than N. Rejects actorLink:true tokens cleanly — their delta is a passthrough to the ` +
+          `world actor, so writes would be semantically wrong; caller should use apply-template ` +
+          `with the world actor ID in that case. Same preResolvedChoices surface as apply-template ` +
+          `(skillGroups / talentGroups / specialisations / lores / spells / trappings) and same ` +
+          `stacking semantics (two calls on the same token compose both layers into its delta).\n\n` +
+          `Use this when:\n` +
+          `- Varying advancement templates across sibling unlinked tokens that share one bestiary base (e.g. Skirmisher vs Soldier vs Elite Goblins from one sidebar entry).\n` +
+          `- Applying a template to a specific placed token's ActorDelta without touching the shared world actor or its other placed-token siblings.\n` +
+          `- Stacking two templates onto the same token (composing role + rank layers into its delta).\n` +
+          `- Previewing the planned per-token template application with dryRun:true before committing.\n\n` +
+          `Do NOT use this on an actorLink:true token — it is rejected (its delta passes through to the world actor). For actorLink:true tokens, use apply-template with the world actor ID instead.\n\n` +
+          `Performance Notes:\n` +
+          `- dryRun:true returns the same planned-change shape as a live run, with zero mutations — same response size either way.`,
         inputSchema: {
           type: 'object',
           properties: {

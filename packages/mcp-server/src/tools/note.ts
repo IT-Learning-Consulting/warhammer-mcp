@@ -140,6 +140,15 @@ export class NoteTool extends BaseTool {
         description:
           `Manage Foundry VTT NoteDocument (map pin) objects via 5 actions (embedded-doc CRUD + list). Notes live on scenes (scene.notes collection) and optionally link to JournalEntry pages.
 
+Use this when:
+- Placing a map pin on a scene that links to a JournalEntry page (a lore location, a quest marker), optionally auto-creating the JournalEntry via journalContent.
+- Auditing which notes on a scene point at a stale/deleted JournalEntry (action:"list", onlyOrphaned:true) — B5-aware FK check.
+- Adjusting a note's position, label text, or icon appearance (action:"update").
+- Removing a map pin that's no longer needed (action:"delete").
+- Fetching a single note's full FK-resolution state (entryLinked/pageLinked) before deciding whether to repair it (action:"get").
+
+Do NOT use this for the JournalEntry/page content itself — use \`journal\` instead; a note is only the map-pin anchor, not the entry's content.
+
 **Actions:**
 - **create**: Place a new map note on a scene. Required: sceneId, x, y. Optional: entryId, pageId, text, iconSize, fontFamily, fontSize, textAnchor, textColor, texture, elevation, sort, global, flags. Phase 6.4 auto-link branch: pass \`journalContent: {name, pages: [...]}\` instead of entryId — handler creates a JournalEntry first, then links the note to it; response includes both note.id and journalEntry.id. Mutually exclusive with entryId. Returns full NoteViewModel with entryLinked + pageLinked booleans.
 - **update**: Partial-diff update. sceneId + noteId + changes (≥1 field). Same writable surface as create. Returns full NoteViewModel.
@@ -150,6 +159,9 @@ export class NoteTool extends BaseTool {
 **FK-orphan / B5 note:** entryLinked=true means the JournalEntry exists; pageLinked=true means the specific page exists within that entry. Older Foundry data (B5) may store a page UUID in entryId — the handler resolves both cases transparently and sets entryLinked + pageLinked accordingly.
 
 **NoteViewModel fields:** id, sceneId, entryId, pageId, entryLinked, pageLinked, x, y, elevation, sort, texture (TextureData), iconSize, text, fontFamily, fontSize, textAnchor, textColor, global, flags.
+
+Performance Notes:
+- create/update/delete/get return a single note record — no pagination. list is paginated (page/pageSize, max 100, default 50); pass countOnly:true for a cheap total without items.
 
 **Examples:**
 - create: {action:"create", sceneId:"abc", x:500, y:300, entryId:"jid", pageId:"pid", text:"Tavern"}

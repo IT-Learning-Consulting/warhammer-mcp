@@ -67,6 +67,15 @@ export class JournalTool extends BaseTool {
         description:
           `Manage Foundry VTT JournalEntries with multi-page + multi-type CRUD via 15 actions.
 
+Use this when:
+- Writing lore, quest briefings, or session notes as a multi-page JournalEntry (text/image/pdf/video pages), e.g. {action:"create-entry", name:"Quest: Find the Witch Hunter", pages:[...]}.
+- Editing an entry's top-level metadata (name, folder, ownership) or a specific page's content (action:"update-entry"/"update-page").
+- Organizing pages under named categories, or reordering them (action:"add-category"/"assign-page-to-category"/"reorder-pages").
+- Broadcasting an entry to all connected players without persisting anything (action:"show-to-players").
+- Auditing existing journals by name-prefix template convention (filterTemplate/filterQuests) before creating a new one.
+
+Do NOT use this for the map-pin anchor that points at a journal page from a scene — use \`note\` instead; \`journal\` owns the JournalEntry/page content itself, not its scene placement.
+
 **Actions:**
 - **create-entry**: Create a JournalEntry with optional inline pages (text/image/pdf/video) + categories. Returns {id, name, pageIds, categoryIds}.
 - **update-entry**: Update top-level fields (name, folder, sort, ownership, flags) on an existing entry. Use update-page for page content.
@@ -93,6 +102,9 @@ export class JournalTool extends BaseTool {
 **Text page format**: 1=HTML (ProseMirror default), 2=Markdown. CONST.JOURNAL_ENTRY_PAGE_FORMATS.
 
 **HTML/CSS preservation** (text pages, format:1): round-trips byte-identical except sanitisation of <script>, on*-event handlers, and javascript: URLs. Preserved: tables, inline styles, custom CSS classes, <section class="secret">, <details>/<summary>, blockquotes, lists, headings, data-* attrs, @UUID[Type.Id]{Label} including @UUID[JournalEntry.X.JournalEntryPage.Y]{Label}.
+
+Performance Notes:
+- get-entry deep mode caps page text.content at 4000 chars and markdown source at 2000 chars per page (truncation marker states omitted char count); pass shallow:true for a cheap {id, name, pageIds, pageCount, categoryCount} probe on large lore journals. list-entries with includeContent:true caps each entry's first-page body at 1000 chars. All other actions return small fixed-shape mutation confirmations, no pagination.
 
 **Examples:**
 - create-entry: {action:"create-entry", name:"Quest: Find the Witch Hunter", pages:[{type:"text", name:"Briefing", text:{content:"<p>...</p>"}}]}

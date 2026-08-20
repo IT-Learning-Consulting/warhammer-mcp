@@ -80,11 +80,23 @@ CONFIGURE: writes one of 16 typed appearance/permission world settings (FontSize
 
 NO CONFIRM-GATE: every action here is additive or reversible (no destructive/removal op exists on this surface) — an intentional deviation from other module-* umbrellas' confirm-gated pair.
 
+Use this when:
+- Playing a full-screen cinematic narration overlay to set a scene's mood on every connected client (narrate).
+- Posting a styled public "description" chat message distinct from ordinary chat (describe).
+- Whispering a GM-only styled note to the currently-connected GMs (notify).
+- Toggling or setting the background scenery frame's visibility.
+- Adjusting Narrator Tools' appearance/permission settings (font, color, duration, who may narrate/describe/scenery).
+
 6 actions:
 read (ungated): get-state {} — returns the persisted sharedState.
 writes (GM-only): narrate { message, startPaused?, speaker? } (message: string | string[]) · describe { message, speaker? } · notify { message, speaker? } · scenery { state? } (GM-only + SETTINGS_MODIFY) · configure { key, value } (GM-only + SETTINGS_MODIFY).
 
-Example: { action: "narrate", message: "The mist parts over Ubersreik." }`,
+Example: { action: "narrate", message: "The mist parts over Ubersreik." }
+
+Do NOT use this tool for a plain, non-styled chat post — use the \`chat-message\` tool for that. module-narrator is the styled narration-overlay/description/notification presentation layer; it always writes through Narrator Tools' own flagged ChatMessage/settings surface, never a bare chat line.
+
+Performance Notes:
+- All 6 actions return a small fixed-shape confirmation (a message id, the current sharedState, or a config write echo) — no response modes, no pagination; cost does not scale with world size.`,
         inputSchema: {
           type: 'object',
           properties: {

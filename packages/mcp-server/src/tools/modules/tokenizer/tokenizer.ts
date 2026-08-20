@@ -109,6 +109,13 @@ const TOOL_DESCRIPTION = `Non-destructive layered token-image compositing via th
 Conditional: returns MODULE_NOT_ACTIVE when tokenizer-2 module is absent/inactive.
 Pre-flight: module-probe.is-active tokenizer-2 before using this tool.
 
+Use this when:
+- Compositing a new token image for an actor from a portrait + frame/mask/background, writing it to prototypeToken.texture.src.
+- Batch-tokenizing many actors at once (e.g. after a bulk NPC import) with a shared frame/style.
+- Exporting a declarative or captured layer stack to disk without writing to any actor.
+- Registering a custom frame asset for reuse across future tokenize calls.
+- Reading Tokenizer's world settings or the registered frame/plugin catalog, or sweeping stale per-actor Tokenizer flags.
+
 7 actions:
 - tokenize              { actorUuid, frameSrc?, maskSrc?, backgroundSrc?, skipRing?, skipBackground?, disposition?, exportSize?, exportFormat?, saveFolder?, filename?, updateActor?, useActorImg?, forceDynamicRing?, forceBakedRing?, wildcardMode? } — composite one actor's token image; writes prototypeToken.texture.src + avatar + FS image unless updateActor:false.
 - tokenize-batch        { actorUuids, confirm, ...same opts as tokenize }        — batch-tokenize many actors; requires confirm:true (CCR-4). Partial-failure safe: never hard-throws on one actor.
@@ -128,7 +135,14 @@ Examples:
 - { action: "tokenize", actorUuid: "Actor.abc123", updateActor: true }
 - { action: "tokenize", actorUuid: "Actor.abc123", skipBackground: true, skipRing: true }
 - { action: "tokenize-batch", actorUuids: ["Actor.abc","Actor.def"], confirm: true }
-- { action: "get-settings" }`;
+- { action: "get-settings" }
+
+Do NOT use this tool for a manual one-off texture path swap — use the \`token\` (core) tool's texture field update for that. module-tokenizer is for compositing a NEW layered image from frame/mask/background sources; it is not a plain texture-path setter.
+
+Performance Notes:
+- tokenize/register-custom-frame/cleanup-flags: small fixed-shape confirmation (a written path, a registered frame, or a cleanup scope) — no response modes, no pagination.
+- tokenize-batch: response size scales with actorUuids count (one result line per actor) — no built-in cap; keep batches to a reasonable size for a readable response.
+- export-layers/get-settings/list-registered: small fixed-shape response — no pagination.`;
 
 const TOOL_INPUT_PROPERTIES = {
   action: {

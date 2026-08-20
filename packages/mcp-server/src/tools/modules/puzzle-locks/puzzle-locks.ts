@@ -73,6 +73,12 @@ FULL-REPLACE TRAP: attach-puzzle's typeConfig is a FULL REPLACE of the per-type 
 
 unlockMacro fires ONLY through the interactive player-facing solve — force-unlock does NOT execute it (only sets general.unlocked=true, and on a Wall also closes the door). set-solve-macro writes it via a targeted dotted-path flag write (safe vs the full-replace trap).
 
+Use this when:
+- Attaching an interactive minigame-type puzzle (password, cryptex, sudoku, mastermind, etc.) to a Wall/Tile/Token/Drawing/document as a session obstacle.
+- Reading a document's current puzzle configuration or checking whether it has been solved and how many attempts were made.
+- Wiring a macro or inline JS to fire when a puzzle is successfully solved.
+- Removing a puzzle entirely once it's no longer needed, or force-unlocking one for GM convenience (bypassing the interactive solve).
+
 6 actions (GM-only):
 attach-puzzle { documentUuid, lockType, generalConfig?, typeConfig } — typeConfig fields vary per lockType; solution-bearing types (password/number/cryptex/fill-blanks/four-by-four/match/switches/mastermind/sudoku/sound) require a non-empty solution field or this rejects PUZZLE_LOCKS_INVALID_LOCK_TYPE (the module itself performs no validation of its own).
 get-puzzle { documentUuid } — reads general + per-type flags.
@@ -81,7 +87,12 @@ set-solve-macro { documentUuid, jsCode? OR macroName? — exactly one required }
 remove-puzzle { documentUuid, confirm:true } — CONFIRM-GATED, deletes general + per-type flags.
 force-unlock { documentUuid, confirm:true } — CONFIRM-GATED GM override; on a Wall ALSO closes the door (two-write); unlockMacro does NOT fire.
 
-Example: { action: "attach-puzzle", documentUuid: "Scene.abc.Drawing.def", lockType: "password-lock", typeConfig: { password: "open sesame" } }`,
+Example: { action: "attach-puzzle", documentUuid: "Scene.abc.Drawing.def", lockType: "password-lock", typeConfig: { password: "open sesame" } }
+
+Do NOT use this tool for physical door/object lock+key mechanics (pick DC, break DC, key items) — use \`module-access-control\` (LocknKey) for that. module-puzzle-locks is for interactive minigame-type puzzles (password/cryptex/sudoku/etc.), a distinct mechanic from LocknKey's lock-and-key model.
+
+Performance Notes:
+- All 6 actions return a small fixed-shape result (a lock's general+per-type config, a solve-state check, or a write confirmation) — no response modes, no pagination; cost does not scale with world size.`,
         inputSchema: {
           type: 'object',
           properties: {

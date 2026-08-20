@@ -51,7 +51,17 @@ export class CompendiumTools extends BaseTool {
           idempotentHint: true,
           openWorldHint: true,
         },
-        description: 'Enhanced search through compendium packs for items, spells, monsters, and other WFRP 4e content. Supports advanced filtering for creatures by threat level (Toughness + Wounds/10), creature species, size, and more. Perfect for encounter building and creature discovery. OPTIMIZATION TIPS: Start with broad searches using threat ranges (e.g., {min: 10, max: 15}) rather than exact values. Use minimal query terms initially and rely on filters. The default limit of 50 is optimal for discovery - avoid reducing it. Search results include key stats (threat, Wounds, Toughness) to reduce need for detailed lookups. Note: filters is creature-only and silently ignored for Actor/JournalEntry/Item searches that don\'t match creature shapes. packType must be top-level — placing it inside filters now throws an error with corrective guidance.',
+        description: `Enhanced keyword/text search through compendium packs for items, spells, monsters, and other WFRP 4e content, with advanced creature filtering (threat level, species, size, and more).
+
+Use this when:
+- Discovering candidate items/creatures by a keyword or partial name (e.g. "knight", "beastman", "wand") when you don't yet have a pack id or item id.
+- Finding creatures matching a threat-level range plus species/size filters for encounter building, before drilling into any single result.
+- Searching across Item/Actor/JournalEntry compendium content by free text where filters (creature-only) don't apply.
+
+Do NOT use this for a broad criteria-based creature survey with no keyword — use \`list-creatures-by-criteria\` instead (this tool is keyword/text search, not a pure-filter browse). Do NOT use this for single-item full detail once you already have an id — use \`get-compendium-item\` instead.
+
+Performance Notes:
+- OPTIMIZATION TIPS: start with broad threat ranges (e.g. {min:10, max:15}) rather than exact values; use minimal query terms and rely on filters. The default limit of 50 is optimal for discovery — avoid reducing it. Results include key stats (threat, Wounds, Toughness) to reduce follow-up lookups. filters is creature-only and silently ignored for Actor/JournalEntry/Item searches that don't match creature shapes. packType must be top-level — placing it inside filters throws an error with corrective guidance.`,
         inputSchema: {
           type: 'object',
           properties: {
@@ -119,7 +129,17 @@ export class CompendiumTools extends BaseTool {
           idempotentHint: true,
           openWorldHint: true,
         },
-        description: 'Retrieve detailed information about a specific compendium item. Use compact mode for UI performance when full details are not needed.',
+        description: `Retrieve full detailed information about one specific compendium item, given its pack id and item id.
+
+Use this when:
+- You already have a packId + itemId (from search-compendium or list-creatures-by-criteria) and need the item's full stat block or content.
+- Pulling a creature's complete profile before building it into an encounter.
+- Fetching an Item's complete mechanical text (weapon/armour/spell) rather than a search snippet.
+
+Do NOT use this for discovery when you don't yet know the item id — use \`search-compendium\` (keyword/text search) or \`list-creatures-by-criteria\` (broad criteria survey) first.
+
+Performance Notes:
+- Pass compact:true for a condensed stat block (key stats, abilities, actions — omits lengthy descriptions and technical data) when full detail isn't needed; this is materially cheaper than the full response and recommended for UI-facing lookups.`,
         inputSchema: {
           type: 'object',
           properties: {
@@ -149,7 +169,17 @@ export class CompendiumTools extends BaseTool {
           idempotentHint: true,
           openWorldHint: true,
         },
-        description: 'OPTIMIZED CREATURE DISCOVERY: Get a comprehensive list of creatures matching specific criteria. Perfect for encounter building - returns minimal data so Claude can use built-in monster knowledge to identify suitable creatures by name, then pull full details only for final selections. Features intelligent pack prioritization (prioritizes WFRP 4e core packs, then specialized content) and high result limits for complete surveys. This replaces inefficient text searches with efficient criteria-based surveys. WFRP 4e specific.',
+        description: `OPTIMIZED CREATURE DISCOVERY: get a comprehensive list of WFRP4e creatures matching specific criteria (threat level, species, size, magic use, special traits) — no keyword required.
+
+Use this when:
+- Surveying every creature matching a threat-level range and/or species/size before picking encounter participants, without a specific name in mind.
+- Building a complete list for Claude's built-in monster knowledge to pick suitable candidates from, then pulling full details only for final selections.
+- Running a broad criteria-based survey where WFRP 4e core packs should be prioritized over specialized/expansion content (this tool's built-in pack prioritization).
+
+Do NOT use this for keyword/text search — use \`search-compendium\` instead; this tool takes structured criteria only, not a free-text query. Once you've narrowed to specific candidates, use \`get-compendium-item\` for full detail.
+
+Performance Notes:
+- Default limit 100, max 1000 — high limits enable complete surveys. Pass compact:true (BUG-365) to return id/name/type/pack only per entry (omits threatLevel, creatureType, size, flags), cutting payload ~80%: a full limit=500 list otherwise runs ~167k chars and can overflow context. Survey names with compact:true first, then call get-compendium-item for details on final picks.`,
         inputSchema: {
           type: 'object',
           properties: {
@@ -210,7 +240,17 @@ export class CompendiumTools extends BaseTool {
           idempotentHint: true,
           openWorldHint: true,
         },
-        description: 'List all available compendium packs',
+        description: `List all available compendium packs registered on the world (id, label, document type, source module/system).
+
+Use this when:
+- Discovering which pack ids exist before scoping a search-compendium/list-creatures-by-criteria call to one pack.
+- Checking whether a specific expansion or system compendium (e.g. a bestiary pack) is actually loaded before assuming its content is available.
+- Filtering the pack inventory by document type (e.g. only Actor packs) to narrow a subsequent search.
+
+Do NOT use this to enumerate items inside a pack — that's \`search-compendium\` (keyword) or \`list-creatures-by-criteria\` (criteria); this tool only lists the packs themselves, not their contents.
+
+Performance Notes:
+- Single small response listing every registered pack — no response modes, no pagination; the pack count is bounded by what's actually loaded in the world.`,
         inputSchema: {
           type: 'object',
           properties: {

@@ -119,6 +119,12 @@ export class ModuleTaggerTool extends BaseTool {
 Conditional: returns MODULE_NOT_ACTIVE when tagger module is absent/inactive.
 Pre-flight: module-probe.is-active tagger before using this tool.
 
+Use this when:
+- Labeling one or more documents with semantic tags (e.g. "enemy", "elite") for later lookup by other tools/macros (MATT, Sequencer selectors, etc.).
+- Querying which documents on a scene (or across all scenes) carry a given tag or wildcard pattern.
+- Checking whether specific documents already carry a tag before deciding to add or skip.
+- Overwriting a document's tag set atomically, or clearing tags off one or more documents.
+
 6 actions:
 - tag         { uuids, tags, toggle? }              — addTags (or toggleTags if toggle:true)
 - untag       { uuids, tags }                        — removeTags
@@ -141,7 +147,13 @@ Examples:
 - { action: "tag", uuids: "Scene.abc.Token.xyz", tags: ["enemy","elite"] }
 - { action: "query", tags: ["enemy*"], sceneId: "abc123" }
 - { action: "check-tags", uuids: "Scene.abc.Token.xyz", check: false }
-- { action: "clear-tags", uuids: ["uuid1","uuid2"], confirm: true }`,
+- { action: "clear-tags", uuids: ["uuid1","uuid2"], confirm: true }
+
+Do NOT use this tool for a document's permanent identity or name — use the relevant core document-update tool for that. Tagger tags are a semantic label layer other selectors (MATT, Sequencer) read against; they never rename or replace a document's actual identity.
+
+Performance Notes:
+- tag/untag/set-tags/clear-tags/check-tags(check:true): small fixed-shape response (an applied count + tag list) — no pagination.
+- query/check-tags(check:false): size scales with matching document count; allScenes:true returns a per-scene map that can be large on a big world — narrow with sceneId/tags/matchAny when possible.`,
         inputSchema: {
           type: 'object',
           properties: {

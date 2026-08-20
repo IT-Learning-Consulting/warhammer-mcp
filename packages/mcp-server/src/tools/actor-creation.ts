@@ -79,7 +79,17 @@ export class ActorCreationTools extends BaseTool {
           idempotentHint: false,
           openWorldHint: true,
         },
-        description: 'Create one or more actors from a specific compendium entry with custom names. Use search-compendium first to find the exact creature you want, then use this tool with the packId and itemId from the search results.',
+        description: `Create one or more world actors from a specific compendium entry with custom names. Use search-compendium first to find the exact creature you want, then use this tool with the packId and itemId from the search results.
+
+Use this when:
+- Spawning one or more NPCs/creatures based on a published stat block (e.g. "wfrp4e-core.bestiary" Giant Rat) under custom names ["Rat 1", "Rat 2"].
+- Populating an encounter with several copies of the same creature entry in one call.
+- Placing the newly created actors onto the current scene as tokens (addToScene:true), with either automatic or explicit per-token coordinates.
+
+Do NOT use this for a blank actor with no compendium base — use create-actor instead.
+
+Performance Notes:
+- Response scales with the number of actors requested (names array length or count) — each created actor's id/name is returned; no full stat-block payload is echoed back per actor.`,
         inputSchema: {
           type: 'object',
           properties: {
@@ -149,6 +159,14 @@ export class ActorCreationTools extends BaseTool {
         },
         description: `Create a world actor of type 'character', 'npc', 'creature', or 'vehicle' with optional system data and folder placement. Unlike create-actor-from-compendium, this creates a blank actor whose shape is fully caller-controlled. Wraps the Foundry-side createActor query (GM-gated, transaction-wrapped).
 
+Use this when:
+- Creating a blank PC actor for /wfrp-build-pc flows (type:"character" auto-embeds basic skills + coins, no dialog).
+- Creating a vehicle actor headlessly (type:"vehicle" is dialog-free by design).
+- Creating an npc/creature actor from autonomous flows, passing options.skipItems:true to suppress the blocking basic-skills dialog (HC9).
+- Placing a pre-shaped actor with specific systemData (species, career, etc.) into a folder at creation time.
+
+Do NOT use this for basing a new actor on a published compendium stat block — use create-actor-from-compendium instead.
+
 **\`_preCreate\` auto-embed behavior (wfrp4e system hook):**
 - **type='character'**: NO PROMPT. The wfrp4e system silently auto-embeds basic skills + 3 coin items (Gold Crowns / Silver Shillings / Brass Pennies, quantity 0). Use this for /wfrp-build-pc flows where the PC sheet should land pre-populated.
 - **type='npc'**: TRIGGERS A BLOCKING DialogV2.confirm asking whether to add basic skills + money. Since MCP calls are headless, the dialog will block the response — typical resolution is to dismiss it via the Foundry UI, or pre-populate \`systemData\` to satisfy the system check. Avoid calling for 'npc' from autonomous flows unless you have a strategy for the dialog.
@@ -157,7 +175,10 @@ export class ActorCreationTools extends BaseTool {
 
 **Post-write verification (CCR-5 / DP-16):** the handler asserts the returned actor has a non-empty id and the name matches the request, throwing CREATE_ACTOR_NOT_PERSISTED on mismatch.
 
-**Suppress \`_preCreate\` dialog (HC9):** pass \`options.skipItems: true\` to bypass the wfrp4e basic-skills DialogV2.confirm on npc/creature creation. Use this for autonomous flows like /wfrp-build-npc --with-details; the skill body then composes skills/coins explicitly via add-item-from-compendium.`,
+**Suppress \`_preCreate\` dialog (HC9):** pass \`options.skipItems: true\` to bypass the wfrp4e basic-skills DialogV2.confirm on npc/creature creation. Use this for autonomous flows like /wfrp-build-npc --with-details; the skill body then composes skills/coins explicitly via add-item-from-compendium.
+
+Performance Notes:
+- Single small response: the created actor's id/name/type, no embedded items/effects echoed back. Mode-less — no response-mode variance.`,
         inputSchema: {
           type: 'object',
           properties: {
@@ -204,7 +225,20 @@ export class ActorCreationTools extends BaseTool {
           idempotentHint: true,
           openWorldHint: true,
         },
-        description: 'Retrieve complete stat block data including items, spells, and abilities for actor creation. TOOL-IDEA-009 (2026-05-14): pass `summary_only: true` to drop the verbose `fullData` and `system` tree from the response, returning only name-only `items[]`/`effects[]` summaries plus the `summary` line. Use this for "does creature X have trait Y?"-style queries when you don\'t need the full payload.',
+        description: `Retrieve complete stat block data including items, spells, and abilities for actor creation.
+
+Use this when:
+- Fetching a compendium creature/NPC's full stat block before creating an actor from it (packId + itemId already known from search-compendium).
+- Checking whether a specific creature has a trait, talent, or ability by name, using \`summary_only: true\` to skip the full payload.
+- Inspecting a compendium entry's structure to decide what systemData to pass to create-actor.
+
+Do NOT use this to find a compendium entry when you don't yet know its packId/itemId — use search-compendium first, then call this tool with the resolved ids.
+
+TOOL-IDEA-009 (2026-05-14): pass \`summary_only: true\` to drop the verbose \`fullData\` and \`system\` tree from the response, returning only name-only \`items[]\`/\`effects[]\` summaries plus the \`summary\` line.
+
+Performance Notes:
+- Full mode (default) returns the entry's complete fullData/system tree plus all embedded items/effects — largest response mode for this tool.
+- \`summary_only: true\` drops fullData/system and returns name-only item/effect summaries — use for existence/trait checks.`,
         inputSchema: {
           type: 'object',
           properties: {

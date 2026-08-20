@@ -96,13 +96,25 @@ export class ModulePartyResourcesTool extends BaseTool {
 Conditional: returns MODULE_NOT_ACTIVE when fvtt-party-resources is absent/inactive.
 Pre-flight: module-probe.is-active fvtt-party-resources before using this tool.
 
+Use this when:
+- Creating a new shared party tracker (e.g. a Doom track, a corruption pool, a shared coin purse).
+- Advancing or reducing a tracker's value during play (increment/decrement/set-value), optionally broadcasting the change to chat.
+- Reading the current value(s) of one or all party trackers for GM or player-facing display.
+- Reconfiguring a tracker's display metadata (name, min/max, icon, visibility, player-manageable flag).
+- Removing a tracker that is no longer needed for the campaign.
+
 8 actions:
 Reads — list (all resources + metadata); get { resourceId } (single resource value + metadata).
 Writes (GM) — set-value { resourceId, value, notifyChat? } (notifyChat:true broadcasts the change to chat); increment { resourceId, jump? } (clamped to max); decrement { resourceId, jump? } (clamped to min); update-meta { resourceId, name?, max?, min?, visible?, playerManaged?, icon?, useIcon?, notifyChat?, incMessage?, decMessage? }.
 Confirm-gated writes (GM + confirm:true) — create { resourceId, name?, value?, max?, min?, visible?, playerManaged?, icon?, notifyChat?, confirm } (registers a new track); delete { resourceId, confirm } (removes from the tracker).
 
 resourceId must be lowercase letters/digits/underscore/hyphen.
-Example: { action: "create", resourceId: "doom_track", name: "Doom", value: 0, max: 13, min: 0, confirm: true }`,
+Example: { action: "create", resourceId: "doom_track", name: "Doom", value: 0, max: 13, min: 0, confirm: true }
+
+Do NOT use this tool for arbitrary world-configuration values — use the \`setting\` tool for that. module-party-resources is specifically the shared party-resource-track store (CRUD over a fixed track shape); it is not a general key-value settings surface.
+
+Performance Notes:
+- All 8 actions return a small fixed-shape record (one resource snapshot, or the full list) — no response modes, no pagination; cost scales only with the number of registered trackers, typically small.`,
         inputSchema: {
           type: 'object',
           properties: {

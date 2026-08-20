@@ -32,7 +32,17 @@ export class DeleteItemTool extends BaseTool {
           openWorldHint: true,
         },
         description:
-          'Delete an item. Supports both actor-embedded and world-scope items. Thin pass-through to the Foundry-module deleteItem query — does not enforce WFRP rules. The system\'s deleteItem hook chain auto-removes any Active Effects the item embedded (research §7.4). Legacy shape `{actorId, itemId}` still accepted for backward compat. New shape: `{destination: {type:"actor"|"world", ...}, itemId? or itemName?}`. Used by /wfrp-mutation remove, /wfrp-disease cure, /wfrp-critical remove, and world-item cleanup flows.',
+          `Delete an item. Supports both actor-embedded and world-scope items. Thin pass-through to the Foundry-module deleteItem query — does not enforce WFRP rules. The system's deleteItem hook chain auto-removes any Active Effects the item embedded (research §7.4). Legacy shape \`{actorId, itemId}\` still accepted for backward compat. New shape: \`{destination: {type:"actor"|"world", ...}, itemId? or itemName?}\`. Used by /wfrp-mutation remove, /wfrp-disease cure, /wfrp-critical remove, and world-item cleanup flows.
+
+Use this when:
+- Removing a cured disease, healed injury, or resolved critical-wound item from a character (e.g. /wfrp-mutation remove, /wfrp-critical remove).
+- Deleting a world-scope item from the Items sidebar (destination:{type:"world"}) as part of maintenance cleanup.
+- Removing an actor-embedded item by known itemId or by itemName lookup.
+
+Do NOT use this to remove an embedded Active Effect directly — use delete-active-effect instead. Note: deleting an item that embeds Active Effects auto-removes those effects as a side effect of this call, so an explicit delete-active-effect call is unnecessary for that case.
+
+Performance Notes:
+- Single small response: confirmation of the deleted item's id, no payload of remaining items echoed back. Mode-less — no response-mode variance.`,
         inputSchema: {
           type: 'object',
           properties: {

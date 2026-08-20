@@ -126,6 +126,15 @@ export class SoundTool extends BaseTool {
         description:
           `Manage Foundry VTT AmbientSound documents via 6 actions (embedded-doc CRUD + list + Phase 9C duplicate). Sounds live on scenes (scene.sounds collection).
 
+Use this when:
+- Placing a positional ambient sound on a scene (e.g. a tavern loop, a waterfall) with a radius and optional darkness-threshold gating.
+- Adjusting an existing sound's volume, radius, or path (action:"update").
+- Removing a sound that's no longer needed on a scene (action:"delete").
+- Auditing every AmbientSound currently placed on a scene, optionally filtered by hidden state or path substring (action:"list"/"get").
+- Cloning an existing sound's settings onto a new placement (action:"duplicate").
+
+Do NOT use this for playlist-driven music/audio tracks — use \`playlist\` instead; this tool is specifically for scene-placed, positional AmbientSound sources, not the playlist/track system.
+
 **Actions:**
 - **create**: Place a new AmbientSound on a scene. Required: sceneId, x, y. Optional: elevation, radius, path, repeat, volume, walls, easing, hidden, darkness.{min,max}, effects.{base,muffled}.{type,intensity}, flags. Returns full SoundViewModel.
 - **update**: Partial-diff update. sceneId + soundId + changes (≥1 field). Same writable surface as create.
@@ -137,6 +146,9 @@ export class SoundTool extends BaseTool {
 **effects:** Each AmbientSound has base and muffled effect variants: {type: string|null, intensity: 0-10}. Controls reverb/muffling through walls.
 
 **darkness:** {min, max} — sound only plays when scene darkness level is within [min, max] (0-1).
+
+Performance Notes:
+- create/update/delete/get/duplicate return a single sound record — no pagination. list without pagination params returns ALL matching sounds in one response (bare array); pass page/pageSize (max 100) to paginate, or countOnly:true for a cheap total.
 
 **Examples:**
 - create: {action:"create", sceneId:"abc", x:500, y:300, path:"sounds/ambient/tavern.ogg", volume:0.4, radius:30}

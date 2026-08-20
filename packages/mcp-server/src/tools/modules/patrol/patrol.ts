@@ -120,6 +120,13 @@ export class ModulePatrolTool extends BaseTool {
 Conditional: returns MODULE_NOT_ACTIVE when patrol is absent/inactive.
 Pre-flight: module-probe.is-active patrol before using this tool.
 
+Use this when:
+- Setting up an NPC token to autonomously wander a zone or follow a defined path across a scene.
+- Defining a wander zone or a named path Drawing that patrol tokens will reference.
+- Checking a token's current patrol config, or listing which tokens on a scene are patrol-enabled.
+- Applying an undetectable status to an actor for stealth-patrol mechanics.
+- Starting/stopping all patrol movement engines globally, or re-mapping paths after redrawing/renaming them.
+
 12 actions:
 Reads — get-token-config { tokenUuid } (all patrol flags + global engine state); get-world-settings {} (module-level config); list-tokens { filter?: all|wander|path|spotting } (patrol-enabled tokens).
 GM writes — enable-token { tokenUuids[], mode: wander|path, spotting?, patrolPathName? (path), pathNodeIndex? (path), multiPath? (path) }; disable-token { tokenUuids[] } (clears all patrol flags); set-wander-zone { sceneId, points[]? (≥3 polygon verts) | drawingId? } (creates a "Patrol"-labeled Drawing); set-path { sceneId, pathName, points[]? (≥2) | drawingId? }; apply-undetectable { actorUuid, active }; configure { patrolDelay?, pathPatrolDelay?, patrolAlertDelay?, patrolDiagonals?, patrolSmooth?, … } (engine tick/detection settings); set-waypoint { tokenUuids[], pathNodeIndex } (jump path-followers to a node).
@@ -127,7 +134,12 @@ Confirm-gated writes — toggle-global { started, engines?: wander|path|both, co
 
 WRITE-ORDER: for path mode, call set-path FIRST (the named Drawing must exist before enable-token, else pathID resolves empty). Patrols pause during active combat and resume after. Global state is in-memory (not persisted).
 
-Example: { action: "enable-token", tokenUuids: ["Scene.x.Token.y"], mode: "wander", spotting: true }`,
+Example: { action: "enable-token", tokenUuids: ["Scene.x.Token.y"], mode: "wander", spotting: true }
+
+Do NOT use this tool for a one-off position update — use the \`token\` (core) tool for that. module-patrol is for persistent autonomous NPC-movement engines (wander/path-follower ticking on the GM client), not a single manual move.
+
+Performance Notes:
+- All 12 actions return a small fixed-shape result (a token config, a per-token enable/disable status list, or a write confirmation) — no response modes, no pagination; cost scales only with the token count passed in tokenUuids, not with scene/world size.`,
         inputSchema: {
           type: 'object',
           properties: {

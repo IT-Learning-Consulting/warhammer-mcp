@@ -52,7 +52,22 @@ export class CharacterTools extends BaseTool {
           idempotentHint: true,
           openWorldHint: true,
         },
-        description: 'Retrieve comprehensive character information for a WFRP 4e character. Returns complete character data including: identity (name, species, status), characteristics (WS, BS, S, T, I, Ag, Dex, Int, WP, Fel), status (wounds, fortune, fate, resilience, resolve, corruption, money, toughness), critical wounds (count and details), biography (prose biographyText, motivation, ambitions), skills (with advances and totals), talents (with descriptions), traits (creature traits), conditions (injuries, mutations, diseases, psychology), items (physical inventory only - weapons, armor, trappings), and experience.\n\nTOOL-IDEA-006 (2026-05-14): pass `sections: ["characteristics"]` (or any subset) to receive only those sections in the response. Reduces payload size dramatically for narrow queries (e.g. "what is Camila\'s WS?"). `id`, `name`, `type`, `hasImage` are always returned. Available section names: `identity`, `vitals`, `characteristics`, `skills`, `talents`, `conditions`, `items`, `effects`, `biography`. Omit `sections` to receive the full payload as before.',
+        description: `Retrieve comprehensive character information for a WFRP 4e character. Returns complete character data including: identity (name, species, status), characteristics (WS, BS, S, T, I, Ag, Dex, Int, WP, Fel), status (wounds, fortune, fate, resilience, resolve, corruption, money, toughness), critical wounds (count and details), biography (prose biographyText, motivation, ambitions), skills (with advances and totals), talents (with descriptions), traits (creature traits), conditions (injuries, mutations, diseases, psychology), items (physical inventory only - weapons, armor, trappings), and experience.
+
+Use this when:
+- Looking up one known character's full sheet detail by name or id (e.g. "identifier":"Camila" or a 16-char actor id like "5kYn49mOZa9krFJ0").
+- Answering a narrow question about one character's stats/skills/conditions using \`sections\` to avoid pulling the whole payload (e.g. "what is Camila's WS?" → sections:["characteristics"]).
+- Reading a character's current wounds/fortune/fate/corruption before applying damage or a condition.
+- Pulling a character's biography/motivation/ambitions prose for narrative use.
+- Verifying a prior write (e.g. after manage-character or update-actor) landed by re-reading the affected section.
+
+Do NOT use this to enumerate many actors at once or find an id by partial/fuzzy match — use list-characters for that, then call get-character with the resolved id.
+
+TOOL-IDEA-006 (2026-05-14): pass \`sections: ["characteristics"]\` (or any subset) to receive only those sections in the response. Reduces payload size dramatically for narrow queries. \`id\`, \`name\`, \`type\`, \`hasImage\` are always returned. Available section names: \`identity\`, \`vitals\`, \`characteristics\`, \`skills\`, \`talents\`, \`conditions\`, \`items\`, \`effects\`, \`biography\`. Omit \`sections\` to receive the full payload as before.
+
+Performance Notes:
+- Full payload (no \`sections\`) includes up to 50 inventory items plus skills/talents/traits/effects — largest response mode for this tool.
+- Passing \`sections\` narrows the response to only the requested buckets (id/name/type/hasImage always included) — use it for single-fact lookups to cut payload size.`,
         inputSchema: {
           type: 'object',
           properties: {
@@ -82,7 +97,18 @@ export class CharacterTools extends BaseTool {
           idempotentHint: true,
           openWorldHint: true,
         },
-        description: 'List all available characters with basic information. WFRP 4e specific.',
+        description: `List all available characters with basic information (id, name, type, hasImage). WFRP 4e specific.
+
+Use this when:
+- Finding a character's id before calling get-character, update-actor, or another actor-scoped tool.
+- Enumerating all PCs, or all NPCs (type:"npc"), or all creatures (type:"creature") in the world.
+- Checking which characters exist before creating a new one, to avoid a duplicate name.
+- Building a roster overview (name + type only) without pulling full sheet detail for every actor.
+
+Do NOT use this for one known character's full detail — use get-character, which returns characteristics, skills, items, and conditions that this tool omits.
+
+Performance Notes:
+- Single flat response, no response modes: one small object per actor (id, name, type, hasImage). Scales linearly with total actor count in the world — no pagination.`,
         inputSchema: {
           type: 'object',
           properties: {

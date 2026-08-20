@@ -120,13 +120,25 @@ export class ModuleGathererTool extends BaseTool {
 Conditional: returns MODULE_NOT_ACTIVE when gatherer is absent/inactive.
 Pre-flight: module-probe.is-active gatherer before using this tool.
 
+Use this when:
+- Executing a gather or harvest draw for a PC from a configured foraging/harvesting spot.
+- Checking a spot's remaining draws, reset timer, or configured table before drawing.
+- Authoring a new gather spot on a journal page, or reconfiguring an existing one's table/quantity/DC rules.
+- Listing all gather spots (optionally scoped to one journal or filtered to exhausted-only) for GM planning.
+- Resetting an exhausted spot's draw count, or adjusting world-level Gatherer settings (quantity path, harvesting eligibility).
+
 9 actions:
 Reads — get-spot-status { pageUuid } (draws remaining, reset time, table, minigame flag); list-spots { journalUuid?, exhaustedOnly? } (enumerate gather-source pages).
 GM writes — gather { pageUuid, actorUuid }; harvest-token { actorUuid (creature carrying gatherSheet), gatheringActorUuid }; reset-spot { pageUuid }; configure-spot { pageUuid, tableUuid?, draws?, quantity?, require?, time?, expression?, modifierList? }; create-spot { journalUuid, name, tableUuid?, draws?, quantity?, time?, expression?, modifierList? }; set-harvest-source { actorUuid, gatherSheetUuid }; configure-settings { quantityPath?, resourcePath?, resourceValue?, enableHarvesting? }.
 
 MINIGAME: pages flagged with a minigame open the slot-machine dialog on the GM client (fire-and-forget; gather/harvest-token return minigame:"opened" + a note rather than awaiting — awaiting would hang the socket). The GM completes the dialog on screen and the item lands when they click through. For WFRP4e, the world setting gatherer.quantityPath must be "quantity.value" or item stacking silently fails — gather surfaces a warning (fix via /foundry-setting).
 
-Example: { action: "gather", pageUuid: "JournalEntry.x.JournalEntryPage.y", actorUuid: "Actor.z" }`,
+Example: { action: "gather", pageUuid: "JournalEntry.x.JournalEntryPage.y", actorUuid: "Actor.z" }
+
+Do NOT use this tool for an arbitrary/ad-hoc table draw not tied to a configured gather-source page — use the \`rolltable\` tool for that. module-gatherer only operates on JournalEntryPage-backed gather spots with their own draw-count/reset/minigame state.
+
+Performance Notes:
+- Most actions return a small fixed-shape record (a spot's status, a gather/harvest result, or a configuration confirmation) — no response modes, no pagination. list-spots scales with the number of gather-source pages in the world/journal scope; still no pagination, so a very large journal set returns a proportionally larger list.`,
         inputSchema: {
           type: 'object',
           properties: {

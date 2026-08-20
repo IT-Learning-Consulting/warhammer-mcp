@@ -115,6 +115,15 @@ export class FolderTool extends BaseTool {
                 description:
                     `Manage Foundry Folder documents through one umbrella tool. 6 actions: create, update, delete, get, list, list-contents.
 
+Use this when:
+- Creating an organizational folder for a document type before importing/generating a batch of documents into it (action:"create", e.g. "Session 12 NPCs").
+- Re-parenting, recoloring, or renaming an existing folder (action:"update").
+- Enumerating folders of a given type to find the right target before a bulk write (action:"list").
+- Listing everything a folder directly contains, or recursively, before deciding whether a delete is safe (action:"list-contents").
+- Removing an empty or no-longer-needed folder, with an explicit choice of un-parenting vs. bulk-deleting its contents (action:"delete").
+
+Do NOT use this for compendium-pack folders — that is a different concept, handled by \`compendium\`/\`compendium-umbrella\`; this tool is for world-document folders only.
+
 WARNING: delete with confirm:true and deleteContents:true is irreversible — contained documents and subfolders are permanently removed.
 
 Key rules:
@@ -125,6 +134,9 @@ Key rules:
 - Maximum folder nesting depth is 4 (CONST.FOLDER_MAX_DEPTH).
 
 Folder types: Actor, Cards, Item, JournalEntry, Macro, Playlist, RollTable, Scene, Adventure, Compendium.
+
+Performance Notes:
+- create/update/delete/get return a single folder record. list is paginated (page/pageSize, max 100, default 50) — pass countOnly:true for a cheap total without items. list-contents returns every matching item in one response with no pagination — recursive:true on a deep tree can produce a large result.
 
 Examples:
 - {action:"create", name:"Session 12 NPCs", type:"Actor"}

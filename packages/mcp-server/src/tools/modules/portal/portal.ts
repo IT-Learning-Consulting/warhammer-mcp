@@ -54,10 +54,21 @@ Conditional: returns MODULE_NOT_ACTIVE when portal-lib is absent/inactive. Pre-f
 
 CANVAS-BOUND, STRICT SCENE GUARD: Portal has NO sceneId parameter of its own — it always spawns onto canvas.scene (the scene currently open in the GM's Foundry client). sceneId here is REQUIRED and is checked against the live canvas.scene.id; a mismatch refuses with PORTAL_WRONG_SCENE_ACTIVE (activate the target scene in the GM client first) rather than silently spawning onto the wrong scene. Also requires canvas.ready (PORTAL_CANVAS_NOT_READY otherwise).
 
+Use this when:
+- Spawning one or more actor-sourced encounter tokens onto the scene the GM currently has open, preserving prototype art/vision/bars.
+- Placing multiple copies of the same creature (e.g. a group of bandits) in one call via the creatures[].count field.
+- Spawning tokens with per-creature TokenDocument overrides (name, disposition) via updateData.
+- Materializing an ambush/reinforcement wave at a specific canvas position mid-session.
+
 1 action:
 spawn { sceneId, creatures: [{ uuid, count?, updateData? }], x, y, elevation? } — GM-only. Builds a Portal() fluent call: addCreature(uuid, {count}) per entry, setLocation({x,y,elevation}), then an awaited spawn(). Returns the spawned tokenIds.
 
-Example: { action: "spawn", sceneId: "abc123", creatures: [{ uuid: "Actor.xyz789" }], x: 1500, y: 1200 }`,
+Example: { action: "spawn", sceneId: "abc123", creatures: [{ uuid: "Actor.xyz789" }], x: 1500, y: 1200 }
+
+Do NOT use this tool to spawn onto a scene the GM is NOT currently viewing — use \`token\`/\`apply-template-to-token\` (core tools) if the target scene differs from canvas.scene, or activate the target scene first. module-portal is strictly canvas-bound; it has no sceneId parameter of its own and refuses a mismatch rather than spawning onto the wrong scene.
+
+Performance Notes:
+- spawn returns a small fixed-shape result (the list of spawned token ids) — no response modes, no pagination; cost scales only with the number of creatures/count requested, not with scene or world size.`,
         inputSchema: {
           type: 'object',
           properties: {

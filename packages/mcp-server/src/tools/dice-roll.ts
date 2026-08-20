@@ -78,7 +78,18 @@ export class DiceRollTools extends BaseTool {
           idempotentHint: false,
           openWorldHint: true,
         },
-        description: 'Request dice rolls from players with interactive buttons. Creates roll buttons in Foundry chat that players can click. Supports both D&D 5e (d20 system) and WFRP 4e (d100 system). Examples: "Roll Weapon Skill for Hans" (WFRP), "Test Willpower against fear" (WFRP), "Roll stealth for Clark" (D&D), "Make a perception check" (D&D). VISIBILITY WORKFLOW: Before calling this function, ensure the user has specified whether they want a public or private roll. If they have already specified "public" or "private" in their request (e.g., "public performance check", "private stealth roll"), you can proceed directly. If the visibility is ambiguous or unspecified, ask: "Do you want this to be a PUBLIC roll (visible to all players) or PRIVATE roll (visible to player and GM only)?" and wait for their answer. Supports character-to-player resolution and GM fallback.',
+        description: `Request dice rolls from players with interactive buttons. Creates roll buttons in Foundry chat that players can click. Supports both D&D 5e (d20 system) and WFRP 4e (d100 system). Examples: "Roll Weapon Skill for Hans" (WFRP), "Test Willpower against fear" (WFRP), "Roll stealth for Clark" (D&D), "Make a perception check" (D&D). VISIBILITY WORKFLOW: Before calling this function, ensure the user has specified whether they want a public or private roll. If they have already specified "public" or "private" in their request (e.g., "public performance check", "private stealth roll"), you can proceed directly. If the visibility is ambiguous or unspecified, ask: "Do you want this to be a PUBLIC roll (visible to all players) or PRIVATE roll (visible to player and GM only)?" and wait for their answer. Supports character-to-player resolution and GM fallback.
+
+Use this when:
+- A player needs to click a roll button themselves — e.g. "Roll Weapon Skill for Hans" or "Test Willpower against fear".
+- The roll's visibility (public vs. private) must be surfaced to the table before it happens.
+- Waiting for the actual player-clicked result via awaitResult:true, to get a structured outcome/total/SL/success envelope.
+- Requesting a roll from a target player by name, with GM fallback if no matching player is connected.
+
+Do NOT use this for an immediate GM-side formula evaluation with no interactive button — use dice-roll instead, which rolls now and returns the numbers without waiting on a player.
+
+Performance Notes:
+- Single small response: an acknowledgement (fire-and-forget) or, with awaitResult:true, a structured result envelope (outcome/total/SL/success). Mode-less — no response-mode variance.`,
         inputSchema: {
           type: 'object',
           properties: {
@@ -136,6 +147,14 @@ export class DiceRollTools extends BaseTool {
         description:
           `Immediately evaluate a dice formula GM-side and return the result. For INTERACTIVE player roll buttons (a player clicks to roll), use request-player-rolls instead — this tool rolls now and hands back the numbers.
 
+Use this when:
+- Evaluating a dice formula immediately GM-side, with no player interaction needed (action:"roll").
+- Checking whether a formula is parseable before using it elsewhere (action:"validate").
+- Sampling a formula's statistical distribution via Monte-Carlo simulation (action:"simulate").
+- Resolving @-path references (e.g. "@characteristics.ws.value") against a known actor's roll data.
+
+Do NOT use this for a player-clickable interactive roll button — use request-player-rolls instead.
+
 **Actions:**
 - **roll**: Evaluate a formula. Required: formula (e.g. "4d6kh3+2", "1d100", "2d10+@characteristics.ws.value"). Optional: actorId (resolves @-paths via the actor's roll data), createMessage (post the result to chat), rollMode (publicroll/gmroll/blindroll/selfroll), flavor (chat label), speaker ({alias?, actor?, token?, scene?} ids). Returns {total, formula, result, terms[], messageId?}.
 - **validate**: Check whether a formula is parseable WITHOUT rolling it. Required: formula. Returns {valid:boolean, formula}. A bad formula returns valid:false (it does not error).
@@ -150,7 +169,12 @@ export class DiceRollTools extends BaseTool {
 - roll: {action:"roll", formula:"4d6kh3+2"}
 - roll with actor: {action:"roll", formula:"1d100", actorId:"abc123", flavor:"Weapon Skill test", createMessage:true}
 - validate: {action:"validate", formula:"1d20+"}
-- simulate: {action:"simulate", formula:"1d6", n:1000}`,
+- simulate: {action:"simulate", formula:"1d6", n:1000}
+
+Performance Notes:
+- roll: single small response ({total, formula, result, terms[], messageId?}), no response-mode variance.
+- validate: single small {valid, formula} response.
+- simulate: response scales with n (capped at 1000) — returns totals[] plus min/max/mean; use n's cap to bound payload size.`,
         inputSchema: {
           type: 'object',
           properties: {

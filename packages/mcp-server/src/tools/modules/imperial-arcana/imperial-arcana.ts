@@ -126,6 +126,13 @@ export class ModuleImperialArcanaTool extends BaseTool {
 divination deck + GM-only Reading Records). Conditional: returns MODULE_NOT_ACTIVE when the module is
 absent/inactive. Pre-flight: module-probe.is-active wfrp-imperial-arcana.
 
+Use this when:
+- Laying a fresh divination spread for a session (a fortune-teller NPC scene, an omen-reading ritual) and getting each position's Promise/Peril/Reader's-Line text.
+- Interpreting an already-dealt or physically-drawn spread by supplying its numerals instead of drawing at random.
+- Persisting a completed reading as a GM-only Reading Record for later reference, optionally linked to participant actors.
+- Searching past Reading Records by spread, numerals, linked entity, or date range.
+- Recalling prior readings tied to one specific entity (actor/location) for a dramatic callback later in the campaign.
+
 4 actions:
 - draw-reading     { spread, question?, numerals? }                       READ-ONLY — lay a spread's
     positions with each card's Promise/Peril/Reader's-Line (from the Card Index journal) + GM-only
@@ -145,7 +152,13 @@ Examples:
 - { action: "draw-reading", spread: "A", numerals: [31,33,35] }   // interpret an already-dealt/physical spread
 - { action: "record-reading", spread: "A", numerals: [10,17,13], dominantOmen: 17, linkedUuids: ["Actor.xxxx"] }
 - { action: "search-omens", spread: "A" }
-- { action: "recall-callbacks", linkedUuid: "Actor.xxxx" }`,
+- { action: "recall-callbacks", linkedUuid: "Actor.xxxx" }
+
+Do NOT use this tool for a generic dice/table draw — use \`rolltable\` for that. imperial-arcana is scoped strictly to the fixed 36-card divination deck and its GM Reading Records; it has no general-purpose table-draw capability.
+
+Performance Notes:
+- draw-reading/record-reading: small fixed-shape response (one spread's positions, or one record confirmation) — no response modes, no pagination.
+- search-omens/recall-callbacks: size scales with matching record count; recall-callbacks accepts a limit (default 20, max 100) to bound the response, search-omens has no limit param — a broad filter can return every stored record.`,
         inputSchema: {
           type: 'object',
           properties: {

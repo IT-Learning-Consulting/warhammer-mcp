@@ -44,11 +44,21 @@ export class TravelDistanceTool extends BaseTool {
         description:
           `Look up the WFRP4e travel distance between two Reikland towns (TravelDistanceWFRP4e gazetteer, Core p.290-294). Returns the road / river / sea legs that exist for that route, each with distance (km), baseline days, and a danger band (Very Low / Low / Medium / High / Very High).
 
+Use this when:
+- Looking up the distance, baseline travel days, and danger band between two known Reikland gazetteer towns.
+- Determining which travel legs (road/river/sea) exist for a given route before narrating a journey.
+- Checking a route's danger band before deciding whether an encounter check applies.
+
+Do NOT use this tool to roll dice or apply Forced March pace math — it never rolls and never writes; that logic (and any actual dice-roll, e.g. via dice-roll) belongs in the skill layer, not here.
+
 **Compute-only:** this tool NEVER rolls and NEVER writes — no chat card, no actor changes. It is a pure reference lookup; narrate the result and compute pace (Steady vs Forced March) in the skill layer.
 
 **Directional:** routes are one-way — a from→to entry may exist without the reverse. Town names are case-insensitive but must match the gazetteer (e.g. "Altdorf", "Bögenhafen", "Ubersreik").
 
-**Errors:** TRAVEL_ROUTE_NOT_FOUND (no directional from→to entry — check spelling / try the reverse); TRAVEL_DATA_NOT_LOADED (the wfrp4e travel gazetteer is not loaded).`,
+**Errors:** TRAVEL_ROUTE_NOT_FOUND (no directional from→to entry — check spelling / try the reverse); TRAVEL_DATA_NOT_LOADED (the wfrp4e travel gazetteer is not loaded).
+
+Performance Notes:
+- Single small response: the route's legs (distance/days/danger band) for one from→to pair, no full gazetteer dump. Mode-less — no response-mode variance.`,
         inputSchema: {
           type: 'object',
           properties: {

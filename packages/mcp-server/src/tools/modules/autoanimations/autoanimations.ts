@@ -127,6 +127,13 @@ Pre-flight: module-probe.is-active autoanimations before using this tool.
 AA fires animations AUTOMATICALLY on every roll once per-item flags or Autorec name-maps exist;
 this tool AUTHORS those flags/maps — it does not intercept rolls.
 
+Use this when:
+- Wiring a specific Item to a JB2A/Sequencer animation so future rolls with it fire automatically (set-item-animation).
+- Bulk-configuring name-based animation matching for a whole item category via the world Autorec map (merge-autorec-entry).
+- Browsing the AA animation database to find a valid dbSection/menuType/animation key before authoring a flag.
+- Auditing what animation (if any) is currently configured on an Item, or clearing a misconfigured one.
+- Manually firing an animation outside of a roll, e.g. for a cutscene beat or GM-narrated moment (play-animation).
+
 7 actions:
 PER-ITEM FLAGS:
 - get-item-animation  { uuid }                          — read flags.autoanimations from an Item
@@ -148,7 +155,13 @@ Examples:
 - { action: "set-item-animation", uuid: "Actor.x.Item.y", animation: { primary: { dbSection: "melee", menuType: "weapon", animation: "sword", variant: "01", color: "white" } } }
 - { action: "merge-autorec-entry", category: "melee", label: "Hand Weapon", animation: { primary: { dbSection: "melee", menuType: "weapon", animation: "sword" } } }
 - { action: "list-animations", dbSection: "melee", menuType: "weapon" }
-- { action: "play-animation", sourceTokenUuid: "Scene.s.Token.t", itemName: "Fireball", confirm: true }`,
+- { action: "play-animation", sourceTokenUuid: "Scene.s.Token.t", itemName: "Fireball", confirm: true }
+
+Do NOT use this tool expecting it to intercept or replay live combat rolls — AA's automatic playback fires from the flags/Autorec maps THIS tool writes, but the actual roll-to-animation dispatch happens inside AA itself outside MCP's reach; this tool only authors those flags/maps and drives one-off manual plays via play-animation.
+
+Performance Notes:
+- get-item-animation/set-item-animation/clear-item-animation/get-autorec/merge-autorec-entry/play-animation: small fixed-shape responses (a flag record, entry counts, or a play confirmation) — no pagination.
+- list-animations: size scales with the aaDatabase subtree matched by dbSection/menuType filters — unfiltered calls can return a large key list; always pass dbSection/menuType to narrow it.`,
         inputSchema: {
           type: 'object',
           properties: {

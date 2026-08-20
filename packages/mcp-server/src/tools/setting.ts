@@ -95,9 +95,19 @@ export class SettingTool extends BaseTool {
                 description:
                     `Manage Foundry world settings through one umbrella tool. 4 actions: get, set, list, list-world-db.
 
+Use this when:
+- Reading the current value of a specific registered setting (action:"get", e.g. namespace:"warhammer-mcp", key:"mcpVerboseConsole").
+- Writing a new value to a specific setting and getting round-trip persistence verification (action:"set").
+- Auditing every registered setting under a namespace, including ones still at their default (action:"list").
+- Auditing only settings that have actually been written to the Foundry world DB (action:"list-world-db").
+- Checking whether a key you're about to write has a registered onChange side effect before deciding whether force:true is safe.
+
+Do NOT use this for WFRP4e system CONFIG data (game.wfrp4e.config) — that is a different concept from game.settings and belongs to \`get-wfrp-config\`. Also: register/delete actions do not exist by design (register needs an un-marshalable constructor reference; delete has no legitimate use case — use set-to-default instead) — don't imply they're available.
+
 WARNING: setting.set on side-effecting keys (e.g. enabled, serverHost, serverPort) triggers Foundry onChange callbacks that may restart the MCP bridge or re-render the canvas. Pass force:true to override the safety block. The default (force:false) will block writes to any key with a registered onChange callback.
 
-register and delete are intentionally excluded: register requires an un-marshalable constructor reference; delete has no legitimate use case (use set-to-default instead).
+Performance Notes:
+- get/set return a single small setting record. list/list-world-db return an array of items unless countOnly:true is passed (returns only the total) — use countOnly for a cheap existence/size check before requesting the full item array on a large namespace.
 
 Key rules:
 - get/set use namespace + key as separate fields (not the composite "namespace.key" form).

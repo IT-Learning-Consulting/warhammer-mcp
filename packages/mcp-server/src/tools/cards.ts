@@ -118,6 +118,15 @@ export class CardsTool extends BaseTool {
         description:
           `Manage Foundry VTT Cards (decks/hands/piles) and embedded Card documents via 19 actions over game.cards. A "stack" is a world-level Cards document (type deck | hand | pile); each stack owns embedded Card documents. Use for initiative decks, fortune-card hands, discard piles, and any card-driven subsystem.
 
+Use this when:
+- Running a persistent deck-state subsystem — an initiative deck, a fortune-card hand, a discard pile — where cards move between named stacks and stay tracked (create-stack, deal, draw, pass, play, discard).
+- Dealing or drawing cards for players/NPCs and needing a pre-flight sufficiency check before committing (action:"deal"/"draw" with dryRun:true).
+- Checking a card's face-down state from a specific player's perspective before revealing it (action:"get-card"/"list-cards" with perspectiveUserId).
+- Shuffling a deck or recalling drawn cards back to their origin (action:"shuffle"/"recall").
+- Auditing or cleaning up stacks and their embedded cards (action:"list-stacks"/"get-stack"/"delete-stack"/"delete-card").
+
+Do NOT use this for random-draw-and-narrate content like loot or encounter tables — use \`rolltable\` instead; \`cards\` is specifically a literal deck-state subsystem with persistent card identity, not a one-shot random roll.
+
 **Stack actions (6):**
 - **create-stack**: New stack. Required: name, type (deck|hand|pile). Optional: description, img, displayCount, ownership, folder, sort, width, height, rotation, flags.
 - **get-stack**: Full stack view by stackId (card counts incl. available/drawn).
@@ -144,6 +153,9 @@ export class CardsTool extends BaseTool {
 - **pass**: Move specific cards (cardIds[]) from one stack to another. All ids pre-validated to exist in the source.
 - **play**: Play one card to a destination stack (Card#play → pile). Required: stackId (parent), cardId, toStackId.
 - **discard**: Discard one card to a destination stack (Card#discard → pile). Required: stackId (parent), cardId, toStackId.
+
+Performance Notes:
+- list-stacks/list-cards are paginated (page/pageSize, countOnly available). Single-record actions (get-stack, get-card, add-card, update-*, flip-card, shuffle, deal, draw, pass, play, discard) return a small fixed-shape response. delete-stack, recall, and deal support dryRun:true previews before their destructive/non-transactional effect — use them to bound risk, not response size.
 
 **Examples:**
 - {action:"create-stack", name:"Initiative Deck", type:"deck"}

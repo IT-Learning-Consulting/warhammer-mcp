@@ -120,13 +120,26 @@ export class ModuleGmtoolkitTool extends BaseTool {
 Conditional: returns MODULE_NOT_ACTIVE when wfrp4e-gm-toolkit is absent/inactive.
 Pre-flight: module-probe.is-active wfrp4e-gm-toolkit before using this tool.
 
+Use this when:
+- Running a dialog-free group test (e.g. a party Perception check) with compact per-target results instead of dialog-driven individual rolls.
+- Adjusting a token's Advantage during combat, including a player-owned token (socket-routed correctly, the GM Toolkit fix).
+- Adjusting a WFRP4e status (Resolve/Sin/Corruption/Fortune) or awarding session XP/turnover at session end.
+- Toggling scene lighting (token vision, global illumination) or pulling players to a new scene.
+- Checking an actor's active conditions, or reading party/group membership for GM planning.
+
 12 actions:
 Reads — get-session-info; get-group { groupType?, activeOnly?, presentOnly? }; check-conditions { actorId }.
 Writes (GM) — run-group-test { testSkill, difficulty?, testModifier?, rollMode?, targetGroup? } (always dialog-free bypass; response carries COMPACT per-target rows {name,id,skill,sl,outcome,roll,target} — never embedded actor docs, BUG-492; malformed targetGroup UUIDs fail loud with GMTOOLKIT_INVALID_TARGET before any roll; a client timeout is NOT a cancellation — the server may have completed and posted rolls, so re-read chat before retrying, never blind-retry); update-advantage { mode, tokenId?, confirm? } (mode increase/reduce/clear-single/clear-bulk; increase/reduce only apply in active combat; player-owned tokens are socket-routed — the GM Toolkit fix; clear-bulk needs confirm:true; response 'value' is the settle-polled POST-write value, BUG-500); adjust-status { actorId, status, change } (resolve/sin/corruption/fortune); toggle-scene-light { sceneId?, tokenVision?, globalLight? }; pull-to-scene { sceneId? } (activates the scene); toggle-compendium-visibility { packId, private? }; roll-d100 { flavor? }.
 Confirm-gated writes (GM + confirm:true) — session-turnover { actorId, xp?, reason?, resetFortune?, activateSceneId?, confirm } (dialog-free decompose: XP + fortune reset + scene); add-xp { actorId, amount, reason?, confirm } (writes total/current + appends the experience log).
 
 NOTE: lose-momentum (use update-advantage reduce/clear) and deal-damage (use warhammer-mcp.apply-damage) are reachable via those safe paths.
-Example: { action: "update-advantage", mode: "increase", tokenId: "Scene.x.Token.y" }`,
+Example: { action: "update-advantage", mode: "increase", tokenId: "Scene.x.Token.y" }
+
+Do NOT use this tool to deal damage — use \`apply-damage\` (warhammer-mcp.apply-damage, the core tool) for that. module-gmtoolkit has no damage action of its own (see the deal-damage note above); it covers group tests, advantage, status/XP, scene/compendium toggles, and group/condition reads only.
+
+Performance Notes:
+- Most actions return a small fixed-shape result (an updated value, a session/XP confirmation, or a toggle state) — no response modes, no pagination.
+- run-group-test/get-group/check-conditions: response size scales with target/group/condition count — run-group-test always renders compact per-target rows (BUG-492), never embedded actor docs, so cost stays bounded even for a large party.`,
         inputSchema: {
           type: 'object',
           properties: {

@@ -85,6 +85,12 @@ export class ModuleProbeTool extends BaseTool {
                     `Read-only probe for Foundry module active state. Always-registered (no MODULE_NOT_ACTIVE guard).
 Use for skill-layer pre-flight before calling module-* tools.
 
+Use this when:
+- Pre-flighting whether a specific companion module (e.g. "monks-active-tiles") is installed and active before calling its module-* tool.
+- Deciding which of several optional module-* tools are usable in the current world by checking one module id.
+- Enumerating every currently active module to build a capability picture of the world.
+- Diagnosing a MODULE_NOT_ACTIVE error from another tool by confirming the module's real state.
+
 2 actions:
 - is-active  { moduleId }  — checks whether a specific module is installed and active.
 - list-active              — lists all currently active modules (id, title, version).
@@ -94,7 +100,13 @@ GM required.
 
 Examples:
 - { action: "is-active", moduleId: "monks-active-tiles" }
-- { action: "list-active" }`,
+- { action: "list-active" }
+
+Do NOT use is-active in a loop to check many modules — use list-active once and filter locally instead. Both actions serve the same read; list-active is the cheaper path when checking more than one or two module ids.
+
+Performance Notes:
+- is-active: a single small fixed-shape response (id/active/title/version) — no pagination.
+- list-active: returns every active module's id/title/version in one response — no response modes, no pagination; size scales with how many modules are installed and active in the world (typically tens of entries).`,
                 inputSchema: {
                     type: 'object',
                     properties: {

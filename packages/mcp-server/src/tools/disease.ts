@@ -52,6 +52,14 @@ export class DiseaseTool extends BaseTool {
         description:
           `Manage WFRP4e disease Items on actors via 8 actions. Thin wrapper over DiseaseModel.
 
+Use this when:
+- Contracting a disease on an actor by compendium name, optionally rolling a server-side Endurance test to resist it (action:"contract").
+- Advancing a disease's incubation/duration timer day by day (action:"increment" / action:"decrement"), including the auto-cascade from incubation to duration.
+- Resolving an incubation or duration dice-string timer to a numeric value (action:"start"), or manually triggering end-of-duration resolution (action:"finish-duration").
+- Setting or replacing a disease's active symptom set (action:"apply-symptom"), or curing/removing a disease item with explicit confirmation (action:"cure").
+
+Do NOT use this for WFRP status-effect conditions (Fatigued, Poisoned, Broken, etc.) — those are distinct from disease Items; use apply-condition / remove-condition instead.
+
 **Actions:**
 - **list**: List all disease items on an actor. Returns id, name, incubation/duration timers, symptoms.
 - **contract**: Add a disease to an actor. Looks up disease by name from compendia. By default (autoEnduranceTest: true) rolls a server-side GM Endurance test; if it passes, disease is resisted. Set endured: true to skip the test and force contraction.
@@ -60,7 +68,10 @@ export class DiseaseTool extends BaseTool {
 - **decrement**: Decrement the active timer by 1 day. Auto-cascades: incubation→0 starts duration; duration→0 calls finishDuration.
 - **finish-duration**: Manually trigger the end-of-duration resolution. Rolls Lingering Endurance test if applicable; may cure, extend, or create a new disease.
 - **apply-symptom**: Set the disease's symptom set. REPLACE semantics — wraps WFRP4e DiseaseModel.updateSymptoms() which deletes existing symptom AEs and creates new ones from the specified set. To preserve existing symptoms while adding more, the caller must pass the full target set (existing + new). Input: symptoms array [{key, severity?}] where key matches CONFIG.WFRP4E.symptoms (e.g. "fever", "delirium"). Severity is an optional difficulty modifier (e.g. "Hard").
-- **cure**: Remove a disease item from the actor. Requires confirm: true; an omitted or false confirm returns the friendly DISEASE_CURE_NOT_CONFIRMED (never a raw Zod error).`,
+- **cure**: Remove a disease item from the actor. Requires confirm: true; an omitted or false confirm returns the friendly DISEASE_CURE_NOT_CONFIRMED (never a raw Zod error).
+
+Performance Notes:
+- Action-based umbrella, no response-mode variance: each action returns a small structured result (disease list, contraction outcome, timer value, or cure confirmation) scoped to one actor's disease items — never a full sheet payload.`,
         inputSchema: {
           type: 'object',
           properties: {

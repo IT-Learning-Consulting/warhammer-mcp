@@ -118,6 +118,15 @@ export class LightTool extends BaseTool {
         description:
           `Manage Foundry VTT AmbientLight documents via 5 actions (embedded-doc CRUD + list). Lights live on scenes (scene.lights collection).
 
+Use this when:
+- Placing an individual point or cone light source on a scene (e.g. a torch, a lantern, a magical glow) with its own dim/bright radius and color.
+- Adjusting an existing light's position, radius, color, or animation (action:"update").
+- Removing a light source that's no longer needed (action:"delete").
+- Auditing every AmbientLight on a scene, optionally filtered by isGlobal or hidden state (action:"list"/"get").
+- Checking whether a light is the scene-wide global illumination source vs. a local point light (isGlobal flag on get/list).
+
+Do NOT use this for scene-wide global darkness animation (e.g. a day/night transition) — use the \`scene\` umbrella's lighting-transition action instead; this tool places individual point/cone light sources, not scene-level ambient darkness changes.
+
 **Actions:**
 - **create**: Place a new AmbientLight on a scene. Required: sceneId, x, y. Optional: elevation, rotation, walls, vision, hidden, config (full LightData surface — dim/bright/color/angle/animation/darkness/etc), flags. Returns full LightViewModel.
 - **update**: Partial-diff update. sceneId + lightId + changes (≥1 field). Same writable surface as create (config is nested SchemaField).
@@ -128,6 +137,9 @@ export class LightTool extends BaseTool {
 **isGlobal:** AmbientLightDocument.isGlobal is a Foundry-computed boolean; true means the light illuminates the entire canvas regardless of radius.
 
 **config fields (LightData):** dim, bright, angle, color, alpha, coloration, luminosity, saturation, contrast, shadows, attenuation, priority, negative, animation.{type,speed,intensity,reverse}, darkness.{min,max}.
+
+Performance Notes:
+- create/update/delete/get return a single light record — no pagination. list without pagination params returns ALL matching lights in one response (bare array); pass page/pageSize (max 100, default 20) to paginate, or countOnly:true for a cheap total.
 
 **Examples:**
 - create: {action:"create", sceneId:"abc", x:500, y:300, config:{bright:10, dim:20, color:"#ffaa00"}}
