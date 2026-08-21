@@ -2,25 +2,41 @@
 
 exports[`ApplyNpcCareerAdvanceTool — characterization > apply-npc-career-advance — career advanced successfully 1`] = `
 {
-  "actorId": "npcactor12345678",
-  "advanced": true,
-  "careerItemId": "career01234567890",
-  "characteristicsUpdated": [
-    "ws",
-    "t",
+  "content": [
+    {
+      "text": "Advanced **npcactor12345678** via **career**. Talents added: 0. Outcome: unknown.",
+      "type": "text",
+    },
   ],
-  "skillsAdded": [
-    "Melee (Basic)",
-    "Dodge",
-  ],
-  "talentsAdded": [],
+  "structuredContent": {
+    "actorId": "npcactor12345678",
+    "advanced": true,
+    "careerItemId": "career01234567890",
+    "characteristicsUpdated": [
+      "ws",
+      "t",
+    ],
+    "skillsAdded": [
+      "Melee (Basic)",
+      "Dodge",
+    ],
+    "talentsAdded": [],
+  },
 }
 `;
 
 exports[`ApplyNpcCareerAdvanceTool — characterization > apply-npc-career-advance — minimal result shape 1`] = `
 {
-  "actorId": "npcactor98765432",
-  "advanced": true,
-  "careerItemId": "career09876543210",
+  "content": [
+    {
+      "text": "Advanced **npcactor98765432** via **career**. Talents added: 0. Outcome: unknown.",
+      "type": "text",
+    },
+  ],
+  "structuredContent": {
+    "actorId": "npcactor98765432",
+    "advanced": true,
+    "careerItemId": "career09876543210",
+  },
 }
 `;

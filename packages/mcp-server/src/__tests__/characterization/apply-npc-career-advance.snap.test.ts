@@ -1,6 +1,10 @@
 // Characterization snapshot — ApplyNpcCareerAdvanceTool return-shape lock.
 // MCP Code-Quality Hardening v1, Phase 0, sub-phase 0.7.2.
-// ApplyNpcCareerAdvanceTool.handle() is a thin pass-through: returns the raw query result.
+// BUG-692 (Phase 3, systemic_bug_class_prevention, 2026-08-19): handle() is no longer a thin
+// pass-through — it now emits {content, structuredContent} (the query result plus the
+// foundry-module service's `outcome` field, echoed into a human-readable summary line) so the
+// tool's response is gradeable per GRADING_CONTRACT.md (it emitted no structuredContent at all
+// before this fix).
 
 import { describe, it, expect } from 'vitest';
 import { ApplyNpcCareerAdvanceTool } from '../../tools/apply-npc-career-advance.js';

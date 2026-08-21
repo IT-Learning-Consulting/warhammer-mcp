@@ -8,6 +8,8 @@ import { notify } from '../../../notify.js';
 import { Envelope, getGame, isGM } from '../_shared/handler-utils.js';
 import { normalizeItemsArray, validateTokenUuid } from './catalog.js';
 import { getItemPilesAPI, notPersisted, resolveToTokenObject, gmRequired, activeGmRequired, bankerAuctioneerCheck } from './helpers.js';
+import { falseReturnEnvelope } from './flow.js';
+import { boundList } from '../../../services/bounded-response.js';
 
 // ── 3A: Pile lifecycle ────────────────────────────────────────────────────────
 
@@ -26,6 +28,12 @@ export async function handleCreatePile(input: CreatePileInput): Promise<Envelope
   if (!input.sceneId) {
     return { success: false, error: 'MISSING_SCENE_ID: sceneId is required for create-pile (game.user.viewedScene is null server-side)' };
   }
+
+  // BUG-779: tracks the actor WE created in this call (createDedicatedActor path only) so any
+  // failure past this point — hook veto, `false` return, throw, or a failed post-write verify —
+  // can roll it back instead of leaving an orphaned dedicated actor behind. Never set for the
+  // shared-default-actor or existing-named-actor paths, which this handler never owns.
+  let createdActor: any = null;
 
   try {
     const API = getItemPilesAPI();
@@ -73,6 +81,16 @@ export async function handleCreatePile(input: CreatePileInput): Promise<Envelope
         { name: input.pileActorName ?? 'Item Pile', type: actorType },
         { skipItems: true },
       );
+      createdActor = newActor;
+      // BUG-779: stamp an ownership marker on the dedicated actor BEFORE any downstream failure
+      // point, so delete-pile can later distinguish an MCP-created dedicated actor (safe to
+      // cascade-delete) from the shared Default Item Pile actor or a pre-existing named actor
+      // (never cascade-deleted) — best-effort; a rollback deletes the actor outright regardless.
+      if (newActor) {
+        try {
+          await newActor.setFlag('warhammer-mcp', 'dedicatedPile', true);
+        } catch (_) { /* best-effort marker */ }
+      }
       options['actor'] = newActor?.uuid;   // existing-actor path; createActor stays false
     } else if (input.pileActorName) {
       options['actor'] = input.pileActorName;
@@ -81,9 +99,11 @@ export async function handleCreatePile(input: CreatePileInput): Promise<Envelope
     // createItemPile returns { tokenUuid?: string, actorUuid: string } (item-piles.js:84851/84860) —
     // NOT a bare UUID. Extract both; never assign the whole object to a string field.
     const result = await API.createItemPile(options);
-    // M-2: socket returns false when no active GM disconnects mid-call
+    // BUG-779/BUG-784: hook veto / business-condition refusal / genuine GM disconnect after we
+    // already created the dedicated actor — roll it back either way, then classify which one it was.
     if (result === false) {
-      return { success: false, error: 'NO_ACTIVE_GM: item-piles socket returned false — GM may have disconnected' };
+      await rollbackCreatedActor(createdActor);
+      return falseReturnEnvelope('create-pile', `scene ${input.sceneId}`);
     }
     const tokenUuid: string | null = result?.tokenUuid ?? null;
     const actorUuid: string | null = result?.actorUuid ?? null;
@@ -104,14 +124,44 @@ export async function handleCreatePile(input: CreatePileInput): Promise<Envelope
         flagData = API.getActorFlagData(actorUuid);
       } catch (_) { /* best-effort */ }
       if (!flagData || typeof flagData !== 'object') {
+        // BUG-779: verify-after-write failed after we created the dedicated actor — roll it back.
+        await rollbackCreatedActor(createdActor);
         return notPersisted(ErrorTokens.ITEM_PILES_CREATE_NOT_PERSISTED, `created pile actor ${actorUuid} has no flag data after createItemPile`);
       }
     }
 
+    // BUG-779: lifecycle/ownership metadata — tells the caller (and a later delete-pile call)
+    // whether this actor is ours to reclaim ('dedicated'), the shared Default Item Pile actor
+    // ('shared'), or a pre-existing actor we merely attached to by name ('existing').
+    const actorOwnership: 'dedicated' | 'existing' | 'shared' | null = !actorUuid
+      ? null
+      : input.createDedicatedActor
+        ? 'dedicated'
+        : input.pileActorName
+          ? 'existing'
+          : 'shared';
+
     notify.created('item-piles', `Created ${input.type ?? 'pile'} pile in scene ${input.sceneId}`, {});
-    return { success: true, data: { tokenUuid, actorUuid, type: input.type ?? 'pile', sceneId: input.sceneId, flagData } };
+    return { success: true, data: { tokenUuid, actorUuid, type: input.type ?? 'pile', sceneId: input.sceneId, flagData, actorOwnership } };
   } catch (e) {
+    // BUG-779: any exception past actor-creation (createItemPile throw, updateItemPile throw,
+    // getActorFlagData throw outside its own best-effort try) rolls the dedicated actor back too.
+    await rollbackCreatedActor(createdActor);
     return { success: false, error: `CREATE_PILE_ERROR: ${e instanceof Error ? e.message : String(e)}` };
+  }
+}
+
+/** BUG-779: best-effort rollback of a dedicated actor this call created — never masks the
+ *  caller's original error with a rollback failure; logs and swallows instead. */
+async function rollbackCreatedActor(actor: any): Promise<void> {
+  if (!actor) return;
+  try {
+    await actor.delete();
+  } catch (rollbackErr) {
+    console.warn(
+      `[item-piles] BUG-779 rollback failed — dedicated actor ${actor?.uuid ?? '(unknown uuid)'} may be orphaned:`,
+      rollbackErr,
+    );
   }
 }
 
@@ -161,9 +211,9 @@ export async function handleUpdatePile(input: UpdatePileInput): Promise<Envelope
     const pileUuid = tokenMatch ? tokenMatch[1] : input.actorUuid;
 
     const updateResult = await API.updateItemPile(pileUuid, updateData);
-    // M-2: socket returns false when GM disconnects mid-call
+    // BUG-784: classify bare false — GM-disconnect vs. business-condition veto.
     if (updateResult === false) {
-      return { success: false, error: 'NO_ACTIVE_GM: item-piles socket returned false — GM may have disconnected' };
+      return falseReturnEnvelope('update-pile', String(pileUuid));
     }
 
     // DP-16: post-write verify — closure-diff against the requested field set (excluding the
@@ -210,6 +260,15 @@ export async function handleUpdatePile(input: UpdatePileInput): Promise<Envelope
   }
 }
 
+/** BUG-779 (unlinked-token cascade fix): item-pile tokens are unlinked (actorLink:false), so
+ *  `tokenDoc.actor` resolves the token's SYNTHETIC ActorDelta (uuid form
+ *  `Scene.X.Token.Y.Actor.Z`), never the world Actor — deleting it silently no-ops and orphans
+ *  the real dedicated actor. `TokenDocument#baseActor` (v13) returns the base world Actor for
+ *  both linked and unlinked tokens; fall back to `game.actors.get(actorId)` if unavailable. */
+function resolveWorldActor(tokenDoc: any): any {
+  return tokenDoc?.baseActor ?? (tokenDoc?.actorId ? (globalThis as any).game?.actors?.get(tokenDoc.actorId) : null) ?? null;
+}
+
 type DeletePileInput = Extract<ModuleItempilesInputType, { action: 'delete-pile' }>;
 
 export async function handleDeletePile(input: DeletePileInput): Promise<Envelope<unknown>> {
@@ -222,11 +281,25 @@ export async function handleDeletePile(input: DeletePileInput): Promise<Envelope
   const uuidErr = validateTokenUuid(input.tokenUuid);
   if (uuidErr) return { success: false, error: uuidErr };
 
-  // CCR-4: dangerous — confirm required
+  // CCR-4: dangerous — confirm required. Preserved BEFORE any resolution (as at baseline) so
+  // CONFIRM_REQUIRED fires unconditionally, even when the token can't yet be resolved. BUG-779:
+  // this preview is now also a best-effort disclosure of the dedicated pile actor (if any) that
+  // confirm:true will cascade-delete alongside the token — "reversible via delete-pile" in the
+  // safety table must mean the actor too. Resolution failure here never blocks the preview
+  // itself; it just falls back to the token-only message.
   if (input.confirm !== true) {
+    let previewActor: any = null;
+    try {
+      const previewToken: any = await (globalThis as any).fromUuid(input.tokenUuid);
+      if (previewToken?.documentName === 'Token') previewActor = resolveWorldActor(previewToken);
+    } catch (_) { /* preview is best-effort only — resolution failure surfaces for real on confirm:true */ }
+    const isDedicatedPreview = Boolean(previewActor?.getFlag?.('warhammer-mcp', 'dedicatedPile'));
+    const cascadeNote = isDedicatedPreview
+      ? ` and its dedicated pile actor "${previewActor?.name ?? previewActor?.uuid}" (${previewActor?.uuid}) — a shared or pre-existing actor is never cascade-deleted`
+      : '';
     return {
       success: false,
-      error: 'CONFIRM_REQUIRED: delete-pile permanently deletes the token. Re-send with confirm:true to proceed.',
+      error: `CONFIRM_REQUIRED: delete-pile permanently deletes the token${cascadeNote}. Re-send with confirm:true to proceed.`,
     };
   }
 
@@ -244,6 +317,14 @@ export async function handleDeletePile(input: DeletePileInput): Promise<Envelope
     if (tokenDoc.documentName !== 'Token') {
       return { success: false, error: `INVALID_PILE_UUID: "${input.tokenUuid}" resolved to a ${tokenDoc.documentName ?? typeof tokenDoc}, not a TokenDocument` };
     }
+
+    // BUG-779: only an actor WE created (createDedicatedActor path, marked at creation with the
+    // warhammer-mcp.dedicatedPile flag) is ever cascade-deleted. The shared Default Item Pile
+    // actor and any pre-existing actor attached via pileActorName-without-createDedicatedActor
+    // are never touched here.
+    const pileActor: any = resolveWorldActor(tokenDoc);
+    const isDedicatedActor = Boolean(pileActor?.getFlag?.('warhammer-mcp', 'dedicatedPile'));
+
     await tokenDoc.delete();
     // DP-16: NEW post-write read-back (this site had zero verify at baseline) — confirm the
     // pile token no longer resolves.
@@ -251,8 +332,32 @@ export async function handleDeletePile(input: DeletePileInput): Promise<Envelope
     if (stillResolves) {
       return notPersisted(ErrorTokens.ITEM_PILES_DELETE_NOT_PERSISTED, `pile token ${input.tokenUuid} still resolves after the delete`);
     }
+
+    // BUG-779: cascade-delete the dedicated actor now that the token delete is confirmed +
+    // verified. Best-effort — a cascade failure is reported in the response but does not
+    // revert the already-verified token delete (the token is gone either way).
+    let actorDeleted = false;
+    let actorDeleteError: string | null = null;
+    if (isDedicatedActor && pileActor) {
+      try {
+        await pileActor.delete();
+        actorDeleted = true;
+      } catch (e) {
+        actorDeleteError = e instanceof Error ? e.message : String(e);
+      }
+    }
+
     notify.deleted('item-piles', `Deleted pile token ${input.tokenUuid}`, {});
-    return { success: true, data: { tokenUuid: input.tokenUuid, deleted: true } };
+    return {
+      success: true,
+      data: {
+        tokenUuid: input.tokenUuid,
+        deleted: true,
+        dedicatedActorUuid: isDedicatedActor ? (pileActor?.uuid ?? null) : null,
+        actorDeleted,
+        ...(actorDeleteError ? { actorDeleteError } : {}),
+      },
+    };
   } catch (e) {
     return { success: false, error: `DELETE_PILE_ERROR: ${e instanceof Error ? e.message : String(e)}` };
   }
@@ -295,9 +400,9 @@ export async function handleSetPileState(input: SetPileStateInput): Promise<Enve
       } else {
         result = await API.revertTokensFromItemPiles(tokens);
       }
-      // M-2: socket returns false when GM disconnects mid-call
+      // BUG-784: classify bare false — GM-disconnect vs. business-condition veto.
       if (result === false) {
-        return { success: false, error: 'NO_ACTIVE_GM: item-piles socket returned false — GM may have disconnected' };
+        return falseReturnEnvelope(`set-pile-state (${input.state})`, `${tokens.length} token(s)`);
       }
 
       // BUG-420: echo the per-token SYNTHETIC pile-actor UUIDs (read post-conversion from
@@ -330,9 +435,10 @@ export async function handleSetPileState(input: SetPileStateInput): Promise<Enve
 
     // BUG-447: open/close/lock/unlock return the same bare `false` for "not a container" as
     // for hook-veto / no-GM (item-piles.js:97969/:98001) — pre-check the pile type so a
-    // non-container gets a truthful token instead of NO_ACTIVE_GM. 'rattle' is exempt (it
-    // doesn't gate on container). NO_ACTIVE_GM below is now reserved for `false` returned
-    // on a VERIFIED container.
+    // non-container gets a truthful token instead of the BUG-784-classified false-return below.
+    // 'rattle' is exempt (it doesn't gate on container). The classified false-return below is
+    // now reserved for `false` returned on a VERIFIED container (see falseReturnEnvelope,
+    // BUG-784, in flow.ts).
     if (input.state !== 'rattle' && !API.isItemPileContainer(input.actorUuid)) {
       const actualType = (API.getActorFlagData(input.actorUuid) as any)?.type ?? 'unknown';
       return { success: false, error: `INVALID_PILE_TYPE: set-pile-state "${input.state}" requires a container pile — this pile is type "${actualType}"` };
@@ -359,9 +465,11 @@ export async function handleSetPileState(input: SetPileStateInput): Promise<Enve
         break;
     }
 
-    // M-2: socket returns false when GM disconnects mid-call
+    // BUG-784: classify bare false — GM-disconnect vs. business-condition veto (e.g. a
+    // preOpenItemPile/preLockItemPile-style hook refusal — the container-type pre-check above
+    // (BUG-447) already ruled out "not a container", but a dynamic hook veto is still possible).
     if (result === false) {
-      return { success: false, error: 'NO_ACTIVE_GM: item-piles socket returned false — GM may have disconnected' };
+      return falseReturnEnvelope(`set-pile-state (${input.state})`, input.actorUuid);
     }
 
     // DP-16: post-write verify — closure-diff against the boolean flag the requested state implies.
@@ -418,6 +526,13 @@ export async function handleGetContents(input: GetContentsInput): Promise<Envelo
       uuid: item.uuid ?? null,
     }));
 
+    // BUG-788: paginate items independently — default to a bounded page (never the whole pile)
+    // so a large merchant/vault stays under the global 64,000-char RESPONSE_TOO_LARGE guard,
+    // with total/truncated/next-offset metadata so a caller can page down after an overflow.
+    // itemCount stays the TOTAL item count on the pile (unchanged semantic); `items` is now
+    // the bounded page, not the whole array.
+    const boundedItems = boundList(serializedItems, { limit: input.limit, offset: input.offset });
+
     const result: Record<string, unknown> = {
       actorUuid,
       isValidPile,
@@ -428,18 +543,43 @@ export async function handleGetContents(input: GetContentsInput): Promise<Envelo
       isClosed,
       isEmpty,
       itemCount: serializedItems.length,
-      items: serializedItems,
+      items: boundedItems.items,
+      itemsOffset: boundedItems.offset,
+      itemsLimit: boundedItems.limit,
+      itemsTruncated: boundedItems.truncated,
+      itemsNextOffset: boundedItems.truncated ? boundedItems.offset + boundedItems.items.length : null,
       currencies,
-      flagData,
+      // BUG-788: strip `log` out of the flagData projection unconditionally — flagData is the
+      // full raw flag blob (API.getActorFlagData) and previously always embedded the entire,
+      // unbounded audit log inside it even when includeLog was false; when includeLog was true
+      // that same log was ALSO copied into the top-level `log` field, duplicating it. The log is
+      // now surfaced ONLY via the paginated top-level `log` field below (when requested).
+      flagData: stripEmbeddedLog(flagData),
     };
 
-    // Vault/merchant audit log (if requested and available)
+    // Vault/merchant audit log (if requested and available) — paginated independently of items.
     if (input.includeLog && flagData) {
-      result.log = (flagData as any)?.log ?? [];
+      const fullLog: unknown[] = Array.isArray((flagData as any)?.log) ? (flagData as any).log : [];
+      const boundedLog = boundList(fullLog, { limit: input.logLimit, offset: input.logOffset });
+      result.log = boundedLog.items;
+      result.logCount = fullLog.length;
+      result.logOffset = boundedLog.offset;
+      result.logLimit = boundedLog.limit;
+      result.logTruncated = boundedLog.truncated;
+      result.logNextOffset = boundedLog.truncated ? boundedLog.offset + boundedLog.items.length : null;
     }
 
     return { success: true, data: result };
   } catch (e) {
     return { success: false, error: `GET_CONTENTS_ERROR: ${e instanceof Error ? e.message : String(e)}` };
   }
+}
+
+/** BUG-788: returns a shallow copy of flagData with the `log` key removed (or flagData
+ *  unchanged if it isn't a plain object) — the log is surfaced separately, paginated, via
+ *  the top-level `log` field so it is never duplicated inside the flagData projection. */
+function stripEmbeddedLog(flagData: unknown): unknown {
+  if (!flagData || typeof flagData !== 'object') return flagData;
+  const { log: _log, ...rest } = flagData as Record<string, unknown>;
+  return rest;
 }

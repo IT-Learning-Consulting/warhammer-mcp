@@ -7,6 +7,7 @@ import { ErrorTokens, validateSequence, makeMattId, type ModuleMattInputType } f
 import { notify } from '../../../notify.js';
 import { Envelope } from '../_shared/handler-utils.js';
 import { MATT_FLAG, getTileByUuidOrThrow, readMattFlags, normalizeActionData, normalizeActions, resolveTaggerSelectorsInSequence, buildImpactReport } from './matt-helpers.js';
+import { buildOutcomeResponse } from '../../../services/shared/outcome-response.js';
 
 type ReplaceSeqInput = Extract<ModuleMattInputType, { action: 'replace-action-sequence' }>;
 type AddActionInput = Extract<ModuleMattInputType, { action: 'add-action' }>;
@@ -71,7 +72,7 @@ async function writeActions(
 
   return {
     success: true,
-    data: {
+    data: buildOutcomeResponse('applied', {
       uuid,
       tileId: tile.id,
       actionCount: persisted.length,
@@ -79,7 +80,7 @@ async function writeActions(
       ...(taggerResolution.length > 0 ? { taggerResolution } : {}),
       ...(taggerWarnings.length > 0 ? { taggerWarnings } : {}),
       ...(extra ?? {}),
-    },
+    }),
   };
 }
 

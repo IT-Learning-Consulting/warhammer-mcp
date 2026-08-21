@@ -27,6 +27,13 @@ const MenuRoute = z.enum(['melee', 'range', 'ontoken', 'templatefx', 'aura', 'pr
 
 // A single animation "video" slot — the dbSection/menuType/animation/variant/color tuple
 // AA resolves against its Sequencer.Database namespace, OR a custom file path.
+//
+// BUG-799: an incomplete DB-driven tuple (e.g. dbSection set but menuType/animation missing)
+// previously passed this schema silently. AA's path builder does NOT reject an incomplete/invalid
+// key — it silently substitutes the first available database choice, so a typo'd or partial tuple
+// plays an ARBITRARY fallback animation while the write still reports success. Require the
+// DB-driven fields all-or-nothing (a fully empty video slot is still valid — "no video configured"),
+// and require a non-empty customPath whenever enableCustom:true.
 const VideoSlot = z.object({
   dbSection: DbSection.optional(),
   menuType: z.string().optional(),
@@ -35,9 +42,19 @@ const VideoSlot = z.object({
   color: z.string().optional(),
   enableCustom: z.boolean().optional(),
   customPath: z.string().optional(),
-}).strict();
+}).strict().refine((v) => {
+  if (v.enableCustom === true) return typeof v.customPath === 'string' && v.customPath.length > 0;
+  const dbFields = [v.dbSection, v.menuType, v.animation];
+  const anySet = dbFields.some((f) => f !== undefined);
+  return !anySet || dbFields.every((f) => f !== undefined);
+}, {
+  message: 'INCOMPLETE_VIDEO_SLOT: a video slot needs either (enableCustom:true + a non-empty customPath) or all of (dbSection + menuType + animation) — a partial DB tuple silently falls back to AA\'s first database choice instead of being rejected',
+});
 
 // A sound slot.
+//
+// BUG-799: enable:true with an omitted/empty file previously passed silently — AA plays nothing
+// for it while the write still reports success.
 const SoundSlot = z.object({
   enable: z.boolean().optional(),
   file: z.string().optional(),
@@ -46,7 +63,9 @@ const SoundSlot = z.object({
   startTime: z.number().int().min(0).optional(),
   repeat: z.number().int().min(1).optional(),
   repeatDelay: z.number().int().min(0).optional(),
-}).strict();
+}).strict().refine((v) => v.enable !== true || (typeof v.file === 'string' && v.file.length > 0), {
+  message: 'INCOMPLETE_SOUND_SLOT: enable:true requires a non-empty file — an enabled sound with no file plays nothing while reporting success',
+});
 
 // An additional FX slot (secondary/source/target) — a video + optional sound + enable flag.
 const FxSlot = z.object({
@@ -56,12 +75,17 @@ const FxSlot = z.object({
 }).strict();
 
 // The macro slot — gated behind confirmedMacro (dossier §5/§6).
+//
+// BUG-799: enable:true with an omitted/empty name previously passed silently, storing a
+// permanently broken roll hook that runs nothing while reporting success.
 const MacroSlot = z.object({
   enable: z.boolean().optional(),
   name: z.string().optional(),
   args: z.unknown().optional(),
   playWhen: z.enum(['0', '1', '2']).optional(),
-}).strict();
+}).strict().refine((v) => v.enable !== true || (typeof v.name === 'string' && v.name.length > 0), {
+  message: 'INCOMPLETE_MACRO_SLOT: enable:true requires a non-empty name — an enabled macro with no name runs nothing while reporting success',
+});
 
 // Melee→range auto-switch (dossier §3a meleeSwitch).
 const MeleeSwitchSlot = z.object({
@@ -73,6 +97,9 @@ const MeleeSwitchSlot = z.object({
 }).strict();
 
 // The simplified animation payload for set-item-animation / merge-autorec-entry.
+//
+// BUG-799: `animation:{}` previously passed this schema silently, producing a v5 write that
+// configures nothing at all while still reporting isCustomized:true / a successful write.
 const AnimationPayload = z.object({
   menu: MenuRoute.optional(),
   primary: VideoSlot.optional(),
@@ -89,7 +116,11 @@ const AnimationPayload = z.object({
   size: z.number().positive().optional(),
   elevation: z.number().optional(),
   delay: z.number().int().min(0).optional(),
-}).strict();
+}).strict().refine(
+  (v) => v.primary !== undefined || v.sound !== undefined || v.secondary !== undefined
+    || v.source !== undefined || v.target !== undefined || v.soundOnly !== undefined || v.macro !== undefined,
+  { message: 'EMPTY_ANIMATION_PAYLOAD: at least one of primary/sound/secondary/source/target/soundOnly/macro must be set — an empty payload configures nothing while still reporting a customized write' },
+);
 
 export const ModuleAutoAnimationsInput = z.discriminatedUnion('action', [
   // ── Per-item flag authoring ──────────────────────────────────────────────

@@ -24,6 +24,7 @@ import { notify } from '../notify.js';
 import { getOrCreateFolder } from './shared/folder-helpers.js';
 import { buildOperationReceipt } from './shared/operation-receipt.js';
 import { waitForActorUpdateCommit } from './shared/actor-update-observer.js';
+import { buildOutcomeResponse } from './shared/outcome-response.js';
 import { verifyDocWrite } from '../utils/verifyWrite.js';
 import { formatActorUpdateSummary } from './shared/actor-update-summary.js';
 import type {
@@ -561,7 +562,11 @@ export class ActorService {
 
       notify.updated('actor', fresh.name ?? 'unknown', { summary: `advancing via ${freshCareer.name}`, uuid: (fresh as any).uuid });
 
-      return {
+      // BUG-692 (outcome): every path through this method above this line either threw (timeout,
+      // missing docs, unmet shortfalls) or fully verified every promised delta landed — there is no
+      // partial-advance state this method can observe and still return normally, so 'applied' is the
+      // only reachable value here.
+      return buildOutcomeResponse('applied', {
         success: true,
         actorId: fresh.id,
         actorName: fresh.name,
@@ -571,7 +576,7 @@ export class ActorService {
         talentPolicy: data.talentPolicy ?? 'all',
         talentsAdded: postTalentItems.length - removedTalentIds.length,
         talentsTrimmed: removedTalentIds.length,
-      };
+      });
     } catch (error) {
       throw new Error(`Failed to apply NPC career advance: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }

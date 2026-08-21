@@ -25,6 +25,10 @@
 //     fire-and-forget, so the site races a Promise against a 2s timeout and tears the
 //     listener down via Hooks.off in finally{} — structurally identical to the two
 //     exemptions above, not a persistent-leak surface.
+//   - autoanimations.ts hooksApi.on('aa.animationEnd')        — ephemeral (BUG-795, Phase 3
+//     systemic_bug_class_prevention, 2026-08-19): observeAnimationEnd races AA's real completion
+//     hook against a timeout, hooksApi.off in finally{} — identical shape to the
+//     actor-update-observer.ts exemption above.
 //   - window.addEventListener('beforeunload')                — intentionally permanent (it IS teardown).
 //   - window.addEventListener(..., { signal })               — already torn down on abort.
 //   (Hooks.once(, jQuery .click(, and el.addEventListener( are not matched by the patterns.)
@@ -118,6 +122,9 @@ function isExempt(rel, name, slice) {
     return true;
   }
   if (name === '(Hooks as any).on(' && rel.endsWith('market.ts') && slice.includes("'updateItem'")) {
+    return true;
+  }
+  if (name === 'hooksApi.on(' && rel.endsWith('autoanimations.ts') && slice.includes("'aa.animationEnd'")) {
     return true;
   }
   if (name === 'window.addEventListener(' && (slice.includes("'beforeunload'") || /\{\s*signal/.test(slice))) {

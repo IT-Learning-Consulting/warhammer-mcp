@@ -125,13 +125,13 @@ export function getActionCatalog(): Record<string, CatalogEntry> {
     'add-items': {
       description: 'Add items to a pile actor (addItems). items array required — forEach crash on null/undefined (C1).',
       dataDefaults: { items: [], removeExistingActorItems: false },
-      danger: false,
+      danger: false, // confirm-gated in handler when removeExistingActorItems:true (BUG-772)
       requiresActiveGm: true,
     },
     'remove-items': {
       description: 'Remove items from a pile actor (removeItems). items array required — forEach crash on null/undefined (C2).',
       dataDefaults: { items: [] },
-      danger: false,
+      danger: false, // confirm-gated in handler unconditionally — permanent item removal (BUG-786)
       requiresActiveGm: true,
     },
     'transfer-items': {
@@ -173,7 +173,7 @@ export function getActionCatalog(): Record<string, CatalogEntry> {
     'roll-item-table': {
       description: 'Roll a RollTable and optionally add results to a target actor (rollItemTable).',
       dataDefaults: { timesToRoll: 1, removeExistingActorItems: false },
-      danger: false,
+      danger: false, // confirm-gated in handler when removeExistingActorItems:true AND targetActorUuid given (BUG-772)
       requiresActiveGm: true,
     },
     'refresh-merchant': {

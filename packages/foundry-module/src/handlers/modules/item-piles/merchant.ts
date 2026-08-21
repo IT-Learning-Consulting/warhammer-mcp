@@ -10,12 +10,29 @@ import { settlePoll } from '../_shared/settle-poll.js';
 import { getActionCatalog, validateRelativeModifier } from './catalog.js';
 import { getItemPilesAPI, notPersisted, gmRequired, activeGmRequired } from './helpers.js';
 import { totalQuantity } from './verify-quantity.js';
-import { currencyTotal } from './flow.js';
+import { currencyTotal, confirmRequiredEnvelope, previewItemLines, falseReturnEnvelope } from './flow.js';
 import { recordEconomyTransaction } from '../wfrp-economy/ledger.js';
+import { buildOutcomeResponse } from '../../../services/shared/outcome-response.js';
 
 // ── 3B: Vault info ────────────────────────────────────────────────────────────
 
 type VaultInfoInput = Extract<ModuleItempilesInputType, { action: 'vault-info' }>;
+
+// BUG-781: dot-path property setter mirroring foundry.utils.setProperty's semantics
+// (creates intermediate objects) without taking a new dependency on the `foundry` global
+// in this file — used to bake a requested quantity onto a cloned item-data object at
+// whatever path the world's item-piles ITEM_QUANTITY_ATTRIBUTE setting names (system-
+// agnostic; never hardcode "system.quantity.value").
+function setDeepProperty(obj: Record<string, unknown>, path: string, value: unknown): void {
+  const parts = path.split('.');
+  let cur: Record<string, unknown> = obj;
+  for (let i = 0; i < parts.length - 1; i++) {
+    const key = parts[i]!;
+    if (typeof cur[key] !== 'object' || cur[key] === null) cur[key] = {};
+    cur = cur[key] as Record<string, unknown>;
+  }
+  cur[parts[parts.length - 1]!] = value;
+}
 
 export async function handleVaultInfo(input: VaultInfoInput): Promise<Envelope<unknown>> {
   if (!isGM()) return { success: false, error: 'GM_REQUIRED: vault-info requires GM access' };
@@ -33,24 +50,83 @@ export async function handleVaultInfo(input: VaultInfoInput): Promise<Envelope<u
         return { success: false, error: `ITEM_NOT_FOUND: cannot resolve item UUID "${input.itemUuid}"` };
       }
 
-      // C-5: canItemFitInVault(item, vaultActor) — item-piles.js:99588 — item FIRST, actor second;
-      // no quantity arg on canItemFitInVault (it doesn't accept one)
-      const canFit = API.canItemFitInVault(itemDoc, input.actorUuid);
-      if (!canFit) {
+      const requestedQty = input.quantity ?? 1;
+      if (!Number.isInteger(requestedQty) || requestedQty < 1) {
+        return { success: false, error: `INVALID_QUANTITY: quantity must be a positive integer, got ${requestedQty}` };
+      }
+
+      // C-5: canItemFitInVault(item, vaultActor) — item-piles.js:99588 — item FIRST, actor
+      // second; no quantity arg on canItemFitInVault (it doesn't accept one). Cheap
+      // single-unit structural gate (does this item TYPE fit at all) — fast-fail before the
+      // fuller quantity-aware check below.
+      const canFitOne = API.canItemFitInVault(itemDoc, input.actorUuid);
+      if (!canFitOne) {
         return {
           success: false,
-          error: `VAULT_FULL: item "${input.itemUuid}" (qty: ${input.quantity ?? 1}) does not fit in vault ${input.actorUuid}`,
+          error: `VAULT_FULL: item "${input.itemUuid}" (qty: ${requestedQty}) does not fit in vault ${input.actorUuid}`,
         };
       }
 
-      let fitResult: unknown = null;
-      if (subAction === 'fit-items') {
-        // C-5: fitItemsIntoVault(items, vaultActor) — item-piles.js:99591 — items FIRST, actor second
-        fitResult = API.fitItemsIntoVault([{ item: itemDoc, quantity: input.quantity ?? 1 }], input.actorUuid);
+      // BUG-781: canItemFitInVault has no quantity concept (the single check above can only
+      // ever answer "does ONE unit fit"), and fitItemsIntoVault expects each array entry to
+      // itself BE an Item/item-data object (item-piles.js:36270-36315, 99588-99592) — it is
+      // a placement CALCULATION (no .update()/.create() call inside it — confirmed by
+      // reading the function body), not a write. The old `[{item:itemDoc,quantity}]`
+      // wrapper was never a valid entry: fitItemsIntoVault deep-clones the wrapper itself
+      // (not `.item`), so getItemFlagData/width/height lookups saw no type/system data.
+      //
+      // Model the requested quantity the way upstream's own addItems() does (item-piles.js
+      // :98461-98463 `setItemQuantity(item, itemData.quantity, true)`):
+      //  - stackable item type (API.canItemStack): ONE entry carrying the FULL requested
+      //    quantity via ITEM_QUANTITY_ATTRIBUTE — a stack occupies a single grid cell
+      //    regardless of its quantity value (footprint comes from width/height only).
+      //  - non-stackable item type: N repeated single-unit entries — each occupies its own
+      //    cell since non-stackable items cannot merge into one document.
+      const rawItemData = typeof itemDoc.toObject === 'function' ? itemDoc.toObject() : itemDoc;
+      const stackable = Boolean(API.canItemStack(itemDoc, input.actorUuid));
+      const qtyAttr: string | undefined = API.ITEM_QUANTITY_ATTRIBUTE;
+      const buildEntry = (qty: number) => {
+        const entry = structuredClone(rawItemData);
+        if (qtyAttr) setDeepProperty(entry, qtyAttr, qty);
+        return entry;
+      };
+      const fitEntries = stackable
+        ? [buildEntry(requestedQty)]
+        : Array.from({ length: requestedQty }, () => buildEntry(1));
+
+      // C-5: fitItemsIntoVault(items, vaultActor) — item-piles.js:99591 — items FIRST,
+      // actor second. Success returns {updates,deletions} covering EVERY entry passed in
+      // (all-or-nothing — upstream early-returns false the moment one entry can't be
+      // placed, per the function body); failure returns false.
+      const fitResult: any = API.fitItemsIntoVault(fitEntries, input.actorUuid);
+      if (fitResult === false) {
+        return {
+          success: false,
+          error: `VAULT_FULL: item "${input.itemUuid}" (qty: ${requestedQty}) does not fit in vault ${input.actorUuid}`,
+        };
       }
+      // coveredCount: number of the requested entries the plan actually accounts for
+      // (newly-placed cells + merge-into-existing-stack deletions) — for a non-stackable
+      // item this equals the requested quantity N (not 1, BUG-781's headline defect); for a
+      // stackable item this is 1 (single merged/placed document) regardless of N.
+      const coveredCount = (Array.isArray(fitResult?.updates) ? fitResult.updates.length : 0)
+        + (Array.isArray(fitResult?.deletions) ? fitResult.deletions.length : 0);
 
       const gridData = API.getVaultGridData(input.actorUuid);
-      return { success: true, data: { actorUuid: input.actorUuid, subAction, canFit: true, itemUuid: input.itemUuid, quantity: input.quantity ?? 1, fitResult, gridData } };
+      return {
+        success: true,
+        data: {
+          actorUuid: input.actorUuid,
+          subAction,
+          canFit: true,
+          itemUuid: input.itemUuid,
+          quantity: requestedQty,
+          stackable,
+          coveredCount,
+          fitResult: subAction === 'fit-items' ? fitResult : null,
+          gridData,
+        },
+      };
     }
 
     // grid-data (default)
@@ -76,17 +152,36 @@ export async function handleRollItemTable(input: RollItemTableInput): Promise<En
     const API = getItemPilesAPI();
     const catalog = getActionCatalog()['roll-item-table']!;
 
+    const removeExisting = input.removeExistingActorItems ?? (catalog.dataDefaults.removeExistingActorItems as boolean);
+
+    // BUG-772: rollItemTable only wipes when BOTH removeExistingActorItems:true AND a
+    // targetActorUuid are given — item-piles.js _rollItemTable forwards to _addItems(targetActor,
+    // ..., {removeExistingActorItems}) only inside `if (targetActor)`; with no target the flag is
+    // a no-op (nothing is added anywhere, so nothing is wiped) and confirm is not required.
+    if (removeExisting && input.targetActorUuid && input.confirm !== true) {
+      let previewItems: unknown = null;
+      try {
+        previewItems = API.getActorItems(input.targetActorUuid);
+      } catch (_) { /* best-effort */ }
+      const { summary } = previewItemLines(previewItems);
+      return confirmRequiredEnvelope(
+        'roll-item-table',
+        input.targetActorUuid,
+        `with removeExistingActorItems:true will WIPE the current inventory (${summary}) before adding the table roll results.`,
+      );
+    }
+
     const options: Record<string, unknown> = {
       timesToRoll: input.timesToRoll ?? (catalog.dataDefaults.timesToRoll as number),
-      removeExistingActorItems: input.removeExistingActorItems ?? (catalog.dataDefaults.removeExistingActorItems as boolean),
+      removeExistingActorItems: removeExisting,
     };
     if (input.targetActorUuid) options.targetActor = input.targetActorUuid;
     if (input.rollData) options.rollData = input.rollData;
 
     const result = await API.rollItemTable(input.tableUuid, options);
-    // M-2: socket returns false when GM disconnects mid-call
+    // BUG-784: classify bare false — GM-disconnect vs. business-condition veto.
     if (result === false) {
-      return { success: false, error: 'NO_ACTIVE_GM: item-piles socket returned false — GM may have disconnected' };
+      return falseReturnEnvelope('roll-item-table', input.targetActorUuid ?? input.tableUuid);
     }
 
     // DP-16: post-write verify (if target actor specified)
@@ -147,9 +242,9 @@ export async function handleRefreshMerchant(input: RefreshMerchantInput): Promis
     };
 
     const refreshResult = await API.refreshMerchantInventory(input.merchantUuid, options);
-    // M-2: socket returns false when GM disconnects mid-call
+    // BUG-784: classify bare false — GM-disconnect vs. business-condition veto.
     if (refreshResult === false) {
-      return { success: false, error: 'NO_ACTIVE_GM: item-piles socket returned false — GM may have disconnected' };
+      return falseReturnEnvelope('refresh-merchant', input.merchantUuid);
     }
 
     // DP-16: post-write verify — refreshMerchantInventory's own restock table is out of our
@@ -207,8 +302,16 @@ export async function handleTradeItems(input: TradeItemsInput): Promise<Envelope
             itemDoc = merchant?.items?.get?.(item.itemId) ?? null;
           }
           if (itemDoc) {
-            const prices: any = API.getPricesForItem(itemDoc, { seller: input.merchantUuid, quantity: item.quantity });
-            const p: any = Array.isArray(prices) ? prices[0] : prices;
+            // BUG-771: pass the buyer so upstream applies any buyer-specific price modifier
+            // (item-piles.js:99470 getPricesForItem + 85630-85639 _tradeItems both resolve
+            // seller+buyer before pricing) — the later real trade always supplies both; this
+            // preview previously supplied seller only, so a per-buyer modifier was invisible
+            // here but active at charge time (GM approves one price, player charged another).
+            // Also select the SAME payment option index the trade itself will use
+            // (getPaymentData: item-piles.js:35963 `[data.paymentIndex || 0]`) instead of
+            // always previewing index 0 regardless of the caller's chosen option.
+            const prices: any = API.getPricesForItem(itemDoc, { seller: input.merchantUuid, buyer: input.buyerUuid, quantity: item.quantity });
+            const p: any = Array.isArray(prices) ? prices[item.paymentIndex ?? 0] : prices;
             pricePreview = String(p?.priceString || p?.basePriceString || (p?.free ? 'free' : 'unknown'));
           }
         }
@@ -286,9 +389,9 @@ export async function handleTradeItems(input: TradeItemsInput): Promise<Envelope
           : `TRADE_ITEMS_ERROR: ${msg}`,
       };
     }
-    // M-2: socket returns false when GM disconnects mid-call
+    // BUG-784: classify bare false — GM-disconnect vs. business-condition veto.
     if (result === false) {
-      return { success: false, error: 'NO_ACTIVE_GM: item-piles socket returned false — GM may have disconnected' };
+      return falseReturnEnvelope('trade-items', `${input.merchantUuid} -> ${input.buyerUuid}`);
     }
 
     // BUG-423 (XPK-01) + live-smoke correction (2026-07-02): the REAL tradeItems resolution
@@ -333,16 +436,21 @@ export async function handleTradeItems(input: TradeItemsInput): Promise<Envelope
       source: 'itempiles',
       description: `Item Piles: bought ${input.items.length} item(s) from merchant`,
     });
+    // BUG-780: an empty/no-op trade (dto.ok:false — nothing moved and no attribute delta)
+    // still reaches this success path; `itemsTraded` also previously echoed the REQUESTED
+    // count regardless of what actually committed. Report `noop` with a reason and the
+    // actually-committed count.
     return {
       success: true,
-      data: {
+      data: buildOutcomeResponse(dto.ok ? 'applied' : 'noop', {
         merchantUuid: input.merchantUuid,
         buyerUuid: input.buyerUuid,
-        itemsTraded: input.items.length,
+        itemsTraded: dto.ok ? input.items.length : 0,
         buyerCurrencies,
         buyerItemCount,
         result: dto,
-      },
+        ...(dto.ok ? {} : { reason: 'nothing moved — module reported no item or attribute deltas' }),
+      }),
     };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -389,9 +497,14 @@ export async function handleUpdatePriceModifiers(input: UpdatePriceModifiersInpu
       if (!itemDoc) {
         return { success: false, error: `ITEM_NOT_FOUND: cannot resolve item UUID "${input.itemUuid}"` };
       }
-      const prices = API.getPricesForItem(itemDoc, { seller: input.actorUuid, quantity: input.quantity ?? 1 });
+      // BUG-771: forward targetActorUuid as the buyer (mirrors BUG-380's actorOpt pattern for
+      // get-modifiers just below) so a buyer-specific price modifier is reflected in this
+      // preview — without it getPricesForItem defaults buyer:false and only the merchant's
+      // global/seller-only price is ever shown, even when a per-buyer override exists.
+      const buyerOpt = input.targetActorUuid ?? false;
+      const prices = API.getPricesForItem(itemDoc, { seller: input.actorUuid, buyer: buyerOpt, quantity: input.quantity ?? 1 });
       const cost = API.getCostOfItem(itemDoc);
-      return { success: true, data: { actorUuid: input.actorUuid, itemUuid: input.itemUuid, quantity: input.quantity ?? 1, prices, cost } };
+      return { success: true, data: { actorUuid: input.actorUuid, targetActorUuid: input.targetActorUuid ?? null, itemUuid: input.itemUuid, quantity: input.quantity ?? 1, prices, cost } };
     }
 
     if (subAction === 'get-modifiers') {
@@ -425,35 +538,71 @@ export async function handleUpdatePriceModifiers(input: UpdatePriceModifiersInpu
     // C-3: updateMerchantPriceModifiers needs ARRAY of entries each with actorUuid (item-piles.js:98364)
     // targetActorUuid defaults to actorUuid (merchant's own modifier) when not specified
     const targetUuid = input.targetActorUuid ?? input.actorUuid;
+    const isRelative = input.relative === true;
+
+    // BUG-774: snapshot the PRE-write raw entry/flag data — upstream's relative-mode arithmetic
+    // (item-piles.js:98404-98407) is `new = old + requested`, and `old` comes from THIS exact
+    // fallback chain (per-actor entry -> merchant global flag -> hardcoded default). The verifier
+    // below must compute the same expected value, not compare the stored result to the raw delta.
+    const preFlagData: any = API.getActorFlagData(input.actorUuid);
+    const preEntry: any = (Array.isArray(preFlagData?.actorPriceModifiers) ? preFlagData.actorPriceModifiers : [])
+      .find((e: any) => e?.actorUuid === targetUuid) ?? {};
+    const oldBuy: number = preEntry?.buyPriceModifier ?? preFlagData?.buyPriceModifier ?? 1;
+    const oldSell: number = preEntry?.sellPriceModifier ?? preFlagData?.sellPriceModifier ?? 0.5;
+
+    // BUG-774: under relative:true, upstream computes `old + requested` per side independently —
+    // an omitted side becomes `old + undefined = NaN` (Math.max(0, NaN) is still NaN), silently
+    // corrupting whichever side the caller didn't touch. Default an omitted side to a 0 delta
+    // (relative "no change") instead of leaving it undefined — this is the "preserve omitted
+    // fields explicitly" fix route from the bug entry, chosen over "require both fields" because
+    // it keeps a legitimate single-side relative update (e.g. "raise buy only") working.
+    const buyRequested = isRelative ? (input.buyPriceModifier ?? 0) : input.buyPriceModifier;
+    const sellRequested = isRelative ? (input.sellPriceModifier ?? 0) : input.sellPriceModifier;
+
     const modifierEntry: Record<string, unknown> = { actorUuid: targetUuid };
-    if (input.buyPriceModifier !== undefined) modifierEntry['buyPriceModifier'] = input.buyPriceModifier;
-    if (input.sellPriceModifier !== undefined) modifierEntry['sellPriceModifier'] = input.sellPriceModifier;
+    if (buyRequested !== undefined) modifierEntry['buyPriceModifier'] = buyRequested;
+    if (sellRequested !== undefined) modifierEntry['sellPriceModifier'] = sellRequested;
     if (input.relative !== undefined) modifierEntry['relative'] = input.relative;
     if (input.override !== undefined) modifierEntry['override'] = input.override;
 
     const modifyResult = await API.updateMerchantPriceModifiers(input.actorUuid, [modifierEntry]);
-    // M-2: socket returns false when GM disconnects mid-call
+    // BUG-784: classify bare false — GM-disconnect vs. business-condition veto.
     if (modifyResult === false) {
-      return { success: false, error: 'NO_ACTIVE_GM: item-piles socket returned false — GM may have disconnected' };
+      return falseReturnEnvelope('update-price-modifiers', input.actorUuid);
     }
 
-    // DP-16 (BUG-445d, D8): verify against the RAW actorPriceModifiers flag entry — the
-    // actual write target (item-piles.js:98364), read via getActorFlagData at the SAME scope
-    // we wrote (targetUuid; BUG-380). getMerchantPriceModifiers returns the COMPOSED effective
-    // modifier (per-actor × merchant global), so a correct write of e.g. sell:0.5 under a 0.5
-    // global read back as 0.25 and false-failed the old requested-vs-composed compare.
+    // BUG-774: expected POST-write value per field, mirroring item-piles.js:98404-98407 exactly:
+    // relative -> Math.max(0, old + requested); absolute -> requested ?? old (a field genuinely
+    // untouched by this call keeps its old value and is excluded from the drift check below).
+    // override is NEVER preserved upstream (item-piles.js:98411) — every write resets it to
+    // `override ?? false`, so it is always verified, not only when explicitly supplied.
+    const expected: Record<string, number | boolean> = { override: input.override ?? false };
+    if (modifierEntry['buyPriceModifier'] !== undefined) {
+      expected['buyPriceModifier'] = isRelative ? Math.max(0, oldBuy + (buyRequested as number)) : Math.max(0, buyRequested as number);
+    }
+    if (modifierEntry['sellPriceModifier'] !== undefined) {
+      expected['sellPriceModifier'] = isRelative ? Math.max(0, oldSell + (sellRequested as number)) : Math.max(0, sellRequested as number);
+    }
+
+    // DP-16 (BUG-445d, D8; BUG-774 extends to override + relative-aware expected values): verify
+    // against the RAW actorPriceModifiers flag entry — the actual write target (item-piles.js:98364),
+    // read via getActorFlagData at the SAME scope we wrote (targetUuid; BUG-380). getMerchantPriceModifiers
+    // returns the COMPOSED effective modifier (per-actor × merchant global), so a correct write of
+    // e.g. sell:0.5 under a 0.5 global read back as 0.25 and false-failed the old compare.
     const rawFlagData: any = API.getActorFlagData(input.actorUuid);
     const rawEntry: any = (Array.isArray(rawFlagData?.actorPriceModifiers) ? rawFlagData.actorPriceModifiers : [])
       .find((e: any) => e?.actorUuid === targetUuid) ?? {};
-    const drift = (['buyPriceModifier', 'sellPriceModifier'] as const).filter(
-      (k) => (modifierEntry as any)[k] !== undefined && Number(rawEntry?.[k]) !== Number((modifierEntry as any)[k]),
-    );
+    const drift = (Object.keys(expected) as Array<keyof typeof expected>).filter((k) => {
+      const raw = rawEntry?.[k];
+      const want = expected[k];
+      return typeof want === 'boolean' ? Boolean(raw) !== want : Number(raw) !== want;
+    });
     if (drift.length > 0) {
-      return notPersisted(ErrorTokens.ITEM_PILES_PRICE_MODIFIERS_NOT_PERSISTED, `price modifiers for ${input.actorUuid} did not persist in the raw actorPriceModifiers flag entry for ${targetUuid}: ${drift.join(', ')} (requested ${JSON.stringify(modifierEntry)}, raw flag entry ${JSON.stringify(rawEntry)})`);
+      return notPersisted(ErrorTokens.ITEM_PILES_PRICE_MODIFIERS_NOT_PERSISTED, `price modifiers for ${input.actorUuid} did not persist in the raw actorPriceModifiers flag entry for ${targetUuid}: ${drift.join(', ')} (expected ${JSON.stringify(expected)}, raw flag entry ${JSON.stringify(rawEntry)})`);
     }
     const afterModifiers: any = API.getMerchantPriceModifiers(input.actorUuid, { actor: targetUuid });
     notify.updated('item-piles', `Updated price modifiers for ${input.actorUuid}`, {});
-    return { success: true, data: { actorUuid: input.actorUuid, subAction: 'update-modifiers', targetActorUuid: input.targetActorUuid ?? null, modifiers: afterModifiers } };
+    return { success: true, data: buildOutcomeResponse('applied', { actorUuid: input.actorUuid, subAction: 'update-modifiers', targetActorUuid: input.targetActorUuid ?? null, modifiers: afterModifiers }) };
   } catch (e) {
     return { success: false, error: `UPDATE_PRICE_MODIFIERS_ERROR: ${e instanceof Error ? e.message : String(e)}` };
   }

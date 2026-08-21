@@ -1,4 +1,9 @@
-// DIALOG-PATH: DIALOG_FREE — the file only LISTENS for the modules own Hooks.callAll("aa.ready", ...) emission (captured once at Foundry init to populate a local reference); this handler never opens a Dialog/DialogV2 and never awaits a Hooks.once-tied Promise.
+// DIALOG-PATH: DIALOG_FREE — no Dialog/DialogV2 anywhere in this file. handlePlayAnimation (BUG-795
+// fix) DOES await a Hooks.once-tied Promise (`aa.animationEnd`), but that hook is fired
+// unconditionally from AA's own animation pipeline (autoanimations.js:17346/17638/17809/18373) —
+// never gated behind a user dialog/confirmation — so it carries none of ADR-10.1's dialog-deadlock
+// risk (bounded by a timeout regardless). The aa.ready capture below is a separate, unrelated
+// Hooks.on listener (module-init capture, not awaited by any handler).
 // Module Integration v1 Phase 8 — module-autoanimations handler.
 //
 // 7-action umbrella for Automated Animations (AA): per-item flag authoring,
@@ -27,6 +32,7 @@ import {
 } from '@foundry-mcp/shared';
 import { notify } from '../../../notify.js';
 import { Envelope, isGM } from '../_shared/handler-utils.js';
+import { buildOutcomeResponse } from '../../../services/shared/outcome-response.js';
 
 
 // ── aa.ready capture (ADR-8.1) ──────────────────────────────────────────────
@@ -250,6 +256,24 @@ async function handleGetItemAnimation(input: GetItemInput): Promise<Envelope<unk
   }
 }
 
+// BUG-799: cross-check a complete DB-driven video tuple against AA's own live menu tree (the same
+// tree handleListAnimations navigates) BEFORE writing — AA's path builder does not reject an
+// unresolvable key at write time, it silently substitutes the first available database choice.
+// Best-effort ("when possible" per the fix route): if aaDatabaseRef isn't populated yet (AA hasn't
+// fired aa.ready), this check is skipped rather than blocking the write on an unrelated timing gap.
+// UNIT-TEST GAP: aaDatabaseRef is captured once via a module-load-time Hooks.once('aa.ready', ...)
+// (this file's own header comment: "Hooks unavailable at import (test env)") — no existing test
+// seam populates it, matching handleListAnimations' own untested populated-tree path. The
+// null-skip branch above IS exercised by every existing test (aaDatabaseRef stays null
+// throughout); the populated-tree rejection branch needs a live/F12 Foundry probe to verify.
+function unresolvedVideoKey(video: { dbSection?: string | undefined; menuType?: string | undefined; animation?: string | undefined; enableCustom?: boolean | undefined } | undefined): string | null {
+  if (!video || video.enableCustom === true) return null; // custom-path videos aren't DB-key-checkable
+  if (!video.dbSection || !video.menuType || !video.animation) return null; // incomplete tuples are already rejected by the Zod refine
+  if (!aaDatabaseRef) return null; // AA not ready yet — best-effort, do not block the write
+  const node = (aaDatabaseRef as any)?.[video.dbSection]?.[video.menuType]?.[video.animation];
+  return node === undefined ? `${video.dbSection}/${video.menuType}/${video.animation}` : null;
+}
+
 async function handleSetItemAnimation(input: SetItemInput): Promise<Envelope<unknown>> {
   if (!isGM()) return { success: false, error: 'GM_REQUIRED: only the GM can write item animations' };
 
@@ -258,6 +282,21 @@ async function handleSetItemAnimation(input: SetItemInput): Promise<Envelope<unk
     return {
       success: false,
       error: 'AA_MACRO_NOT_CONFIRMED: animation.macro.enable=true makes AA run an arbitrary world macro on every roll. Re-send with confirmedMacro:true to allow it.',
+    };
+  }
+
+  // BUG-799: reject an unresolvable DB-driven key BEFORE writing, across every video-bearing slot.
+  const unresolved = [
+    unresolvedVideoKey(input.animation.primary),
+    unresolvedVideoKey(input.animation.secondary?.video),
+    unresolvedVideoKey(input.animation.source?.video),
+    unresolvedVideoKey(input.animation.target?.video),
+    unresolvedVideoKey(input.animation.meleeSwitch?.video),
+  ].filter((x): x is string => x !== null);
+  if (unresolved.length > 0) {
+    return {
+      success: false,
+      error: `AA_VIDEO_KEY_UNRESOLVED: [${unresolved.join(', ')}] do(es) not resolve against AA's live animation database — AA's path builder would silently substitute an arbitrary fallback for this instead of rejecting it. Check list-animations for valid keys.`,
     };
   }
 
@@ -280,6 +319,19 @@ async function handleSetItemAnimation(input: SetItemInput): Promise<Envelope<unk
       return {
         success: false,
         error: `AA_FLAG_VERIFY_FAILED: post-write re-read did not confirm version=5 + isCustomized=true (got version=${written?.version}, isCustomized=${written?.isCustomized})`,
+      };
+    }
+
+    // BUG-799: version/isCustomized alone previously verified NOTHING about the actual requested
+    // content — deep-compare every executable field (video/sound/macro/soundOnly across all
+    // slots) against what we asked to be written, so a persisted-but-wrong value fails loud
+    // instead of reporting success on a "customized" flag that doesn't play what was requested.
+    const EXECUTABLE_FIELDS = ['primary', 'secondary', 'source', 'target', 'soundOnly', 'macro', 'meleeSwitch'] as const;
+    const contentDrift = EXECUTABLE_FIELDS.filter((f) => JSON.stringify(written[f]) !== JSON.stringify((v5 as any)[f]));
+    if (contentDrift.length > 0) {
+      return {
+        success: false,
+        error: `AA_FLAG_CONTENT_NOT_PERSISTED: version/isCustomized landed but these executable field(s) do not match what was requested: [${contentDrift.join(', ')}]`,
       };
     }
 
@@ -437,6 +489,40 @@ async function handleMergeAutorecEntry(input: MergeAutorecInput): Promise<Envelo
 
 type PlayAnimInput = Extract<ModuleAutoAnimationsInputType, { action: 'play-animation' }>;
 
+type AnimationEndSignal = 'ended' | 'no-target' | 'timeout';
+
+// BUG-795: AA's exported playAnimation() (autoanimations.js:18686-18708) fires its internal
+// trafficCop$1(handler) WITHOUT awaiting it, then returns `handler` — always truthy unless `item`
+// itself is falsy, and completely unrelated to whether trafficCop actually dispatched anything.
+// The old `result !== false` check was therefore true almost unconditionally. AA fires real
+// lifecycle hooks unconditionally from its own pipeline instead: `aa.animationStart`/
+// `aa.animationEnd(sourceToken, targetsOrNoTarget)`, including a `"no-target"` signal at the exact
+// melee/range-exits-for-zero-targets path this bug names (autoanimations.js:17809/18373). Observe
+// that instead of trusting playAnimation()'s return value. Bounded by a timeout — an animation
+// that hasn't signaled completion within budget is reported honestly as unconfirmed, never as a
+// fabricated success (fix route: "return an honest queued state rather than fabricated completion").
+// Ephemeral — hooksApi.off in finally{}, same self-cleaning shape as actor-update-observer.ts's
+// waitForActorUpdateCommit (check-signal-hooks.mjs's own precedent exemption).
+async function observeAnimationEnd(sourceToken: unknown, timeoutMs: number): Promise<AnimationEndSignal> {
+  const hooksApi: any = (globalThis as any).Hooks;
+  if (!hooksApi?.on || !hooksApi?.off) return 'timeout';
+
+  let hookId: number | undefined;
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await new Promise<AnimationEndSignal>((resolve) => {
+      hookId = hooksApi.on('aa.animationEnd', (tok: unknown, tgts: unknown) => {
+        if (tok !== sourceToken) return; // scope strictly to THIS call's source token
+        resolve(tgts === 'no-target' ? 'no-target' : 'ended');
+      });
+      timeoutHandle = setTimeout(() => resolve('timeout'), timeoutMs);
+    });
+  } finally {
+    if (hookId !== undefined) hooksApi.off('aa.animationEnd', hookId);
+    if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
+  }
+}
+
 async function handlePlayAnimation(input: PlayAnimInput): Promise<Envelope<unknown>> {
   if (!isGM()) return { success: false, error: 'GM_REQUIRED: only the GM can fire director animations' };
   if (input.confirm !== true) {
@@ -458,20 +544,48 @@ async function handlePlayAnimation(input: PlayAnimInput): Promise<Envelope<unkno
     const item = input.itemUuid ? await resolveDoc(input.itemUuid) : { name: input.itemName };
     if (input.itemUuid && !item) return { success: false, error: `ITEM_NOT_FOUND: no item at "${input.itemUuid}"` };
 
-    // Explicit empty array when no targets supplied (dossier open-q §6: avoid silent
-    // fallback to game.user.targets).
+    // BUG-795: unresolved target UUIDs were previously dropped silently, so a typo'd/stale target
+    // UUID could shrink the played target count below what the GM requested without any signal.
+    // Explicit empty array when no targets supplied at all (dossier open-q §6: avoid silent
+    // fallback to game.user.targets) is preserved — only a UUID that was SUPPLIED and failed to
+    // resolve is now an error.
     const targets: any[] = [];
+    const unresolvedTargets: string[] = [];
     for (const tu of input.targetUuids ?? []) {
       const td = await resolveDoc(tu);
       if (td) targets.push(td.object ?? td);
+      else unresolvedTargets.push(tu);
+    }
+    if (unresolvedTargets.length > 0) {
+      return {
+        success: false,
+        error: `TARGET_NOT_FOUND: could not resolve target UUID(s) [${unresolvedTargets.join(', ')}] — supply valid token/actor UUIDs or omit targetUuids entirely.`,
+      };
     }
 
-    const result = await aa.playAnimation(sourceToken, item, { targets });
-    const played = result !== false;
-    notify.updated('autoanimations', (item as any)?.name ?? input.itemName ?? 'animation', {
-      summary: `manual play (${targets.length} target(s))`,
-    });
-    return { success: true, data: { played, sourceToken: input.sourceTokenUuid, targetCount: targets.length } };
+    const AA_ANIMATION_END_TIMEOUT_MS = 3000;
+    const endObserved = observeAnimationEnd(sourceToken, AA_ANIMATION_END_TIMEOUT_MS);
+    await aa.playAnimation(sourceToken, item, { targets });
+    const endSignal = await endObserved;
+
+    const played = endSignal === 'ended';
+    const outcome = endSignal === 'ended' ? 'applied' : (endSignal === 'no-target' ? 'failed' : 'partial');
+    if (played) {
+      notify.updated('autoanimations', (item as any)?.name ?? input.itemName ?? 'animation', {
+        summary: `manual play (${targets.length} target(s))`,
+      });
+    }
+    return {
+      success: true,
+      data: buildOutcomeResponse(outcome, {
+        played,
+        sourceToken: input.sourceTokenUuid,
+        targetCount: targets.length,
+        endSignal,
+        ...(endSignal === 'timeout' ? { note: `no aa.animationEnd signal observed within ${AA_ANIMATION_END_TIMEOUT_MS}ms — dispatch is unconfirmed, not a fabricated success` } : {}),
+        ...(endSignal === 'no-target' ? { note: 'AA exited via its own zero-target path (melee/range playback found nothing to animate against)' } : {}),
+      }),
+    };
   } catch (e) {
     return { success: false, error: `AA_PLAY_ERROR: ${e instanceof Error ? e.message : String(e)}` };
   }

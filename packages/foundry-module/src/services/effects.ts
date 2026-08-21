@@ -18,6 +18,7 @@ import { notify } from '../notify.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
 import { verifyDocWrite } from '../utils/verifyWrite.js';
 import { _resolveActor, _resolveItem, _findEffect, _targetToResolverInput } from './shared/document-resolver.js';
+import { buildOutcomeResponse } from './shared/outcome-response.js';
 
 export class EffectsService {
   constructor(private readonly validateState: () => void) {}
@@ -69,7 +70,7 @@ export class EffectsService {
           notify.created('active-effect', data.effect.name, {
             summary: `on ${actor.name} (immediate one-shot — fired + self-deleted)`,
           });
-          return {
+          return buildOutcomeResponse('applied', {
             success: true,
             scope: 'actor-direct',
             actorId: actor.id,
@@ -81,14 +82,14 @@ export class EffectsService {
             parentType: 'Actor' as const,
             fired: true,
             autoDeleted: true,
-          };
+          });
         }
         if (!created || created.length === 0) {
           if (isSelfDeletingImmediate(data.effect)) {
             notify.created('active-effect', data.effect.name, {
               summary: `on ${actor.name} (immediate one-shot — fired + self-deleted)`,
             });
-            return {
+            return buildOutcomeResponse('applied', {
               success: true,
               scope: 'actor-direct',
               actorId: actor.id,
@@ -100,7 +101,7 @@ export class EffectsService {
               parentType: 'Actor' as const,
               fired: true,
               autoDeleted: true,
-            };
+            });
           }
           throw new Error('Failed to create ActiveEffect on actor');
         }
@@ -113,7 +114,7 @@ export class EffectsService {
             notify.created('active-effect', createdEffect.name, {
               summary: `on ${actor.name} (immediate one-shot — fired + self-deleted)`,
             });
-            return {
+            return buildOutcomeResponse('applied', {
               success: true,
               scope: 'actor-direct',
               actorId: actor.id,
@@ -125,7 +126,7 @@ export class EffectsService {
               parentType: 'Actor' as const,
               fired: true,
               autoDeleted: true,
-            };
+            });
           }
           throw new Error(`${ErrorTokens.ADD_ACTIVE_EFFECT_NOT_PERSISTED}: effect ${createdEffect.id} absent after create`);
         }
@@ -149,7 +150,7 @@ export class EffectsService {
         if (data.returnFullPayload === true) {
           base.effectData = createdEffect.toObject?.() ?? null;
         }
-        return base;
+        return buildOutcomeResponse('applied', base);
       }
 
       // --- item path (scope:'actor' or scope:'world') — unchanged ---
@@ -163,7 +164,7 @@ export class EffectsService {
         notify.created('active-effect', data.effect.name, {
           summary: `on ${item.name} (immediate one-shot — fired + self-deleted)`,
         });
-        return {
+        return buildOutcomeResponse('applied', {
           success: true,
           scope,
           actorId: owner?.id ?? null,
@@ -173,14 +174,14 @@ export class EffectsService {
           effectName: data.effect.name,
           fired: true,
           autoDeleted: true,
-        };
+        });
       }
       if (!created || created.length === 0) {
         if (isSelfDeletingImmediate(data.effect)) {
           notify.created('active-effect', data.effect.name, {
             summary: `on ${item.name} (immediate one-shot — fired + self-deleted)`,
           });
-          return {
+          return buildOutcomeResponse('applied', {
             success: true,
             scope,
             actorId: owner?.id ?? null,
@@ -190,7 +191,7 @@ export class EffectsService {
             effectName: data.effect.name,
             fired: true,
             autoDeleted: true,
-          };
+          });
         }
         throw new Error('Failed to create ActiveEffect');
       }
@@ -203,7 +204,7 @@ export class EffectsService {
           notify.created('active-effect', createdEffect.name, {
             summary: `on ${item.name} (immediate one-shot — fired + self-deleted)`,
           });
-          return {
+          return buildOutcomeResponse('applied', {
             success: true,
             scope,
             actorId: owner?.id ?? null,
@@ -213,7 +214,7 @@ export class EffectsService {
             effectName: createdEffect.name,
             fired: true,
             autoDeleted: true,
-          };
+          });
         }
         throw new Error(`${ErrorTokens.ADD_ACTIVE_EFFECT_NOT_PERSISTED}: effect ${createdEffect.id} absent after create`);
       }
@@ -243,7 +244,7 @@ export class EffectsService {
       if (data.returnFullPayload === true) {
         base.effectData = createdEffect.toObject?.() ?? null;
       }
-      return base;
+      return buildOutcomeResponse('applied', base);
     } catch (error) {
       throw new Error(
         `Failed to add active effect: ${error instanceof Error ? error.message : 'Unknown error'}`

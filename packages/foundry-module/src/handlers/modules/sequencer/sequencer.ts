@@ -28,6 +28,7 @@ import { requireModuleActive } from '../_shared/require-module-active.js';
 import { ModuleSequencerInput, type ModuleSequencerInputType, ALLOWED_SECTION_TYPES } from '@foundry-mcp/shared';
 import { notify } from '../../../notify.js';
 import { Envelope, isGM } from '../_shared/handler-utils.js';
+import { buildOutcomeResponse } from '../../../services/shared/outcome-response.js';
 
 
 // ── Local helpers ──────────────────────────────────────────────────────────────
@@ -67,6 +68,52 @@ function isDatabasePopulated(Sequencer: any): boolean {
   } catch {
     return false;
   }
+}
+
+// BUG-794: Sequence.play() (sequencer.js:27719-27763, live Sequencer v4.2.2) initializes and
+// executes sections through its OWN internal Promise.allSettled(promises), then discards the
+// settled results in a `.then()` that ignores them entirely — there is no public API to retrieve
+// per-section outcomes after calling play(). Missing assets / invalid render data on a
+// fire-and-forget (non-waitUntilFinished) section therefore silently rejects with no observable
+// trace; play() still resolves normally.
+//
+// Fix: wrap each section's own `_execute()` (the exact method play()'s loop calls,
+// sequencer.js:27750/27752) to record its outcome BEFORE re-throwing into upstream's own
+// allSettled — the real, UNMODIFIED play() still runs afterward with its full original timing,
+// hooks, and effectIndex bookkeeping intact. This does not reimplement any playback/rendering
+// logic; it only observes each section's outcome as a side effect of the same private method
+// upstream itself calls. PRIVATE-API-COUPLED (section._execute is an undocumented instance
+// method) — re-verify this wrapper still applies cleanly on any Sequencer module version bump.
+async function playSequenceWithOutcomes(
+  seq: any,
+  options: Record<string, unknown> = {},
+): Promise<{ playedCount: number; failedCount: number; failures: string[] }> {
+  const sections: any[] = Array.isArray(seq?.sections) ? seq.sections : [];
+  const outcomes: Array<{ ok: boolean; error?: string } | undefined> = new Array(sections.length);
+  for (let i = 0; i < sections.length; i++) {
+    const section = sections[i];
+    if (typeof section?._execute !== 'function') continue; // defensive — should not happen on a live Sequencer section
+    const original = section._execute.bind(section);
+    section._execute = async (...args: unknown[]) => {
+      try {
+        const result = await original(...args);
+        outcomes[i] = { ok: true };
+        return result;
+      } catch (e) {
+        outcomes[i] = { ok: false, error: e instanceof Error ? e.message : String(e) };
+        throw e; // rethrow — preserve upstream's own allSettled-catches-it contract exactly
+      }
+    };
+  }
+  await seq.play(options);
+  const failures = outcomes
+    .map((o, i) => (o && !o.ok ? `section ${i}: ${o.error}` : null))
+    .filter((x): x is string => x !== null);
+  return {
+    playedCount: sections.length - failures.length,
+    failedCount: failures.length,
+    failures,
+  };
 }
 
 // ── Macro-node ALLOWLIST guard (SA2 — allowlist, NOT denylist) ─────────────────
@@ -223,11 +270,16 @@ async function handlePlaySequenceJson(input: PlaySeqInput): Promise<Envelope<unk
       const Sequence = getSequenceClass();
       const seq = new Sequence();
       buildSimplifiedSequence(seq, sections);
-      await seq.play(input.options ?? {});
-      notify.updated('sequencer', 'Played sequence', { summary: `${sections.length} simplified section(s)` });
+      const { playedCount, failedCount, failures } = await playSequenceWithOutcomes(seq, input.options ?? {});
+      // BUG-794: suppress the success notification when every section failed — a GM should not
+      // see "Played sequence" for a cutscene that rendered nothing.
+      if (playedCount > 0) {
+        notify.updated('sequencer', 'Played sequence', { summary: `${playedCount}/${sections.length} simplified section(s)${failedCount ? `, ${failedCount} failed` : ''}` });
+      }
+      const outcome = failedCount === 0 ? 'applied' : (playedCount > 0 ? 'partial' : 'failed');
       return {
         success: true,
-        data: { played: true, sectionCount: sections.length, mode: 'simplified' },
+        data: buildOutcomeResponse(outcome, { played: playedCount > 0, sectionCount: sections.length, playedCount, failedCount, failures, mode: 'simplified' }),
       };
     } catch (e) {
       return { success: false, error: e instanceof Error && /^SEQUENCER_/.test(e.message) ? e.message : `SEQUENCER_PLAY_ERROR: ${e instanceof Error ? e.message : String(e)}` };
@@ -245,9 +297,22 @@ async function handlePlaySequenceJson(input: PlaySeqInput): Promise<Envelope<unk
     // SEQUENCER_PLAY_ERROR rather than silently resolving play() on a broken section
     // (softFail:true is a footgun for an MCP tool: success returned, nothing rendered).
     seq.fromJSON({ options: { moduleName: 'warhammer-mcp', softFail: false }, sections: input.sequence });
-    await seq.play(input.options ?? {});
-    notify.updated('sequencer', 'Played sequence', { summary: `${input.sequence.length} section(s)` });
-    return { success: true, data: { played: true, sectionCount: input.sequence.length, note: 'session-transport: toJSON format is unversioned and fragile across Sequencer upgrades' } };
+    const { playedCount, failedCount, failures } = await playSequenceWithOutcomes(seq, input.options ?? {});
+    if (playedCount > 0) {
+      notify.updated('sequencer', 'Played sequence', { summary: `${playedCount}/${input.sequence.length} section(s)${failedCount ? `, ${failedCount} failed` : ''}` });
+    }
+    const outcome = failedCount === 0 ? 'applied' : (playedCount > 0 ? 'partial' : 'failed');
+    return {
+      success: true,
+      data: buildOutcomeResponse(outcome, {
+        played: playedCount > 0,
+        sectionCount: input.sequence.length,
+        playedCount,
+        failedCount,
+        failures,
+        note: 'session-transport: toJSON format is unversioned and fragile across Sequencer upgrades',
+      }),
+    };
   } catch (e) {
     return { success: false, error: `SEQUENCER_PLAY_ERROR: ${e instanceof Error ? e.message : String(e)}` };
   }
@@ -324,13 +389,33 @@ async function handleUpdateEffects(input: UpdateEffectsInput): Promise<Envelope<
         error: 'SEQUENCER_UPDATE_EFFECTS_ERROR: filter is required — provide at least one filter key (name, sceneId, source, target, origin, or effects)',
       };
     }
-    const result = await Sequencer.EffectManager.updateEffects(input.filter, input.updates ?? {});
+    // BUG-807: an omitted/empty updates object is a no-op request — reject it rather than
+    // letting it silently resolve as a false "success" with 0 fulfilled and 0 rejected.
+    if (!input.updates || Object.keys(input.updates).length === 0) {
+      return {
+        success: false,
+        error: 'SEQUENCER_UPDATE_EFFECTS_ERROR: updates is required — provide at least one field to update',
+      };
+    }
+    const result = await Sequencer.EffectManager.updateEffects(input.filter, input.updates);
     notify.updated('sequencer', 'Updated effects', { summary: JSON.stringify(input.filter) });
     // updateEffects resolves via Promise.allSettled — count outcomes, don't serialize them.
     const settled = Array.isArray(result) ? result : [];
     const updatedCount = settled.filter((r: any) => r?.status === 'fulfilled').length;
     const failedCount = settled.length - updatedCount;
-    return { success: true, data: { updatedCount, failedCount } };
+    // BUG-807: a run where every update was rejected (or nothing matched the filter) must not
+    // report bare `success:true` with a hidden failedCount — surface it via `outcome`, mirroring
+    // BUG-794's simplified/serialized play-sequence precedent above (success:true envelope,
+    // outcome discriminates applied/partial/failed inside data), plus the rejection reasons.
+    const failureReasons = settled
+      .filter((r: any) => r?.status === 'rejected')
+      .map((r: any) => (r?.reason instanceof Error ? r.reason.message : String(r?.reason ?? 'unknown')));
+    const outcome = settled.length === 0 || updatedCount === 0
+      ? 'failed'
+      : failedCount > 0
+        ? 'partial'
+        : 'applied';
+    return { success: true, data: buildOutcomeResponse(outcome, { updatedCount, failedCount, ...(failureReasons.length > 0 ? { failureReasons } : {}) }) };
   } catch (e) {
     return { success: false, error: `SEQUENCER_UPDATE_EFFECTS_ERROR: ${e instanceof Error ? e.message : String(e)}` };
   }
@@ -514,9 +599,23 @@ async function handlePreload(input: PreloadInput): Promise<Envelope<unknown>> {
   if (!isGM()) return { success: false, error: 'GM_REQUIRED' };
   try {
     const Sequencer = getSequencer();
-    await Sequencer.Preloader.preload(input.files, input.showProgressBar ?? false);
-    notify.updated('sequencer', 'Preloaded assets', { summary: `${input.files.length} file(s) on GM client` });
-    return { success: true, data: { preloaded: input.files.length, target: 'gm-client' } };
+    // BUG-806: `Preloader.preload()` is undocumented/untyped as returning anything, but its
+    // real implementation (`preload()` -> `_preloadLocal()`, sequencer.js:11078-11082,11332-11358)
+    // RETURNS the `_preloadLocal` promise directly, which resolves to `numFilesFailedToLoad` (a
+    // plain number) — observable, just previously discarded. Requesting 0 files short-circuits
+    // to `return;` (resolves `undefined`), so guard that case explicitly rather than treating
+    // `undefined` as "0 failed".
+    const rawResult: unknown = await Sequencer.Preloader.preload(input.files, input.showProgressBar ?? false);
+    const failedCount = typeof rawResult === 'number' ? rawResult : 0;
+    const succeededCount = input.files.length - failedCount;
+    const outcome = failedCount === 0 ? 'applied' : (succeededCount > 0 ? 'partial' : 'failed');
+    if (succeededCount > 0) {
+      notify.updated('sequencer', 'Preloaded assets', { summary: `${succeededCount}/${input.files.length} file(s) on GM client${failedCount ? `, ${failedCount} failed` : ''}` });
+    }
+    return {
+      success: true,
+      data: buildOutcomeResponse(outcome, { requested: input.files.length, succeededCount, failedCount, target: 'gm-client' }),
+    };
   } catch (e) {
     return { success: false, error: `SEQUENCER_PRELOAD_ERROR: ${e instanceof Error ? e.message : String(e)}` };
   }
@@ -529,9 +628,23 @@ async function handlePreloadForClients(input: PreloadForClientsInput): Promise<E
   }
   try {
     const Sequencer = getSequencer();
+    // BUG-806 (HC8 partial disposition): unlike the GM-local `preload()` above,
+    // `preloadForClients()`'s returned promise resolves via `request.resolve()` called with NO
+    // arguments (sequencer.js:11284) — the per-client `numFilesFailedToLoad` IS tracked
+    // internally (`request.clientsDone`, sequencer.js:11254-11257) but is never passed to the
+    // caller. There is no public API surface to recover it; a real per-client fail count is
+    // genuinely unobservable here, so this reports only that every connected client
+    // acknowledged the broadcast round-trip — not that every file loaded on every client.
     await Sequencer.Preloader.preloadForClients(input.files, input.showProgressBar ?? false);
     notify.updated('sequencer', 'Preloaded assets for all clients', { summary: `${input.files.length} file(s)` });
-    return { success: true, data: { preloaded: input.files.length, target: 'all-clients' } };
+    return {
+      success: true,
+      data: buildOutcomeResponse('applied', {
+        requested: input.files.length,
+        target: 'all-clients',
+        note: 'all connected clients acknowledged the preload round-trip; per-client per-file failure counts are not exposed by the Sequencer public API (HC8 disposition — see BUG-806)',
+      }),
+    };
   } catch (e) {
     return { success: false, error: `SEQUENCER_PRELOAD_FOR_CLIENTS_ERROR: ${e instanceof Error ? e.message : String(e)}` };
   }

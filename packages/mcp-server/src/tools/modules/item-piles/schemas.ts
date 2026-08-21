@@ -53,11 +53,24 @@ export interface ItemPileGetContentsResult {
   isLocked: boolean | null;
   isClosed: boolean | null;
   isEmpty: boolean | null;
+  /** Total item count on the pile (NOT the page length — see `items`/`itemsLimit`). */
   itemCount: number;
+  /** BUG-788: bounded page, not the whole pile — see itemsOffset/itemsLimit/itemsTruncated/itemsNextOffset. */
   items: ItemPileItem[];
+  itemsOffset: number;
+  itemsLimit: number;
+  itemsTruncated: boolean;
+  itemsNextOffset: number | null;
   currencies: unknown;
+  /** BUG-788: never includes the raw `log` key — the log is surfaced separately (paginated) below. */
   flagData: unknown;
+  /** BUG-788: bounded page of the vault/merchant audit log (includeLog:true only). */
   log?: unknown[];
+  logCount?: number;
+  logOffset?: number;
+  logLimit?: number;
+  logTruncated?: boolean;
+  logNextOffset?: number | null;
 }
 
 export interface ItemPileAddItemsResult {

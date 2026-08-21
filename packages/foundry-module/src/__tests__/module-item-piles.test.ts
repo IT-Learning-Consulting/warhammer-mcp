@@ -498,6 +498,7 @@ describe('BUG-445: quantity-dimension verifies (stack-merge / partial-stack / ra
       action: 'remove-items',
       actorUuid: 'Actor.pile',
       items: [{ id: 'r1' }],
+      confirm: true, // BUG-786: remove-items now always requires confirm:true
     });
 
     expect(result.success).toBe(true);

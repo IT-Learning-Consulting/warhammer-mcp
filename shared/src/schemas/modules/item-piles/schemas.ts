@@ -153,6 +153,14 @@ export const ModuleItempilesInput = z.discriminatedUnion('action', [
     action: z.literal('get-contents'),
     actorUuid: z.string().min(1),
     includeLog: z.boolean().optional(),               // vault/merchant audit trail
+    // BUG-788: items and the (optional) audit log are paginated INDEPENDENTLY — default bounded
+    // page (50, capped 500 — see boundList()) keeps a large merchant/vault/long-log pile under
+    // the global 64,000-char RESPONSE_TOO_LARGE guard, with total/truncated/next-offset metadata
+    // in the response so a caller can page down after an overflow.
+    limit: z.number().int().min(1).max(500).optional(),      // items page size
+    offset: z.number().int().min(0).optional(),               // items page offset
+    logLimit: z.number().int().min(1).max(500).optional(),   // log page size (includeLog only)
+    logOffset: z.number().int().min(0).optional(),            // log page offset (includeLog only)
   }).strict(),
 
   // 6. add-items — addItems; items REQUIRED array (C1)
@@ -161,6 +169,7 @@ export const ModuleItempilesInput = z.discriminatedUnion('action', [
     actorUuid: z.string().min(1),
     items: z.array(z.record(z.unknown())).min(1, 'items must be a non-empty array (C1 — addItems forEach crash on null/undefined)'),
     removeExistingActorItems: z.boolean().optional(),
+    confirm: z.boolean().optional(),   // BUG-772: required when removeExistingActorItems:true (wipes existing inventory)
     // mergeSimilarItems and respectItemIds removed — not real addItems options (item-piles.js:98428)
   }).strict(),
 
@@ -173,6 +182,7 @@ export const ModuleItempilesInput = z.discriminatedUnion('action', [
       id: z.string().optional(),
       quantity: z.number().int().positive().optional(),
     })).min(1, 'items must be a non-empty array (C2 — removeItems forEach crash)'),
+    confirm: z.boolean().optional(),   // BUG-786: always required — permanent item removal
   }).strict(),
 
   // 8. transfer-items — transferItems/transferAllItems/combineItemPiles; items required (C3)
@@ -241,6 +251,7 @@ export const ModuleItempilesInput = z.discriminatedUnion('action', [
     rollData: z.record(z.unknown()).optional(),    // formula context (full-strength param)
     timesToRoll: z.number().int().positive().optional(),
     removeExistingActorItems: z.boolean().optional(),
+    confirm: z.boolean().optional(),   // BUG-772: required when removeExistingActorItems:true AND targetActorUuid given (wipes target's inventory)
   }).strict(),
 
   // 15. refresh-merchant — refreshMerchantInventory; removeExistingActorItems defaults FALSE (safe; asymmetric)

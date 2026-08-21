@@ -20,6 +20,7 @@ import { notify } from '../notify.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
 import { _resolveItem } from './shared/document-resolver.js';
 import { buildOperationReceipt } from './shared/operation-receipt.js';
+import { buildOutcomeResponse } from './shared/outcome-response.js';
 import { verifyDocWrite } from '../utils/verifyWrite.js';
 
 export class ItemService {
@@ -648,6 +649,6 @@ export class ItemService {
       summary: `qualities modified on ${ownerLabel}`,
       uuid: (item as any).uuid,
     });
-    return { itemName: item.name, owner: ownerLabel };
+    return buildOutcomeResponse('applied', { itemName: item.name, owner: ownerLabel });
   }
 }

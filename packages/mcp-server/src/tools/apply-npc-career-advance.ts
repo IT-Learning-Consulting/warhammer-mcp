@@ -73,6 +73,15 @@ Performance Notes:
       careerItemId: parsed.careerItemId,
       talentPolicy: parsed.talentPolicy ?? 'all',
     });
-    return await this.query<any>('applyNpcCareerAdvance', parsed);
+    const data = await this.query<any>('applyNpcCareerAdvance', parsed);
+    // BUG-692: this tool emitted no structuredContent at all before this fix, so its `outcome`
+    // field (added by the foundry-module service's buildOutcomeResponse call) was ungradeable per
+    // GRADING_CONTRACT.md — raw handler-data passthrough, matching the module-matt/-itempiles/
+    // -sequencer/-autoanimations convention (memo §F6).
+    const talentsAdded = typeof data?.talentsAdded === 'number' ? data.talentsAdded : 0;
+    const text = `Advanced **${data?.actorName ?? parsed.actorId}** via **${data?.careerName ?? 'career'}**` +
+      (data?.careerLevel != null ? ` (level ${data.careerLevel})` : '') +
+      `. Talents added: ${talentsAdded}${data?.talentsTrimmed ? `, trimmed: ${data.talentsTrimmed}` : ''}. Outcome: ${data?.outcome ?? 'unknown'}.`;
+    return { content: [{ type: 'text' as const, text }], structuredContent: data as Record<string, unknown> };
   }
 }

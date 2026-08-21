@@ -5,12 +5,13 @@
 
 import { ErrorTokens, type ModuleItempilesInputType } from '@foundry-mcp/shared';
 import { notify } from '../../../notify.js';
-import { Envelope } from '../_shared/handler-utils.js';
+import { Envelope, getGame } from '../_shared/handler-utils.js';
 import { settlePoll } from '../_shared/settle-poll.js';
-import { normalizeItemsArray, validateCurrencyString } from './catalog.js';
+import { normalizeItemsArray, validateCurrencyString, checkActiveGm } from './catalog.js';
 import { getItemPilesAPI, notPersisted, gmRequired, activeGmRequired } from './helpers.js';
 import { totalQuantity } from './verify-quantity.js';
 import { recordEconomyTransaction } from '../wfrp-economy/ledger.js';
+import { buildOutcomeResponse } from '../../../services/shared/outcome-response.js';
 
 // ── Phase 4 (wfrp_economy_system) money-leak closure ────────────────────────────
 //
@@ -40,6 +41,75 @@ function actorMoneyBp(_API: any, actorUuid: string): number {
   return sum;
 }
 
+// ── BUG-772/786: shared confirm-choreography helper ────────────────────────────
+//
+// add-items(removeExistingActorItems:true), roll-item-table(removeExistingActorItems:true +
+// targetActorUuid), and remove-items are all irreversible-destruction paths that had no
+// confirm:true gate (BUG-772: the two wipe paths; BUG-786: permanent item removal). This mirrors
+// the CONFIRM_REQUIRED choreography already established by refresh-merchant (merchant.ts CCR-4),
+// remove-currency, split-loot, and transfer-items(all/combine) — one envelope shape instead of
+// three more hand-rolled duplicates. Exported so merchant.ts's roll-item-table gate (BUG-772,
+// same wipe class as add-items) reuses it rather than re-deriving the choreography.
+
+/** Best-effort "N item(s): Name (qty: n), ..." summary for a confirm-choreography preview. */
+export function previewItemLines(items: unknown): { count: number; summary: string } {
+  const arr = Array.isArray(items) ? items : [];
+  const lines = arr.map((it: any) => {
+    const qty = it?.system?.quantity?.value ?? it?.system?.quantity ?? 1;
+    return `${String(it?.name ?? '(unnamed)')} (qty: ${qty})`;
+  });
+  return { count: arr.length, summary: arr.length === 0 ? '(empty)' : `${arr.length} item(s): ${lines.join(', ')}` };
+}
+
+/** The CONFIRM_REQUIRED envelope every gated destructive item-piles action returns pre-confirm. */
+export function confirmRequiredEnvelope(action: string, actorUuid: string, detail: string): Envelope<unknown> {
+  return {
+    success: false,
+    error: `CONFIRM_REQUIRED: ${action} on ${actorUuid} ${detail} Re-send with confirm:true.`,
+  };
+}
+
+// ── BUG-784: false-return classification (shared by flow.ts/merchant.ts/container.ts) ─────────
+//
+// Every socket-routed item-piles API call resolves a bare `false` for MULTIPLE distinct causes
+// upstream never distinguishes: a disconnected GM mid-call (M-2's original concern), a hook veto
+// (e.g. a preAddItems/preTradeItems/preLockItemPile handler refusing the operation), a
+// non-lootable-target refusal, or another business-condition failure. Every handler in this
+// trio previously translated ALL of these uniformly to NO_ACTIVE_GM, asserting a network/
+// principal cause the response cannot actually know (BUG-784).
+//
+// activeGmRequired() already confirms a GM is active BEFORE the API call runs. Re-running that
+// exact same check immediately AFTER a bare `false` comes back is the one genuine business-vs-
+// connectivity discriminator available here: if a GM is STILL active post-call, the socket call
+// itself didn't fail for lack of a GM — the `false` is a business-condition veto, reported via
+// the neutral ITEM_PILES_OPERATION_VETOED token (operation + target context, no GM-disconnect
+// claim). Only a GM that has genuinely gone inactive between the pre-check and this call still
+// yields NO_ACTIVE_GM — which stays truthful because it is re-verified, not assumed.
+export function falseReturnCause(): { noActiveGm: boolean; clause: string } {
+  const gmErr = checkActiveGm(getGame());
+  if (gmErr) {
+    return { noActiveGm: true, clause: 'no active GM client is currently detected' };
+  }
+  return {
+    noActiveGm: false,
+    clause: 'was refused by item-piles — a GM is currently active, so this is not a connectivity failure (likely a hook veto or a business-condition refusal, e.g. a non-lootable target)',
+  };
+}
+
+/** Message form of the BUG-784 classification, for sites that throw rather than return an Envelope. */
+export function falseReturnMessage(operation: string, target: string, detail?: string): string {
+  const { noActiveGm, clause } = falseReturnCause();
+  if (noActiveGm) {
+    return `NO_ACTIVE_GM: ${operation} on ${target} — item-piles socket returned false and ${clause}.`;
+  }
+  return `ITEM_PILES_OPERATION_VETOED: ${operation} on ${target} ${clause}.${detail ? ` ${detail}` : ''}`;
+}
+
+/** Envelope form of the BUG-784 classification for every bare-`false`-from-item-piles site. */
+export function falseReturnEnvelope(operation: string, target: string, detail?: string): Envelope<never> {
+  return { success: false, error: falseReturnMessage(operation, target, detail) };
+}
+
 // ── 3A: Item mutations ────────────────────────────────────────────────────────
 
 type AddItemsInput = Extract<ModuleItempilesInputType, { action: 'add-items' }>;
@@ -53,6 +123,25 @@ export async function handleAddItems(input: AddItemsInput): Promise<Envelope<unk
   try {
     const API = getItemPilesAPI();
     const items = normalizeItemsArray(input.items);
+
+    // BUG-772: removeExistingActorItems:true wipes the target's ENTIRE existing inventory before
+    // adding (item-piles.js _addItems: transaction.appendItemChanges(existingItems, {remove:true})
+    // when removeExistingActorItems) — the same class of destructive replacement refresh-merchant
+    // already confirm-gates (CCR-4), but this wipe path was never extended the same gate. Preview
+    // the existing inventory + replacement count before requiring literal confirm:true.
+    const removeExisting = input.removeExistingActorItems ?? false;
+    if (removeExisting && input.confirm !== true) {
+      let previewItems: unknown = null;
+      try {
+        previewItems = API.getActorItems(input.actorUuid);
+      } catch (_) { /* best-effort */ }
+      const { summary } = previewItemLines(previewItems);
+      return confirmRequiredEnvelope(
+        'add-items',
+        input.actorUuid,
+        `with removeExistingActorItems:true will WIPE the current inventory (${summary}) before adding ${items.length} replacement item(s).`,
+      );
+    }
 
     // BUG-461(b): quantity-dimension verify. Adding an item onto an existing same-name stack
     // merges — distinct-item COUNT stays flat while quantity grows — so the old count-based
@@ -77,13 +166,14 @@ export async function handleAddItems(input: AddItemsInput): Promise<Envelope<unk
 
     // L-1: mergeSimilarItems/respectItemIds removed — not real addItems options (item-piles.js:98428)
     const options: Record<string, unknown> = {
-      removeExistingActorItems: input.removeExistingActorItems ?? false,
+      removeExistingActorItems: removeExisting,
     };
 
     const addResult = await API.addItems(input.actorUuid, items, options);
-    // M-2: socket returns false when GM disconnects mid-call
+    // BUG-784: bare false is a GM-disconnect OR a business-condition veto (hook veto, etc.) —
+    // classify, don't assume (see falseReturnEnvelope block comment above).
     if (addResult === false) {
-      return { success: false, error: 'NO_ACTIVE_GM: item-piles socket returned false — GM may have disconnected' };
+      return falseReturnEnvelope('add-items', input.actorUuid);
     }
 
     // DP-16 (BUG-461b): post-write verify (settle-polled) — on the additive path
@@ -127,6 +217,33 @@ export async function handleRemoveItems(input: RemoveItemsInput): Promise<Envelo
   try {
     const API = getItemPilesAPI();
     const items = normalizeItemsArray(input.items);
+
+    // BUG-786: remove-items permanently destroys inventory with no confirm gate — the safety
+    // reference already requires confirm:true for irreversible ops (permanent currency deduction
+    // is gated via remove-currency's CCR-4 choreography) but item removal was silently exempt.
+    // Preview requested-vs-current quantity per targeted item before requiring confirm:true.
+    if (input.confirm !== true) {
+      let currentItems: unknown = null;
+      try {
+        currentItems = API.getActorItems(input.actorUuid);
+      } catch (_) { /* best-effort */ }
+      const currentArr = Array.isArray(currentItems) ? currentItems : [];
+      const lines = items.map((entry: unknown) => {
+        const obj = (entry && typeof entry === 'object') ? (entry as Record<string, unknown>) : {};
+        const id = String(obj['_id'] ?? obj['id'] ?? '');
+        const current: any = currentArr.find((it: any) => String(it?.id ?? it?._id ?? '') === id);
+        const name = current?.name ?? (id || '(unresolved item)');
+        const currentQty = current?.system?.quantity?.value ?? current?.system?.quantity ?? '?';
+        const requestedQty = obj['quantity'] ?? currentQty;
+        return `${name} (current qty: ${currentQty}, requesting removal of: ${requestedQty})`;
+      });
+      return confirmRequiredEnvelope(
+        'remove-items',
+        input.actorUuid,
+        `will permanently remove ${items.length} item(s) — ${lines.join('; ') || '(no items resolved)'}.`,
+      );
+    }
+
     // BUG-445 (D8): partial-stack removal (1-of-2) keeps the distinct-item COUNT static while
     // quantity drops 2→1 — the old count-based verify false-failed successful removals.
     // Measure total quantity over the removed id/name family instead; when no family can be
@@ -148,9 +265,9 @@ export async function handleRemoveItems(input: RemoveItemsInput): Promise<Envelo
     const beforeMoneyBp = actorMoneyBp(API, input.actorUuid);
 
     const removeResult = await API.removeItems(input.actorUuid, items);
-    // M-2: socket returns false when GM disconnects mid-call
+    // BUG-784: classify bare false — GM-disconnect vs. business-condition veto.
     if (removeResult === false) {
-      return { success: false, error: 'NO_ACTIVE_GM: item-piles socket returned false — GM may have disconnected' };
+      return falseReturnEnvelope('remove-items', input.actorUuid);
     }
 
     // DP-16 (BUG-445c, D8): post-write verify (settle-polled) — total quantity over the
@@ -240,9 +357,9 @@ export async function handleTransferItems(input: TransferItemsInput): Promise<En
       result = await API.transferItems(input.sourceUuid, input.targetUuid, items);
     }
 
-    // M-2: socket returns false when GM disconnects mid-call
+    // BUG-784: classify bare false — GM-disconnect vs. business-condition veto.
     if (result === false) {
-      return { success: false, error: 'NO_ACTIVE_GM: item-piles socket returned false — GM may have disconnected' };
+      return falseReturnEnvelope(`transfer-items (mode: ${mode})`, `${input.sourceUuid} -> ${input.targetUuid}`);
     }
 
     // BUG-423 (XPK-01): normalize the raw API resolution into an explicit DTO.
@@ -282,7 +399,20 @@ export async function handleTransferItems(input: TransferItemsInput): Promise<En
       });
     }
     notify.updated('item-piles', `Transferred items (mode: ${mode}) from ${input.sourceUuid} to ${input.targetUuid}`, {});
-    return { success: true, data: { mode, sourceUuid: input.sourceUuid, targetUuid: input.targetUuid, targetItemCount: targetCount, result: dto } };
+    // BUG-780: an empty/no-op transfer (nothing resolved to move) still reaches this success
+    // path — report it as `noop` with a reason rather than an indistinguishable `applied`.
+    const transferOutcome = dto.itemsTransferred.length > 0 ? 'applied' : 'noop';
+    return {
+      success: true,
+      data: buildOutcomeResponse(transferOutcome, {
+        mode,
+        sourceUuid: input.sourceUuid,
+        targetUuid: input.targetUuid,
+        targetItemCount: targetCount,
+        result: dto,
+        ...(transferOutcome === 'noop' ? { reason: 'nothing resolved to transfer — result set was empty' } : {}),
+      }),
+    };
   } catch (e) {
     return { success: false, error: `TRANSFER_ITEMS_ERROR: ${e instanceof Error ? e.message : String(e)}` };
   }
@@ -412,7 +542,8 @@ async function applyAbsoluteCurrencies(API: any, actorUuid: string, setString: s
   if (updates.length > 0) await actor.updateEmbeddedDocuments('Item', updates);
   for (const c of creations) {
     const r = await API.addCurrencies(actorUuid, c);
-    if (r === false) throw new Error(`NO_ACTIVE_GM: item-piles socket returned false while creating ${c}`);
+    // BUG-784: classify bare false — GM-disconnect vs. business-condition veto.
+    if (r === false) throw new Error(falseReturnMessage('add-currency (creating denomination)', actorUuid, `denomination: ${c}`));
   }
   return targets;
 }
@@ -446,9 +577,9 @@ export async function handleAddCurrency(input: AddCurrencyInput): Promise<Envelo
     const API = getItemPilesAPI();
     const beforeCurrencies = API.getActorCurrencies(input.actorUuid, { getAll: true });
     const addCurrResult = await API.addCurrencies(input.actorUuid, input.currencies);
-    // M-2: socket returns false when GM disconnects mid-call
+    // BUG-784: classify bare false — GM-disconnect vs. business-condition veto.
     if (addCurrResult === false) {
-      return { success: false, error: 'NO_ACTIVE_GM: item-piles socket returned false — GM may have disconnected' };
+      return falseReturnEnvelope('add-currency', input.actorUuid);
     }
 
     // DP-16: post-write verify (settle-polled) — closure-diff against the pre-call snapshot.
@@ -622,8 +753,11 @@ export async function handleTransferCurrency(input: TransferCurrencyInput): Prom
       // Add side: addCurrencies is proven immune to the BUG-428 chain.
       try {
         const addResult = await API.addCurrencies(input.targetUuid, input.currencies);
+        // BUG-784: classify bare false — GM-disconnect vs. business-condition veto — instead of
+        // asserting "no-active-GM" as the cause unconditionally.
         if (addResult === false) {
-          return { success: false, error: `ITEM_PILES_PARTIAL_TRANSFER: removed "${input.currencies}" from ${input.sourceUuid} but the add to ${input.targetUuid} returned no-active-GM — manual reconcile needed (transfer is non-atomic, no automatic rollback)` };
+          const { clause } = falseReturnCause();
+          return { success: false, error: `ITEM_PILES_PARTIAL_TRANSFER: removed "${input.currencies}" from ${input.sourceUuid} but the add to ${input.targetUuid} ${clause} — manual reconcile needed (transfer is non-atomic, no automatic rollback)` };
         }
       } catch (e) {
         return { success: false, error: `ITEM_PILES_PARTIAL_TRANSFER: removed "${input.currencies}" from ${input.sourceUuid} but failed to add to ${input.targetUuid} — manual reconcile needed (transfer is non-atomic, no automatic rollback). Cause: ${e instanceof Error ? e.message : String(e)}` };
@@ -658,12 +792,15 @@ export async function handleTransferCurrency(input: TransferCurrencyInput): Prom
         source: 'itempiles',
         description: `Item Piles: transferred "${input.currencies}"`,
       });
-      return { success: true, data: { mode, sourceUuid: input.sourceUuid, targetUuid: input.targetUuid, sourceCurrencies: sourceAfter, targetCurrencies: targetAfter, result: dtoT } };
+      return {
+        success: true,
+        data: buildOutcomeResponse('applied', { mode, sourceUuid: input.sourceUuid, targetUuid: input.targetUuid, sourceCurrencies: sourceAfter, targetCurrencies: targetAfter, result: dtoT }),
+      };
     }
 
-    // M-2: socket returns false when GM disconnects mid-call
+    // BUG-784: classify bare false — GM-disconnect vs. business-condition veto.
     if (result === false) {
-      return { success: false, error: 'NO_ACTIVE_GM: item-piles socket returned false — GM may have disconnected' };
+      return falseReturnEnvelope(`transfer-currency (mode: ${mode})`, `${input.sourceUuid} -> ${input.targetUuid}`);
     }
 
     // BUG-423 (XPK-01) + live-smoke correction (2026-07-02): the REAL transferCurrencies/
@@ -708,7 +845,20 @@ export async function handleTransferCurrency(input: TransferCurrencyInput): Prom
         description: `Item Piles: transferred all currencies (mode: ${mode})`,
       });
     }
-    return { success: true, data: { mode, sourceUuid: input.sourceUuid, targetUuid: input.targetUuid, sourceCurrencies, targetCurrencies, result: dto } };
+    // BUG-780: mode:"all" can resolve `dto.ok:false` on a silent no-op (BUG-428 class) and
+    // still reach here — report `noop` with a reason instead of an indistinguishable `applied`.
+    return {
+      success: true,
+      data: buildOutcomeResponse(dto.ok ? 'applied' : 'noop', {
+        mode,
+        sourceUuid: input.sourceUuid,
+        targetUuid: input.targetUuid,
+        sourceCurrencies,
+        targetCurrencies,
+        result: dto,
+        ...(dto.ok ? {} : { reason: 'nothing moved — module reported empty deltas' }),
+      }),
+    };
   } catch (e) {
     return { success: false, error: `TRANSFER_CURRENCY_ERROR: ${e instanceof Error ? e.message : String(e)}` };
   }
@@ -717,6 +867,29 @@ export async function handleTransferCurrency(input: TransferCurrencyInput): Prom
 // ── 3A: Loot split ────────────────────────────────────────────────────────────
 
 type SplitLootInput = Extract<ModuleItempilesInputType, { action: 'split-loot' }>;
+
+/** Per-stack quantity of one item document — same coercion as verify-quantity.ts's totalQuantity(). */
+function splitLootItemQuantity(item: any): number {
+  const q = item?.system?.quantity?.value ?? item?.system?.quantity;
+  const n = Number(q);
+  return q !== undefined && q !== null && Number.isFinite(n) ? n : 1;
+}
+
+/** BUG-776: expected TOTAL quantity remaining after split-loot, mirroring item-piles.js's
+ *  _splitItemPileContents (:85474-85536) per-stack `Math.floor(qty/numPlayers)*numPlayers` removal
+ *  EXACTLY — sum of per-stack remainders is not the remainder of the summed quantity, so this must
+ *  be computed stack-by-stack, never as a single aggregate mod. Currency-registered items (`type ===
+ *  'money'`, this file's own established detection — see actorMoneyBp above) ALWAYS split
+ *  (unconditional in upstream); ordinary items split ONLY when shareItemsEnabled. */
+function expectedSplitLootRemaining(items: any[], numPlayers: number, shareItemsEnabled: boolean): number {
+  let remaining = 0;
+  for (const item of items) {
+    const qty = splitLootItemQuantity(item);
+    const eligible = item?.type === 'money' || shareItemsEnabled;
+    remaining += eligible ? qty % numPlayers : qty;
+  }
+  return remaining;
+}
 
 export async function handleSplitLoot(input: SplitLootInput): Promise<Envelope<unknown>> {
   const gmErr = gmRequired();
@@ -728,6 +901,11 @@ export async function handleSplitLoot(input: SplitLootInput): Promise<Envelope<u
   if (!input.targets || input.targets.length === 0) {
     return { success: false, error: 'MISSING_TARGETS: targets must be a non-empty array of actor/token UUIDs (C8 — omitting targets with no active player chars → silent no-op)' };
   }
+
+  // BUG-776: duplicate target UUIDs were previously accepted as multiple recipients, which both
+  // corrupts the floor(qty/numPlayers) split math (numPlayers counted the duplicate) and would
+  // create two separate Transaction entries crediting the same actor twice.
+  const dedupedTargets = [...new Set(input.targets)];
 
   // CCR-4: dangerous — confirm required
   if (input.confirm !== true) {
@@ -744,24 +922,47 @@ export async function handleSplitLoot(input: SplitLootInput): Promise<Envelope<u
     } catch (_) { /* best-effort */ }
     return {
       success: false,
-      error: `CONFIRM_REQUIRED: split-loot distributes and empties the pile ${input.actorUuid} among ${input.targets.length} target(s). Current contents: ${contentsSummary}. Re-send with confirm:true.`,
+      error: `CONFIRM_REQUIRED: split-loot distributes ordinary items + currency among ${dedupedTargets.length} target(s) from pile ${input.actorUuid}, leaving any indivisible remainder behind (upstream floor(qty/${dedupedTargets.length})*${dedupedTargets.length} split — an uneven stack does NOT empty the pile). Current contents: ${contentsSummary}. Re-send with confirm:true.`,
     };
   }
 
   try {
     const API = getItemPilesAPI();
     const fromUuidSync = (globalThis as any).fromUuidSync;
+    const numPlayers = dedupedTargets.length;
 
     // C-7: targets/instigator must be Actor/TokenDocument instances (item-piles.js:98305-98312);
     // passing UUID strings throws. Resolve each via fromUuidSync.
-    const resolvedTargets = input.targets.map((uuid: string) => {
+    const resolvedTargets = dedupedTargets.map((uuid: string) => {
       const doc = typeof fromUuidSync === 'function' ? fromUuidSync(uuid) : null;
       if (!doc) throw new Error(`ACTOR_NOT_FOUND: cannot resolve target UUID "${uuid}" — ensure the actor/token exists`);
       return doc;
     });
 
     // Money-leak closure (Phase 4): per-recipient before-snapshot for the delta-based detection below.
-    const beforeTargetMoneyBp = new Map<string, number>(input.targets.map((uuid: string) => [uuid, actorMoneyBp(API, uuid)]));
+    const beforeTargetMoneyBp = new Map<string, number>(dedupedTargets.map((uuid: string) => [uuid, actorMoneyBp(API, uuid)]));
+
+    // BUG-776: item-piles defaults shareItemsEnabled:false on every pile — upstream's own
+    // _splitItemPileContents (item-piles.js:85482) skips ORDINARY items entirely when it's not
+    // explicitly true, leaving them behind while advertising "split loot". A GM invoking this
+    // action clearly intends items to move; auto-enable the flag (persists on the pile going
+    // forward, which is the correct/expected state for a pile meant to be looted) rather than
+    // silently under-delivering the tool's own advertised behavior.
+    const preFlagData: any = API.getActorFlagData(input.actorUuid);
+    const shareItemsEnabled = preFlagData?.shareItemsEnabled === true;
+    if (!shareItemsEnabled) {
+      await API.updateItemPile(input.actorUuid, { shareItemsEnabled: true });
+    }
+
+    // BUG-776: currency-inclusive, per-stack snapshot BEFORE the write — the expected-remainder
+    // math below needs individual stack quantities (a per-stack floor/mod), not an aggregate total.
+    const beforeItems: any[] = API.getActorItems(input.actorUuid, { getItemCurrencies: true }) ?? [];
+    const beforeTotal = beforeItems.reduce((acc, it) => acc + splitLootItemQuantity(it), 0);
+    const expectedRemaining = expectedSplitLootRemaining(beforeItems, numPlayers, true);
+
+    if (beforeTotal === 0) {
+      return { success: true, data: buildOutcomeResponse('noop', { actorUuid: input.actorUuid, targets: dedupedTargets, itemsRemaining: 0, reason: 'pile was already empty — nothing to split' }) };
+    }
 
     const options: Record<string, unknown> = {
       targets: resolvedTargets,
@@ -773,24 +974,27 @@ export async function handleSplitLoot(input: SplitLootInput): Promise<Envelope<u
     }
 
     const splitResult = await API.splitItemPileContents(input.actorUuid, options);
-    // M-2: socket returns false when GM disconnects mid-call
+    // BUG-784: classify bare false — GM-disconnect vs. business-condition veto.
     if (splitResult === false) {
-      return { success: false, error: 'NO_ACTIVE_GM: item-piles socket returned false — GM may have disconnected' };
+      return falseReturnEnvelope('split-loot', input.actorUuid, `target(s): ${dedupedTargets.join(', ')}`);
     }
 
-    // DP-16: post-write verify (settle-polled) — pile should be empty
-    const readRemaining = () => {
-      const cur = API.getActorItems(input.actorUuid);
-      return Array.isArray(cur) ? cur.length : 0;
+    // BUG-776 (DP-16): post-write verify against the EXPECTED remainder (currency-inclusive TOTAL
+    // quantity), not a bare stack-count-equals-zero check — upstream intentionally leaves an
+    // indivisible per-stack remainder (floor(qty/numPlayers)*numPlayers removed), so "pile not
+    // empty" is the CORRECT end state whenever any stack's quantity isn't a multiple of numPlayers.
+    const readRemainingTotal = () => {
+      const cur = API.getActorItems(input.actorUuid, { getItemCurrencies: true });
+      return (Array.isArray(cur) ? cur : []).reduce((acc: number, it: any) => acc + splitLootItemQuantity(it), 0);
     };
-    const persisted = await settlePoll(() => readRemaining() === 0);
-    const remaining = readRemaining();
-    if (!persisted && remaining > 0) {
-      return notPersisted(ErrorTokens.ITEM_PILES_SPLIT_LOOT_NOT_PERSISTED, `split-loot on ${input.actorUuid} left ${remaining} item(s) in the pile — expected empty`);
+    const persisted = await settlePoll(() => readRemainingTotal() === expectedRemaining);
+    const remaining = readRemainingTotal();
+    if (!persisted && remaining !== expectedRemaining) {
+      return notPersisted(ErrorTokens.ITEM_PILES_SPLIT_LOOT_NOT_PERSISTED, `split-loot on ${input.actorUuid} left ${remaining} total quantity in the pile — expected ${expectedRemaining} (the indivisible remainder for ${numPlayers} target(s))`);
     }
     // Money-leak closure (Phase 4): ONE ledger row PER RECIPIENT (design decision — per-recipient rows
     // preserve who-got-what auditability), fail-open, post-write only.
-    for (const uuid of input.targets) {
+    for (const uuid of dedupedTargets) {
       const before = beforeTargetMoneyBp.get(uuid) ?? 0;
       const delta = actorMoneyBp(API, uuid) - before;
       if (delta > 0) {
@@ -803,8 +1007,13 @@ export async function handleSplitLoot(input: SplitLootInput): Promise<Envelope<u
         });
       }
     }
-    notify.updated('item-piles', `Split loot from ${input.actorUuid} among ${input.targets.length} actors`, {});
-    return { success: true, data: { actorUuid: input.actorUuid, targets: input.targets, itemsRemaining: remaining } };
+    notify.updated('item-piles', `Split loot from ${input.actorUuid} among ${dedupedTargets.length} actors`, {});
+    // BUG-776: by this point `remaining === expectedRemaining` is already GUARANTEED (the verify
+    // above returns NOT_PERSISTED otherwise) — a nonzero remainder that matches the expected
+    // indivisible leftover is a full success, not partial. There is no distinguishable partial
+    // state from this single aggregate verification; a true mid-operation failure surfaces as
+    // NOT_PERSISTED above instead.
+    return { success: true, data: buildOutcomeResponse('applied', { actorUuid: input.actorUuid, targets: dedupedTargets, itemsRemaining: remaining, expectedRemaining }) };
   } catch (e) {
     return { success: false, error: `SPLIT_LOOT_ERROR: ${e instanceof Error ? e.message : String(e)}` };
   }

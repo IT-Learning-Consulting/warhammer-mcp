@@ -79,11 +79,18 @@ function formatSetState(d: ItemPileSetStateResult): string {
 }
 
 function formatGetContents(d: ItemPileGetContentsResult): string {
+  // BUG-788: items/log are independently paginated bounded pages, not the whole pile — surface
+  // the total/truncated/next-offset metadata so a caller sees whether/how to page down.
+  const itemsPageNote = d.itemsTruncated
+    ? ` (page: offset ${d.itemsOffset}, limit ${d.itemsLimit}, truncated — next-offset ${d.itemsNextOffset})`
+    : d.itemCount > d.items.length
+      ? ` (page: offset ${d.itemsOffset}, limit ${d.itemsLimit})`
+      : '';
   const lines = [
     `module-itempiles.get-contents: pile ${d.actorUuid}`,
     `- valid=${d.isValidPile}, container=${d.isContainer}, merchant=${d.isMerchant}, vault=${d.isVault}`,
     `- locked=${d.isLocked}, closed=${d.isClosed}, empty=${d.isEmpty}`,
-    `- itemCount: ${d.itemCount}`,
+    `- itemCount: ${d.itemCount}${itemsPageNote}`,
   ];
   if (d.items.length > 0) {
     const itemLines = truncatedJoin(
@@ -96,7 +103,12 @@ function formatGetContents(d: ItemPileGetContentsResult): string {
   }
   lines.push(`- currencies: ${JSON.stringify(d.currencies)}`);
   lines.push(`- flagData: ${JSON.stringify(d.flagData)}`);
-  if (d.log !== undefined) lines.push(`- log: ${JSON.stringify(d.log)}`);
+  if (d.log !== undefined) {
+    const logPageNote = d.logTruncated
+      ? ` (${d.logCount ?? d.log.length} total, page: offset ${d.logOffset ?? 0}, limit ${d.logLimit ?? d.log.length}, truncated — next-offset ${d.logNextOffset})`
+      : ` (${d.logCount ?? d.log.length} total, page: offset ${d.logOffset ?? 0}, limit ${d.logLimit ?? d.log.length})`;
+    lines.push(`- log${logPageNote}: ${JSON.stringify(d.log)}`);
+  }
   return lines.join('\n');
 }
 
@@ -276,7 +288,7 @@ PILE LIFECYCLE:
 - set-pile-state      { actorUuid|tokenUuids, state, confirm? }                 — state: open/close/lock/unlock/rattle/turnTokens/revertTokens
 
 CONTENTS READ:
-- get-contents        { actorUuid, includeLog? }                                — items + currencies + flags + type checks
+- get-contents        { actorUuid, includeLog?, limit?, offset?, logLimit?, logOffset? }  — items + currencies + flags + type checks; items and the log (includeLog) are paginated INDEPENDENTLY (default page 50, max 500 — BUG-788)
 
 ITEM MUTATIONS:
 - add-items           { actorUuid, items[] }                                    — items array required (C1); returns { actorUuid, itemsAdded, totalItems }
@@ -324,7 +336,8 @@ Do NOT use this tool for plain non-piled inventory/currency edits on a regular a
 
 Performance Notes:
 - Most actions return a small fixed-shape confirmation (pile metadata, a transfer/trade result, or a price-modifier record) — no response modes, no pagination.
-- get-contents/vault-info: size scales with pile contents; item lists beyond 10 entries are truncated in the rendered text (full data still in structuredContent).`,
+- get-contents: items and the audit log (includeLog:true) are paginated INDEPENDENTLY (BUG-788) — limit/offset page items, logLimit/logOffset page the log; default page 50, max 500. Response includes itemCount/itemsTruncated/itemsNextOffset and logCount/logTruncated/logNextOffset — re-call with the returned next-offset to page down after a RESPONSE_TOO_LARGE. flagData never duplicates the log (previously embedded both inside flagData AND as a second top-level copy when includeLog:true).
+- vault-info: size scales with pile contents; item lists beyond 10 entries are truncated in the rendered text (full data still in structuredContent).`,
         inputSchema: {
           type: 'object',
           properties: {
@@ -349,7 +362,7 @@ Performance Notes:
             currencies: { type: 'string', description: '[add-currency/remove-currency/transfer-currency] Currency string "Xgc Yss Zbp" (case-insensitive GC/SS/BP).' },
             mode: { type: 'string', enum: ['transfer', 'all', 'combine'], description: '[transfer-items/transfer-currency] Mode. "all"/"combine" require confirm:true. "combine" is only valid for transfer-items (merges source pile into target); transfer-currency only accepts "transfer" or "all".' },
             state: { type: 'string', enum: ['open', 'close', 'lock', 'unlock', 'rattle', 'turnTokens', 'revertTokens'], description: '[set-pile-state] Target state.' },
-            confirm: { type: 'boolean', description: 'Required true for dangerous actions: delete-pile, remove-currency, split-loot, trade-items, refresh-merchant(removeExisting:true), transfer-items all/combine, revertTokens.' },
+            confirm: { type: 'boolean', description: 'Required true for dangerous actions: delete-pile, remove-currency, remove-items (always — BUG-786), split-loot, trade-items, refresh-merchant(removeExisting:true), transfer-items all/combine, revertTokens, add-items(removeExistingActorItems:true — BUG-772), roll-item-table(removeExistingActorItems:true with targetActorUuid — BUG-772).' },
             targets: { type: 'array', items: { type: 'string' }, description: '[split-loot] Target actor UUIDs. REQUIRED — omitting causes silent no-op (C8).' },
             sourceUuid: { type: 'string', description: '[transfer-items/transfer-currency] Source actor UUID.' },
             targetUuid: { type: 'string', description: '[transfer-items/transfer-currency] Target actor UUID.' },
@@ -359,7 +372,7 @@ Performance Notes:
             targetActorUuid: { type: 'string', description: '[roll-item-table/update-price-modifiers] Actor to receive rolled items (roll-item-table) or the per-actor target for update-price-modifiers (OPTIONAL — defaults to actorUuid, i.e. the merchant\'s own modifier entry).' },
             rollData: { type: 'object', description: '[roll-item-table] Formula context for roll expressions.' },
             timesToRoll: { type: 'number', description: '[roll-item-table] How many times to roll (default 1).' },
-            removeExistingActorItems: { type: 'boolean', description: '[add-items/refresh-merchant] Default FALSE (safe). Setting true on refresh-merchant WIPES inventory before restocking.' },
+            removeExistingActorItems: { type: 'boolean', description: '[add-items/roll-item-table/refresh-merchant] Default FALSE (safe). Setting true WIPES existing inventory before adding/restocking — requires confirm:true on add-items and on roll-item-table (when targetActorUuid is given) (BUG-772); refresh-merchant also requires confirm:true when true.' },
             subAction: { type: 'string', enum: ['fit-check', 'grid-data', 'fit-items', 'get-modifiers', 'update-modifiers', 'get-prices'], description: '[vault-info/update-price-modifiers] Sub-operation.' },
             itemUuid: { type: 'string', description: '[vault-info/update-price-modifiers] Item UUID for fit-check or price lookup.' },
             quantity: { type: 'number', description: '[vault-info/update-price-modifiers] Quantity for fit-check or price calculation.' },
@@ -418,7 +431,11 @@ Performance Notes:
             closed: { type: 'boolean', description: '[create-pile/update-pile] Whether pile is closed.' },
             instigator: { type: 'string', description: '[split-loot] Token UUID of the character initiating the split.' },
             interactingTokenUuid: { type: 'string', description: '[set-pile-state] Token UUID of the interacting character (for open/close).' },
-            includeLog: { type: 'boolean', description: '[get-contents] Include the vault/merchant audit log in response.' },
+            includeLog: { type: 'boolean', description: '[get-contents] Include the vault/merchant audit log in response (paginated — see logLimit/logOffset).' },
+            limit: { type: 'number', description: '[get-contents] Items page size. Default 50, max 500 (BUG-788). Response echoes itemsLimit/itemsOffset/itemsTruncated/itemsNextOffset.' },
+            offset: { type: 'number', description: '[get-contents] Items page offset. Default 0. Page down with itemsNextOffset from a prior response.' },
+            logLimit: { type: 'number', description: '[get-contents] Audit log page size (only applies when includeLog:true). Default 50, max 500 (BUG-788). Paginated INDEPENDENTLY of items.' },
+            logOffset: { type: 'number', description: '[get-contents] Audit log page offset (only applies when includeLog:true). Default 0. Page down with logNextOffset from a prior response.' },
             pileActorName: { type: 'string', description: '[create-pile] Name for the pile actor.' },
             tokenName: { type: 'string', description: '[create-pile] Name for the canvas token.' },
             cols: { type: 'number', description: '[update-pile vault] Vault grid columns.' },
