@@ -8,6 +8,8 @@ import { notify } from './notify.js';
 import { registerRollRelayHook } from './hooks/createChatMessage-roll-relay.js';
 import { registerMcpDialogChimeHook } from './hooks/mcp-dialog-chime.js';
 import { registerMcpDialogAutoResolve } from './mcp-dialog-autoresolve.js';
+// F7-B — window.warhammerMcp.fireTrigger global (hotbar-macro MATT firing without Claude/MCP).
+import { registerWarhammerMcpGlobals } from './globals.js';
 // Phase 4.3 (R4.2): per-message AbortController registry for the roll-button listener-leak fix.
 import { bindMessageController, releaseMessageController } from './utils/message-lifecycle.js';
 // Phase 10 (R10.1): generic per-owner lifecycle registry — owns the Hooks.on/off + socket on/off
@@ -753,6 +755,9 @@ registerMcpDialogChimeHook();
 
 // Register dialog auto-resolve net — suppresses blocking spec-choice dialogs during MCP requests.
 registerMcpDialogAutoResolve();
+
+// F7-B — expose window.warhammerMcp.fireTrigger so a hotbar macro can fire a MATT tile directly.
+registerWarhammerMcpGlobals();
 
 // Generic WFRP4e chat "roll-and-react" button. Runs a real wfrp4e test (characteristic or skill)
 // on the CLICKING user's character, then fires outcome-keyed actions. Lives in module code so it is
