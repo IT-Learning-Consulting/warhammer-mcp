@@ -70,13 +70,24 @@ export async function fireTrigger(
 }
 
 /**
- * Register the `window.warhammerMcp` global on Foundry's `ready` hook. Called once from main.ts.
- * Registered on every client (like foundryMCPBridge/foundryMCPDebug) so a pinned hotbar macro
- * resolves the same way regardless of who clicks it; MATT enforces its own per-tile permissions.
+ * Register the `warhammerMcp` global on Foundry's `ready` hook. Called once from main.ts.
+ *
+ * Exposed on BOTH `game` and the bare/window global:
+ *  - `game.warhammerMcp?.fireTrigger` — the documented macro form (memo §C usage examples).
+ *  - `warhammerMcp.fireTrigger` / `window.warhammerMcp.fireTrigger` — shorthand + iframe-context survival.
+ *
+ * In Foundry `game` !== `window`, so the memo's sample (which set `window.warhammerMcp` only) left
+ * `game.warhammerMcp` undefined — a live smoke on 2026-08-21 caught this. Setting both means every
+ * documented access path resolves. Registered on every client (like foundryMCPBridge/foundryMCPDebug)
+ * so a pinned hotbar macro resolves the same way regardless of who clicks it; MATT enforces its own
+ * per-tile permissions.
  */
 export function registerWarhammerMcpGlobals(): void {
   (Hooks as any).once('ready', () => {
-    (globalThis as any).warhammerMcp = { fireTrigger };
-    console.log(`[${MODULE_ID}] window.warhammerMcp.fireTrigger registered (hotbar-macro MATT firing)`);
+    const api = { fireTrigger };
+    const g = globalThis as any;
+    g.warhammerMcp = api;
+    if (g.game) g.game.warhammerMcp = api;
+    console.log(`[${MODULE_ID}] warhammerMcp.fireTrigger registered on game + window (hotbar-macro MATT firing)`);
   });
 }

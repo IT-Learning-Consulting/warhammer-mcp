@@ -3,7 +3,7 @@
 // method to 'manual' + tokens to controlled, and every failure surfaces a UI error WITHOUT throwing.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { fireTrigger } from '../globals.js';
+import { fireTrigger, registerWarhammerMcpGlobals } from '../globals.js';
 
 const g = globalThis as any;
 
@@ -84,5 +84,29 @@ describe('warhammerMcp.fireTrigger', () => {
     expect(triggerSpy).not.toHaveBeenCalled();
     expect(errorSpy).toHaveBeenCalledTimes(2);
     expect(errorSpy.mock.calls[0][0]).toMatch(/UUID string is required/i);
+  });
+});
+
+describe('registerWarhammerMcpGlobals', () => {
+  // Regression guard for the 2026-08-21 live-smoke bug: registration set window.warhammerMcp only,
+  // so the DOCUMENTED `game.warhammerMcp?.fireTrigger` form was undefined (game !== window in Foundry).
+  it('exposes fireTrigger on BOTH game.warhammerMcp and window/globalThis, sharing one api object', () => {
+    let readyCb: (() => void) | undefined;
+    const savedHooks = g.Hooks;
+    const savedGameWmcp = g.game.warhammerMcp;
+    const savedBareWmcp = g.warhammerMcp;
+    g.Hooks = { once: (evt: string, cb: () => void) => { if (evt === 'ready') readyCb = cb; } };
+    try {
+      registerWarhammerMcpGlobals();
+      expect(readyCb).toBeTypeOf('function'); // registered on the ready hook
+      readyCb!();
+      expect(typeof g.warhammerMcp?.fireTrigger).toBe('function');      // window / bare shorthand
+      expect(typeof g.game.warhammerMcp?.fireTrigger).toBe('function'); // documented game.* form
+      expect(g.game.warhammerMcp).toBe(g.warhammerMcp);                 // same api object, not two copies
+    } finally {
+      g.Hooks = savedHooks;
+      g.game.warhammerMcp = savedGameWmcp;
+      g.warhammerMcp = savedBareWmcp;
+    }
   });
 });
