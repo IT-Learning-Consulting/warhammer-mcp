@@ -39,6 +39,8 @@ export * from './sound.js';
 export * from './region.js';
 export * from './tile.js';
 export * from './template.js';
+// opportunity_scan_2026-08-21 F11 — 8th Scene-embedded umbrella schema.
+export * from './wall.js';
 // Phase 1 mcp_diagnostic_tool — diagnostic umbrella (recent-errors / world-issues / support-snapshot).
 export * from './diagnostic.js';
 // Phase 6.1 mcp_crud_expansion — filepicker umbrella (upload / list / convert).

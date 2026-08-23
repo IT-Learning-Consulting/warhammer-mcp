@@ -1,5 +1,5 @@
 {
-  "count": 115,
+  "count": 116,
   "capturedVia": "standalone-backend :31414 list_tools",
   "names": [
     "actor-config",
@@ -116,6 +116,7 @@
     "update-active-effect",
     "update-actor",
     "update-item",
-    "user"
+    "user",
+    "wall"
   ]
 }

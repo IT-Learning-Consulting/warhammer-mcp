@@ -61,8 +61,10 @@ describe('declarative tool registry parity (R8.1/R8.2)', () => {
     // skills_vault machine_port Phase 3: 114 → 115 with the module-tokenizer umbrella (7 actions
     // over Tokenizer 2's headless API). __tools-list-snapshot__.json regenerated 2026-08-16
     // alongside this update (was drifted +1 unbaselined by the same addition).
-    expect(names.length).toBe(115);
-    expect(new Set(names).size).toBe(115); // no duplicate registrations (Risk 8.A)
+    // opportunity-scan-noncheap-improvements F11: 115 → 116 with the new `wall` umbrella tool
+    // (5 actions over scene.walls). __tools-list-snapshot__.json regenerated alongside this update.
+    expect(names.length).toBe(116);
+    expect(new Set(names).size).toBe(116); // no duplicate registrations (Risk 8.A)
   });
 
   it('every registration carries a callable handler', () => {

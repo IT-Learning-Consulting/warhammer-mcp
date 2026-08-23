@@ -183,7 +183,9 @@ export const STRICT_ACTION_DATA: Record<string, z.ZodTypeAny> = {
     }),
   delete: z.object({ entity: entityField }).passthrough(),
   scene: z
-    .object({ entity: entityField.optional(), sceneid: z.string().min(1).optional() })
+    // sceneid is stored by MATT as either a bare id string OR the {id,name} object
+    // form its config UI writes; entityField accepts both (BUG-874).
+    .object({ entity: entityField.optional(), sceneid: entityField.optional() })
     .passthrough()
     .refine((d) => d.entity != null || d.sceneid != null, {
       message: 'scene requires one of entity or sceneid',

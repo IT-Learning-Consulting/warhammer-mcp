@@ -105,6 +105,12 @@ import { ModulePuzzleLocksTool } from '../modules/puzzle-locks/puzzle-locks.js';
 import { ModuleSyrinscapeTool } from '../modules/syrinscape/syrinscape.js';
 import { ModulePortalTool } from '../modules/portal/portal.js';
 import { ModuleTradingPlacesTool } from '../modules/trading-places/trading-places.js';
+// opportunity_scan_2026-08-21 F11 — 8th Scene-embedded umbrella tool.
+// GATE-SUPPRESS[success-semantics]: this file is declarative registry wiring only
+// (import + array entry) — it has no outcome-field/success-envelope logic of its
+// own to flag; the coverage-assertion rule fires on any diffed file in the tools/
+// tree not already allowlisted, which build-tools.ts was never previously in.
+import { WallTool } from '../wall.js';
 
 export function buildTools(deps: BaseToolOptions): BaseTool[] {
   return [
@@ -209,5 +215,6 @@ export function buildTools(deps: BaseToolOptions): BaseTool[] {
     new ModuleSyrinscapeTool(deps),
     new ModulePortalTool(deps),
     new ModuleTradingPlacesTool(deps),
+    new WallTool(deps),
   ];
 }

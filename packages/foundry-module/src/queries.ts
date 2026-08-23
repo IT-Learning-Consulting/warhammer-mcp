@@ -59,6 +59,8 @@ import { dispatchSound as dispatchSoundHandler } from './handlers/sound.js';
 import { dispatchRegion as dispatchRegionHandler } from './handlers/region.js';
 import { dispatchTile as dispatchTileHandler } from './handlers/tile.js';
 import { dispatchTemplate as dispatchTemplateHandler } from './handlers/template.js';
+// opportunity_scan_2026-08-21 F11 — 8th Scene-embedded umbrella (create/update/delete/get/list over scene.walls).
+import { dispatchWall as dispatchWallHandler } from './handlers/wall.js';
 // Phase 5 mcp_coverage_expansion — drawing umbrella (CRUD + list + duplicate over scene.drawings).
 import { dispatchDrawing as dispatchDrawingHandler } from './handlers/drawing.js';
 // Phase 7 mcp_coverage_expansion — cards umbrella (stack + embedded-card CRUD + gameplay verbs over game.cards).
@@ -422,6 +424,7 @@ export class QueryHandlers {
       'diagnostic': this.handleDiagnostic.bind(this),
       'token': this.handleToken.bind(this),
       'light': this.handleLight.bind(this),
+      'wall': this.handleWall.bind(this),
       'note': this.handleNote.bind(this),
       'sound': this.handleSound.bind(this),
       'playlist': this.handlePlaylist.bind(this),
@@ -1093,6 +1096,13 @@ export class QueryHandlers {
     return wrapQuery('Failed to dispatch light action', async () => {
       this.dataAccess.validateFoundryState();
       return await dispatchLightHandler(data);
+    });
+  }
+
+  async handleWall(data: unknown): Promise<any> {
+    return wrapQuery('Failed to dispatch wall action', async () => {
+      this.dataAccess.validateFoundryState();
+      return await dispatchWallHandler(data);
     });
   }
 
