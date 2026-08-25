@@ -12,6 +12,7 @@ import { getItemPilesAPI, notPersisted, gmRequired, activeGmRequired } from './h
 import { totalQuantity } from './verify-quantity.js';
 import { recordEconomyTransaction } from '../wfrp-economy/ledger.js';
 import { buildOutcomeResponse } from '../../../services/shared/outcome-response.js';
+import { requireConfirm } from '../../../services/shared/destructive-confirm.js';
 
 // ── Phase 4 (wfrp_economy_system) money-leak closure ────────────────────────────
 //
@@ -61,12 +62,23 @@ export function previewItemLines(items: unknown): { count: number; summary: stri
   return { count: arr.length, summary: arr.length === 0 ? '(empty)' : `${arr.length} item(s): ${lines.join(', ')}` };
 }
 
-/** The CONFIRM_REQUIRED envelope every gated destructive item-piles action returns pre-confirm. */
+/**
+ * The CONFIRM_REQUIRED envelope every gated destructive item-piles action returns pre-confirm.
+ * Thin delegate to the shared `requireConfirm()` helper (systemic_bug_class_prevention v2 Phase
+ * 1/5.1 — R1.3 consolidation) — kept as a distinct function (rather than inlining at each call
+ * site) so its 3 existing call sites (`flow.ts` add-items/remove-items, `merchant.ts`
+ * roll-item-table) stay untouched and byte-identical. `detail`'s own trailing period is stripped
+ * before composing the blast-radius string because `requireConfirm()` appends its own terminal
+ * period ahead of the `Re-send with confirm:true.` trailer — without the strip the two periods
+ * would collide and the refusal text would drift from its pre-consolidation wording.
+ */
 export function confirmRequiredEnvelope(action: string, actorUuid: string, detail: string): Envelope<unknown> {
-  return {
-    success: false,
-    error: `CONFIRM_REQUIRED: ${action} on ${actorUuid} ${detail} Re-send with confirm:true.`,
-  };
+  const trimmedDetail = detail.endsWith('.') ? detail.slice(0, -1) : detail;
+  const blastRadius = `${actorUuid} ${trimmedDetail}`;
+  // requireConfirm() only resolves null when confirm===true; this call always passes
+  // confirm:false since it exists to BUILD the refusal envelope, so the result is always the
+  // ConfirmRequiredEnvelope arm, which is a valid Envelope<unknown> (Envelope<T>'s false arm).
+  return requireConfirm({ confirm: false }, action, blastRadius) as Envelope<unknown>;
 }
 
 // ── BUG-784: false-return classification (shared by flow.ts/merchant.ts/container.ts) ─────────
@@ -614,7 +626,10 @@ export async function handleRemoveCurrency(input: RemoveCurrencyInput): Promise<
   const currErr = validateCurrencyString(input.currencies);
   if (currErr) return { success: false, error: currErr };
 
-  // CCR-4: dangerous — confirm required
+  // CCR-4: dangerous — confirm required. Migrated onto the shared requireConfirm() helper
+  // (systemic_bug_class_prevention v2 Phase 1/5.1 — R1.3 consolidation); preview content
+  // (denomination summary) and refusal trigger conditions are unchanged from the pre-migration
+  // hand-rolled envelope.
   if (input.confirm !== true) {
     // BUG-448#7: readable preview — denomination summary ("4GC 2SS 3BP") via the
     // readBalance()/getStringFromCurrencies idiom instead of a serialized document dump.
@@ -623,10 +638,11 @@ export async function handleRemoveCurrency(input: RemoveCurrencyInput): Promise<
       const API = getItemPilesAPI();
       balanceStr = readBalance(API, input.actorUuid).str || '(none)';
     } catch (_) { /* best-effort */ }
-    return {
-      success: false,
-      error: `CONFIRM_REQUIRED: remove-currency will permanently deduct "${input.currencies}" from ${input.actorUuid}. Current balance: ${balanceStr}. Re-send with confirm:true.`,
-    };
+    return requireConfirm(
+      { confirm: false }, // inside the input.confirm !== true branch — always false here
+      'remove-currency',
+      `${input.actorUuid} — will permanently deduct "${input.currencies}" (current balance: ${balanceStr})`,
+    ) as Envelope<unknown>;
   }
 
   // BUG-428 bypass: removeCurrencies silently no-ops in WFRP4e (see plumbing block above) —

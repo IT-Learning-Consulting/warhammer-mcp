@@ -13,6 +13,7 @@ import { totalQuantity } from './verify-quantity.js';
 import { currencyTotal, confirmRequiredEnvelope, previewItemLines, falseReturnEnvelope } from './flow.js';
 import { recordEconomyTransaction } from '../wfrp-economy/ledger.js';
 import { buildOutcomeResponse } from '../../../services/shared/outcome-response.js';
+import { requireConfirm } from '../../../services/shared/destructive-confirm.js';
 
 // ── 3B: Vault info ────────────────────────────────────────────────────────────
 
@@ -218,7 +219,10 @@ export async function handleRefreshMerchant(input: RefreshMerchantInput): Promis
   // The API default is TRUE (wipes inventory) — we flip it.
   const removeExisting = input.removeExistingActorItems ?? false;
 
-  // CCR-4 + rich-impact-body (matt.ts:498 pattern): confirm required when removeExistingActorItems:true
+  // CCR-4 + rich-impact-body (matt.ts:498 pattern): confirm required when removeExistingActorItems:true.
+  // Migrated onto the shared requireConfirm() helper (systemic_bug_class_prevention v2 Phase
+  // 1/5.1 — R1.3 consolidation); preview content (item count) and refusal trigger conditions are
+  // unchanged from the pre-migration hand-rolled envelope.
   if (removeExisting && input.confirm !== true) {
     let previewItems: unknown = null;
     try {
@@ -226,10 +230,11 @@ export async function handleRefreshMerchant(input: RefreshMerchantInput): Promis
       previewItems = API.getActorItems(input.merchantUuid);
     } catch (_) { /* best-effort */ }
     const itemCount = Array.isArray(previewItems) ? previewItems.length : 'unknown';
-    return {
-      success: false,
-      error: `CONFIRM_REQUIRED: refresh-merchant with removeExistingActorItems:true will WIPE the current inventory (${itemCount} items) of merchant ${input.merchantUuid} before restocking. Re-send with confirm:true.`,
-    };
+    return requireConfirm(
+      { confirm: false }, // inside the input.confirm !== true branch — always false here
+      'refresh-merchant',
+      `${input.merchantUuid} — with removeExistingActorItems:true will WIPE the current inventory (${itemCount} items) before restocking`,
+    ) as Envelope<unknown>;
   }
 
   try {

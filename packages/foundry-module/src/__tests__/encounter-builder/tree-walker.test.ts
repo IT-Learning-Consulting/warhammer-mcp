@@ -34,11 +34,33 @@ function makeTemplate(structure: any, options: any[]) {
   };
 }
 
+// BUG-677 (systemic_bug_class_prevention v2 Phase 2, task 2.1): executeTemplatePlan's WRITE#1 now
+// additionally stamps `flags.warhammer-mcp.appliedTemplates` and verifies it via verifyDocWrite
+// against the re-fetched (`fromUuid`) doc's `_source` — this fixture's actor mock must round-trip
+// that write like the sibling template-apply-reconcile.test.ts fixtures already do, or the verify
+// spuriously drifts (real Foundry actors persist update() and are re-readable via fromUuid; only
+// this fake mock previously didn't). Mechanical fixture fidelity fix only — no assertion changes.
+function applyDotPath(target: Record<string, any>, updateData: Record<string, any>): void {
+  for (const [path, value] of Object.entries(updateData)) {
+    const parts = path.split('.');
+    let cur = target;
+    for (let i = 0; i < parts.length - 1; i++) {
+      const key = parts[i]!;
+      if (cur[key] == null) cur[key] = {};
+      cur = cur[key];
+    }
+    cur[parts[parts.length - 1]!] = value;
+  }
+}
+
+let freshDocShadow: any;
+
 function makeActor(opts: { id: string; name: string; type: string }) {
   const updates: Array<{ updateData: Record<string, any>; options: any }> = [];
   const creates: Array<{ items: any[]; options: any }> = [];
   return {
     id: opts.id,
+    uuid: `Actor.${opts.id}`,
     name: opts.name,
     type: opts.type,
     system: { characteristics: {} },
@@ -46,6 +68,7 @@ function makeActor(opts: { id: string; name: string; type: string }) {
     effects: new Map(),
     update: vi.fn(async (updateData: Record<string, any>, options: any) => {
       updates.push({ updateData, options });
+      applyDotPath(freshDocShadow._source, updateData);
     }),
     createEmbeddedDocuments: vi.fn(async (_name: string, items: any[], options: any) => {
       creates.push({ items, options });
@@ -57,6 +80,8 @@ function makeActor(opts: { id: string; name: string; type: string }) {
 }
 
 beforeEach(() => {
+  freshDocShadow = { _source: {} };
+  (globalThis as any).fromUuid = vi.fn().mockImplementation(async () => freshDocShadow);
   vi.spyOn(console, 'error').mockImplementation(() => {});
   (globalThis as any).ui = { notifications: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } };
   const existingUtils = (globalThis as any).foundry?.utils ?? {};

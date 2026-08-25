@@ -63,6 +63,11 @@ exports[`QueryHandlers.handleAddItemFromCompendium — write-arg characterizatio
     [
       {
         "_id": "compendium-src",
+        "flags": {
+          "warhammer-mcp": {
+            "sourceUuid": "Compendium.wfrp4e-core.items.Item.aaaaaaaaaaaaaaaa",
+          },
+        },
         "name": "Sigmar Holy Symbol",
         "system": {},
         "type": "trapping",

@@ -2406,9 +2406,17 @@ describe('venture-ledger — list-transactions projection pin extension (venture
 
 describe('venture-ledger — get-economy ventureCount (additive, R7d.7 stock fields frozen)', () => {
   it('get-economy response carries ventureCount additively alongside the frozen stocks array', async () => {
+    // BUG-821(c) / ADR-16 (systemic_bug_class_prevention v2 Phase 2, task 3.3): ventureCount is now
+    // ECONOMY-SCOPED — only ventures whose handledBy[] links name this economy count. v1/v2 each carry
+    // a handledBy entry naming ECO (mirrors the fork's matchingVentureLinks predicate in wfrp-economy.ts
+    // ventureCount()) so this fixture still tests "get-economy counts THIS economy's ventures", not the
+    // retired world-global count.
     const { settings } = makeSettings({
       economies: [{ id: ECO, name: 'The Empire', currency: 'GC', banks: [], properties: [], stocks: [{ id: 's1', name: 'Old Stock Row' }] }],
-      ventures: { instances: { v1: { id: 'v1' }, v2: { id: 'v2' } } },
+      ventures: { instances: {
+        v1: { id: 'v1', handledBy: [{ economyId: ECO }] },
+        v2: { id: 'v2', handledBy: [{ economyId: ECO }] },
+      } },
     });
     (globalThis as any).game = makeGame({ active: true, settings });
     const res: any = await dispatchModuleWfrpEconomy({ action: 'get-economy', economyId: ECO });

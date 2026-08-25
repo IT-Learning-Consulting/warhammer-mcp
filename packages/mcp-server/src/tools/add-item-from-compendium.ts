@@ -41,6 +41,12 @@ Use this when:
 
 Do NOT use this to author a homebrew item not sourced from a compendium — use create-custom-item instead.
 
+Retry contract: a repeat call with the same {actorId, itemUuid/compendiumId} is dedupe-gated by
+default — if a matching item (by resolved sourceUuid, or {name, type} for legacy items) already
+exists on the actor, no new item is created; the response reports outcome:"alreadyApplied" and the
+existing item's id. Safe to retry after a timeout. Pass allowDuplicate:true to force a genuine
+second copy (e.g. two identical daggers).
+
 Performance Notes:
 - Single small response: the embedded item's id/name, no full item payload echoed back. Mode-less — no response-mode variance.`,
         inputSchema: {
@@ -61,6 +67,10 @@ Performance Notes:
             skipSpecialisationChoice: {
               type: 'boolean',
               description: 'When true, suppresses the WFRP4e specialisation-choice dialog for bare isSpec skills (e.g. "Lore ()", "Language ()"). Required for autonomous NPC/PC builds that embed specialisation skills without user interaction. Default false.',
+            },
+            allowDuplicate: {
+              type: 'boolean',
+              description: 'When true, bypasses the dedupe gate and creates a genuine second copy even if a matching item (by sourceUuid, or {name, type} for legacy items) already exists on the actor. Default false — a repeat call is treated as an idempotent retry and returns outcome:"alreadyApplied" against the existing item instead of duplicating it.',
             },
           },
           required: ['actorId'],

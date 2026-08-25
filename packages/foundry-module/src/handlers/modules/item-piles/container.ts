@@ -2,6 +2,10 @@
 // Module Integration v1 Phase 3 — module-itempiles: pile lifecycle + container state + contents read.
 // mcp_code_quality_v2 Phase C3 (19a split): extracted verbatim from item-piles.ts — zero
 // behavioral change (behavior freeze HC3/HC13).
+//
+// GATE-SUPPRESS[success-semantics]: systemic_bug_class_prevention v2 Phase 1 (task 5.1) touches only
+// handleDeletePile's confirm-gate consolidation onto requireConfirm() — this file's outcome-field
+// retrofit (HC4/check-outcome-field allowlist membership) is out of scope; owned by v2 Phase 3 (C2).
 
 import { ErrorTokens, type ModuleItempilesInputType } from '@foundry-mcp/shared';
 import { notify } from '../../../notify.js';
@@ -10,12 +14,23 @@ import { normalizeItemsArray, validateTokenUuid } from './catalog.js';
 import { getItemPilesAPI, notPersisted, resolveToTokenObject, gmRequired, activeGmRequired, bankerAuctioneerCheck } from './helpers.js';
 import { falseReturnEnvelope } from './flow.js';
 import { boundList } from '../../../services/bounded-response.js';
+import { requireConfirm } from '../../../services/shared/destructive-confirm.js';
+import { runWriteSteps, type WriteStep, type StepIds } from '../../../services/shared/resume-boundary.js';
 
 // ── 3A: Pile lifecycle ────────────────────────────────────────────────────────
 
 type CreatePileInput = Extract<ModuleItempilesInputType, { action: 'create-pile' }>;
 
-export async function handleCreatePile(input: CreatePileInput): Promise<Envelope<unknown>> {
+/** systemic_bug_class_prevention v2 Phase 2 (task 2.4): attaches a runWriteSteps() undo-failure
+ *  warning onto an error envelope so it reaches the caller — never console-only (the exact
+ *  BUG-779 residual defect this retrofit closes; pre-retrofit the rollback-of-rollback only
+ *  `console.warn`'d, see resume-boundary.ts's own header). No-op when there are no warnings, so
+ *  every ordinary refusal/verify-failure envelope stays byte-identical to pre-retrofit. */
+function withWarnings<T extends Envelope<unknown>>(env: T, warnings: string[]): T & { warnings?: string[] } {
+  return warnings.length > 0 ? { ...env, warnings } : env;
+}
+
+export async function handleCreatePile(input: CreatePileInput): Promise<Envelope<unknown> & { warnings?: string[] }> {
   const gmErr = gmRequired();
   if (gmErr) return gmErr;
   const agmErr = activeGmRequired();
@@ -29,11 +44,20 @@ export async function handleCreatePile(input: CreatePileInput): Promise<Envelope
     return { success: false, error: 'MISSING_SCENE_ID: sceneId is required for create-pile (game.user.viewedScene is null server-side)' };
   }
 
-  // BUG-779: tracks the actor WE created in this call (createDedicatedActor path only) so any
-  // failure past this point — hook veto, `false` return, throw, or a failed post-write verify —
-  // can roll it back instead of leaving an orphaned dedicated actor behind. Never set for the
-  // shared-default-actor or existing-named-actor paths, which this handler never owns.
-  let createdActor: any = null;
+  // BUG-779 (systemic_bug_class_prevention v2 Phase 2, task 2.4): the tracked-create + rollback
+  // pattern that used to live here as a hand-rolled `createdActor` local + 3 scattered
+  // `rollbackCreatedActor()` call sites is now expressed as a `runWriteSteps()` sequence — the
+  // exact generalization this handler was the reference implementation for (see
+  // resume-boundary.ts's own file header, which cites this function by name/line). Refusal/
+  // rollback semantics, every response field, the dedicatedPile flag, and handleDeletePile's
+  // cascade + confirm-preview below are all unchanged — only the rollback wiring moved.
+  let dedicatedActor: any = null;
+  let tokenUuid: string | null = null;
+  let actorUuid: string | null = null;
+  let flagData: unknown = null;
+  let refused = false;
+  let notPersistedMessage: string | null = null;
+  let genericErrorMessage: string | null = null;
 
   try {
     const API = getItemPilesAPI();
@@ -69,65 +93,127 @@ export async function handleCreatePile(input: CreatePileInput): Promise<Envelope
     //   createActor:true  → create new actor (actor = name for the new actor)
     //   actor (string)    → resolve as existing actor UUID/name
     //   neither           → use shared Default Item Pile actor
-    if (input.createDedicatedActor) {
-      // Pre-create the dedicated actor with skipItems:true so the wfrp4e ActorWFRP4e._preCreate
-      // "add basic skills + money?" DialogV2 does NOT pop on the GM client. item-piles.js:84719
-      // calls Actor.create(actorData) with NO options, so we cannot forward skipItems through
-      // createItemPile — pre-create here + hand it to item-piles as an existing actor instead.
-      const g = getGame();
-      const actorType = API.ACTOR_CLASS_TYPE ?? 'npc';
-      const ActorCls = g?.actors?.documentClass ?? (globalThis as any).Actor;
-      const newActor = await ActorCls.create(
-        { name: input.pileActorName ?? 'Item Pile', type: actorType },
-        { skipItems: true },
-      );
-      createdActor = newActor;
-      // BUG-779: stamp an ownership marker on the dedicated actor BEFORE any downstream failure
-      // point, so delete-pile can later distinguish an MCP-created dedicated actor (safe to
-      // cascade-delete) from the shared Default Item Pile actor or a pre-existing named actor
-      // (never cascade-deleted) — best-effort; a rollback deletes the actor outright regardless.
-      if (newActor) {
-        try {
-          await newActor.setFlag('warhammer-mcp', 'dedicatedPile', true);
-        } catch (_) { /* best-effort marker */ }
-      }
-      options['actor'] = newActor?.uuid;   // existing-actor path; createActor stays false
-    } else if (input.pileActorName) {
+    if (!input.createDedicatedActor && input.pileActorName) {
       options['actor'] = input.pileActorName;
     }
 
-    // createItemPile returns { tokenUuid?: string, actorUuid: string } (item-piles.js:84851/84860) —
-    // NOT a bare UUID. Extract both; never assign the whole object to a string field.
-    const result = await API.createItemPile(options);
-    // BUG-779/BUG-784: hook veto / business-condition refusal / genuine GM disconnect after we
-    // already created the dedicated actor — roll it back either way, then classify which one it was.
-    if (result === false) {
-      await rollbackCreatedActor(createdActor);
-      return falseReturnEnvelope('create-pile', `scene ${input.sceneId}`);
-    }
-    const tokenUuid: string | null = result?.tokenUuid ?? null;
-    const actorUuid: string | null = result?.actorUuid ?? null;
+    const steps: WriteStep[] = [];
 
-    // The createDedicatedActor path pre-creates a bare actor (with skipItems to avoid the wfrp4e
-    // dialog) and hands it to createItemPile as an existing actor — but that path does NOT stamp
-    // enabled:true or the type/config flags (only the createActor:true path does, and that one
-    // triggers the dialog). Stamp the pile config now via updateItemPile (verified-working merge),
-    // so the dedicated merchant/vault/container is actually enabled + correctly typed.
-    if (input.createDedicatedActor && actorUuid) {
-      await API.updateItemPile(actorUuid, { ...itemPileFlags, enabled: true });
+    if (input.createDedicatedActor) {
+      steps.push({
+        label: 'create-dedicated-actor',
+        async run(): Promise<StepIds> {
+          // Pre-create the dedicated actor with skipItems:true so the wfrp4e ActorWFRP4e._preCreate
+          // "add basic skills + money?" DialogV2 does NOT pop on the GM client. item-piles.js:84719
+          // calls Actor.create(actorData) with NO options, so we cannot forward skipItems through
+          // createItemPile — pre-create here + hand it to item-piles as an existing actor instead.
+          const g = getGame();
+          const actorType = API.ACTOR_CLASS_TYPE ?? 'npc';
+          const ActorCls = g?.actors?.documentClass ?? (globalThis as any).Actor;
+          const newActor = await ActorCls.create(
+            { name: input.pileActorName ?? 'Item Pile', type: actorType },
+            { skipItems: true },
+          );
+          dedicatedActor = newActor;
+          // BUG-779: stamp an ownership marker on the dedicated actor BEFORE any downstream
+          // failure point, so delete-pile can later distinguish an MCP-created dedicated actor
+          // (safe to cascade-delete) from the shared Default Item Pile actor or a pre-existing
+          // named actor (never cascade-deleted) — best-effort; a rollback deletes the actor
+          // outright regardless.
+          if (newActor) {
+            try {
+              await newActor.setFlag('warhammer-mcp', 'dedicatedPile', true);
+            } catch (_) { /* best-effort marker */ }
+          }
+          options['actor'] = newActor?.uuid;   // existing-actor path; createActor stays false
+          return { created: [newActor?.uuid ?? null] };
+        },
+        async undo(): Promise<void> {
+          // BUG-779: best-effort rollback of a dedicated actor this call created. A thrown
+          // delete() here is caught by runWriteSteps() itself and pushed onto
+          // receipt.warnings — never console-only (this is the residual defect task 2.4 closes;
+          // pre-retrofit this was a local rollbackCreatedActor() that only console.warn'd).
+          if (!dedicatedActor) return;
+          await dedicatedActor.delete();
+        },
+      });
     }
 
-    // DP-16: post-write verify — read back flag data from the created actor (by actorUuid, not the result object)
-    let flagData: unknown = null;
-    if (actorUuid) {
-      try {
-        flagData = API.getActorFlagData(actorUuid);
-      } catch (_) { /* best-effort */ }
-      if (!flagData || typeof flagData !== 'object') {
-        // BUG-779: verify-after-write failed after we created the dedicated actor — roll it back.
-        await rollbackCreatedActor(createdActor);
-        return notPersisted(ErrorTokens.ITEM_PILES_CREATE_NOT_PERSISTED, `created pile actor ${actorUuid} has no flag data after createItemPile`);
+    steps.push({
+      label: 'create-item-pile',
+      async run(): Promise<StepIds> {
+        // createItemPile returns { tokenUuid?: string, actorUuid: string } (item-piles.js:84851/84860) —
+        // NOT a bare UUID. Extract both; never assign the whole object to a string field.
+        let result: any;
+        try {
+          result = await API.createItemPile(options);
+        } catch (e) {
+          genericErrorMessage = e instanceof Error ? e.message : String(e);
+          throw e;
+        }
+        // BUG-779/BUG-784: hook veto / business-condition refusal / genuine GM disconnect after we
+        // already created the dedicated actor — roll it back either way, then classify which one it was.
+        if (result === false) {
+          refused = true;
+          throw new Error('ITEM_PILES_CREATE_PILE_REFUSED');
+        }
+        tokenUuid = result?.tokenUuid ?? null;
+        actorUuid = result?.actorUuid ?? null;
+        return { created: actorUuid ? [actorUuid] : [] };
+      },
+    });
+
+    steps.push({
+      label: 'finalize-dedicated-pile',
+      async run(): Promise<StepIds> {
+        // The createDedicatedActor path pre-creates a bare actor (with skipItems to avoid the wfrp4e
+        // dialog) and hands it to createItemPile as an existing actor — but that path does NOT stamp
+        // enabled:true or the type/config flags (only the createActor:true path does, and that one
+        // triggers the dialog). Stamp the pile config now via updateItemPile (verified-working merge),
+        // so the dedicated merchant/vault/container is actually enabled + correctly typed.
+        if (input.createDedicatedActor && actorUuid) {
+          try {
+            await API.updateItemPile(actorUuid, { ...itemPileFlags, enabled: true });
+          } catch (e) {
+            genericErrorMessage = e instanceof Error ? e.message : String(e);
+            throw e;
+          }
+        }
+
+        // DP-16: post-write verify — read back flag data from the created actor (by actorUuid, not the result object)
+        if (actorUuid) {
+          try {
+            flagData = API.getActorFlagData(actorUuid);
+          } catch (_) { /* best-effort */ }
+          if (!flagData || typeof flagData !== 'object') {
+            // BUG-779: verify-after-write failed after we created the dedicated actor — the
+            // undo cascade below rolls it back.
+            notPersistedMessage = `created pile actor ${actorUuid} has no flag data after createItemPile`;
+            throw new Error(notPersistedMessage);
+          }
+        }
+        return {};
+      },
+    });
+
+    const outcome = await runWriteSteps(steps);
+
+    if (outcome.outcome !== 'applied') {
+      const warnings = outcome.receipt.warnings;
+      if (refused) {
+        return withWarnings(falseReturnEnvelope('create-pile', `scene ${input.sceneId}`), warnings);
       }
+      if (notPersistedMessage) {
+        return withWarnings(notPersisted(ErrorTokens.ITEM_PILES_CREATE_NOT_PERSISTED, notPersistedMessage), warnings);
+      }
+      // Any other thrown exception past actor-creation (createItemPile throw, updateItemPile
+      // throw, getActorFlagData throw outside its own best-effort try) — BUG-779: the dedicated
+      // actor's rollback already ran inside runWriteSteps(); a rollback failure is now in
+      // `warnings` (surfaced to the caller below), never console-only.
+      return withWarnings(
+        { success: false, error: `CREATE_PILE_ERROR: ${genericErrorMessage ?? 'unknown step failure'}` },
+        warnings,
+      );
     }
 
     // BUG-779: lifecycle/ownership metadata — tells the caller (and a later delete-pile call)
@@ -144,24 +230,9 @@ export async function handleCreatePile(input: CreatePileInput): Promise<Envelope
     notify.created('item-piles', `Created ${input.type ?? 'pile'} pile in scene ${input.sceneId}`, {});
     return { success: true, data: { tokenUuid, actorUuid, type: input.type ?? 'pile', sceneId: input.sceneId, flagData, actorOwnership } };
   } catch (e) {
-    // BUG-779: any exception past actor-creation (createItemPile throw, updateItemPile throw,
-    // getActorFlagData throw outside its own best-effort try) rolls the dedicated actor back too.
-    await rollbackCreatedActor(createdActor);
+    // Setup-phase exception (e.g. getItemPilesAPI()/normalizeItemsArray() throwing before any
+    // step ran) — nothing has been created yet, so there is nothing to roll back.
     return { success: false, error: `CREATE_PILE_ERROR: ${e instanceof Error ? e.message : String(e)}` };
-  }
-}
-
-/** BUG-779: best-effort rollback of a dedicated actor this call created — never masks the
- *  caller's original error with a rollback failure; logs and swallows instead. */
-async function rollbackCreatedActor(actor: any): Promise<void> {
-  if (!actor) return;
-  try {
-    await actor.delete();
-  } catch (rollbackErr) {
-    console.warn(
-      `[item-piles] BUG-779 rollback failed — dedicated actor ${actor?.uuid ?? '(unknown uuid)'} may be orphaned:`,
-      rollbackErr,
-    );
   }
 }
 
@@ -287,6 +358,9 @@ export async function handleDeletePile(input: DeletePileInput): Promise<Envelope
   // confirm:true will cascade-delete alongside the token — "reversible via delete-pile" in the
   // safety table must mean the actor too. Resolution failure here never blocks the preview
   // itself; it just falls back to the token-only message.
+  // Migrated onto the shared requireConfirm() helper (systemic_bug_class_prevention v2 Phase
+  // 1/5.1 — R1.3 consolidation); preview content (dedicated-actor cascade disclosure) and
+  // refusal trigger conditions are unchanged from the pre-migration hand-rolled envelope.
   if (input.confirm !== true) {
     let previewActor: any = null;
     try {
@@ -297,10 +371,11 @@ export async function handleDeletePile(input: DeletePileInput): Promise<Envelope
     const cascadeNote = isDedicatedPreview
       ? ` and its dedicated pile actor "${previewActor?.name ?? previewActor?.uuid}" (${previewActor?.uuid}) — a shared or pre-existing actor is never cascade-deleted`
       : '';
-    return {
-      success: false,
-      error: `CONFIRM_REQUIRED: delete-pile permanently deletes the token${cascadeNote}. Re-send with confirm:true to proceed.`,
-    };
+    return requireConfirm(
+      { confirm: false }, // inside the input.confirm !== true branch — always false here
+      'delete-pile',
+      `${input.tokenUuid} — permanently deletes the token${cascadeNote}`,
+    ) as Envelope<unknown>;
   }
 
   try {

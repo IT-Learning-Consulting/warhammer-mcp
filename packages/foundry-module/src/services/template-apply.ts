@@ -10,6 +10,7 @@ import { notify } from '../notify.js';
 import { buildOperationReceipt } from './shared/operation-receipt.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
 import { verifyDocWrite } from '../utils/verifyWrite.js';
+import { runWriteSteps, precheckAlreadyApplied, type WriteStep } from './shared/resume-boundary.js';
 
 interface PreResolvedChoices {
   skillGroups?: Record<string, string> | undefined;
@@ -71,6 +72,13 @@ export class TemplateApplyService {
       const result = await this._runTemplateApply(actor, template, templateId, data.preResolvedChoices ?? {});
       return { ...result, ...buildOperationReceipt({ created: result?.applied?.itemIds, updated: [result?.actorId] }) };
     } catch (error) {
+      // BUG-677 (systemic_bug_class_prevention v2 Phase 2, task 2.1): a mid-sequence write-step
+      // failure inside executeTemplatePlan() (via runWriteSteps) is re-thrown carrying a
+      // `templateApplyPartial` payload (outcome/receipt/landed ids) instead of a bare Error — surface
+      // it as a structured response here instead of discarding it behind the old generic re-thrown
+      // message (the pre-fix defect at this exact catch).
+      const partial = (error as any)?.templateApplyPartial;
+      if (partial) return partial;
       throw new Error(`Failed to apply template: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -227,9 +235,25 @@ export class TemplateApplyService {
     // --- name + characteristics (single update payload) ---
     const pre = (sys.alterName?.pre ?? '').trim();
     const post = (sys.alterName?.post ?? '').trim();
-    const newName = `${pre} ${actor.name} ${post}`.trim().replace(/\s+/g, ' ');
+    // BUG-680 (systemic_bug_class_prevention v2 Phase 2, task 2.2): idempotent alterName guard — if
+    // actor.name already carries the pre/post wrapper (a prior apply, or the calling workflow already
+    // renamed the actor to its final role-bearing name before calling applyTemplate), skip re-wrapping
+    // that half instead of blindly concatenating (live evidence: "..._Goblin_Shaman" + post:"Shaman" ->
+    // "... Goblin_Shaman Shaman" double-suffix). Whitespace-collapse-aware to match the newName
+    // normalization below (`.trim().replace(/\s+/g, ' ')`) — the `alreadyApplied` idiom
+    // (outcome-response.ts:5-7) applied to the naming portion of the write.
+    const normalizedActorName = actor.name.trim().replace(/\s+/g, ' ');
+    const preAlreadyApplied = pre.length > 0 && normalizedActorName.startsWith(pre);
+    const postAlreadyApplied = post.length > 0 && normalizedActorName.endsWith(post);
+    const effectivePre = preAlreadyApplied ? '' : pre;
+    const effectivePost = postAlreadyApplied ? '' : post;
+    const newName = `${effectivePre} ${normalizedActorName} ${effectivePost}`.trim().replace(/\s+/g, ' ');
     const updateData: Record<string, any> = {};
     // BUG-275: only write name fields when the template renames the actor; never write prototypeToken.name on a token delta (DataModelValidationError).
+    // BUG-680: preAlreadyApplied/postAlreadyApplied above already fold an already-present prefix/suffix
+    // out of newName, so this EXISTING no-op guard (unchanged, preserved verbatim) now also catches
+    // "pre and/or post already present" (naming portion treated as already-applied, zero writes) in
+    // addition to the true genuinely-unchanged case it always covered.
     if (newName !== actor.name) {
       updateData['name'] = newName;
       if (!actor.isToken) {
@@ -431,89 +455,199 @@ export class TemplateApplyService {
     };
   }
 
-  // Apply phase: WRITE #1 (actor.update) then WRITE #2 (createEmbeddedDocuments) in order, options preserved
-  // verbatim (HC1 / BUG-242 skipSpecialisationChoice).
+  // Apply phase: WRITE #1 (actor.update) then WRITE #2 (createEmbeddedDocuments) then WRITE #3
+  // (advance-bump updateEmbeddedDocuments) wrapped in `runWriteSteps` (BUG-677 - systemic_bug_class_prevention
+  // v2 Phase 2, task 2.1). Options preserved verbatim (HC1 / BUG-242 skipSpecialisationChoice). Each step's
+  // write-not-persisted checks reuse the existing verifyDocWrite/manual-throw idioms verbatim, only relocated
+  // into a step's `run()` - a mid-sequence throw is caught by `runWriteSteps` (partial/failed outcome with the
+  // landed-ids receipt) instead of the old bare uncaught throw that discarded all provenance. This method
+  // still REJECTS on failure (same message text, preserved for `template-apply-reconcile.test.ts`'s direct
+  // callers) - the thrown Error additionally carries a `templateApplyPartial` payload that `applyTemplate()`'s
+  // catch surfaces as a structured response instead of a generic re-thrown message (the pre-fix defect there).
+  //
+  // WRITE#1's updateData additionally stamps `flags.warhammer-mcp.appliedTemplates` (append templateId) - the
+  // Q6 flag-mark for the ambiguous natural key (a templateId is the only reliable identity a retried apply can
+  // check). `precheckAlreadyApplied` consults that flag BEFORE any write: a re-apply of an already-applied
+  // templateId short-circuits to `outcome:'alreadyApplied'` with zero writes.
   async executeTemplatePlan(plan: TemplateApplyPlan): Promise<any> {
     const { actor, templateId, templateName, newName, characteristicDeltas } = plan;
     const updateWrite = plan.writes[0] as Extract<TemplateWrite, { op: 'actor.update' }>;
     const createWrite = plan.writes[1] as Extract<TemplateWrite, { op: 'createEmbeddedDocuments' }>;
 
-    await actor.update(updateWrite.updateData, updateWrite.options as any);
-    verifyDocWrite(await (globalThis as any).fromUuid((actor as any).uuid), updateWrite.updateData, ErrorTokens.TEMPLATE_APPLY_WRITE_NOT_PERSISTED);
-    // BUG-460 pre-merge: wfrp4e's same-name skill/talent merge converts a duplicate CREATE into an
-    // advance-bump UPDATE on the existing embedded item — but in the headless apply path it routes that
-    // update to the world Items collection (Item.updateDocuments with embedded ids), where the ids don't
-    // resolve, so the bump FAILS SILENTLY (4 unhandled rejections; merged advances stay at the first
-    // apply's values). We do the merge ourselves BEFORE the create: partition incoming same-name+type items
-    // that carry a numeric system.advances.value against an existing embedded item of the same name+type,
-    // sum the advances into an explicit actor.updateEmbeddedDocuments bump (correct embedded collection),
-    // and drop them from the create batch so wfrp4e's broken world-scope merge never fires. Skills + talents
-    // both key on system.advances.value; traits/trappings/spells have no advances leaf → normal create.
-    // On a first apply (no pre-existing items) existingByKey is empty and this is a no-op.
-    const SEP = ' ';
-    const existingByKey = new Map<string, any>();
-    for (const it of Array.from(((actor as any).items ?? []) as Iterable<any>)) {
-      if (typeof (it as any)?.system?.advances?.value === 'number') {
-        existingByKey.set(`${(it as any).name}${SEP}${(it as any).type}`, it);
-      }
+    // Q6 natural-key precheck (BUG-677): an already-applied templateId short-circuits, zero writes.
+    const existingAppliedRaw = (actor as any).getFlag?.('warhammer-mcp', 'appliedTemplates');
+    const existingApplied: string[] = Array.isArray(existingAppliedRaw) ? existingAppliedRaw : [];
+    const alreadyApplied = await precheckAlreadyApplied(() => existingApplied.includes(templateId));
+    if (alreadyApplied) {
+      return {
+        success: true,
+        outcome: 'alreadyApplied',
+        actorId: actor.id,
+        actorName: actor.name,
+        templateId,
+        templateName,
+        applied: {
+          name: actor.name,
+          characteristics: {},
+          itemIds: [],
+          itemsByType: { skill: 0, talent: 0, spell: 0, trait: 0, trapping: 0 },
+          merged: [],
+        },
+      };
     }
-    const advanceBumps: Array<{ _id: string; 'system.advances.value': number }> = [];
-    const mergedSummary: Array<{ name: string; type: string; from: number; to: number }> = [];
-    const createItems: any[] = [];
-    for (const req of createWrite.items as any[]) {
-      const incAdv = req?.system?.advances?.value;
-      const key = `${req?.name}${SEP}${req?.type}`;
-      const existing = existingByKey.get(key);
-      if (existing && typeof incAdv === 'number') {
-        const from = Number(existing.system?.advances?.value ?? 0);
-        const to = from + Number(incAdv);
-        advanceBumps.push({ _id: existing.id, 'system.advances.value': to });
-        mergedSummary.push({ name: String(req?.name ?? ''), type: String(req?.type ?? ''), from, to });
-        existingByKey.delete(key); // one incoming maps to one existing item
-      } else {
-        createItems.push(req);
-      }
-    }
+    // Stamp the natural-key flag into WRITE#1's updateData (appended, never overwritten/deduped - a
+    // re-apply of the SAME templateId never reaches here, caught by the precheck above).
+    updateWrite.updateData['flags.warhammer-mcp.appliedTemplates'] = [...existingApplied, templateId];
 
-    // Always issue the create (even with an empty batch) — preserves the pre-BUG-460 contract that each
-    // apply performs a createEmbeddedDocuments call (characterization: da-template.snap + apply-template
-    // stacking). Foundry treats an empty array as a no-op returning [].
-    const created: any[] = (await (actor as any).createEmbeddedDocuments(createWrite.documentType, createItems, createWrite.options)) ?? [];
-    // Snapshot the expected targets BEFORE the write (BUG-075 pattern): Foundry's
-    // updateEmbeddedDocuments expands the dotted-key update objects IN PLACE
-    // ({'system.advances.value': N} → {system:{advances:{value:N}}}), so reading
-    // bump['system.advances.value'] after the await yields undefined → false
-    // TEMPLATE_APPLY_WRITE_NOT_PERSISTED on a fully-persisted merge (live-caught 2026-07-07).
-    const expectedAdvancesById = new Map<string, number>(
-      advanceBumps.map((b) => [b._id, b['system.advances.value']]),
-    );
-    if (advanceBumps.length > 0) {
-      await (actor as any).updateEmbeddedDocuments('Item', advanceBumps);
-    }
-    // BUG-451 (same wrong-dimension class as BUG-445): a raw doc-count compare false-fails
-    // when wfrp4e MERGES same-name skills/talents into existing embedded items instead of
-    // creating new docs (re-apply onto a pre-templated actor: expected 15, got 13 while the
-    // write fully persisted — and threw after the writes, so ROLLBACK_UNAVAILABLE surfaced).
-    // Reconcile per requested item: PASS if it came back in `created` OR a same-name item of
-    // the same type exists on the actor post-write (merged advance/stack — now via our own bump).
-    const postItems: any[] = Array.from(((actor as any).items ?? []) as Iterable<any>);
-    // DP-16 (BUG-460): assert every advance-bump landed on its embedded item, NOT the world Items collection.
-    // Compare against the pre-write snapshot, never the (Foundry-mutated) bump objects.
-    for (const [bumpId, expected] of expectedAdvancesById) {
-      const got = Number(postItems.find((it: any) => it.id === bumpId)?.system?.advances?.value);
-      if (got !== expected) {
-        throw new Error(`${ErrorTokens.TEMPLATE_APPLY_WRITE_NOT_PERSISTED}: same-name advance-bump for item ${bumpId} did not persist (expected ${expected}, got ${got}) — merge may have routed to the world Items collection`);
+    // Captures whichever step's run() throws so the reconstructed Error below carries the EXACT original
+    // message (test-compat: template-apply-reconcile.test.ts asserts on the literal message text).
+    let lastStepError: unknown;
+    const runCapturing = async <T,>(fn: () => Promise<T>): Promise<T> => {
+      try {
+        return await fn();
+      } catch (err) {
+        lastStepError = err;
+        throw err;
       }
-    }
-    const unreconciled = (createWrite.items as any[]).filter((req: any) => {
-      const name = String(req?.name ?? '');
-      const type = String(req?.type ?? '');
-      const inCreated = created.some((c: any) => String(c?.name ?? '') === name && String(c?.type ?? '') === type);
-      const onActor = postItems.some((it: any) => String(it?.name ?? '') === name && String(it?.type ?? '') === type);
-      return !inCreated && !onActor;
-    });
-    if (unreconciled.length > 0) {
-      throw new Error(`${ErrorTokens.TEMPLATE_APPLY_WRITE_NOT_PERSISTED}: ${unreconciled.length} requested item(s) neither created nor present on the actor post-write: ${unreconciled.map((m: any) => `${m?.name ?? '?'} (${m?.type ?? '?'})`).join(', ')}`);
+    };
+
+    let freshActorDoc: unknown;
+    const stepUpdate: WriteStep = {
+      label: 'actor.update',
+      run: () => runCapturing(async () => {
+        await actor.update(updateWrite.updateData, updateWrite.options as any);
+        freshActorDoc = await (globalThis as any).fromUuid((actor as any).uuid);
+        // Reuse the existing verifyDocWrite idiom verbatim (was `:442`).
+        verifyDocWrite(freshActorDoc, updateWrite.updateData, ErrorTokens.TEMPLATE_APPLY_WRITE_NOT_PERSISTED);
+        return { updated: [actor.id] };
+      }),
+    };
+
+    // BUG-460 pre-merge + WRITE#2, computed fresh only when this step actually runs (never on the
+    // alreadyApplied short-circuit above, and never if WRITE#1 failed).
+    let created: any[] = [];
+    let advanceBumps: Array<{ _id: string; 'system.advances.value': number }> = [];
+    let mergedSummary: Array<{ name: string; type: string; from: number; to: number }> = [];
+    let expectedAdvancesById: Map<string, number> = new Map();
+    const stepCreate: WriteStep = {
+      label: 'createEmbeddedDocuments',
+      run: () => runCapturing(async () => {
+        // BUG-460 pre-merge: wfrp4e's same-name skill/talent merge converts a duplicate CREATE into an
+        // advance-bump UPDATE on the existing embedded item - but in the headless apply path it routes that
+        // update to the world Items collection (Item.updateDocuments with embedded ids), where the ids don't
+        // resolve, so the bump FAILS SILENTLY (4 unhandled rejections; merged advances stay at the first
+        // apply's values). We do the merge ourselves BEFORE the create: partition incoming same-name+type
+        // items that carry a numeric system.advances.value against an existing embedded item of the same
+        // name+type, sum the advances into an explicit actor.updateEmbeddedDocuments bump (correct embedded
+        // collection), and drop them from the create batch so wfrp4e's broken world-scope merge never fires.
+        // Skills + talents both key on system.advances.value; traits/trappings/spells have no advances leaf
+        // -> normal create. On a first apply (no pre-existing items) existingByKey is empty and this is a no-op.
+        const SEP = ' ';
+        const existingByKey = new Map<string, any>();
+        for (const it of Array.from(((actor as any).items ?? []) as Iterable<any>)) {
+          if (typeof (it as any)?.system?.advances?.value === 'number') {
+            existingByKey.set(`${(it as any).name}${SEP}${(it as any).type}`, it);
+          }
+        }
+        const createItems: any[] = [];
+        for (const req of createWrite.items as any[]) {
+          const incAdv = req?.system?.advances?.value;
+          const key = `${req?.name}${SEP}${req?.type}`;
+          const existing = existingByKey.get(key);
+          if (existing && typeof incAdv === 'number') {
+            const from = Number(existing.system?.advances?.value ?? 0);
+            const to = from + Number(incAdv);
+            advanceBumps.push({ _id: existing.id, 'system.advances.value': to });
+            mergedSummary.push({ name: String(req?.name ?? ''), type: String(req?.type ?? ''), from, to });
+            existingByKey.delete(key); // one incoming maps to one existing item
+          } else {
+            createItems.push(req);
+          }
+        }
+
+        // Always issue the create (even with an empty batch) - preserves the pre-BUG-460 contract that each
+        // apply performs a createEmbeddedDocuments call (characterization: da-template.snap + apply-template
+        // stacking). Foundry treats an empty array as a no-op returning [].
+        created = (await (actor as any).createEmbeddedDocuments(createWrite.documentType, createItems, createWrite.options)) ?? [];
+        // Snapshot the expected targets BEFORE the write (BUG-075 pattern): Foundry's
+        // updateEmbeddedDocuments expands the dotted-key update objects IN PLACE
+        // ({'system.advances.value': N} -> {system:{advances:{value:N}}}), so reading
+        // bump['system.advances.value'] after the await yields undefined -> false
+        // TEMPLATE_APPLY_WRITE_NOT_PERSISTED on a fully-persisted merge (live-caught 2026-07-07).
+        expectedAdvancesById = new Map<string, number>(advanceBumps.map((b) => [b._id, b['system.advances.value']]));
+        return { created: created.map((i: any) => i.id) };
+      }),
+    };
+
+    const stepAdvanceBump: WriteStep = {
+      label: 'advance-bump updateEmbeddedDocuments',
+      run: () => runCapturing(async () => {
+        if (advanceBumps.length > 0) {
+          await (actor as any).updateEmbeddedDocuments('Item', advanceBumps);
+        }
+        // BUG-451 (same wrong-dimension class as BUG-445): a raw doc-count compare false-fails
+        // when wfrp4e MERGES same-name skills/talents into existing embedded items instead of
+        // creating new docs (re-apply onto a pre-templated actor: expected 15, got 13 while the
+        // write fully persisted - and threw after the writes, so ROLLBACK_UNAVAILABLE surfaced).
+        // Reconcile per requested item: PASS if it came back in `created` OR a same-name item of
+        // the same type exists on the actor post-write (merged advance/stack - now via our own bump).
+        const postItems: any[] = Array.from(((actor as any).items ?? []) as Iterable<any>);
+        // DP-16 (BUG-460): assert every advance-bump landed on its embedded item, NOT the world Items collection.
+        // Compare against the pre-write snapshot, never the (Foundry-mutated) bump objects.
+        for (const [bumpId, expected] of expectedAdvancesById) {
+          const got = Number(postItems.find((it: any) => it.id === bumpId)?.system?.advances?.value);
+          if (got !== expected) {
+            throw new Error(`${ErrorTokens.TEMPLATE_APPLY_WRITE_NOT_PERSISTED}: same-name advance-bump for item ${bumpId} did not persist (expected ${expected}, got ${got}) - merge may have routed to the world Items collection`);
+          }
+        }
+        const unreconciled = (createWrite.items as any[]).filter((req: any) => {
+          const name = String(req?.name ?? '');
+          const type = String(req?.type ?? '');
+          const inCreated = created.some((c: any) => String(c?.name ?? '') === name && String(c?.type ?? '') === type);
+          const onActor = postItems.some((it: any) => String(it?.name ?? '') === name && String(it?.type ?? '') === type);
+          return !inCreated && !onActor;
+        });
+        if (unreconciled.length > 0) {
+          throw new Error(`${ErrorTokens.TEMPLATE_APPLY_WRITE_NOT_PERSISTED}: ${unreconciled.length} requested item(s) neither created nor present on the actor post-write: ${unreconciled.map((m: any) => `${m?.name ?? '?'} (${m?.type ?? '?'})`).join(', ')}`);
+        }
+        return { updated: advanceBumps.map((b) => b._id) };
+      }),
+    };
+
+    const stepOutcome = await runWriteSteps([stepUpdate, stepCreate, stepAdvanceBump]);
+
+    if (stepOutcome.outcome !== 'applied') {
+      // BUG-677: surface a receipt of landed ids instead of an uncaught throw with zero provenance.
+      // executeTemplatePlan itself still REJECTS (test-compat) but the Error carries the receipt for
+      // applyTemplate()'s catch to turn into a structured response (`:73-75` region).
+      const original = lastStepError instanceof Error
+        ? lastStepError
+        : new Error(`Template apply failed at step "${stepOutcome.failedStep}"`);
+      (original as any).templateApplyPartial = {
+        success: false,
+        outcome: stepOutcome.outcome,
+        failedStep: stepOutcome.failedStep,
+        actorId: actor.id,
+        actorName: actor.name,
+        templateId,
+        templateName,
+        message: original.message,
+        receipt: stepOutcome.receipt,
+        applied: {
+          name: newName,
+          characteristics: characteristicDeltas,
+          itemIds: stepOutcome.receipt.createdDocumentIds,
+          itemsByType: {
+            skill: created.filter((i: any) => i.type === 'skill').length,
+            talent: created.filter((i: any) => i.type === 'talent').length,
+            spell: created.filter((i: any) => i.type === 'spell').length,
+            trait: created.filter((i: any) => i.type === 'trait').length,
+            trapping: created.filter((i: any) => !['skill', 'talent', 'spell', 'trait'].includes(i.type)).length,
+          },
+          merged: mergedSummary,
+        },
+      };
+      throw original;
     }
 
     notify.updated('actor', actor.name, { summary: `applied template ${templateName}`, uuid: (actor as any).uuid });
@@ -536,7 +670,7 @@ export class TemplateApplyService {
           trapping: created.filter((i: any) => !['skill', 'talent', 'spell', 'trait'].includes(i.type)).length,
         },
         // BUG-460: same-name skills/talents advance-bumped in place (existing + incoming) instead of
-        // duplicated — surfaced so a stacking caller can see the merge that wfrp4e's headless path hid.
+        // duplicated - surfaced so a stacking caller can see the merge that wfrp4e's headless path hid.
         merged: mergedSummary,
       },
     };

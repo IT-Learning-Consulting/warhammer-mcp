@@ -42,10 +42,15 @@ const SoundFilter = z.object({
 
 export const ModuleSequencerInput = z.discriminatedUnion('action', [
   // play-sequence-json — session-transport; macro-node ALLOWLIST guard required
+  // BUG-793: `Sequence.play()`'s ONLY options are {remote, preload, local} (live Sequencer
+  // v4.2.2 sequencer.js:27719, confirmed by typings/types.d.ts PlayOptions) — remote/preload
+  // smuggle a broadcast/preload straight past the DoS-gated preload-for-clients action, and
+  // local has no legitimate use here either. No safe key remains, so options is an empty
+  // .strict({}) allowlist: kept for wire-compat, rejects every key.
   z.object({
     action: z.literal('play-sequence-json'),
     sequence: z.array(SequenceSection).min(1),
-    options: z.record(z.unknown()).optional(),
+    options: z.object({}).strict().optional(),
   }).strict(),
 
   // EffectManager actions
@@ -62,7 +67,10 @@ export const ModuleSequencerInput = z.discriminatedUnion('action', [
   z.object({ action: z.literal('update-effects'), filter: EffectFilter.optional(), updates: z.record(z.unknown()).optional() }).strict(),
 
   // SoundManager actions
-  z.object({ action: z.literal('play-sound'), file: z.string().min(1), options: z.record(z.unknown()).optional() }).strict(),
+  // BUG-793: play-sound's `options` reaches the identical Sequence.play({remote,preload,local})
+  // call (handler wraps `new Sequence().sound(file)` then `seq.play(options)`) — same hole,
+  // same fix: empty .strict({}) allowlist (see play-sequence-json note above).
+  z.object({ action: z.literal('play-sound'), file: z.string().min(1), options: z.object({}).strict().optional() }).strict(),
   // BUG-791: same destructive-confirmation-bypass shape as end-all-sounds — confirm required
   // whenever the effective filter doesn't genuinely narrow the scope (handler-enforced).
   z.object({ action: z.literal('end-sounds'), filter: SoundFilter.optional(), confirm: z.boolean().optional() }).strict(),
@@ -83,10 +91,14 @@ export const ModuleSequencerInput = z.discriminatedUnion('action', [
   z.object({ action: z.literal('preload-for-clients'), files: z.array(z.string().min(1)).min(1), showProgressBar: z.boolean().optional(), confirm: z.boolean().optional() }).strict(),
 
   // Permission write
+  // BUG-802: writes a world permission setting (GM-authorization change) with no confirm gate,
+  // no preview, and no reload signal — confirm-gated below (handler previews currentValue vs
+  // requestedValue and returns reloadRequired:true on the confirmed write; sequencer.ts).
   z.object({
     action: z.literal('permission-write'),
     key: z.enum(['permissions-effect-create', 'permissions-effect-delete', 'permissions-sound-create', 'permissions-preload', 'permissions-sidebar-tools']),
     value: z.number().int().min(0).max(3),
+    confirm: z.boolean().optional(),  // CONFIRM-GATE(permission-write):
   }).strict(),
 ]);
 

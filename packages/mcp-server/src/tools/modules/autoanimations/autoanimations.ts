@@ -10,6 +10,10 @@
 //   - R2.4: errors route through the shared BaseTool.errorResponse.
 //   - F03 (Phase 5 carry-forward): the formatter must emit EVERY data field the
 //       handler returns — a field computed but not surfaced is invisible to callers.
+//
+// GATE-SUPPRESS[success-semantics]: systemic_bug_class_prevention v2 Phase 1 (BUG-813) touches only
+// the clear-item-animation confirm-gate description/schema here — this tool's outcome-field
+// retrofit (HC4/check-outcome-field allowlist membership) is out of scope; owned by v2 Phase 3 (C2).
 
 import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
 import { ErrorTokens } from '@foundry-mcp/shared';
@@ -140,7 +144,7 @@ PER-ITEM FLAGS:
 - set-item-animation  { uuid, animation, confirmedMacro? } — write v5 flags (two-step; forces version:5 + isCustomized:true)
     animation = { menu?, primary:{dbSection,menuType,animation,variant?,color?}, sound?, secondary?, source?, target?, soundOnly?, macro?, meleeSwitch?, fromAmmo? }
     macro.enable:true REQUIRES confirmedMacro:true (AA runs an arbitrary world macro on every roll).
-- clear-item-animation { uuid }                         — delete flags.autoanimations (verified)
+- clear-item-animation { uuid, confirm:true }           — delete flags.autoanimations (verified; confirm-gated, no undo)
 DISCOVERY (read-only, needs aa.ready):
 - list-animations     { dbSection?, menuType? }         — list AA animation keys (reads aaDatabase tree; AA's namespace is private to Sequencer.searchFor)
 AUTOREC (world-level name→animation maps):
@@ -183,7 +187,7 @@ Performance Notes:
             itemUuid: { type: 'string', description: '[play-animation] Item UUID to route the animation (or use itemName).' },
             itemName: { type: 'string', description: '[play-animation] Item name for Autorec-only lookup (or use itemUuid).' },
             targetUuids: { type: 'array', items: { type: 'string' }, description: '[play-animation] Target token UUIDs (empty array = no targets, avoids silent game.user.targets fallback).' },
-            confirm: { type: 'boolean', description: '[play-animation] Required true (transient effect, no undo).' },
+            confirm: { type: 'boolean', description: '[play-animation] Required true (transient effect, no undo). [clear-item-animation] Required true — permanently deletes the item\'s animation config (no undo); omit/false returns CONFIRM_REQUIRED with a preview of what would be deleted.' },
           },
           required: ['action'],
           // BUG-808 (D1 — tighten in place, never anyOf): per-branch required sets generated

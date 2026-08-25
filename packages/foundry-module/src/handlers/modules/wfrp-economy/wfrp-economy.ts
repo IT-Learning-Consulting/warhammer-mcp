@@ -295,6 +295,8 @@ import { ErrorTokens } from '@foundry-mcp/shared';
 import { WfrpEconomyInput, type WfrpEconomyInputType } from '@foundry-mcp/shared';
 import { notify } from '../../../notify.js';
 import { Envelope, getGame, isGM } from '../_shared/handler-utils.js';
+import { requireConfirm } from '../../../services/shared/destructive-confirm.js';
+import { buildOutcomeResponse } from '../../../services/shared/outcome-response.js';
 
 
 const MODULE_ID = 'wfrp4e-economy';
@@ -362,6 +364,9 @@ const WRITE_ACTIONS = new Set([
   'launch-venture',
   'wind-up-venture',
   'close-out-venture',
+  // BUG-821(c) / ADR-16 — archives-then-removes the orphan venture rows; a real write, GM-gated like
+  // every other destructive venture action.
+  'cleanup-orphan-ventures',
   'trading-set-season',
   'trading-gossip-test', // Change 2: now mints+stores a rumour on a successful Gossip Test (real write)
   'trading-buy-cargo',
@@ -407,8 +412,17 @@ function readEnterprises(): { profiles: Record<string, any>; instances: Record<s
 function readVentures(): { instances: Record<string, any> } {
   return getSetting('ventures') ?? { instances: {} };
 }
-function ventureCount(): number {
-  return Object.keys(readVentures().instances ?? {}).length;
+// BUG-821(c) / ADR-16: ventures are NOT world-scoped — a deed's handledBy[] entries name the specific
+// economy/bank Registry it belongs to. Every formatter call site below WAS reporting the raw
+// world-global count on a per-economy row (a fresh economy read `ventureCount` > 0 whenever ANY
+// economy in the world had ventures). economyId, when supplied, filters to ventures with at least one
+// handledBy entry naming that economy (mirrors the fork's matchingVentureLinks predicate,
+// economy-integrity.js:66-73); omitted preserves the prior world-global count for callers that still
+// want it.
+function ventureCount(economyId?: string): number {
+  const instances = Object.values(readVentures().instances ?? {});
+  if (!economyId) return instances.length;
+  return instances.filter((venture: any) => (venture?.handledBy ?? []).some((link: any) => link?.economyId === economyId)).length;
 }
 function readLevies(): any[] {
   return getSetting('levies') ?? [];
@@ -669,6 +683,9 @@ export async function dispatchModuleWfrpEconomy(data: unknown): Promise<Envelope
         return await handleSetVentureStatus(input);
       case 'set-venture-standing':
         return await handleSetVentureStanding(input);
+      // BUG-821(c) / ADR-16 — confirm-gated one-time cleanup of the pre-existing orphan venture deeds.
+      case 'cleanup-orphan-ventures':
+        return await handleCleanupOrphanVentures(input);
       // ── trading (Phase 7f) ──
       case 'trading-list-settlements':
         return await handleTradingListSettlements(input);
@@ -742,8 +759,8 @@ export async function dispatchModuleWfrpEconomy(data: unknown): Promise<Envelope
 
 function handleListEconomies(): Envelope<unknown> {
   const economies = readEconomies();
-  // Ventures are world-scoped (not per-economy, D1) — the same total is additive on every row.
-  const totalVentures = ventureCount();
+  // BUG-821(c) / ADR-16: ventures are per-economy (a deed's handledBy[] names its own Registry), NOT
+  // world-scoped — each row gets ITS OWN count now, not a shared world-global total.
   const list = economies.map((e: any) => ({
     id: e?.id,
     name: e?.name,
@@ -751,7 +768,7 @@ function handleListEconomies(): Envelope<unknown> {
     bankCount: e?.banks?.length ?? 0,
     propertyCount: e?.properties?.length ?? 0,
     stockCount: e?.stocks?.length ?? 0, // frozen — R7d.7
-    ventureCount: totalVentures, // ADDITIVE, Phase 7d
+    ventureCount: ventureCount(e?.id), // ADDITIVE, Phase 7d; per-economy scoping BUG-821(c)/ADR-16
   }));
   return { success: true, data: { action: 'list-economies', count: list.length, economies: list } };
 }
@@ -781,7 +798,7 @@ function handleGetEconomy(input: GetEconomyInput): Envelope<unknown> {
       banks: economy.banks ?? [],
       properties,
       stocks: economy.stocks ?? [], // frozen — R7d.7
-      ventureCount: ventureCount(), // ADDITIVE, Phase 7d — world-scoped, not per-economy
+      ventureCount: ventureCount(economy.id), // ADDITIVE, Phase 7d; per-economy scoping BUG-821(c)/ADR-16
     },
   };
 }
@@ -849,7 +866,9 @@ async function handleCreateEconomy(input: CreateEconomyInput): Promise<Envelope<
   notify.created('wfrp-economy', input.name, { summary: `economy ${economyId} (${banks.length} bank/${stocks.length} stock/${properties.length} prop)` });
   return {
     success: true,
-    data: { action: 'create-economy', economyId, name: input.name, bankCount: banks.length, stockCount: stocks.length, propertyCount: properties.length, ventureCount: ventureCount() },
+    // BUG-821(c) / ADR-16: a freshly-created economy has zero ventures of its own — the pre-fix
+    // world-global count could read >0 here purely because some OTHER economy in the world had deeds.
+    data: { action: 'create-economy', economyId, name: input.name, bankCount: banks.length, stockCount: stocks.length, propertyCount: properties.length, ventureCount: ventureCount(economyId) },
   };
 }
 
@@ -3013,6 +3032,88 @@ async function handleSetVentureStanding(input: SetVentureStandingInput): Promise
   }
   notify.updated('wfrp-economy', `venture ${input.ventureId}`, { summary: `standing now ${result.standing}` });
   return { success: true, data: { action: 'set-venture-standing', ventureId: input.ventureId, standing: result.standing } };
+}
+
+// BUG-821(c) / ADR-16 — venture-orphan-cleanup. The 21 pre-existing orphan deeds are ventures whose
+// handledBy array holds zero links resolving to a currently-live economy (the residue of the pre-fix
+// scrubVentureLinks, which stripped the matching link but never removed the row — task 3.2's cascade
+// fix prevents new ones going forward, but never sweeps the existing ones itself, per ADR-16's explicit
+// decoupling of preventive vs remedial). "resolving" mirrors the fork's own contextStatus/
+// matchingVentureLinks idiom: a link only counts if its economyId names an economy that still exists.
+const VENTURE_ARCHIVE_KEY = 'institutionRecoveryArchive'; // same setting economy-integrity.js's
+// persistArchive() writes to (archivePayload/persistArchive aren't exported, so this handler writes an
+// archive entry of the same shape directly — task 3.3's file scope is wfrp-economy.ts + schemas only).
+
+function orphanVentures(): Array<{ id: string; record: any }> {
+  const liveEconomyIds = new Set(readEconomies().map((e: any) => e?.id));
+  const instances = readVentures().instances ?? {};
+  const orphans: Array<{ id: string; record: any }> = [];
+  for (const [ventureId, venture] of Object.entries(instances)) {
+    const resolvingLinks = ((venture as any)?.handledBy ?? []).filter((link: any) => link?.economyId && liveEconomyIds.has(link.economyId));
+    if (resolvingLinks.length === 0) orphans.push({ id: ventureId, record: venture });
+  }
+  return orphans;
+}
+
+type CleanupOrphanVenturesInput = Extract<WfrpEconomyInputType, { action: 'cleanup-orphan-ventures' }>;
+async function handleCleanupOrphanVentures(input: CleanupOrphanVenturesInput): Promise<Envelope<unknown>> {
+  const orphans = orphanVentures();
+  const totalEscrowBp = orphans.reduce((sum, o) => sum + Number(o.record?.escrowBp ?? 0), 0);
+  const blastRadius = orphans.length
+    ? `${orphans.length} orphan venture deed(s) with zero resolving handledBy links, holding ${totalEscrowBp} BP total escrow — each is archived to the recovery log then permanently removed from the ledger; any held escrow is written off`
+    : 'zero orphan venture deeds (nothing currently qualifies)';
+  // ADR-16 (LAW): this new confirm-gated surface routes through the Phase-1-shipped requireConfirm()
+  // helper — NOT this file's own confirmRequired() — matching the exact CONFIRM-GATE convention landed
+  // for autoanimations.ts's clear-item-animation / sequencer.ts's permission-write.
+  const refusal = requireConfirm({ confirm: input.confirm === true }, 'cleanup-orphan-ventures', blastRadius);
+  if (refusal) return refusal;
+
+  if (!orphans.length) {
+    return {
+      success: true,
+      data: buildOutcomeResponse('noop', { action: 'cleanup-orphan-ventures', removedCount: 0, removedVentureIds: [], totalWrittenOffBp: 0 }),
+    };
+  }
+
+  const archive = (getSetting(VENTURE_ARCHIVE_KEY) as any[]) ?? [];
+  const archiveEntry = {
+    id: randomId(),
+    kind: 'venture-orphan-cleanup',
+    createdAt: new Date().toISOString(),
+    createdBy: getGame()?.user?.id ?? null,
+    economyId: null,
+    bankId: null,
+    target: null,
+    affected: { ventures: orphans.map((o) => ({ key: o.id, record: o.record })) },
+    transactionHistoryPolicy: 'retained-in-active-log',
+  };
+  archive.push(archiveEntry);
+  await setSetting(VENTURE_ARCHIVE_KEY, archive);
+  const archived = ((getSetting(VENTURE_ARCHIVE_KEY) as any[]) ?? []).some((entry: any) => entry?.id === archiveEntry.id);
+  if (!archived) return notPersisted(`cleanup-orphan-ventures archive entry "${archiveEntry.id}" did not persist; active data was not changed`);
+
+  const orphanIds = new Set(orphans.map((o) => o.id));
+  const instances = readVentures().instances ?? {};
+  for (const id of orphanIds) delete instances[id];
+  await setSetting('ventures', { instances });
+
+  const remaining = orphanVentures();
+  const persistedCheckFailed = remaining.some((o) => orphanIds.has(o.id));
+  if (persistedCheckFailed) {
+    return notPersisted(`cleanup-orphan-ventures failed persistence check: ${remaining.filter((o) => orphanIds.has(o.id)).length} orphan venture(s) survived the removal write`);
+  }
+
+  notify.deleted('wfrp-economy', 'orphan venture deeds', { summary: `${orphans.length} orphan venture deed(s) archived and removed (archive ${archiveEntry.id})` });
+  return {
+    success: true,
+    data: buildOutcomeResponse('applied', {
+      action: 'cleanup-orphan-ventures',
+      removedCount: orphans.length,
+      removedVentureIds: [...orphanIds],
+      archiveId: archiveEntry.id,
+      totalWrittenOffBp: totalEscrowBp,
+    }),
+  };
 }
 
 // ── trading (Phase 7f) ──────────────────────────────────────────────────────────

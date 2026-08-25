@@ -20,7 +20,8 @@
 //   - play-sequence-json is session-transport only (unversioned toJSON, fragile across upgrades).
 //   - preload-for-clients: requires confirm:true (broadcast risk, SUPPORTED_WITH_CONFIRMATION).
 //   - end-all-effects / end-all-sounds: require confirm:true (scene-level destructive).
-//   - permission-write: GM-only world settings.
+//   - permission-write: GM-only world settings. BUG-802: requires confirm:true (preview of
+//       current->requested value returned on refusal); confirmed write sets reloadRequired:true.
 //   - CCR-3: notify.updated on writes; no notify on reads.
 //   - CCR-4: confirm gates on destructive/broadcast actions.
 
@@ -29,6 +30,7 @@ import { ModuleSequencerInput, type ModuleSequencerInputType, ALLOWED_SECTION_TY
 import { notify } from '../../../notify.js';
 import { Envelope, isGM } from '../_shared/handler-utils.js';
 import { buildOutcomeResponse } from '../../../services/shared/outcome-response.js';
+import { requireConfirm } from '../../../services/shared/destructive-confirm.js';
 
 
 // ── Local helpers ──────────────────────────────────────────────────────────────
@@ -658,6 +660,22 @@ async function handlePermissionWrite(input: PermissionWriteInput): Promise<Envel
   if (!isGM()) return { success: false, error: 'GM_REQUIRED: only the GM can change Sequencer permissions' };
   try {
     const game = (globalThis as any).game;
+
+    // BUG-802: read the CURRENT value before any write, so an unconfirmed call can preview
+    // exactly what would change (folded into the CONFIRM_REQUIRED blastRadius text — Envelope's
+    // success:false branch carries no `data` field, matching item-piles' confirmRequiredEnvelope
+    // convention, flow.ts:65-70).
+    const currentValue = game.settings.get('sequencer', input.key);
+    // requireConfirm's param type is `{ confirm?: boolean }`; under this repo's
+    // exactOptionalPropertyTypes:true, Zod's `.optional()` infers `boolean | undefined` (not
+    // exactly-omittable), so pass a normalized boolean rather than `input` directly.
+    const refusal = requireConfirm(
+      { confirm: input.confirm === true },
+      'permission-write',
+      `Sequencer world setting "${input.key}" (current: ${currentValue} -> requested: ${input.value})`,
+    );
+    if (refusal) return refusal;
+
     await game.settings.set('sequencer', input.key, input.value);
     const verified = game.settings.get('sequencer', input.key);
     // mcp_code_quality_v2 Phase C3 (F03 type-aware redesign): input.value is a Zod z.number()
@@ -669,7 +687,9 @@ async function handlePermissionWrite(input: PermissionWriteInput): Promise<Envel
       return { success: false, error: `PERMISSION_WRITE_FAILED: setting ${input.key} expected ${input.value} but got ${verified}` };
     }
     notify.updated('sequencer', `Set permission ${input.key} = ${input.value}`, {});
-    return { success: true, data: { key: input.key, value: input.value, verified } };
+    // BUG-802: mirrors UserSetRoleResponse (user.ts:428-469, schemas/user.ts:251-257) — a world
+    // permission change requires clients to reload to pick up the new authorization state.
+    return { success: true, data: { key: input.key, value: input.value, verified, reloadRequired: true } };
   } catch (e) {
     return { success: false, error: `SEQUENCER_PERMISSION_WRITE_ERROR: ${e instanceof Error ? e.message : String(e)}` };
   }

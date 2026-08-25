@@ -33,6 +33,9 @@ import {
 import { notify } from '../../../notify.js';
 import { Envelope, isGM } from '../_shared/handler-utils.js';
 import { buildOutcomeResponse } from '../../../services/shared/outcome-response.js';
+import { requireConfirm } from '../../../services/shared/destructive-confirm.js';
+import { runWriteSteps, type WriteStep } from '../../../services/shared/resume-boundary.js';
+import { verifyFlagWrite } from '../../../utils/verifyWrite.js';
 
 
 // ── aa.ready capture (ADR-8.1) ──────────────────────────────────────────────
@@ -309,16 +312,83 @@ async function handleSetItemAnimation(input: SetItemInput): Promise<Envelope<unk
 
     const v5 = expandToV5(input.animation, item.name ?? 'item');
 
-    // Two-step write (dossier §3a) — clear old, then set.
-    await item.update({ 'flags.-=autoanimations': null });
-    await item.update({ 'flags.autoanimations': v5 });
+    // BUG-797: snapshot the pre-write flag value BEFORE the delete so every post-delete failure
+    // branch below can restore it instead of leaving the item flagless. `null` (no prior flag)
+    // makes the restore a no-op delete — there was never a "working" flag to lose.
+    const snapshot = (item.flags as any)?.autoanimations ?? null;
+    const restoreSnapshot = async (): Promise<void> => {
+      if (snapshot === null) {
+        await item.update({ 'flags.-=autoanimations': null });
+        return;
+      }
+      await item.update({ 'flags.autoanimations': snapshot });
+      verifyFlagWrite(item, 'autoanimations', 'version', (snapshot as any)?.version, 'AA_ROLLBACK_VERIFY_FAILED');
+    };
+    // Best-effort — a rollback-verify failure is reported as a suffix on the ORIGINAL error,
+    // never thrown over it (the caller needs to see WHY the write failed first).
+    const restoreSnapshotSafe = async (): Promise<string | undefined> => {
+      try {
+        await restoreSnapshot();
+        return undefined;
+      } catch (e) {
+        return e instanceof Error ? e.message : String(e);
+      }
+    };
+
+    // Captures whichever step's run() throws so the reconstructed error below carries the exact
+    // original message — runWriteSteps() itself does not return it (same `runCapturing` idiom as
+    // template-apply.ts's BUG-677 fix).
+    let lastStepError: unknown;
+    const runCapturing = async <T,>(fn: () => Promise<T>): Promise<T> => {
+      try {
+        return await fn();
+      } catch (err) {
+        lastStepError = err;
+        throw err;
+      }
+    };
+
+    // Two-step write (dossier §3a) — clear old, then set — run as runWriteSteps steps so a throw
+    // on either write triggers the clear step's `undo` (restoreSnapshot) instead of leaving the
+    // item flagless (BUG-797, was the outer catch's uncompensated path).
+    const steps: WriteStep[] = [
+      {
+        label: 'clear-old-flag',
+        run: () => runCapturing(async () => {
+          await item.update({ 'flags.-=autoanimations': null });
+          return { updated: [input.uuid] };
+        }),
+        undo: restoreSnapshot,
+      },
+      {
+        label: 'set-new-flag',
+        run: () => runCapturing(async () => {
+          await item.update({ 'flags.autoanimations': v5 });
+          return { updated: [input.uuid] };
+        }),
+      },
+    ];
+    const stepResult = await runWriteSteps(steps);
+    if (stepResult.outcome !== 'applied') {
+      const original = lastStepError instanceof Error
+        ? lastStepError.message
+        : `write step "${stepResult.failedStep}" failed`;
+      const rollbackNote = stepResult.receipt.warnings.length > 0 ? ` (${stepResult.receipt.warnings.join('; ')})` : '';
+      return {
+        success: false,
+        error: `AA_SET_ITEM_ERROR: ${original}${rollbackNote}`,
+      };
+    }
 
     // DP-16 post-write re-read.
     const written = (item.flags as any)?.autoanimations;
     if (!written || written.version !== 5 || written.isCustomized !== true) {
+      // BUG-797: the two-step write itself landed, but content verification failed — restore the
+      // pre-write snapshot before returning so the item never ends up flagless.
+      const rollbackWarning = await restoreSnapshotSafe();
       return {
         success: false,
-        error: `AA_FLAG_VERIFY_FAILED: post-write re-read did not confirm version=5 + isCustomized=true (got version=${written?.version}, isCustomized=${written?.isCustomized})`,
+        error: `AA_FLAG_VERIFY_FAILED: post-write re-read did not confirm version=5 + isCustomized=true (got version=${written?.version}, isCustomized=${written?.isCustomized})${rollbackWarning ? ` — ROLLBACK_FAILED: ${rollbackWarning}` : ''}`,
       };
     }
 
@@ -329,9 +399,12 @@ async function handleSetItemAnimation(input: SetItemInput): Promise<Envelope<unk
     const EXECUTABLE_FIELDS = ['primary', 'secondary', 'source', 'target', 'soundOnly', 'macro', 'meleeSwitch'] as const;
     const contentDrift = EXECUTABLE_FIELDS.filter((f) => JSON.stringify(written[f]) !== JSON.stringify((v5 as any)[f]));
     if (contentDrift.length > 0) {
+      // BUG-797: same rollback as the version/isCustomized branch above — content drifted, so
+      // restore the pre-write snapshot rather than leaving the wrong (or partial) flag in place.
+      const rollbackWarning = await restoreSnapshotSafe();
       return {
         success: false,
-        error: `AA_FLAG_CONTENT_NOT_PERSISTED: version/isCustomized landed but these executable field(s) do not match what was requested: [${contentDrift.join(', ')}]`,
+        error: `AA_FLAG_CONTENT_NOT_PERSISTED: version/isCustomized landed but these executable field(s) do not match what was requested: [${contentDrift.join(', ')}]${rollbackWarning ? ` — ROLLBACK_FAILED: ${rollbackWarning}` : ''}`,
       };
     }
 
@@ -356,6 +429,21 @@ async function handleClearItemAnimation(input: ClearItemInput): Promise<Envelope
     if (typeof item.update !== 'function') {
       return { success: false, error: `NOT_AN_ITEM: uuid "${input.uuid}" is not an updatable Item` };
     }
+
+    // BUG-813: read the config that would be destroyed BEFORE the confirm gate, so an
+    // unconfirmed call previews exactly what it would delete (blastRadius string — Envelope's
+    // success:false branch carries no `data` field, matching item-piles' confirmRequiredEnvelope
+    // convention, flow.ts:65-70).
+    const currentFlags = (item.flags as any)?.autoanimations ?? null;
+    const blastRadius = currentFlags
+      ? `item "${item.name ?? input.uuid}" (menu=${currentFlags.menu ?? '?'}, animation=${currentFlags.primary?.video?.animation ?? '?'}, version=${currentFlags.version ?? '?'})`
+      : `item "${item.name ?? input.uuid}" (no flags.autoanimations currently set)`;
+    // requireConfirm's param type is `{ confirm?: boolean }`; under this repo's
+    // exactOptionalPropertyTypes:true, Zod's `.optional()` infers `boolean | undefined`
+    // (not exactly-omittable), so pass a normalized boolean rather than `input` directly.
+    const refusal = requireConfirm({ confirm: input.confirm === true }, 'clear-item-animation', blastRadius);
+    if (refusal) return refusal;
+
     await item.update({ 'flags.-=autoanimations': null });
     // DP-16 verify absence.
     if ((item.flags as any)?.autoanimations !== undefined) {

@@ -17,7 +17,11 @@ function wire(itemSource: Record<string, unknown>) {
   const actor: any = {
     id: 'actorAAAAAAAAAA1',
     name: 'Test Victim',
-    items: { get: (id: string) => created.find((c) => c.id === id) },
+    items: {
+      get: (id: string) => created.find((c) => c.id === id),
+      find: (fn: (c: any) => boolean) => created.find(fn),
+      some: (fn: (c: any) => boolean) => created.some(fn),
+    },
     createEmbeddedDocuments: vi.fn(async (_type: string, payloads: any[]) => {
       const docs = payloads.map((p, i) => ({ id: `embedded${i}AAAAAAA`, name: p.name, type: p.type, uuid: `Actor.x.Item.embedded${i}` }));
       created.push(...docs);

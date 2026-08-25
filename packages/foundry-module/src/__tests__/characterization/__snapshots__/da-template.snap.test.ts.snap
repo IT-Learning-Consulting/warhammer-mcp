@@ -51,6 +51,9 @@ exports[`template-apply engine — applyTemplate (world actor) write capture > c
         "skipExperienceChecks": true,
       },
       "updateData": {
+        "flags.warhammer-mcp.appliedTemplates": [
+          "tpl-wight",
+        ],
         "name": "Wight Skeleton",
         "prototypeToken.name": "Wight Skeleton",
         "system.characteristics.t.advances": 10,
@@ -132,6 +135,9 @@ exports[`template-apply engine — applyTemplateToToken (synthetic delta) write 
         "skipExperienceChecks": true,
       },
       "updateData": {
+        "flags.warhammer-mcp.appliedTemplates": [
+          "tpl-skirmisher",
+        ],
         "name": "Skirmisher Goblin",
         "system.characteristics.ws.advances": 5,
       },
@@ -198,6 +204,9 @@ exports[`template-apply engine — planTemplateApply / executeTemplatePlan split
         "skipExperienceChecks": true,
       },
       "updateData": {
+        "flags.warhammer-mcp.appliedTemplates": [
+          "tpl-wight",
+        ],
         "name": "Wight Skeleton",
         "prototypeToken.name": "Wight Skeleton",
         "system.characteristics.t.advances": 10,

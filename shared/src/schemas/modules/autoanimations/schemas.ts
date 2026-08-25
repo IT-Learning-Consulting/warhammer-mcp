@@ -140,6 +140,7 @@ export const ModuleAutoAnimationsInput = z.discriminatedUnion('action', [
   z.object({
     action: z.literal('clear-item-animation'),
     uuid: z.string().min(1),
+    confirm: z.boolean().optional(), // CONFIRM-GATE(clear-item-animation):
   }).strict(),
 
   // ── Discovery (read-only, DEPENDENCY_GATED on aa.ready) ───────────────────

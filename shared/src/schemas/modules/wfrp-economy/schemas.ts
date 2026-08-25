@@ -7,7 +7,7 @@
 // `.strict()` ZodObject (NO `.refine`/`.transform` — a ZodEffects breaks the discriminatedUnion);
 // cross-field rules (confirm-gate, large-transfer threshold, target resolution) live in the handler.
 //
-// 91 actions across 16 idioms (capability_audit/wfrp4e-economy.md + phase6_pre_plan.md §Action surface;
+// 92 actions across 16 idioms (capability_audit/wfrp4e-economy.md + phase6_pre_plan.md §Action surface;
 // record-transaction + delete-account added Phase 2, wfrp_economy_system_v1_prd.md §10; apply-levies +
 // money-to-burn added Phase 4, same PRD §10; invest/resolve-investment/list-investments/stash-deposit/
 // stash-withdraw/accrue-interest added Phase 5, same PRD §10; list-enterprises/get-enterprise/
@@ -113,6 +113,11 @@
 //     payout, venture event roll — each seam reads its OWN economy's state; trading quote actions take
 //     an optional economyId, omitted = identity) — the seams live entirely in the fork, this schema
 //     only validates the GM's state pick.
+//   cleanup-orphan-ventures (+1, systemic_bug_class_prevention v2 Phase 2, BUG-821(c)/ADR-16): { confirm }
+//     — GM-only, confirm-gated one-time removal of the pre-existing live venture deeds whose handledBy
+//     array resolves to zero live economies (a residue of the pre-fix scrub-only cascade). No fields
+//     beyond confirm — the handler enumerates the orphan set itself and previews deed count + total
+//     escrow BP before any write.
 //
 // All monetary amounts are integer Brass Pennies (BP); 1 GC = 240 BP, 1 SS = 12 BP.
 //
@@ -682,6 +687,19 @@ export const WfrpEconomyInput = z.discriminatedUnion('action', [
       ventureId,
       standing: ventureStanding,
       confirm: z.boolean().optional(),
+    })
+    .strict(),
+
+  // BUG-821(c) / ADR-16 (systemic_bug_class_prevention v2, Phase 2, task 3.3): the 21 pre-existing live
+  // orphan venture deeds (rows left behind by the pre-fix scrubVentureLinks, which stripped a holder
+  // link but never removed the row) get a SEPARATE, explicitly previewed, confirm-gated one-time cleanup
+  // action — the preventive fix (task 3.2's archive-then-remove cascade) never depends on this action
+  // actually running. No input fields beyond confirm — the handler enumerates every zero-resolving-link
+  // orphan itself.
+  z
+    .object({
+      action: z.literal('cleanup-orphan-ventures'),
+      confirm: z.boolean().optional(), // CONFIRM-GATE(cleanup-orphan-ventures):
     })
     .strict(),
 

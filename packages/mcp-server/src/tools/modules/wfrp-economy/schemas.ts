@@ -3,7 +3,7 @@
 // CCR-5: Zod input validation lives package-local on the foundry-module side. The mcp-server tool layer
 // only needs typed response shapes for this.query<T> (DP-15 — never <any>).
 //
-// Warhammer Economy v1.0.0. 92 actions across 17 idioms (unified-ledger: record-transaction /
+// Warhammer Economy v1.0.0. 93 actions across 17 idioms (unified-ledger: record-transaction /
 // delete-account added Phase 2; levy-and-burn: apply-levies / money-to-burn added Phase 4;
 // banking-and-income: invest / resolve-investment / list-investments / stash-deposit / stash-withdraw /
 // accrue-interest added Phase 5 (+run-economic-cycle added Phase 9, D7 revisit — the module-UI-only
@@ -18,7 +18,9 @@
 // investment-cycle idiom's buy-stock/sell-stock/get-portfolio are RETIRED the same phase — enum literals
 // preserved, WFRP_ECONOMY_ACTION_RETIRED short-circuit); +toggle-venture-badge / issue-parts /
 // set-venture-status / set-venture-standing added Phase 7d2 (Venture Events v2), wfrp_economy_system_v1_prd.md
-// §10; trading idiom (23 actions, trading-* prefix) — the ported trading-places engine, native to this
+// §10; +cleanup-orphan-ventures added systemic_bug_class_prevention v2 Phase 2 (BUG-821(c)/ADR-16) —
+// confirm-gated one-time removal of the pre-existing zero-resolving-link orphan deeds; trading idiom
+// (23 actions, trading-* prefix) — the ported trading-places engine, native to this
 // module — added Phase 7f, wfrp-economy-phase7f plan §10; +trading-list-vehicle-actors /
 // trading-connect-cargo-vehicle / trading-disconnect-cargo-vehicle, vehicle-linked cargo capacity,
 // post-7f; +trading-delete-rumour, post-7f Trade Rumour Table redesign Change 1/2); economic-climate
@@ -33,7 +35,7 @@ export interface WfrpEconomySummary {
   bankCount: number;
   propertyCount: number;
   stockCount: number; // frozen — R7d.7, stock fields never removed
-  ventureCount: number; // ADDITIVE, Phase 7d
+  ventureCount: number; // ADDITIVE, Phase 7d; per-economy scoping BUG-821(c)/ADR-16 (was world-scoped)
 }
 
 export interface WfrpEconomyListEconomiesResult {
@@ -50,7 +52,7 @@ export interface WfrpEconomyGetEconomyResult {
   banks: Array<Record<string, unknown>>;
   properties: Array<Record<string, unknown>>;
   stocks: Array<Record<string, unknown>>; // frozen — R7d.7
-  ventureCount: number; // ADDITIVE, Phase 7d — count of live venture-ledger deeds (world-scoped, not per-economy)
+  ventureCount: number; // ADDITIVE, Phase 7d — count of live venture-ledger deeds handled by THIS economy (BUG-821(c)/ADR-16; was world-scoped)
 }
 
 export interface WfrpEconomyBankerEntry {
@@ -75,7 +77,7 @@ export interface WfrpEconomyCreateEconomyResult {
   bankCount: number;
   stockCount: number; // frozen — R7d.7
   propertyCount: number;
-  ventureCount: number; // ADDITIVE, Phase 7d — world-scoped venture count (ventures aren't per-economy)
+  ventureCount: number; // ADDITIVE, Phase 7d — this economy's own venture count (BUG-821(c)/ADR-16; a fresh economy always reads 0, was world-scoped)
 }
 
 export interface WfrpEconomyUpdateEconomyResult {
@@ -833,6 +835,23 @@ export interface WfrpEconomySetVentureStandingResult {
   standing: string;
 }
 
+/**
+ * BUG-821(c) / ADR-16 (systemic_bug_class_prevention v2, Phase 2, task 3.3) — confirm-gated one-time
+ * removal of the pre-existing live venture deeds whose handledBy array resolves to zero live economies.
+ * `outcome` is the Phase-1-shipped buildOutcomeResponse() discriminator: 'noop' when zero orphans were
+ * found (no archive/write occurred), 'applied' when the confirmed removal ran.
+ */
+export interface WfrpEconomyCleanupOrphanVenturesResult {
+  action: 'cleanup-orphan-ventures';
+  outcome: 'noop' | 'applied';
+  removedCount: number;
+  removedVentureIds: string[];
+  /** BP that was held in escrow by the removed orphan deeds and could not be paid to anyone — written off with the deed, never moved to a wallet. */
+  totalWrittenOffBp: number;
+  /** Present only on 'applied' — the recovery-archive entry id the removed deeds were captured into. */
+  archiveId?: string;
+}
+
 // ── trading (Phase 7f) ───────────────────────────────────────────────────────
 
 export interface WfrpTradingSettlement {
@@ -1171,6 +1190,7 @@ export type WfrpEconomyResult =
   | WfrpEconomyIssuePartsResult
   | WfrpEconomySetVentureStatusResult
   | WfrpEconomySetVentureStandingResult
+  | WfrpEconomyCleanupOrphanVenturesResult
   | WfrpEconomyTradingListSettlementsResult
   | WfrpEconomyTradingListCargoTypesResult
   | WfrpEconomyTradingGetSeasonResult
@@ -1270,6 +1290,7 @@ export const WFRP_ECONOMY_ACTIONS = [
   'issue-parts',
   'set-venture-status',
   'set-venture-standing',
+  'cleanup-orphan-ventures',
   'trading-list-settlements',
   'trading-list-cargo-types',
   'trading-get-season',

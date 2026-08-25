@@ -129,7 +129,7 @@ describe('set-item-animation — v5 write invariants', () => {
 describe('clear-item-animation', () => {
   it('clears flags and verifies absence', async () => {
     item.flags.autoanimations = { version: 5, isCustomized: true };
-    const result = await dispatchModuleAutoAnimations({ action: 'clear-item-animation', uuid: 'Actor.x.Item.y' });
+    const result = await dispatchModuleAutoAnimations({ action: 'clear-item-animation', uuid: 'Actor.x.Item.y', confirm: true });
     expect(result.success).toBe(true);
     expect(item.flags.autoanimations).toBeUndefined();
   });

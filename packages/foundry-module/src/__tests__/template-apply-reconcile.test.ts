@@ -16,6 +16,25 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TemplateApplyService } from '../services/template-apply.js';
 
+// BUG-677 (systemic_bug_class_prevention v2 Phase 2, task 2.1): executeTemplatePlan's WRITE#1 now
+// additionally stamps `flags.warhammer-mcp.appliedTemplates` and verifies it via verifyDocWrite
+// against the re-fetched (`fromUuid`) doc's `_source` — these fixtures' actor mocks must round-trip
+// that flag write like the other template-apply test files (apply-template.test.ts,
+// characterization/da-template.snap.test.ts) already do, or the verify spuriously drifts. Mechanical
+// fixture fidelity fix only — no assertion/intent changes.
+function applyDotPath(target: Record<string, any>, updateData: Record<string, any>): void {
+  for (const [path, value] of Object.entries(updateData)) {
+    const parts = path.split('.');
+    let cur = target;
+    for (let i = 0; i < parts.length - 1; i++) {
+      const key = parts[i]!;
+      if (cur[key] == null) cur[key] = {};
+      cur = cur[key];
+    }
+    cur[parts[parts.length - 1]!] = value;
+  }
+}
+
 function makePlan(actor: any, requested: any[]): any {
   return {
     actor,
@@ -33,8 +52,12 @@ function makePlan(actor: any, requested: any[]): any {
 }
 
 describe('BUG-451: executeTemplatePlan per-item reconciliation', () => {
+  // BUG-677 fixture fidelity (see applyDotPath doc-comment above): freshDocShadow is the object
+  // `fromUuid` returns post-update; each test's `actor.update` mock writes onto its `_source`.
+  let freshDocShadow: any;
   beforeEach(() => {
-    (globalThis as any).fromUuid = vi.fn().mockResolvedValue({});
+    freshDocShadow = { _source: {} };
+    (globalThis as any).fromUuid = vi.fn().mockImplementation(async () => freshDocShadow);
   });
 
   it('PASSES when a requested item was merged into an existing embedded item (not created)', async () => {
@@ -46,7 +69,9 @@ describe('BUG-451: executeTemplatePlan per-item reconciliation', () => {
       id: 'a1',
       name: 'Test Shaman',
       uuid: 'Actor.a1',
-      update: vi.fn().mockResolvedValue(undefined),
+      update: vi.fn(async (updateData: Record<string, any>) => {
+        applyDotPath(freshDocShadow._source, updateData);
+      }),
       // wfrp4e merged "Dodge" into the pre-existing embedded skill — only Melee comes back.
       createEmbeddedDocuments: vi.fn().mockResolvedValue([{ id: 'i1', name: 'Melee (Basic)', type: 'skill' }]),
       // post-write collection: both names present (Dodge pre-existing, advances merged)
@@ -69,7 +94,9 @@ describe('BUG-451: executeTemplatePlan per-item reconciliation', () => {
       id: 'a1',
       name: 'Test',
       uuid: 'Actor.a1',
-      update: vi.fn().mockResolvedValue(undefined),
+      update: vi.fn(async (updateData: Record<string, any>) => {
+        applyDotPath(freshDocShadow._source, updateData);
+      }),
       createEmbeddedDocuments: vi.fn().mockResolvedValue([]),
       items: [{ id: 'i0', name: 'Dodge', type: 'skill' }],
     };
@@ -92,7 +119,9 @@ describe('BUG-451: executeTemplatePlan per-item reconciliation', () => {
       id: 'a1',
       name: 'Test Shaman',
       uuid: 'Actor.a1',
-      update: vi.fn().mockResolvedValue(undefined),
+      update: vi.fn(async (updateData: Record<string, any>) => {
+        applyDotPath(freshDocShadow._source, updateData);
+      }),
       createEmbeddedDocuments: vi.fn().mockResolvedValue([]),
       updateEmbeddedDocuments: vi.fn().mockImplementation(async (_type: string, updates: any[]) => {
         for (const u of updates) if (u._id === chan.id) chan.system.advances.value = u['system.advances.value'];
@@ -126,7 +155,9 @@ describe('BUG-451: executeTemplatePlan per-item reconciliation', () => {
       id: 'a1',
       name: 'Test Shaman',
       uuid: 'Actor.a1',
-      update: vi.fn().mockResolvedValue(undefined),
+      update: vi.fn(async (updateData: Record<string, any>) => {
+        applyDotPath(freshDocShadow._source, updateData);
+      }),
       createEmbeddedDocuments: vi.fn().mockResolvedValue([]),
       updateEmbeddedDocuments: vi.fn().mockImplementation(async (_type: string, updates: any[]) => {
         for (const u of updates) {
@@ -155,7 +186,9 @@ describe('BUG-451: executeTemplatePlan per-item reconciliation', () => {
       id: 'a1',
       name: 'Test',
       uuid: 'Actor.a1',
-      update: vi.fn().mockResolvedValue(undefined),
+      update: vi.fn(async (updateData: Record<string, any>) => {
+        applyDotPath(freshDocShadow._source, updateData);
+      }),
       createEmbeddedDocuments: vi.fn().mockResolvedValue([]),
       // Simulate the BUG-460 failure: the update is accepted but the embedded value never changes
       // (routed to the world Items collection where the id doesn't resolve).
@@ -182,7 +215,9 @@ describe('BUG-451: executeTemplatePlan per-item reconciliation', () => {
       id: 'a1',
       name: 'Test',
       uuid: 'Actor.a1',
-      update: vi.fn().mockResolvedValue(undefined),
+      update: vi.fn(async (updateData: Record<string, any>) => {
+        applyDotPath(freshDocShadow._source, updateData);
+      }),
       createEmbeddedDocuments: vi.fn().mockResolvedValue(created),
       items: created,
     };

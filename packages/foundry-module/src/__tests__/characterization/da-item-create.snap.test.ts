@@ -165,7 +165,11 @@ describe('QueryHandlers.handleAddItemFromCompendium — write-arg characterizati
     const actor = {
       id: 'a1',
       name: 'Hans',
-      items: { get: (itemId: string) => backingItems.get(itemId) ?? null },
+      items: {
+        get: (itemId: string) => backingItems.get(itemId) ?? null,
+        find: (fn: (c: any) => boolean) => [...backingItems.values()].find(fn),
+        some: (fn: (c: any) => boolean) => [...backingItems.values()].some(fn),
+      },
       createEmbeddedDocuments: vi.fn(async (_type: string, payloads: any[]) =>
         payloads.map((p, i) => {
           const created = { id: `added-${i}`, name: p.name, type: p.type, uuid: `Actor.a1.Item.added-${i}` };

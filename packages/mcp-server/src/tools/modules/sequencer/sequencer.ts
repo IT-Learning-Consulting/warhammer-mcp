@@ -8,6 +8,10 @@
 //   - DP-15: typed this.query<T> — never <any>.
 //   - R2.4: errors route through the shared BaseTool.errorResponse.
 //   - Phase 5 module_integration_v1 acceptance criteria #2.
+//
+// GATE-SUPPRESS[success-semantics]: systemic_bug_class_prevention v2 Phase 1 (BUG-793) touches only
+// the play-sequence-json/play-sound options schema description here — this tool's outcome-field
+// retrofit (HC4/check-outcome-field allowlist membership) is out of scope; owned by v2 Phase 3 (C2).
 
 import { BaseTool, BaseToolOptions } from '../../../base-tool.js';
 import {
@@ -64,6 +68,11 @@ interface PermissionWriteResult {
   key?: string;
   value?: number;
   verified?: number;
+  // BUG-802: present on the confirmed-write success payload only — the CONFIRM_REQUIRED refusal
+  // throws inside this.query() (BaseTool.query() unwrap contract) before reaching this tool, so
+  // its current/requested-value preview surfaces via the thrown error message text, not a field
+  // here.
+  reloadRequired?: boolean;
 }
 
 type SequencerResult = SequencerPlayResult | SequencerEffectsResult | DatabaseResult | PermissionWriteResult;
@@ -176,7 +185,7 @@ PRELOAD:
 - preload             { files, showProgressBar? }     — Preloader.preload (GM client)
 - preload-for-clients { files, showProgressBar?, confirm? } — broadcasts to ALL clients. BUG-810: confirm optional at parse time; omitted/false → clean CONFIRM_REQUIRED token; pass confirm:true to proceed.
 PERMISSIONS:
-- permission-write    { key, value }                  — set Sequencer world permission (0-3)
+- permission-write    { key, value, confirm? }        — set Sequencer world permission (0-3). BUG-802: confirm optional at parse time; omitted/false → clean CONFIRM_REQUIRED token whose message names the current value alongside the requested one — pass confirm:true to proceed. A confirmed write returns reloadRequired:true (clients must reload to pick up the new world-permission state, same signal as user.set-role).
   keys: permissions-effect-create|delete, permissions-sound-create, permissions-preload, permissions-sidebar-tools
 
 GM required for all actions.
@@ -211,11 +220,11 @@ Performance Notes:
               items: { type: 'object' },
               description: '[play-sequence-json] Array of section objects. SIMPLIFIED style: {type:"effect"|"sound", file, ...options} (recommended; expanded server-side, BUG-462). SERIALIZED style: full Sequence.toJSON() sections (type in [effect,sound,scrollingText,canvasPan,wait], each with repetitionsDelay[min,max]). Never mix styles in one call.',
             },
-            options: { type: 'object', description: '[play-sequence-json/play-sound] Play options passed to .play().' },
+            options: { type: 'object', additionalProperties: false, description: '[play-sequence-json/play-sound] Reserved for future .play() options. BUG-793: no key is currently accepted — Sequence.play()\'s only options (remote/preload/local) are broadcast/preload controls excluded here to prevent bypassing the confirm-gated preload-for-clients action; omit this field.' },
             filter: { type: 'object', description: '[end-effects/get-effects/update-effects/end-sounds/get-sounds] EffectManager InFilters: {name?,sceneId?,source?,target?,origin?,effects?}.' },
             updates: { type: 'object', description: '[update-effects] Property updates to apply to matched effects.' },
             sceneId: { type: 'string', description: '[end-all-effects] Limit to this scene ID. (end-all-sounds no longer accepts a scene — Sequencer 4.2.x ends all sounds globally.)' },
-            confirm: { type: 'boolean', description: '[end-all-effects/end-all-sounds/preload-for-clients] Must be true to proceed with these destructive/broadcast actions. BUG-810: optional at the schema layer (omitting it or passing false both return a clean CONFIRM_REQUIRED token instead of a raw parse error) — but the action will not execute without confirm:true.' },
+            confirm: { type: 'boolean', description: '[end-all-effects/end-all-sounds/preload-for-clients/permission-write] Must be true to proceed with these destructive/broadcast/world-authorization actions. BUG-810/BUG-802: optional at the schema layer (omitting it or passing false both return a clean CONFIRM_REQUIRED token instead of a raw parse error) — but the action will not execute without confirm:true. For permission-write the CONFIRM_REQUIRED message names the current permission value against the requested one; a confirmed write returns reloadRequired:true.' },
             file: { type: 'string', description: '[play-sound] Sound file path.' },
             files: { type: 'array', items: { type: 'string' }, description: '[preload/preload-for-clients] File paths to preload.' },
             showProgressBar: { type: 'boolean', description: '[preload/preload-for-clients] Show loading progress bar.' },
@@ -264,7 +273,9 @@ Performance Notes:
         text = formatDatabase(data as DatabaseResult, action);
       } else if (action === 'permission-write') {
         const r = data as PermissionWriteResult;
-        text = `module-sequencer.permission-write: ${r.key} = ${r.value} (verified: ${r.verified})`;
+        // BUG-802: reloadRequired is present only on the confirmed-write success payload
+        // (the CONFIRM_REQUIRED refusal throws inside this.query() and never reaches here).
+        text = `module-sequencer.permission-write: ${r.key} = ${r.value} (verified: ${r.verified})${r.reloadRequired ? ' — reload required for clients to pick up the new permission' : ''}`;
       } else {
         text = formatEffects(data as SequencerEffectsResult, action);
       }

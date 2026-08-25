@@ -70,4 +70,8 @@ export const AddItemFromCompendiumInput = z.object({
   itemUuid: FoundryUuid.optional(),
   compendiumId: z.string().optional(), // not a document id (compendium pack string) — left bare per Phase 1 design
   skipSpecialisationChoice: z.boolean().optional(),
+  // BUG-711 (Phase 2 task 2.3): a timed-out retry of this call is dedupe-gated by default
+  // (natural key: the resolved compendium sourceUuid, falling back to {name, type} for legacy
+  // items). Pass true to force a genuine second copy (e.g. two identical daggers) past the gate.
+  allowDuplicate: z.boolean().optional(),
 }).strict();

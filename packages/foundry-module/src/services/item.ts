@@ -22,6 +22,7 @@ import { _resolveItem } from './shared/document-resolver.js';
 import { buildOperationReceipt } from './shared/operation-receipt.js';
 import { buildOutcomeResponse } from './shared/outcome-response.js';
 import { verifyDocWrite } from '../utils/verifyWrite.js';
+import { precheckAlreadyApplied } from './shared/resume-boundary.js';
 
 export class ItemService {
   constructor(private readonly validateState: () => void) {}
@@ -490,6 +491,46 @@ export class ItemService {
     if (itemData?.system?.prompt === true && !itemData?.system?.location?.key) {
       itemData.system.prompt = false;
     }
+
+    // BUG-711 (Phase 2 task 2.3): a timed-out add-item-from-compendium call that actually
+    // landed must not be blindly duplicated by a caller retry. Natural key is the resolved
+    // compendium sourceUuid stamped below on every item this method creates; legacy items
+    // created before this fix carry no such flag, so fall back to {name, type} matching for
+    // those. This gate sits AFTER every preceding exit (uuid/actor/compendium-not-found) —
+    // it only fires once the item has fully resolved.
+    const itemName = (itemData as any)?.name;
+    const itemType = (itemData as any)?.type;
+    const matchesExisting = (existing: any): boolean => {
+      const existingSourceUuid = existing.getFlag?.('warhammer-mcp', 'sourceUuid');
+      if (existingSourceUuid) return existingSourceUuid === uuid;
+      return existing.name === itemName && existing.type === itemType;
+    };
+    const alreadyApplied = await precheckAlreadyApplied(
+      () => (actor.items as any)?.some(matchesExisting) ?? false,
+    );
+    if (alreadyApplied && parsed.allowDuplicate !== true) {
+      const existingItem = (actor.items as any)?.find(matchesExisting);
+      return buildOutcomeResponse('alreadyApplied', {
+        ...buildOperationReceipt(),
+        itemId: existingItem?.id ?? null,
+        itemName: existingItem?.name ?? itemName,
+        itemType: existingItem?.type ?? itemType,
+        actorId: actor.id,
+        actorName: actor.name,
+        message: `"${existingItem?.name ?? itemName}" is already present on ${actor.name} — skipped duplicate create. Pass allowDuplicate:true to force a second copy.`,
+      });
+    }
+
+    // Stamp the resolved compendium sourceUuid on the created item's data — the natural key
+    // the dedupe gate above (and any future retry) checks against.
+    itemData.flags = {
+      ...(itemData.flags ?? {}),
+      'warhammer-mcp': {
+        ...((itemData.flags as any)?.['warhammer-mcp'] ?? {}),
+        sourceUuid: uuid,
+      },
+    };
+
     const embedOptions: Record<string, unknown> = {};
     if (parsed.skipSpecialisationChoice) embedOptions.skipSpecialisationChoice = true;
     const createdItems = await actor.createEmbeddedDocuments('Item', [itemData], embedOptions);
