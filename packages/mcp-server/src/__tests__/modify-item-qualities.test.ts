@@ -22,11 +22,13 @@ function makeTool() {
   const foundryClient: any = {
     query: vi.fn(async (key: string, args: any) => {
       calls.push({ key, args });
+      // BUG-869: this.query() returns the ALREADY-UNWRAPPED payload (BaseTool.query() contract) —
+      // { itemName, owner, outcome }, matching ItemService.modifyItemQualities' single success
+      // path (services/item.ts:693, buildOutcomeResponse('applied', { itemName, owner })).
       return {
-        success: true,
-        data: {
-          itemName: args.itemName ?? 'unknown-item',
-        },
+        itemName: args.itemName ?? 'unknown-item',
+        owner: 'Hans',
+        outcome: 'applied',
       };
     }),
   };
@@ -121,5 +123,29 @@ describe('modify-item-qualities — tool dispatch', () => {
     expect(calls[0].args.destination).toEqual({ type: 'actor', actorName: 'Hans' });
     expect(calls[0].args.itemName).toBe('Longsword');
     expect(calls[0].args.addQualities).toEqual([{ name: 'damaging' }]);
+  });
+});
+
+// BUG-869 — structuredContent + outputSchema envelope (D5: additive; the existing text summary
+// survives byte-unchanged, structuredContent is new).
+describe('modify-item-qualities — output envelope (BUG-869)', () => {
+  it('declares an outputSchema whose outcome enum is exactly the 5-value success-semantics set', () => {
+    const { tool } = makeTool();
+    const def: any = tool.getToolDefinitions()[0];
+    expect(def.outputSchema).toBeTruthy();
+    const outcomeEnum = def.outputSchema.properties?.outcome?.enum;
+    expect(outcomeEnum).toEqual(['applied', 'alreadyApplied', 'noop', 'partial', 'failed']);
+  });
+
+  it('returns a content+structuredContent envelope, text summary byte-identical to the pre-BUG-869 shape', async () => {
+    const { tool } = makeTool();
+    const result: any = await tool.handle({
+      destination: { type: 'actor', actorName: 'Hans' },
+      itemName: 'Longsword',
+      addQualities: [{ name: 'damaging' }],
+    });
+    // CCR-7 additive-envelope proof — the human-readable text callers already parse is unchanged.
+    expect(result.content).toEqual([{ type: 'text', text: 'Modified **Longsword**.\nAdded qualities: damaging' }]);
+    expect(result.structuredContent).toEqual({ itemName: 'Longsword', owner: 'Hans', outcome: 'applied' });
   });
 });

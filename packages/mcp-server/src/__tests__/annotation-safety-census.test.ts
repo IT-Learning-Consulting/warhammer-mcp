@@ -35,7 +35,8 @@ const READ_ONLY_ACTIONS = new Set([
 // Mutating actions: writes, deletes, world-config changes, or client broadcasts.
 const MUTATING_ACTIONS = new Set([
   // module-autoanimations
-  'set-item-animation', 'clear-item-animation', 'merge-autorec-entry', 'play-animation',
+  'set-item-animation', 'clear-item-animation', 'merge-autorec-entry',
+  'update-autorec-entry', 'remove-autorec-entry', 'play-animation',
   // module-sequencer
   'play-sequence-json', 'end-effects', 'end-all-effects', 'update-effects',
   'play-sound', 'end-sounds', 'end-all-sounds',

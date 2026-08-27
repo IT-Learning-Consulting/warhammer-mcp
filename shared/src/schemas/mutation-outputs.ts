@@ -204,6 +204,44 @@ export type MattMutationOutputType = z.infer<typeof MattMutationOutput>;
 export const ImperialArcanaOutput = z.object({}).passthrough();
 export type ImperialArcanaOutputType = z.infer<typeof ImperialArcanaOutput>;
 
+// --- modify-item-qualities.ts (raw passthrough; faithful to ItemService.modifyItemQualities,
+//     services/item.ts:559-694 — single success path, `buildOutcomeResponse('applied', { itemName,
+//     owner })`). BUG-869: the `outcome` the foundry-module handler already computed never reached
+//     the mcp-server wire — modify-item-qualities.ts emitted a text-only response with no
+//     structuredContent/outputSchema, so callers had no machine-readable success signal. ---
+export const ModifyItemQualitiesOutput = z.object({
+  itemName: z.string(),
+  owner: z.string(),
+  outcome: z.enum(['applied', 'alreadyApplied', 'noop', 'partial', 'failed']),
+}).passthrough();
+export type ModifyItemQualitiesOutputType = z.infer<typeof ModifyItemQualitiesOutput>;
+
+// --- add-item-from-compendium.ts (raw passthrough; faithful to ItemService.addItemFromCompendium,
+//     services/item.ts:473-556 — two branches: `buildOutcomeResponse('alreadyApplied', {...
+//     buildOperationReceipt(), itemId(nullable), itemName, itemType, actorId, actorName, message })`
+//     on the dedupe hit, `buildOutcomeResponse('applied', { itemId, itemName, itemType, actorId,
+//     actorName, message })` on a fresh create. Phase 3 task 4.1 (widened): the `applied` branch
+//     previously returned a bare object with NO `outcome` field — the create-branch fix is a
+//     sibling of this schema addition, not a pre-existing fact. The operation-receipt fields
+//     (operationId/createdDocumentIds/updatedDocumentIds/deletedDocumentIds/warnings) are present
+//     ONLY on the `alreadyApplied` branch — the `applied` branch does not call
+//     buildOperationReceipt(), so those fields stay optional here. ---
+export const AddItemFromCompendiumOutput = z.object({
+  itemId: z.string().nullable(),
+  itemName: z.string(),
+  itemType: z.string(),
+  actorId: z.string(),
+  actorName: z.string(),
+  message: z.string(),
+  outcome: z.enum(['applied', 'alreadyApplied', 'noop', 'partial', 'failed']),
+  operationId: z.string().optional(),
+  createdDocumentIds: z.array(z.string()).optional(),
+  updatedDocumentIds: z.array(z.string()).optional(),
+  deletedDocumentIds: z.array(z.string()).optional(),
+  warnings: z.array(z.string()).optional(),
+}).passthrough();
+export type AddItemFromCompendiumOutputType = z.infer<typeof AddItemFromCompendiumOutput>;
+
 // --- JSON-schema consts for the 10 new DTOs ---
 export const APPLY_DAMAGE_OUTPUT_JSON_SCHEMA = zodToJsonSchema(ApplyDamageOutput, { target: 'jsonSchema7' });
 export const APPLY_TEMPLATE_TO_TOKEN_OUTPUT_JSON_SCHEMA = zodToJsonSchema(ApplyTemplateToTokenOutput, { target: 'jsonSchema7' });
@@ -216,3 +254,5 @@ export const DELETE_ACTIVE_EFFECT_OUTPUT_JSON_SCHEMA = zodToJsonSchema(DeleteAct
 export const REGION_MUTATION_OUTPUT_JSON_SCHEMA = zodToJsonSchema(RegionMutationOutput, { target: 'jsonSchema7' });
 export const MATT_MUTATION_OUTPUT_JSON_SCHEMA = zodToJsonSchema(MattMutationOutput, { target: 'jsonSchema7' });
 export const IMPERIAL_ARCANA_OUTPUT_JSON_SCHEMA = zodToJsonSchema(ImperialArcanaOutput, { target: 'jsonSchema7' });
+export const MODIFY_ITEM_QUALITIES_OUTPUT_JSON_SCHEMA = zodToJsonSchema(ModifyItemQualitiesOutput, { target: 'jsonSchema7' });
+export const ADD_ITEM_FROM_COMPENDIUM_OUTPUT_JSON_SCHEMA = zodToJsonSchema(AddItemFromCompendiumOutput, { target: 'jsonSchema7' });

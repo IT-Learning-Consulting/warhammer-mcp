@@ -8,6 +8,17 @@ export interface ApplyNpcCareerAdvanceToolOptions {
   logger: Logger;
 }
 
+// Phase 3 (systemic_bug_class_prevention v2, task 5.2, D8): empty-passthrough outputSchema,
+// mirroring module-matt's MattMutationOutput/MATT_MUTATION_OUTPUT_JSON_SCHEMA precedent
+// (z.object({}).passthrough() run through zodToJsonSchema). Inlined here rather than added to
+// shared/src/schemas/mutation-outputs.ts — this task's declared file set is this file +
+// item-piles.ts/sequencer.ts/autoanimations.ts only.
+const APPLY_NPC_CAREER_ADVANCE_OUTPUT_JSON_SCHEMA = {
+  type: 'object',
+  properties: {},
+  additionalProperties: true,
+} as const;
+
 export class ApplyNpcCareerAdvanceTool extends BaseTool {
   constructor(options: BaseToolOptions) {
     super(options);
@@ -62,6 +73,7 @@ Performance Notes:
           },
           required: ['actorId', 'careerItemId'],
         },
+        outputSchema: APPLY_NPC_CAREER_ADVANCE_OUTPUT_JSON_SCHEMA,
       },
     ];
   }

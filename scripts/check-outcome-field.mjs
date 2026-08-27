@@ -9,15 +9,34 @@
 // the ZodEffects/ZodOptional peel trap the Zod parity checker hit does not apply. Deliberate omission,
 // not an oversight.
 //
-// Three rules:
+// Four rules:
 //   1. schema           — for each allowlisted tool that declares a concrete `outcome` property in its
 //                          published outputSchema, its `.enum` must equal the 5-value OutcomeValue set
 //                          exactly. Tools with no outputSchema, or an empty-passthrough outputSchema
 //                          (the region/MATT/imperial-arcana carve-out, D5), are skipped — not offenders.
+//   1b. schema-presence  — systemic_bug_class_prevention v2 Phase 3, D6. Rule 1 above is silent (not an
+//       + wire-emission     offender) when an allowlisted tool declares NO outputSchema at all — exactly
+//                          the BUG-869 gap (modify-item-qualities emitted an `outcome` from its handler
+//                          that never reached the wire, and rule 1 couldn't see it because it only
+//                          inspects tools that already declare an outputSchema). Rule 1b closes that
+//                          blind spot: for EVERY allowlisted tool, (a) its published def MUST declare
+//                          an outputSchema — an empty-passthrough schema counts, same as rule 1's own
+//                          carve-out semantics, this only checks presence, not enum-exactness (rule 1
+//                          still owns that); AND (b) its mcp-server tool source file must contain a
+//                          literal `structuredContent` emission (source grep via the NEW
+//                          TOOL_STRUCTURED_CONTENT_FILES map below — distinct from TOOL_HANDLER_FILES,
+//                          which maps to the foundry-module SIDE). Either (a) or (b) absent is a HARD
+//                          offender — same severity class as rules 1/2. RULE_1B_CARVEOUTS is the named,
+//                          justified-exception escape hatch (R3.8): a tool legitimately cannot emit
+//                          structuredContent (an SDK limitation) goes here, WITH justification in a
+//                          comment — never as a shortcut for "hasn't been retrofitted yet".
 //   2. builder-usage     — each allowlisted tool's known foundry-module handler file(s) must contain at
-//                          least one `buildOutcomeResponse(` call. The tool -> handler-file map below is
-//                          the plan's own "Files to Modify" list (systemic-bug-class-prevention-phase3-
-//                          success-semantics.md), not re-derived by convention-guessing.
+//                          least one call from BUILDER_TOKENS (`buildOutcomeResponse(` or, per D7,
+//                          `runWriteSteps(` — apply-template's outcome is produced by the
+//                          resume-boundary.ts runWriteSteps composer, not buildOutcomeResponse; verified
+//                          live, systemic_bug_class_prevention v2 task 5.1). The tool -> handler-file map
+//                          below is the plan's own "Files to Modify" list (systemic-bug-class-prevention-
+//                          phase3-write-verification.md), not re-derived by convention-guessing.
 //   3. coverage-assertion — `git diff --name-only` over handler/tool source dirs, cross-checked against
 //                          the allowlist's mapped files and `// GATE-SUPPRESS[success-semantics]:` anchors.
 //                          Per D3, an unrepresented diffed file is a RATCHETED baseline entry, not a
@@ -45,8 +64,9 @@ const MODULE_SRC_REL = 'packages/foundry-module/src';
 
 export const OUTCOME_VALUES = ['applied', 'alreadyApplied', 'noop', 'partial', 'failed'];
 
-// The plan's own "Files to Modify" list (systemic-bug-class-prevention-phase3-success-semantics.md) —
-// grounded, not guessed. Paths are relative to packages/foundry-module/src/.
+// The plan's own "Files to Modify" list (systemic-bug-class-prevention-phase3-success-semantics.md,
+// extended by systemic-bug-class-prevention-phase3-write-verification.md task 5.1) — grounded, not
+// guessed. Paths are relative to packages/foundry-module/src/.
 const TOOL_HANDLER_FILES = {
   'add-active-effect': ['services/effects.ts'],
   'modify-item-qualities': ['services/item.ts'],
@@ -64,13 +84,50 @@ const TOOL_HANDLER_FILES = {
   ],
   'module-sequencer': ['handlers/modules/sequencer/sequencer.ts'],
   'module-autoanimations': ['handlers/modules/autoanimations/autoanimations.ts'],
+  // Phase 3 (systemic_bug_class_prevention v2) Q1=B adoption sweep, task 5.1(c):
+  'apply-template': ['services/template-apply.ts'],
+  'add-item-from-compendium': ['services/item.ts'],
+  'module-tokenizer': ['handlers/modules/tokenizer/tokenizer.ts'],
+  'module-wfrp-economy': ['handlers/modules/wfrp-economy/wfrp-economy.ts'],
 };
+
+// Rule 1b's structuredContent-emission source map — the mcp-server-SIDE tool definition file for each
+// allowlisted tool (distinct from TOOL_HANDLER_FILES, which is the foundry-module-side handler; a tool
+// can call buildOutcomeResponse()/runWriteSteps() in its handler and STILL never wire the resulting
+// `outcome` onto the wire if its mcp-server tool class never sets `structuredContent` on its return —
+// exactly BUG-869). Repo-root-relative (these files live under packages/mcp-server/src/tools/, outside
+// MODULE_SRC, so they can't share TOOL_HANDLER_FILES' MODULE_SRC-relative convention).
+const TOOL_STRUCTURED_CONTENT_FILES = {
+  'add-active-effect': ['packages/mcp-server/src/tools/add-active-effect.ts'],
+  'modify-item-qualities': ['packages/mcp-server/src/tools/modify-item-qualities.ts'],
+  'apply-npc-career-advance': ['packages/mcp-server/src/tools/apply-npc-career-advance.ts'],
+  'module-matt': ['packages/mcp-server/src/tools/modules/monks-active-tiles/matt.ts'],
+  'module-itempiles': ['packages/mcp-server/src/tools/modules/item-piles/item-piles.ts'],
+  'module-sequencer': ['packages/mcp-server/src/tools/modules/sequencer/sequencer.ts'],
+  'module-autoanimations': ['packages/mcp-server/src/tools/modules/autoanimations/autoanimations.ts'],
+  'apply-template': ['packages/mcp-server/src/tools/apply-template.ts'],
+  'add-item-from-compendium': ['packages/mcp-server/src/tools/add-item-from-compendium.ts'],
+  'module-tokenizer': ['packages/mcp-server/src/tools/modules/tokenizer/tokenizer.ts'],
+  'module-wfrp-economy': ['packages/mcp-server/src/tools/modules/wfrp-economy/wfrp-economy.ts'],
+};
+
+// Rule 1b carve-out list (D6/R3.8) — initially empty. Admission bar: a tool goes here ONLY when it can
+// be shown that it legitimately cannot emit structuredContent (a genuine SDK/transport limitation),
+// with the justification written inline as a comment next to its entry. Never add a tool here merely
+// because it hasn't been retrofitted with outputSchema/structuredContent yet — that omission is
+// precisely the defect class this rule exists to catch, and papering over it here is a shortcut this
+// list is explicitly not for.
+export const RULE_1B_CARVEOUTS = [];
 
 // Additional accounted files for rule 3 beyond TOOL_HANDLER_FILES' foundry-module handlers — the
 // mcp-server-side tool file for an allowlisted tool, when that tool's own retrofit touched it
 // directly (e.g. BUG-692 adding structuredContent to apply-npc-career-advance.ts). Repo-root-relative.
 const ADDITIONAL_ACCOUNTED_FILES = [
   'packages/mcp-server/src/tools/apply-npc-career-advance.ts',
+  // Phase 3 (systemic_bug_class_prevention v2), tasks 3.2/4.2/5.2: retrofitted directly, same reason.
+  'packages/mcp-server/src/tools/modify-item-qualities.ts',
+  'packages/mcp-server/src/tools/modules/tokenizer/tokenizer.ts',
+  'packages/mcp-server/src/tools/modules/item-piles/item-piles.ts',
 ];
 
 // Dirs whose diffed .ts files are in scope for rule 3.
@@ -87,13 +144,17 @@ Usage: node check-outcome-field.mjs [--help] [--json]
 
 Rules:
   1. schema            allowlisted tool's outputSchema.properties.outcome.enum matches the 5-value set
-  2. builder-usage      allowlisted tool's handler file(s) call buildOutcomeResponse(
+                        (tools with no outputSchema, or an empty-passthrough one, are skipped here)
+  1b. schema-presence  every allowlisted tool MUST (a) declare SOME outputSchema (empty-passthrough
+      + wire-emission  counts) and (b) emit structuredContent from its mcp-server tool source — either
+                        absent is a HARD offender (D6); RULE_1B_CARVEOUTS is the named exception list
+  2. builder-usage      allowlisted tool's handler file(s) call buildOutcomeResponse( or runWriteSteps(
   3. coverage-assertion git-diff'd handler/tool files not covered by the allowlist or a
                         // GATE-SUPPRESS[success-semantics]: anchor are ratcheted as baseline entries
 `);
 }
 
-function loadAllowlist() {
+export function loadAllowlist() {
   const raw = JSON.parse(readFileSync(ALLOWLIST_PATH, 'utf8'));
   if (!Array.isArray(raw)) throw new Error(`${ALLOWLIST_PATH} must be a JSON array of tool names`);
   return raw;
@@ -139,7 +200,10 @@ async function collectDefsFromFile(file, defsByName) {
   }
 }
 
-async function collectToolDefs() {
+// Exported so the fixture test (outcome-field-fixtures.test.ts, task 5.1's "GREEN on the real tree"
+// case) can build a REAL defsByName from the built dist without duplicating this dist-walk-and-import
+// logic — same reuse convention as the other exported rule functions.
+export async function collectToolDefs() {
   let files;
   try {
     files = walkJs(TOOLS_DIST);
@@ -182,6 +246,67 @@ export function checkSchemaRule(allowlist, defsByName) {
   return offenders;
 }
 
+/** Rule 1b(a) — outputSchema PRESENCE (not enum-exactness; rule 1 still owns that). Unlike rule 1's
+ *  `schemaOffenderFor`, absence of any outputSchema at all IS the offense here — that is the whole
+ *  point of this rule (D6). An empty-passthrough outputSchema (any truthy object) counts as declared. */
+function outputSchemaPresenceOffenderFor(toolName, def) {
+  if (def && typeof def === 'object' && def.outputSchema != null && typeof def.outputSchema === 'object') {
+    return null;
+  }
+  const rel = TOOL_HANDLER_FILES[toolName]?.[0] ?? `${toolName}.ts`;
+  return { file: `${MODULE_SRC_REL}/${rel}`, detail: `tool "${toolName}": no outputSchema declared at all — rule 1b requires at least an empty-passthrough schema` };
+}
+
+/** Rule 1b(b) — structuredContent SOURCE emission. `readFile` is injectable, same convention as rule 2's
+ *  `checkBuilderUsageRule`, so the fixture test can seed red/green content without disk I/O. */
+function structuredContentOffenderFor(toolName, readFile) {
+  const files = TOOL_STRUCTURED_CONTENT_FILES[toolName];
+  if (!files) {
+    return { file: `${toolName}.ts`, detail: `tool "${toolName}" is allowlisted but has no known mcp-server tool-file mapping for the rule 1b structuredContent check` };
+  }
+  for (const rel of files) {
+    const full = path.resolve(REPO_ROOT, rel);
+    let content;
+    try {
+      content = readFile(full, rel, toolName);
+    } catch {
+      continue;
+    }
+    if (content.includes('structuredContent')) return null;
+  }
+  return { file: files[0], detail: `tool "${toolName}": no structuredContent emission found in ${files.join(', ')}` };
+}
+
+/** Rule 1b — schema-presence + structuredContent-emission (D6). `carveOuts` is injectable (defaults to
+ *  the real RULE_1B_CARVEOUTS constant) so the fixture test can prove the carve-out mechanism without
+ *  mutating the real, always-empty-by-default exported list. A carved-out tool is skipped entirely —
+ *  neither check runs for it. */
+export function checkRule1b(
+  allowlist,
+  defsByName,
+  readFile = (full) => readFileSync(full, 'utf8'),
+  carveOuts = RULE_1B_CARVEOUTS,
+) {
+  const offenders = [];
+  for (const toolName of allowlist) {
+    if (carveOuts.includes(toolName)) continue;
+    const schemaOffender = outputSchemaPresenceOffenderFor(toolName, defsByName.get(toolName));
+    if (schemaOffender) offenders.push(schemaOffender);
+    const contentOffender = structuredContentOffenderFor(toolName, readFile);
+    if (contentOffender) offenders.push(contentOffender);
+  }
+  return offenders;
+}
+
+// Rule 2's accepted builder-token set (D7): each allowlisted tool's foundry-module handler file(s) must
+// contain at least one of these literal call tokens. `buildOutcomeResponse(` is the original idiom;
+// `runWriteSteps(` was added because apply-template's outcome is produced by Phase 2's
+// resume-boundary.ts runWriteSteps composer, not buildOutcomeResponse — services/template-apply.ts
+// imports runWriteSteps and contains zero buildOutcomeResponse( calls (verified live, task 5.1: 1 vs 0
+// via a Node file read + `grep -a`, since the file carries a pre-existing NUL byte, BUG-878, that makes
+// plain `rg`/`grep` treat it as binary and silently return 0 matches for either token).
+const BUILDER_TOKENS = ['buildOutcomeResponse(', 'runWriteSteps('];
+
 /** Rule 2 — builder-usage. `readFile` is injectable (defaults to real readFileSync) so the fixture test
  *  can seed red/green content without touching the real handler files on disk. */
 export function checkBuilderUsageRule(allowlist, readFile = (full) => readFileSync(full, 'utf8')) {
@@ -201,13 +326,13 @@ export function checkBuilderUsageRule(allowlist, readFile = (full) => readFileSy
       } catch {
         continue;
       }
-      if (content.includes('buildOutcomeResponse(')) {
+      if (BUILDER_TOKENS.some((token) => content.includes(token))) {
         found = true;
         break;
       }
     }
     if (!found) {
-      offenders.push({ file: `${MODULE_SRC_REL}/${files[0]}`, detail: `tool "${toolName}": no buildOutcomeResponse( call found in ${files.join(', ')}` });
+      offenders.push({ file: `${MODULE_SRC_REL}/${files[0]}`, detail: `tool "${toolName}": no ${BUILDER_TOKENS.join(' or ')} call found in ${files.join(', ')}` });
     }
   }
   return offenders;
@@ -263,29 +388,31 @@ async function main() {
   const defsByName = await collectToolDefs();
 
   const schemaOffenders = checkSchemaRule(allowlist, defsByName);
+  const rule1bOffenders = checkRule1b(allowlist, defsByName);
   const builderOffenders = checkBuilderUsageRule(allowlist);
   const coverageOffenders = checkCoverageAssertionRule(allowlist);
 
-  const hardOffenders = [...schemaOffenders, ...builderOffenders];
+  const hardOffenders = [...schemaOffenders, ...rule1bOffenders, ...builderOffenders];
 
   if (jsonMode) {
-    console.log(JSON.stringify({ schema: schemaOffenders, builderUsage: builderOffenders, coverageAssertion: coverageOffenders }, null, 2));
+    console.log(JSON.stringify({ schema: schemaOffenders, rule1b: rule1bOffenders, builderUsage: builderOffenders, coverageAssertion: coverageOffenders }, null, 2));
   } else {
     console.log(`check-outcome-field: ${allowlist.length} allowlisted tool(s) checked.`);
-    if (hardOffenders.length === 0) console.log('PASS: schema + builder-usage rules clean.');
+    if (hardOffenders.length === 0) console.log('PASS: schema + rule 1b + builder-usage rules clean.');
   }
 
-  // Offender lines (stderr, `  <path>.ts` — exactly 2 leading spaces) for ALL three rules, including
+  // Offender lines (stderr, `  <path>.ts` — exactly 2 leading spaces) for ALL four rules, including
   // the ratcheted coverage-assertion ones, so the runner's per-file-parse baseline sees them all.
   if (hardOffenders.length > 0 || coverageOffenders.length > 0) {
-    console.error(`\n${hardOffenders.length} offender(s) (schema + builder-usage), ${coverageOffenders.length} ratcheted coverage-assertion entry(ies):\n`);
+    console.error(`\n${hardOffenders.length} offender(s) (schema + rule 1b + builder-usage), ${coverageOffenders.length} ratcheted coverage-assertion entry(ies):\n`);
     for (const o of [...hardOffenders, ...coverageOffenders]) {
       console.error(`  ${o.file}`);
       console.error(`    - ${o.detail}`);
     }
   }
 
-  // Only rules 1+2 (schema, builder-usage) can fail this script — rule 3 is ratcheted (D3), never hard-fails.
+  // Only rules 1+1b+2 (schema, schema-presence/structuredContent, builder-usage) can fail this script —
+  // rule 3 is ratcheted (D3), never hard-fails.
   process.exit(hardOffenders.length > 0 ? 1 : 0);
 }
 

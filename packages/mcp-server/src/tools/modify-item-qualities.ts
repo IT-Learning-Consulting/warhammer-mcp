@@ -1,4 +1,9 @@
-import { ModifyItemQualitiesV2Input } from '@foundry-mcp/shared';
+import {
+  ModifyItemQualitiesV2Input,
+  ModifyItemQualitiesOutput,
+  type ModifyItemQualitiesOutputType,
+  MODIFY_ITEM_QUALITIES_OUTPUT_JSON_SCHEMA,
+} from '@foundry-mcp/shared';
 import { FoundryClient } from '../foundry-client.js';
 import { Logger } from '../logger.js';
 import { BaseTool, BaseToolOptions } from '../base-tool.js';
@@ -104,11 +109,12 @@ Performance Notes:
             },
           ],
         },
+        outputSchema: MODIFY_ITEM_QUALITIES_OUTPUT_JSON_SCHEMA,
       },
     ];
   }
 
-  async handle(args: unknown): Promise<string> {
+  async handle(args: unknown): Promise<any> {
     const parsed = ModifyItemQualitiesV2Input.parse(args);
     this.logger.info('modify-item-qualities', {
       destination: parsed.destination.type,
@@ -119,12 +125,15 @@ Performance Notes:
       addF: parsed.addFlaws.length,
       rmF: parsed.removeFlaws.length,
     });
-    const result: any = await this.query<any>(
+    const result: any = await this.query<ModifyItemQualitiesOutputType>(
       'modifyItemQualities',
       parsed
     );
     // BUG-325: BaseTool.query() already unwraps the envelope; drop the dead ?.data operand
     const data = result ?? {};
+    // BUG-869 (D5): parse against the shared output schema so `outcome` (already computed by
+    // the foundry-module handler) is validated before it reaches the wire as structuredContent.
+    const structuredContent = ModifyItemQualitiesOutput.parse(data);
     const parts: string[] = [`Modified **${data.itemName ?? parsed.itemName ?? parsed.itemId}**.`];
     if (parsed.addQualities.length)
       parts.push(`Added qualities: ${parsed.addQualities.map((q) => q.name).join(', ')}`);
@@ -133,6 +142,7 @@ Performance Notes:
     if (parsed.addFlaws.length)
       parts.push(`Added flaws: ${parsed.addFlaws.map((f) => f.name).join(', ')}`);
     if (parsed.removeFlaws.length) parts.push(`Removed flaws: ${parsed.removeFlaws.join(', ')}`);
-    return parts.join('\n');
+    const text = parts.join('\n');
+    return { content: [{ type: 'text' as const, text }], structuredContent };
   }
 }

@@ -77,6 +77,146 @@ describe('BUG-784 — falseReturnCause/falseReturnMessage/falseReturnEnvelope', 
   });
 });
 
+// ── systemic_bug_class_prevention v2 Phase 4 (D2, BUG-784 residual) — the 4 precise veto tokens ──
+//
+// falseReturnCause()/falseReturnMessage()/falseReturnEnvelope() now accept an optional
+// `targetUuid`; when a GM is confirmed active, it is probed (in specificity order:
+// isValidItemPile / isItemPileLocked / isItemPileClosed / isItemPileMerchant) for the most
+// specific detectable veto cause. These cases prove (i) each of the 4 new tokens fires under its
+// mocked predicate, (ii) NO_ACTIVE_GM still fires when the GM is genuinely inactive — even with a
+// targetUuid supplied and a predicate that would otherwise match (old exit-state preserved,
+// NO_ACTIVE_GM is checked BEFORE any probing), and (iii) ITEM_PILES_OPERATION_VETOED still fires
+// when the GM is active and no predicate matches (old exit-state preserved, unchanged from the
+// pre-Phase-4 2-way split).
+describe('BUG-784 Phase 4 (D2) — precise veto-token reachability via targetUuid', () => {
+  it('emits ITEM_PILES_INVALID_TARGET when isValidItemPile is false', () => {
+    (globalThis as any).game = {
+      user: { isGM: true },
+      users: [{ isGM: true, active: true }],
+      itempiles: { API: { isValidItemPile: () => false } },
+    };
+    const { noActiveGm, token } = falseReturnCause('Actor.notapile');
+    expect(noActiveGm).toBe(false);
+    expect(token).toBe('ITEM_PILES_INVALID_TARGET');
+
+    const msg = falseReturnMessage('set-pile-state (open)', 'Actor.notapile', undefined, 'Actor.notapile');
+    expect(msg).toMatch(/^ITEM_PILES_INVALID_TARGET:/);
+    expect(msg).not.toContain('NO_ACTIVE_GM');
+  });
+
+  it('emits ITEM_PILES_TARGET_LOCKED when isItemPileLocked is true (isValidItemPile true, so it does not shadow it)', () => {
+    (globalThis as any).game = {
+      user: { isGM: true },
+      users: [{ isGM: true, active: true }],
+      itempiles: { API: { isValidItemPile: () => true, isItemPileLocked: () => true } },
+    };
+    const { token } = falseReturnCause('Actor.locked');
+    expect(token).toBe('ITEM_PILES_TARGET_LOCKED');
+
+    const env = falseReturnEnvelope('add-items', 'Actor.locked', undefined, 'Actor.locked');
+    expect((env as any).error).toMatch(/^ITEM_PILES_TARGET_LOCKED:/);
+    expect((env as any).error).toContain('is currently locked');
+  });
+
+  it('emits ITEM_PILES_TARGET_CLOSED when isItemPileClosed is true (isValidItemPile true, isItemPileLocked false)', () => {
+    (globalThis as any).game = {
+      user: { isGM: true },
+      users: [{ isGM: true, active: true }],
+      itempiles: {
+        API: { isValidItemPile: () => true, isItemPileLocked: () => false, isItemPileClosed: () => true },
+      },
+    };
+    const { token } = falseReturnCause('Actor.closed');
+    expect(token).toBe('ITEM_PILES_TARGET_CLOSED');
+
+    const env = falseReturnEnvelope('remove-items', 'Actor.closed', undefined, 'Actor.closed');
+    expect((env as any).error).toMatch(/^ITEM_PILES_TARGET_CLOSED:/);
+    expect((env as any).error).toContain('is currently closed');
+  });
+
+  it('emits ITEM_PILES_NOT_A_MERCHANT when isItemPileMerchant is false (the 3 earlier predicates all pass)', () => {
+    (globalThis as any).game = {
+      user: { isGM: true },
+      users: [{ isGM: true, active: true }],
+      itempiles: {
+        API: {
+          isValidItemPile: () => true,
+          isItemPileLocked: () => false,
+          isItemPileClosed: () => false,
+          isItemPileMerchant: () => false,
+        },
+      },
+    };
+    const { token } = falseReturnCause('Actor.notmerchant');
+    expect(token).toBe('ITEM_PILES_NOT_A_MERCHANT');
+
+    const env = falseReturnEnvelope('trade-items', 'Actor.notmerchant', undefined, 'Actor.notmerchant');
+    expect((env as any).error).toMatch(/^ITEM_PILES_NOT_A_MERCHANT:/);
+    expect((env as any).error).toContain('does not resolve as an item-pile merchant');
+  });
+
+  it('falls back to ITEM_PILES_OPERATION_VETOED when a GM is active and no predicate matches (old exit-state preserved)', () => {
+    (globalThis as any).game = {
+      user: { isGM: true },
+      users: [{ isGM: true, active: true }],
+      itempiles: {
+        API: {
+          isValidItemPile: () => true,
+          isItemPileLocked: () => false,
+          isItemPileClosed: () => false,
+          isItemPileMerchant: () => true,
+        },
+      },
+    };
+    const { noActiveGm, token } = falseReturnCause('Actor.healthy');
+    expect(noActiveGm).toBe(false);
+    expect(token).toBe('ITEM_PILES_OPERATION_VETOED');
+
+    const env = falseReturnEnvelope('add-items', 'Actor.healthy', undefined, 'Actor.healthy');
+    expect((env as any).error).toMatch(/^ITEM_PILES_OPERATION_VETOED:/);
+  });
+
+  it('a probe that throws is UNDETECTED, not a match — probing continues to the next predicate', () => {
+    (globalThis as any).game = {
+      user: { isGM: true },
+      users: [{ isGM: true, active: true }],
+      itempiles: {
+        API: {
+          isValidItemPile: () => { throw new Error('token-less target'); },
+          isItemPileLocked: () => true,
+        },
+      },
+    };
+    const { token } = falseReturnCause('Actor.throwsOnFirstProbe');
+    expect(token).toBe('ITEM_PILES_TARGET_LOCKED');
+  });
+
+  it('still yields NO_ACTIVE_GM when the GM is genuinely inactive, even with a targetUuid whose predicate would otherwise match (old exit-state preserved — NO_ACTIVE_GM is decided before any probing)', () => {
+    (globalThis as any).game = {
+      user: { isGM: true },
+      users: [{ isGM: true, active: false }],
+      itempiles: { API: { isValidItemPile: () => false, isItemPileLocked: () => true } },
+    };
+    const { noActiveGm, token } = falseReturnCause('Actor.wouldBeLocked');
+    expect(noActiveGm).toBe(true);
+    expect(token).toBe('NO_ACTIVE_GM');
+
+    const msg = falseReturnMessage('add-items', 'Actor.wouldBeLocked', undefined, 'Actor.wouldBeLocked');
+    expect(msg).toMatch(/^NO_ACTIVE_GM:/);
+    expect(msg).not.toContain('ITEM_PILES_TARGET_LOCKED');
+  });
+
+  it('no targetUuid supplied → skips probing entirely and falls back to ITEM_PILES_OPERATION_VETOED (backward-compatible 2-arg call shape)', () => {
+    (globalThis as any).game = {
+      user: { isGM: true },
+      users: [{ isGM: true, active: true }],
+      itempiles: { API: { isValidItemPile: () => false } }, // would match if probed
+    };
+    const { token } = falseReturnCause();
+    expect(token).toBe('ITEM_PILES_OPERATION_VETOED');
+  });
+});
+
 // ── flow.ts: plain item mutation (handleAddItems) ──────────────────────────────────────────────
 
 describe('handleAddItems — BUG-784 (flow.ts)', () => {
@@ -248,6 +388,19 @@ describe('handleTransferCurrency (mode:transfer) — BUG-784 embedded ITEM_PILES
 // ── merchant.ts: handleRefreshMerchant ──────────────────────────────────────────────────────────
 
 describe('handleRefreshMerchant — BUG-784 (merchant.ts)', () => {
+  it('BUG-784 (D3): a non-merchant target is refused pre-call with ITEM_PILES_NOT_A_MERCHANT — the API write is never attempted', async () => {
+    const refreshMerchantInventory = async () => { throw new Error('should never be called — D3 pre-check must refuse first'); };
+    (globalThis as any).game = {
+      user: { isGM: true },
+      users: [{ isGM: true, active: true }],
+      itempiles: { API: { getActorItems: () => [], isItemPileMerchant: () => false, refreshMerchantInventory } },
+    };
+    const result: any = await handleRefreshMerchant({ action: 'refresh-merchant', merchantUuid: 'Actor.notamerchant' } as any);
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/^ITEM_PILES_NOT_A_MERCHANT:/);
+    expect(result.error).not.toContain('NO_ACTIVE_GM');
+  });
+
   it('a hook-veto false stays neutral', async () => {
     (globalThis as any).game = {
       user: { isGM: true },

@@ -1,19 +1,66 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`AddItemFromCompendiumTool — characterization > add item by itemUuid — raw passthrough 1`] = `
+exports[`AddItemFromCompendiumTool — characterization > add item by itemUuid — envelope, wire text matches the pre-existing auto-wrap shape 1`] = `
 {
-  "actorId": "actor-001",
-  "embedded": true,
-  "itemId": "item-new-001",
-  "itemName": "Longsword",
+  "content": [
+    {
+      "text": "{"itemId":"item-new-001","itemName":"Longsword","itemType":"weapon","actorId":"actor-001","actorName":"Test Actor","message":"Successfully added \\"Longsword\\" to Test Actor from compendium","outcome":"applied"}",
+      "type": "text",
+    },
+  ],
+  "structuredContent": {
+    "actorId": "actor-001",
+    "actorName": "Test Actor",
+    "itemId": "item-new-001",
+    "itemName": "Longsword",
+    "itemType": "weapon",
+    "message": "Successfully added "Longsword" to Test Actor from compendium",
+    "outcome": "applied",
+  },
 }
 `;
 
-exports[`AddItemFromCompendiumTool — characterization > add specialisation skill with skipSpecialisationChoice — raw passthrough 1`] = `
+exports[`AddItemFromCompendiumTool — characterization > add specialisation skill with skipSpecialisationChoice — envelope, wire text matches the pre-existing auto-wrap shape 1`] = `
 {
-  "actorId": "actor-002",
-  "embedded": true,
-  "itemId": "item-new-002",
-  "itemName": "Lore (Beasts)",
+  "content": [
+    {
+      "text": "{"itemId":"item-new-002","itemName":"Lore (Beasts)","itemType":"skill","actorId":"actor-002","actorName":"Test Actor 2","message":"Successfully added \\"Lore (Beasts)\\" to Test Actor 2 from compendium","outcome":"applied"}",
+      "type": "text",
+    },
+  ],
+  "structuredContent": {
+    "actorId": "actor-002",
+    "actorName": "Test Actor 2",
+    "itemId": "item-new-002",
+    "itemName": "Lore (Beasts)",
+    "itemType": "skill",
+    "message": "Successfully added "Lore (Beasts)" to Test Actor 2 from compendium",
+    "outcome": "applied",
+  },
+}
+`;
+
+exports[`AddItemFromCompendiumTool — characterization > repeat call — alreadyApplied dedupe branch — envelope, wire text matches the pre-existing auto-wrap shape 1`] = `
+{
+  "content": [
+    {
+      "text": "{"itemId":"item-existing-003","itemName":"Longsword","itemType":"weapon","actorId":"actor-001","actorName":"Test Actor","message":"\\"Longsword\\" is already present on Test Actor — skipped duplicate create. Pass allowDuplicate:true to force a second copy.","outcome":"alreadyApplied","operationId":"op-aifc003","createdDocumentIds":[],"updatedDocumentIds":[],"deletedDocumentIds":[],"warnings":[]}",
+      "type": "text",
+    },
+  ],
+  "structuredContent": {
+    "actorId": "actor-001",
+    "actorName": "Test Actor",
+    "createdDocumentIds": [],
+    "deletedDocumentIds": [],
+    "itemId": "item-existing-003",
+    "itemName": "Longsword",
+    "itemType": "weapon",
+    "message": ""Longsword" is already present on Test Actor — skipped duplicate create. Pass allowDuplicate:true to force a second copy.",
+    "operationId": "op-aifc003",
+    "outcome": "alreadyApplied",
+    "updatedDocumentIds": [],
+    "warnings": [],
+  },
 }
 `;

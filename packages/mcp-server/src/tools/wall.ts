@@ -76,6 +76,9 @@ function formatWallView(w: WallViewModel): string {
     `### Restrictions`,
     `- light: ${w.light} · sight: ${w.sight} · sound: ${w.sound} · move: ${w.move}`,
     `- threshold: attenuation=${w.threshold.attenuation ? 'yes' : 'no'}, light=${w.threshold.light}, sight=${w.threshold.sight}, sound=${w.threshold.sound}`,
+    ``,
+    `### Flags`,
+    `- ${Object.keys(w.flags ?? {}).join(', ') || 'none'}`,
   ].join('\n');
 }
 

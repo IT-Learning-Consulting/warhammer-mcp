@@ -67,6 +67,7 @@ const LIMIT_PARAM_HINTS: Record<string, string> = {
   'module-gmtoolkit': 'run-group-test returns compact per-target rows; narrow targetGroup if the party is very large.',
   'module-syrinscape': 'Pass limit/offset and/or a name filter to list-soundsets / list-moods.',
   'item-directory': 'For search pass limit/offset (default 50) and/or a query term; for list pass page/pageSize.',
+  'module-itempiles': 'For get-contents pass limit/offset to page items and logLimit/logOffset to page the audit log independently (BUG-788); re-call with the returned itemsNextOffset/logNextOffset.',
 };
 
 const GENERIC_HINT = 'Use the tool\'s limit/offset/filter/projection parameters, or narrow the request.';

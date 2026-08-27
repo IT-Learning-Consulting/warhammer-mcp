@@ -1,17 +1,90 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`ModifyItemQualitiesTool — characterization > add qualities to actor-embedded weapon — formatted string 1`] = `
-"Modified **Longsword**.
-Added qualities: impale, precise"
+exports[`ModifyItemQualitiesTool — characterization > add qualities to actor-embedded weapon — envelope, text byte-identical to pre-BUG-869 shape 1`] = `
+{
+  "content": [
+    {
+      "text": "Modified **Longsword**.
+Added qualities: impale, precise",
+      "type": "text",
+    },
+  ],
+  "structuredContent": {
+    "flaws": {
+      "value": [],
+    },
+    "itemName": "Longsword",
+    "outcome": "applied",
+    "owner": "actor-001",
+    "qualities": {
+      "value": [
+        {
+          "name": "impale",
+          "value": null,
+        },
+        {
+          "name": "precise",
+          "value": null,
+        },
+      ],
+    },
+  },
+}
 `;
 
-exports[`ModifyItemQualitiesTool — characterization > add quality and flaw simultaneously — formatted string 1`] = `
-"Modified **Rusty Dagger**.
+exports[`ModifyItemQualitiesTool — characterization > add quality and flaw simultaneously — envelope, text byte-identical to pre-BUG-869 shape 1`] = `
+{
+  "content": [
+    {
+      "text": "Modified **Rusty Dagger**.
 Added qualities: fast
-Added flaws: tiring"
+Added flaws: tiring",
+      "type": "text",
+    },
+  ],
+  "structuredContent": {
+    "flaws": {
+      "value": [
+        {
+          "name": "tiring",
+          "value": null,
+        },
+      ],
+    },
+    "itemName": "Rusty Dagger",
+    "outcome": "applied",
+    "owner": "Hans",
+    "qualities": {
+      "value": [
+        {
+          "name": "fast",
+          "value": null,
+        },
+      ],
+    },
+  },
+}
 `;
 
-exports[`ModifyItemQualitiesTool — characterization > remove flaw from world-scope item — formatted string 1`] = `
-"Modified **Old Shield**.
-Removed flaws: clumsy"
+exports[`ModifyItemQualitiesTool — characterization > remove flaw from world-scope item — envelope, text byte-identical to pre-BUG-869 shape 1`] = `
+{
+  "content": [
+    {
+      "text": "Modified **Old Shield**.
+Removed flaws: clumsy",
+      "type": "text",
+    },
+  ],
+  "structuredContent": {
+    "flaws": {
+      "value": [],
+    },
+    "itemName": "Old Shield",
+    "outcome": "applied",
+    "owner": "(world)",
+    "qualities": {
+      "value": [],
+    },
+  },
+}
 `;

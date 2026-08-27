@@ -201,6 +201,9 @@ export async function handleCreatePile(input: CreatePileInput): Promise<Envelope
     if (outcome.outcome !== 'applied') {
       const warnings = outcome.receipt.warnings;
       if (refused) {
+        // BUG-784 (D2): no actorUuid resolved yet at this failure point (the create-item-pile
+        // step throws before assignment) — nothing exists to probe, so targetUuid is omitted and
+        // the classifier falls straight to its NO_ACTIVE_GM / ITEM_PILES_OPERATION_VETOED split.
         return withWarnings(falseReturnEnvelope('create-pile', `scene ${input.sceneId}`), warnings);
       }
       if (notPersistedMessage) {
@@ -284,7 +287,7 @@ export async function handleUpdatePile(input: UpdatePileInput): Promise<Envelope
     const updateResult = await API.updateItemPile(pileUuid, updateData);
     // BUG-784: classify bare false — GM-disconnect vs. business-condition veto.
     if (updateResult === false) {
-      return falseReturnEnvelope('update-pile', String(pileUuid));
+      return falseReturnEnvelope('update-pile', String(pileUuid), undefined, String(pileUuid));
     }
 
     // DP-16: post-write verify — closure-diff against the requested field set (excluding the
@@ -475,9 +478,13 @@ export async function handleSetPileState(input: SetPileStateInput): Promise<Enve
       } else {
         result = await API.revertTokensFromItemPiles(tokens);
       }
-      // BUG-784: classify bare false — GM-disconnect vs. business-condition veto.
+      // BUG-784: classify bare false — GM-disconnect vs. business-condition veto. This branch acts
+      // on a BATCH of tokens (no single UUID) — probe the first token's pile-actor UUID as a
+      // best-effort representative sample (D2's probes are already independently try/catch-
+      // guarded, so an unresolvable/undefined sample degrades to the neutral veto, never a throw).
       if (result === false) {
-        return falseReturnEnvelope(`set-pile-state (${input.state})`, `${tokens.length} token(s)`);
+        const representativeTargetUuid: string | undefined = (tokens[0] as any)?.document?.actor?.uuid ?? (tokens[0] as any)?.actor?.uuid ?? undefined;
+        return falseReturnEnvelope(`set-pile-state (${input.state})`, `${tokens.length} token(s)`, undefined, representativeTargetUuid);
       }
 
       // BUG-420: echo the per-token SYNTHETIC pile-actor UUIDs (read post-conversion from
@@ -544,7 +551,7 @@ export async function handleSetPileState(input: SetPileStateInput): Promise<Enve
     // preOpenItemPile/preLockItemPile-style hook refusal — the container-type pre-check above
     // (BUG-447) already ruled out "not a container", but a dynamic hook veto is still possible).
     if (result === false) {
-      return falseReturnEnvelope(`set-pile-state (${input.state})`, input.actorUuid);
+      return falseReturnEnvelope(`set-pile-state (${input.state})`, input.actorUuid, undefined, input.actorUuid);
     }
 
     // DP-16: post-write verify — closure-diff against the boolean flag the requested state implies.

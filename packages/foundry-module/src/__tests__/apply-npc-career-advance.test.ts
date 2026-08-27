@@ -299,25 +299,76 @@ describe('applyNpcCareerAdvance — BUG-217/218 observer + post-verify', () => {
 // characteristic/skill/talent deltas to have actually landed, not just document existence.
 
 describe('applyNpcCareerAdvance — BUG-692 explicit timeout failure + real delta verify', () => {
-  it('throws APPLY_NPC_CAREER_ADVANCE_NOT_PERSISTED when the updateActor hook never fires (genuine timeout)', async () => {
+  // BUG-866: the timeout path is no longer an unconditional throw — a bounded re-check
+  // (~3 x 150ms) of the SAME promised-delta verification the success path uses runs first.
+  // This fixture's career now promises a characteristic that advance() never actually delivers
+  // (advance() is a true no-op — no hook fire, no state mutation), so the re-check genuinely
+  // finds the delta absent on every attempt and the original token still fires — the "old
+  // exit-state preserved" sibling case. (Previously this career promised nothing at all, which
+  // is now a vacuously-verified case under BUG-866's re-check and no longer proves a genuine
+  // failure; the promised characteristic makes this fixture an actual absent-delta case again.)
+  it('throws APPLY_NPC_CAREER_ADVANCE_NOT_PERSISTED when the updateActor hook never fires AND the promised delta never lands (genuine timeout)', async () => {
     const hooks = makeHooksMock(); // hook never fired by advance() below — simulates a slow/contended write
     (globalThis as any).Hooks = hooks;
 
-    const career = { id: 'c1', name: 'Apothecary', type: 'career', system: { level: { value: 1 } } };
+    const career = {
+      id: 'c1', name: 'Apothecary', type: 'career',
+      system: { level: { value: 1 }, characteristics: { ws: true }, skills: [], talents: [] },
+    };
     const actor = mockActor({
       id: 'npc-7',
       name: 'Timeout',
       type: 'npc',
       items: [career],
-      advance() { /* never fires the hook */ },
+      advance() { /* never fires the hook, never mutates state */ },
     });
+    (actor as any).system.characteristics = { ws: { advances: 0 } }; // never reaches the expected 5
     (globalThis as any).game.actors = new Map([['npc-7', actor]]);
 
     const qh = makeHandlers();
     await expect(
       (qh.actorService as any).applyNpcCareerAdvance({ actorId: 'npc-7', careerItemId: 'c1' }),
     ).rejects.toThrow(/APPLY_NPC_CAREER_ADVANCE_NOT_PERSISTED.*timed out/);
-  }, 1000);
+  }, 2000);
+
+  // BUG-866: reachability case A — the observer times out (`committed === false`, the old
+  // unconditional-throw condition) but the actor ALREADY carries every promised delta (advance()
+  // mutated state synchronously, same as a real un-awaited actor.update() landing just after the
+  // 250ms window closes) — this is not a failure. The bounded re-check finds the deltas on
+  // (at most) its first pass and the call resolves as success; `advance()` is called exactly
+  // once — no second write is ever issued.
+  it('BUG-866: resolves success when the observer times out but the promised deltas are already present', async () => {
+    const hooks = makeHooksMock(); // hook deliberately never fires — forces committed === false
+    (globalThis as any).Hooks = hooks;
+
+    const career = {
+      id: 'c1', name: 'Apothecary', type: 'career',
+      system: { level: { value: 1 }, characteristics: { ws: true }, skills: ['Heal'], talents: ['Savvy'] },
+    };
+    const healSkill = { id: 'sk1', name: 'Heal', type: 'skill', system: { advances: { value: 5 } } };
+    const advanceCalls: any[] = [];
+    const actor = mockActor({
+      id: 'npc-12', name: 'Already-Landed', type: 'npc', items: [career, healSkill],
+      advance(c: any) {
+        advanceCalls.push(c);
+        // Mutates state synchronously (simulating the un-awaited actor.update() having already
+        // settled) but deliberately never fires the updateActor hook — the observer times out.
+        (actor as any).items.set('tal1', { id: 'tal1', name: 'Savvy', type: 'talent' });
+      },
+    });
+    (actor as any).system.characteristics = { ws: { advances: 5 } }; // meets expected 5 (level 1 * 5)
+    (globalThis as any).game.actors = new Map([['npc-12', actor]]);
+
+    const qh = makeHandlers();
+    const result = await (qh.actorService as any).applyNpcCareerAdvance({
+      actorId: 'npc-12', careerItemId: 'c1',
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.actorId).toBe('npc-12');
+    expect(result.talentsAdded).toBe(1);
+    expect(advanceCalls).toHaveLength(1);
+  }, 2000);
 
   it('throws when the hook fires but the promised characteristic advance never landed', async () => {
     const hooks = makeHooksMock();

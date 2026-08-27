@@ -268,6 +268,21 @@ export const ErrorTokens = {
   ITEM_PILES_REFRESH_MERCHANT_NOT_PERSISTED: 'ITEM_PILES_REFRESH_MERCHANT_NOT_PERSISTED',
   ITEM_PILES_TRADE_ITEMS_NOT_PERSISTED: 'ITEM_PILES_TRADE_ITEMS_NOT_PERSISTED',
   ITEM_PILES_PRICE_MODIFIERS_NOT_PERSISTED: 'ITEM_PILES_PRICE_MODIFIERS_NOT_PERSISTED',
+  // systemic_bug_class_prevention v2 Phase 4 (BUG-784 residual, D2/D4) — item-piles false-return
+  // PROVENANCE tokens. flow.ts's falseReturnCause() re-verifies GM state after every bare `false`
+  // from an item-piles socket call; when a GM is still active, it probes the target (in order:
+  // isValidItemPile / isItemPileLocked / isItemPileClosed / isItemPileMerchant, each try/catch-
+  // guarded — an undetected probe is skipped, never a false match) and emits the most specific
+  // matching token below, falling back to ITEM_PILES_OPERATION_VETOED when none match. No
+  // `_NOT_PERSISTED` suffix on any of these five: they are a read-time DIAGNOSIS of why a call
+  // returned false, not a post-write verify failure — nothing was written, so transaction-
+  // manager's rollback regex must NOT match them. The merchant-type one below also doubles as a
+  // genuine pre-check on refresh-merchant (D3, merchant.ts), not only a post-false diagnosis.
+  ITEM_PILES_OPERATION_VETOED: 'ITEM_PILES_OPERATION_VETOED',
+  ITEM_PILES_INVALID_TARGET: 'ITEM_PILES_INVALID_TARGET',
+  ITEM_PILES_TARGET_LOCKED: 'ITEM_PILES_TARGET_LOCKED',
+  ITEM_PILES_TARGET_CLOSED: 'ITEM_PILES_TARGET_CLOSED',
+  ITEM_PILES_NOT_A_MERCHANT: 'ITEM_PILES_NOT_A_MERCHANT',
   JOURNAL_WRITE_NOT_PERSISTED: 'JOURNAL_WRITE_NOT_PERSISTED',
   KEYBINDING_NOT_PERSISTED: 'KEYBINDING_NOT_PERSISTED',
   LEVELS_WRITE_NOT_PERSISTED: 'LEVELS_WRITE_NOT_PERSISTED',

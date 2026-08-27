@@ -293,6 +293,16 @@ function formatResult(d: WfrpEconomyResult): string {
   }
 }
 
+// Phase 3 (systemic_bug_class_prevention v2, D8): empty-passthrough outputSchema, mirroring
+// module-matt's MattMutationOutput/MATT_MUTATION_OUTPUT_JSON_SCHEMA precedent (z.object({}).passthrough()
+// run through zodToJsonSchema). Inlined here rather than added to shared/src/schemas/mutation-outputs.ts —
+// this task's declared file set is this file + tokenizer.ts only.
+const WFRP_ECONOMY_MUTATION_OUTPUT_JSON_SCHEMA = {
+  type: 'object',
+  properties: {},
+  additionalProperties: true,
+} as const;
+
 export interface ModuleWfrpEconomyToolOptions extends BaseToolOptions {}
 
 export class ModuleWfrpEconomyTool extends BaseTool {
@@ -471,6 +481,7 @@ Performance Notes:
           },
           required: ['action'],
         },
+        outputSchema: WFRP_ECONOMY_MUTATION_OUTPUT_JSON_SCHEMA,
       },
     ];
   }

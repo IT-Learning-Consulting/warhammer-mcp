@@ -503,6 +503,42 @@ export class ActorService {
         ((actor as any).items ?? []).filter((it: any) => it.type === 'talent').map((it: any) => String(it.id)),
       );
 
+      // BUG-218 (existence) + BUG-692 (actual deltas): re-read actor + career, then verify every
+      // promised characteristic/skill/talent delta actually landed — not just that the documents
+      // still exist. Extracted to a closure (BUG-866) so the post-timeout bounded re-check below
+      // can run the EXACT SAME verification the success path uses, instead of duplicating or
+      // weakening it.
+      const verifyDeltasLanded = (): { fresh: any; freshCareer: any; postTalentItems: any[] } => {
+        const fresh = game.actors?.get(data.actorId);
+        const freshCareer = fresh?.items?.get(data.careerItemId);
+        if (!fresh || !freshCareer) {
+          throw new Error(`${ErrorTokens.APPLY_NPC_CAREER_ADVANCE_NOT_PERSISTED}: actor ${data.actorId} or career ${data.careerItemId} missing after advance`);
+        }
+
+        const freshSystem: any = (fresh as any).system ?? {};
+        const shortfalls: string[] = [];
+        for (const ch of flaggedChars) {
+          const advances = Number(freshSystem.characteristics?.[ch]?.advances ?? 0);
+          if (advances < advancesNeeded) shortfalls.push(`characteristic "${ch}" advances ${advances} < expected ${advancesNeeded}`);
+        }
+        const freshItems: any[] = Array.from((fresh as any).items ?? []);
+        for (const skillName of careerSkillNames) {
+          const skillItem = freshItems.find((it: any) => it.type === 'skill' && String(it.name).toLowerCase() === skillName.toLowerCase());
+          const advances = Number(skillItem?.system?.advances?.value ?? -1);
+          if (!skillItem || advances < advancesNeeded) {
+            shortfalls.push(`skill "${skillName}" advances ${advances} < expected ${advancesNeeded}`);
+          }
+        }
+        const postTalentItems = freshItems.filter((it: any) => it.type === 'talent' && !preTalentIds.has(String(it.id)));
+        if (careerTalentNames.length > 0 && postTalentItems.length === 0) {
+          shortfalls.push(`expected ${careerTalentNames.length} new talent item(s) from [${careerTalentNames.join(', ')}], found 0`);
+        }
+        if (shortfalls.length > 0) {
+          throw new Error(`${ErrorTokens.APPLY_NPC_CAREER_ADVANCE_NOT_PERSISTED}: advance() reported commit but the promised deltas did not fully land — ${shortfalls.join('; ')}`);
+        }
+        return { fresh, freshCareer, postTalentItems };
+      };
+
       // BUG-692/BUG-217: StandardActorModel.advance() (wfrp4e.js:7036) is itself synchronous but
       // fire-and-forgets `adv.advance()`, which is `async` yet ALSO calls `this.actor.update()`
       // (wfrp4e.js:2760) without awaiting it — two un-awaited layers between this call and the
@@ -510,43 +546,46 @@ export class ActorService {
       const commitObserved = waitForActorUpdateCommit(String(actor.id), 250);
       model.advance(career);
       const committed = await commitObserved;
-      // BUG-692: a timeout is now an EXPLICIT failure — the old implementation resolved
-      // identically on hook-fire and on timeout, so a genuinely-incomplete advance (e.g. under
-      // contention) was silently reported as success.
+
+      let verified: { fresh: any; freshCareer: any; postTalentItems: any[] };
       if (!committed) {
-        throw new Error(`${ErrorTokens.APPLY_NPC_CAREER_ADVANCE_NOT_PERSISTED}: timed out waiting for actor ${data.actorId}'s updateActor hook after advance() — no commit observed within 250ms`);
-      }
-
-      // BUG-218 (existence) + BUG-692 (actual deltas): re-read actor + career, then verify every
-      // promised characteristic/skill/talent delta actually landed — not just that the documents
-      // still exist.
-      const fresh = game.actors?.get(data.actorId);
-      const freshCareer = fresh?.items?.get(data.careerItemId);
-      if (!fresh || !freshCareer) {
-        throw new Error(`${ErrorTokens.APPLY_NPC_CAREER_ADVANCE_NOT_PERSISTED}: actor ${data.actorId} or career ${data.careerItemId} missing after advance`);
-      }
-
-      const freshSystem: any = (fresh as any).system ?? {};
-      const shortfalls: string[] = [];
-      for (const ch of flaggedChars) {
-        const advances = Number(freshSystem.characteristics?.[ch]?.advances ?? 0);
-        if (advances < advancesNeeded) shortfalls.push(`characteristic "${ch}" advances ${advances} < expected ${advancesNeeded}`);
-      }
-      const freshItems: any[] = Array.from((fresh as any).items ?? []);
-      for (const skillName of careerSkillNames) {
-        const skillItem = freshItems.find((it: any) => it.type === 'skill' && String(it.name).toLowerCase() === skillName.toLowerCase());
-        const advances = Number(skillItem?.system?.advances?.value ?? -1);
-        if (!skillItem || advances < advancesNeeded) {
-          shortfalls.push(`skill "${skillName}" advances ${advances} < expected ${advancesNeeded}`);
+        // BUG-866: a `false` commitObserved means the 250ms window closed with no `updateActor`
+        // hook observed — a TIMEOUT, not proof the write never landed. advance()'s un-awaited
+        // actor.update() (see above) can settle just after the window closes, and BUG-692's old
+        // "timeout is always fatal" rule then false-FAILED a write that HAD fully landed (the
+        // mirror image of the false-success BUG-692 fixed). Fix (call-site-scoped, Design
+        // Decision D4 — `waitForActorUpdateCommit`/`actor-update-observer.ts` and its 250ms
+        // default are UNTOUCHED; widening the shared constant would affect every other caller):
+        // bounded local re-check (~3 x 150ms) of the SAME characteristic/skill/talent
+        // verification the success path performs (`verifyDeltasLanded`). If the deltas are
+        // already present, this is not a failure — proceed as success. `model.advance()` is
+        // NEVER invoked a second time; only the read-side re-check is retried. If the deltas are
+        // still absent after the retries, fail loud with the EXISTING timeout token, unchanged —
+        // the retries' own (more granular) shortfall errors are deliberately NOT surfaced here,
+        // so this exit's error text stays byte-identical to the pre-BUG-866 behavior.
+        const timeoutError = new Error(
+          `${ErrorTokens.APPLY_NPC_CAREER_ADVANCE_NOT_PERSISTED}: timed out waiting for actor ${data.actorId}'s updateActor hook after advance() — no commit observed within 250ms`,
+        );
+        let recovered: { fresh: any; freshCareer: any; postTalentItems: any[] } | undefined;
+        for (let attempt = 0; attempt < 3 && !recovered; attempt++) {
+          await new Promise((resolve) => setTimeout(resolve, 150));
+          try {
+            recovered = verifyDeltasLanded();
+          } catch {
+            // Absent on this attempt — retry (or fall through to the unchanged timeout error).
+          }
         }
+        if (!recovered) {
+          throw timeoutError;
+        }
+        verified = recovered;
+      } else {
+        // BUG-692: a timeout is an EXPLICIT failure path (above) — the old implementation
+        // resolved identically on hook-fire and on timeout, so a genuinely-incomplete advance
+        // (e.g. under contention) was silently reported as success.
+        verified = verifyDeltasLanded();
       }
-      const postTalentItems = freshItems.filter((it: any) => it.type === 'talent' && !preTalentIds.has(String(it.id)));
-      if (careerTalentNames.length > 0 && postTalentItems.length === 0) {
-        shortfalls.push(`expected ${careerTalentNames.length} new talent item(s) from [${careerTalentNames.join(', ')}], found 0`);
-      }
-      if (shortfalls.length > 0) {
-        throw new Error(`${ErrorTokens.APPLY_NPC_CAREER_ADVANCE_NOT_PERSISTED}: advance() reported commit but the promised deltas did not fully land — ${shortfalls.join('; ')}`);
-      }
+      const { fresh, freshCareer, postTalentItems } = verified;
 
       // BUG-696: wfrp4e's Advancement.advance() (wfrp4e.js:2756-2757) has no talent-count
       // policy — it always embeds EVERY career.system.talents entry, and no parameter on

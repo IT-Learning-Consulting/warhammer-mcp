@@ -182,7 +182,7 @@ export async function handleRollItemTable(input: RollItemTableInput): Promise<En
     const result = await API.rollItemTable(input.tableUuid, options);
     // BUG-784: classify bare false — GM-disconnect vs. business-condition veto.
     if (result === false) {
-      return falseReturnEnvelope('roll-item-table', input.targetActorUuid ?? input.tableUuid);
+      return falseReturnEnvelope('roll-item-table', input.targetActorUuid ?? input.tableUuid, undefined, input.targetActorUuid);
     }
 
     // DP-16: post-write verify (if target actor specified)
@@ -240,6 +240,15 @@ export async function handleRefreshMerchant(input: RefreshMerchantInput): Promis
   try {
     const API = getItemPilesAPI();
 
+    // BUG-784 (D3): genuine pre-check — refresh-merchant is a merchant-only operation, so refuse
+    // a non-merchant pile up front with a truthful, enum-backed token instead of letting a
+    // downstream hook veto get misclassified. Mirrors trade-items' isItemPileMerchant pre-check
+    // (this file, INVALID_PILE_TYPE message style) — the ONE site the false-return classifier's
+    // post-diagnosis probe (D2) is promoted to a real pre-refusal for.
+    if (!API.isItemPileMerchant(input.merchantUuid)) {
+      return { success: false, error: `${ErrorTokens.ITEM_PILES_NOT_A_MERCHANT}: actor ${input.merchantUuid} is not a merchant pile — refresh-merchant requires a merchant-type pile (use update-pile to set type:"merchant" first)` };
+    }
+
     // M-1: tablesForPopulate removed — it's an actor flag, not an API arg (item-piles.js:99278);
     // set table population via update-pile pile flags before calling refresh-merchant.
     const options: Record<string, unknown> = {
@@ -249,7 +258,7 @@ export async function handleRefreshMerchant(input: RefreshMerchantInput): Promis
     const refreshResult = await API.refreshMerchantInventory(input.merchantUuid, options);
     // BUG-784: classify bare false — GM-disconnect vs. business-condition veto.
     if (refreshResult === false) {
-      return falseReturnEnvelope('refresh-merchant', input.merchantUuid);
+      return falseReturnEnvelope('refresh-merchant', input.merchantUuid, undefined, input.merchantUuid);
     }
 
     // DP-16: post-write verify — refreshMerchantInventory's own restock table is out of our
@@ -396,7 +405,7 @@ export async function handleTradeItems(input: TradeItemsInput): Promise<Envelope
     }
     // BUG-784: classify bare false — GM-disconnect vs. business-condition veto.
     if (result === false) {
-      return falseReturnEnvelope('trade-items', `${input.merchantUuid} -> ${input.buyerUuid}`);
+      return falseReturnEnvelope('trade-items', `${input.merchantUuid} -> ${input.buyerUuid}`, undefined, input.merchantUuid);
     }
 
     // BUG-423 (XPK-01) + live-smoke correction (2026-07-02): the REAL tradeItems resolution
@@ -573,7 +582,7 @@ export async function handleUpdatePriceModifiers(input: UpdatePriceModifiersInpu
     const modifyResult = await API.updateMerchantPriceModifiers(input.actorUuid, [modifierEntry]);
     // BUG-784: classify bare false — GM-disconnect vs. business-condition veto.
     if (modifyResult === false) {
-      return falseReturnEnvelope('update-price-modifiers', input.actorUuid);
+      return falseReturnEnvelope('update-price-modifiers', input.actorUuid, undefined, input.actorUuid);
     }
 
     // BUG-774: expected POST-write value per field, mirroring item-piles.js:98404-98407 exactly:

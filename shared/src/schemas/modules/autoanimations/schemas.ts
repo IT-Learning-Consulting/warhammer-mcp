@@ -151,8 +151,19 @@ export const ModuleAutoAnimationsInput = z.discriminatedUnion('action', [
   }).strict(),
 
   // ── Autorec world-config ─────────────────────────────────────────────────
+  //
+  // BUG-812(a): a parameterless call keeps returning the pre-fix counts-only shape
+  // (CCR-7 — existing callers unaffected); supplying ANY of category/label/limit/offset
+  // switches to a bounded, filtered, per-entry payload (boundList() paging, matching the
+  // item-directory.ts filter->paginate->serialize recipe).
   z.object({
     action: z.literal('get-autorec'),
+    category: AutorecCategory.optional(),
+    label: z.string().min(1).optional(),
+    // BUG-528-style bounding params (boundList pattern) — same limit/offset shape as
+    // ItemDirectorySearchInput.
+    limit: z.number().int().min(1).max(500).optional(),
+    offset: z.number().int().min(0).optional(),
   }).strict(),
 
   z.object({
@@ -161,6 +172,32 @@ export const ModuleAutoAnimationsInput = z.discriminatedUnion('action', [
     label: z.string().min(1),
     animation: AnimationPayload,
     confirmedMacro: z.boolean().optional(),
+  }).strict(),
+
+  // BUG-812(c): patch a stored entry's label and/or animation by id, preserving the id.
+  // NOTE: "at least one of label/animation" is enforced at the HANDLER layer, not via
+  // `.refine()` here — zod's discriminatedUnion requires every branch to be a plain ZodObject;
+  // `.refine()` returns ZodEffects, which breaks union membership (destination.ts:9-13 /
+  // cards.ts:274-277 / document-io.ts:76-78 precedent — repeated constraint across this repo's
+  // own schemas, not a one-off).
+  z.object({
+    action: z.literal('update-autorec-entry'),
+    category: AutorecCategory,
+    id: z.string().min(1),
+    label: z.string().min(1).optional(),
+    animation: AnimationPayload.optional(),
+    confirmedMacro: z.boolean().optional(),
+    confirm: z.boolean().optional(), // CONFIRM-GATE(update-autorec-entry):
+  }).strict(),
+
+  // BUG-812(c): remove a stored entry by id — direct game.settings.get/.set on
+  // "aaAutorec-<category>", filtered/replaced by id (qa.md second research pass LAW; never
+  // mergeMenus, which is add-only and silently no-ops on a reduced array).
+  z.object({
+    action: z.literal('remove-autorec-entry'),
+    category: AutorecCategory,
+    id: z.string().min(1),
+    confirm: z.boolean().optional(), // CONFIRM-GATE(remove-autorec-entry):
   }).strict(),
 
   // ── Manual director play (GM + confirm) ──────────────────────────────────

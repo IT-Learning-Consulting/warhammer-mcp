@@ -89,6 +89,7 @@ exports[`QueryHandlers.handleAddItemFromCompendium — write-arg characterizatio
     "itemName": "Sigmar Holy Symbol",
     "itemType": "trapping",
     "message": "Successfully added "Sigmar Holy Symbol" to Hans from compendium",
+    "outcome": "applied",
   },
   "success": true,
 }

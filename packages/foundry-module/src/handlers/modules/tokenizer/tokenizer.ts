@@ -34,6 +34,7 @@ import { ModuleTokenizerInput, type ModuleTokenizerInputType, ErrorTokens } from
 import { notify } from '../../../notify.js';
 import { Envelope, isGM } from '../_shared/handler-utils.js';
 import { settlePoll } from '../_shared/settle-poll.js';
+import { buildOutcomeResponse } from '../../../services/shared/outcome-response.js';
 
 // ── Local helpers ──────────────────────────────────────────────────────────────
 
@@ -77,23 +78,56 @@ function extractResultPath(result: unknown): string | null {
 }
 
 /**
+ * BUG-850 — for a wildcard-baseline prototype-token actor (`.src` is a glob like `path/*`),
+ * Tokenizer 2's default `wildcardMode:"keep"` behavior genuinely writes a NEW numbered
+ * set-member file (confirmed live-API read, see
+ * .agents/research/systemic_bug_class_prevention/phase3_tokenizer_api.md §d) and deliberately
+ * NEVER touches `prototypeToken.texture.src` — the glob is left unchanged BY DESIGN, not as a
+ * failed repoint. So an unchanged `.src` alongside a non-null `resultPath` is the CORRECT,
+ * expected outcome for a wildcard baseline, and must not be treated as `TOKENIZE_NOT_PERSISTED`.
+ */
+function isWildcardTexture(baselineTexture: string | null): boolean {
+  return typeof baselineTexture === 'string' && baselineTexture.includes('*');
+}
+
+/**
  * DP-16 — settle-poll re-read of prototypeToken.texture.src after api.tokenize(), then verify
  * it actually reflects the exported path. The module's own actor.update() may land on a later
  * tick than tokenize()'s resolution, so an instant read-back is not trustworthy.
  */
-async function settleAndVerifyTexture(
+export async function settleAndVerifyTexture(
   actorUuid: string,
   baselineTexture: string | null,
   resultPath: string | null,
 ): Promise<{ texture: string | null; error?: string }> {
+  const wildcardBaseline = isWildcardTexture(baselineTexture);
   const fresh = await settlePoll(
     () => resolveActor(actorUuid),
     (a: any) => {
       const src: string | null = a?.prototypeToken?.texture?.src ?? null;
+      if (wildcardBaseline) {
+        // BUG-850: a wildcard baseline never gets `.src` repointed on the module's default
+        // wildcardMode:"keep" — the settle condition is just a non-null resultPath, since
+        // `.src` legitimately never changes.
+        return resultPath != null || src !== baselineTexture;
+      }
       return src !== baselineTexture || (resultPath != null && src === resultPath);
     },
   );
   const texture: string | null = fresh?.prototypeToken?.texture?.src ?? null;
+
+  if (wildcardBaseline) {
+    // Unchanged glob `.src` + a non-null resultPath is SUCCESS for a wildcard baseline — the
+    // module added a new set-member file, it never intended to repoint `.src`. Only a genuinely
+    // null resultPath (the export itself never produced a path) is a real failure here.
+    if (texture === baselineTexture && resultPath == null) {
+      return {
+        texture,
+        error: `${ErrorTokens.TOKENIZE_NOT_PERSISTED}: wildcard tokenize produced no exported path for baseline "${baselineTexture}" after settle-poll`,
+      };
+    }
+    return { texture };
+  }
 
   if (texture === baselineTexture && resultPath != null && resultPath !== baselineTexture) {
     return {
@@ -181,6 +215,7 @@ async function handleTokenizeBatch(input: TokenizeBatchInput): Promise<Envelope<
 
   const api = getTokenizerApi();
   const opts = buildTokenizeOpts(input);
+  const wantsActorUpdate = opts.updateActor !== false; // module writes the actor by default
 
   const results: Array<{ actorUuid: string; result?: { tokenPath: string | null }; error?: string }> = [];
   let succeeded = 0;
@@ -188,8 +223,20 @@ async function handleTokenizeBatch(input: TokenizeBatchInput): Promise<Envelope<
   for (const actorUuid of input.actorUuids) {
     try {
       const actor = resolveActor(actorUuid);
+      const baselineTexture: string | null = actor.prototypeToken?.texture?.src ?? null;
       const rawResult = await api.tokenize(actor, opts);
       const tokenPath = extractResultPath(rawResult);
+
+      if (wantsActorUpdate) {
+        // BUG-850: align with handleTokenize's settle-and-verify — a failure here becomes
+        // THIS item's `error` entry, never a thrown exception that aborts the whole batch.
+        const verify = await settleAndVerifyTexture(actorUuid, baselineTexture, tokenPath);
+        if (verify.error) {
+          results.push({ actorUuid, error: verify.error });
+          continue;
+        }
+      }
+
       results.push({ actorUuid, result: { tokenPath } });
       succeeded++;
     } catch (e) {
@@ -198,10 +245,11 @@ async function handleTokenizeBatch(input: TokenizeBatchInput): Promise<Envelope<
   }
 
   const failed = input.actorUuids.length - succeeded;
+  const outcome = failed === 0 ? 'applied' : succeeded === 0 ? 'failed' : 'partial';
   notify.updated('tokenizer', `Batch-tokenized ${succeeded}/${input.actorUuids.length} actor(s)${failed > 0 ? ` (${failed} failed)` : ''}`, {});
   return {
     success: true,
-    data: { total: input.actorUuids.length, succeeded, failed, results },
+    data: buildOutcomeResponse(outcome, { total: input.actorUuids.length, succeeded, failed, results }),
   };
 }
 
@@ -239,6 +287,18 @@ async function handleExportLayers(input: ExportLayersInput): Promise<Envelope<un
     const rawResult = await api.exportLayers(layers, buildExportLayersOpts(input));
     const resultPath = extractResultPath(rawResult);
 
+    // BUG-852 — confirmed live-API read (phase3_tokenizer_api.md §c): Tokenizer 2's
+    // exportLayers() ALWAYS resolves to {blob, dataURL} only — it never returns a
+    // path/tokenPath/src, for a well-formed layers[]/layerStack OR a bogus one. There is
+    // no reachable success path through this extraction logic today; fail loud instead
+    // of silently reporting success:true on a no-op.
+    if (resultPath == null) {
+      return {
+        success: false,
+        error: 'TOKENIZER_EXPORT_LAYERS_ERROR: export produced no path — the module returns {blob, dataURL} only, never a file path, for any input (1.1\'s finding: no input shape yields a path)',
+      };
+    }
+
     notify.updated('tokenizer', `Exported layer stack${describeLayerCount(input)}`, {});
     return { success: true, data: { exportPath: resultPath } };
   } catch (e) {
@@ -248,13 +308,60 @@ async function handleExportLayers(input: ExportLayersInput): Promise<Envelope<un
 
 type RegisterCustomFrameInput = Extract<ModuleTokenizerInputType, { action: 'register-custom-frame' }>;
 
+/**
+ * BUG-848 — registerCustomFrame's real signature is a SINGLE descriptor object
+ * `{src, label?, group?}` (confirmed by static read of the v1.2.6 bundle, see
+ * .agents/research/systemic_bug_class_prevention/phase3_tokenizer_api.md §a), not
+ * `(name, path, config)`. It persists to a `game.settings` world setting rather than
+ * throwing — `custom-frame-groups` when `group` is supplied, else the flat `custom-frames`
+ * array — and resolves to `false` (never rejects) on a missing/non-string `src` OR a
+ * duplicate entry already present in the target array. The old 3-positional-arg call bound
+ * `input.name` (a bare string) to the sole parameter, so `n.src` was always `undefined` and
+ * the function returned `false` on its very first line, before ever touching a setting —
+ * a guaranteed no-op that the old handler never checked (it reported success:true
+ * unconditionally). Fixed here: correct call shape + DP-16 settle-poll re-read of the
+ * actual target setting before reporting success.
+ */
 async function handleRegisterCustomFrame(input: RegisterCustomFrameInput): Promise<Envelope<unknown>> {
   if (!isGM()) return { success: false, error: 'GM_REQUIRED: only the GM can register a custom frame' };
   try {
     const api = getTokenizerApi();
-    await api.registerCustomFrame(input.name, input.path, input.config ?? {});
+    const group = typeof input.config?.group === 'string' ? (input.config.group as string) : undefined;
+
+    // Real return value: `true` on a genuine new-entry write, `false` on a duplicate
+    // `src` already present in the target array (not an error — an idempotent no-op).
+    const wasNewlyRegistered: boolean = await api.registerCustomFrame({ src: input.path, label: input.name, group });
+
+    const settingKey = group ? 'custom-frame-groups' : 'custom-frames';
+    const isRegistered = (): boolean => {
+      const list = (globalThis as any).game?.settings?.get?.('tokenizer-2', settingKey);
+      if (!Array.isArray(list)) return false;
+      if (group) {
+        // custom-frame-groups shape: [{ label: <group>, frames: [{src, label}, ...] }, ...]
+        const entry = list.find((g: any) => g?.label === group);
+        return Boolean(entry?.frames?.some((f: any) => f?.src === input.path));
+      }
+      // custom-frames shape: [{ src, label }, ...]
+      return list.some((f: any) => f?.src === input.path);
+    };
+
+    const persisted = await settlePoll(isRegistered);
+    if (!persisted) {
+      return {
+        success: false,
+        error: `TOKENIZER_REGISTER_NOT_PERSISTED: frame "${input.name}" (${input.path}) was not found in world setting "${settingKey}" after settle-poll`,
+      };
+    }
+
     notify.updated('tokenizer', `Registered custom frame "${input.name}"`, {});
-    return { success: true, data: { name: input.name, path: input.path } };
+    return {
+      success: true,
+      data: buildOutcomeResponse(wasNewlyRegistered ? 'applied' : 'alreadyApplied', {
+        name: input.name,
+        path: input.path,
+        group: group ?? null,
+      }),
+    };
   } catch (e) {
     return { success: false, error: `TOKENIZER_REGISTER_FRAME_ERROR: ${e instanceof Error ? e.message : String(e)}` };
   }
@@ -316,20 +423,90 @@ async function handleGetSettings(input: GetSettingsInput): Promise<Envelope<unkn
 
 type ListRegisteredInput = Extract<ModuleTokenizerInputType, { action: 'list-registered' }>;
 
-/** Extract display names from a registry, whether it's keyed by object or a plain array. */
-function registryNames(registry: unknown): string[] {
-  if (!registry || typeof registry !== 'object') return [];
-  if (Array.isArray(registry)) return registry.map((entry: any) => entry?.name ?? String(entry));
-  return Object.keys(registry);
+/**
+ * BUG-849 — the old `registryNames()` did `Object.keys()` on `frameRegistry`/`pluginRegistry`,
+ * both class instances, surfacing their private field names (`_static`, `_loaders`,
+ * `_loaderCache`, `_activeKind`, `_plugins`, `_toolIds`, `_animationPresets`, `_encoders`)
+ * instead of real registered entries. Real enumeration surface confirmed by static bundle read
+ * (see .agents/research/systemic_bug_class_prevention/phase3_tokenizer_api.md §(b), LAW for
+ * this fix): `pluginRegistry.getAll()` → `[...this._plugins.values()]` (real plugin objects),
+ * `async frameRegistry.getSections('frame' | 'mask')` → hydrated `{id, label, subsections}`
+ * section objects merging the registry's `_static` + lazily-loaded `_loaders` entries. Neither
+ * accessor by itself covers user-registered custom frames, which BUG-848 confirmed persist to
+ * the separate `custom-frames` (flat `{src, label}`) and `custom-frame-groups` (per-group
+ * `{label, frames:[{src,label},...]}`) world settings (`tokenizer.ts:335` region) rather than
+ * into the frameRegistry itself — so those settings are merged in and dedup'd against the
+ * registry sections (dedup key: `id` for registry entries, `src` for setting entries — the two
+ * identity domains a single entry can arrive under), each entry source-tagged `registry` vs
+ * `setting` per D8.
+ */
+type FrameEntry = { id: string; label: string; kind: 'frame' | 'mask'; source: 'registry' | 'setting'; group?: string };
+type PluginEntry = { id: string; name: string };
+
+function addRegistrySections(out: FrameEntry[], seen: Set<string>, kind: 'frame' | 'mask', sections: any[]): void {
+  for (const s of sections) {
+    const id = typeof s?.id === 'string' ? s.id : s?.id != null ? String(s.id) : undefined;
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push({ id, label: typeof s?.label === 'string' ? s.label : id, kind, source: 'registry' });
+  }
+}
+
+async function collectFrames(api: any): Promise<FrameEntry[]> {
+  const seen = new Set<string>();
+  const out: FrameEntry[] = [];
+
+  const frameRegistry = api?.frameRegistry;
+  const frameSections: any[] = frameRegistry ? ((await frameRegistry.getSections('frame')) ?? []) : [];
+  addRegistrySections(out, seen, 'frame', frameSections);
+  const maskSections: any[] = frameRegistry ? ((await frameRegistry.getSections('mask')) ?? []) : [];
+  addRegistrySections(out, seen, 'mask', maskSections);
+
+  const game = (globalThis as any).game;
+  const customFrames = game?.settings?.get?.('tokenizer-2', 'custom-frames');
+  if (Array.isArray(customFrames)) {
+    for (const f of customFrames) {
+      const id = typeof f?.src === 'string' ? f.src : undefined;
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      out.push({ id, label: typeof f?.label === 'string' ? f.label : id, kind: 'frame', source: 'setting' });
+    }
+  }
+
+  const customFrameGroups = game?.settings?.get?.('tokenizer-2', 'custom-frame-groups');
+  if (Array.isArray(customFrameGroups)) {
+    for (const g of customFrameGroups) {
+      const groupLabel = typeof g?.label === 'string' ? g.label : undefined;
+      for (const f of g?.frames ?? []) {
+        const id = typeof f?.src === 'string' ? f.src : undefined;
+        if (!id || seen.has(id)) continue;
+        seen.add(id);
+        out.push({ id, label: typeof f?.label === 'string' ? f.label : id, kind: 'frame', source: 'setting', group: groupLabel });
+      }
+    }
+  }
+
+  return out;
+}
+
+function collectPlugins(api: any): PluginEntry[] {
+  const list: any[] = typeof api?.pluginRegistry?.getAll === 'function' ? api.pluginRegistry.getAll() : [];
+  return list.map((p: any, i: number) => {
+    const id = typeof p?.id === 'string' ? p.id : p?.id != null ? String(p.id) : `plugin-${i}`;
+    const name = typeof p?.name === 'string' ? p.name : id;
+    return { id, name };
+  });
 }
 
 async function handleListRegistered(_input: ListRegisteredInput): Promise<Envelope<unknown>> {
   if (!isGM()) return { success: false, error: 'GM_REQUIRED: reading registered frames/plugins requires GM access' };
   try {
     const api = getTokenizerApi();
+    const frames = await collectFrames(api);
+    const plugins = collectPlugins(api);
     return {
       success: true,
-      data: { frames: registryNames(api.frameRegistry), plugins: registryNames(api.pluginRegistry) },
+      data: { frames, plugins },
     };
   } catch (e) {
     return { success: false, error: `TOKENIZER_LIST_REGISTERED_ERROR: ${e instanceof Error ? e.message : String(e)}` };

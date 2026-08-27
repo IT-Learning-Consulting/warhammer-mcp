@@ -63,6 +63,21 @@ describe('ModuleAutoAnimationsTool — characterization', () => {
     expect((r as any).content[0].text).toMatchSnapshot();
   });
 
+  // BUG-812(a) — a filtered/paginated get-autorec call returns an `entries` page instead of
+  // the counts-only shape; locks the F03 formatter surface (every field printed).
+  it('get-autorec — filtered entries page', async () => {
+    const r = await tool({
+      entries: [
+        { id: 'melee-0001', label: 'Hand Weapon', isEnabled: true, isCustomized: true, fromAmmo: false, menu: 'melee', version: 5, animation: 'melee/weapon/sword' },
+      ],
+      totalAvailable: 2,
+      truncated: true,
+      offset: 0,
+      limit: 1,
+    }).execute({ action: 'get-autorec', category: 'melee', limit: 1 });
+    expect((r as any).content[0].text).toMatchSnapshot();
+  });
+
   it('set-item-animation — write confirmed', async () => {
     const r = await tool({
       uuid: 'Actor.x.Item.y',
@@ -74,6 +89,37 @@ describe('ModuleAutoAnimationsTool — characterization', () => {
       action: 'set-item-animation',
       uuid: 'Actor.x.Item.y',
       animation: { primary: { dbSection: 'melee', menuType: 'weapon', animation: 'sword' } },
+    });
+    expect((r as any).content[0].text).toMatchSnapshot();
+  });
+
+  // BUG-812(c) — update-autorec-entry / remove-autorec-entry formatter surfaces (F03).
+  it('update-autorec-entry — patch confirmed', async () => {
+    const r = await tool({
+      category: 'melee',
+      id: 'melee-0001',
+      label: 'Hand Weapon (Renamed)',
+      updated: true,
+    }).execute({
+      action: 'update-autorec-entry',
+      category: 'melee',
+      id: 'melee-0001',
+      label: 'Hand Weapon (Renamed)',
+      confirm: true,
+    });
+    expect((r as any).content[0].text).toMatchSnapshot();
+  });
+
+  it('remove-autorec-entry — removal confirmed', async () => {
+    const r = await tool({
+      category: 'melee',
+      id: 'melee-0001',
+      removed: true,
+    }).execute({
+      action: 'remove-autorec-entry',
+      category: 'melee',
+      id: 'melee-0001',
+      confirm: true,
     });
     expect((r as any).content[0].text).toMatchSnapshot();
   });

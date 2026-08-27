@@ -243,6 +243,17 @@ function formatPriceModifiers(d: ItemPilePriceModifiersResult): string {
   return lines.join('\n');
 }
 
+// Phase 3 (systemic_bug_class_prevention v2, task 5.2, D8): empty-passthrough outputSchema,
+// mirroring module-matt's MattMutationOutput/MATT_MUTATION_OUTPUT_JSON_SCHEMA precedent
+// (z.object({}).passthrough() run through zodToJsonSchema). Inlined here rather than added to
+// shared/src/schemas/mutation-outputs.ts — this task's declared file set is this file +
+// apply-npc-career-advance.ts/sequencer.ts/autoanimations.ts only.
+const ITEM_PILES_MUTATION_OUTPUT_JSON_SCHEMA = {
+  type: 'object',
+  properties: {},
+  additionalProperties: true,
+} as const;
+
 export interface ModuleItempilsToolOptions extends BaseToolOptions {}
 
 export class ModuleItempilesTool extends BaseTool {
@@ -316,7 +327,9 @@ TRADE / PRICE:
 
 SAFETY:
 - banker/auctioneer pile types → MODULE_DEPENDENCY_NOT_ACTIVE (companion not installed)
-- No active GM → NO_ACTIVE_GM structured error on all socket operations
+- No active GM → NO_ACTIVE_GM structured error on all socket operations; a GM-active-but-refused write
+  instead surfaces one of the ITEM_PILES_* veto/diagnosis tokens below (see ERROR TOKENS) — a false
+  return is never misreported as NO_ACTIVE_GM once a GM is confirmed still connected (BUG-784)
 - delete-pile, remove-currency, split-loot, trade-items, refresh-merchant(removeExisting:true) require confirm:true
 - CONFIRM_REQUIRED previews are readable summaries (denomination strings like "4GC 2SS", first-item price), not raw JSON
 - remove-currency writes an absolute per-denomination set: the VALUE removed is exact but coin shapes may consolidate (e.g. 12 BP → 1 SS)
@@ -324,11 +337,17 @@ SAFETY:
 - turnTokens/revertTokens: tokenUuids are resolved server-side — UUID strings NOT passed to API (C6/C7)
 - relative:true price modifiers require finite numbers (C9 — silent NaN corruption otherwise)
 - Simple Calendar GUIDANCE_ONLY: openTimes.status:"auto" without SC rewrites flag to "open"
+- refresh-merchant refuses a non-merchant pile up front with ITEM_PILES_NOT_A_MERCHANT (pre-check, never a socket call)
 
 ERROR TOKENS: MODULE_NOT_ACTIVE, MODULE_DEPENDENCY_NOT_ACTIVE, NO_ACTIVE_GM, GM_REQUIRED,
 INSUFFICIENT_CURRENCY, VAULT_FULL, INVALID_PILE_TYPE (set-pile-state on non-container; trade/modifiers on non-merchant),
 INVALID_PILE_UUID (delete-pile only), INVALID_CURRENCY_STRING, ITEM_PILES_PARTIAL_TRANSFER,
-TOKEN_NOT_FOUND, CONFIRM_REQUIRED
+TOKEN_NOT_FOUND, CONFIRM_REQUIRED, ITEM_PILES_OPERATION_VETOED (GM active, false-return refused for an
+undetermined business reason — hook veto or similar), ITEM_PILES_INVALID_TARGET, ITEM_PILES_TARGET_LOCKED,
+ITEM_PILES_TARGET_CLOSED, ITEM_PILES_NOT_A_MERCHANT — the last four are a false-return DIAGNOSIS
+(BUG-784): item-piles' own socket call resolved false FIRST, then the target was probed for the most
+specific detectable cause; NOT a pre-write reject-before-call gate (except refresh-merchant's dedicated
+ITEM_PILES_NOT_A_MERCHANT pre-check above, which is genuinely pre-call)
 
 GM required for all write actions.
 
@@ -491,6 +510,7 @@ Performance Notes:
             { if: { properties: { action: { const: 'update-price-modifiers' } } }, then: { required: ['actorUuid'] } },
           ],
         },
+        outputSchema: ITEM_PILES_MUTATION_OUTPUT_JSON_SCHEMA,
       },
     ];
   }

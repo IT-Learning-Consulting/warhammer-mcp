@@ -6,7 +6,7 @@
 // Hooks.on listener (module-init capture, not awaited by any handler).
 // Module Integration v1 Phase 8 — module-autoanimations handler.
 //
-// 7-action umbrella for Automated Animations (AA): per-item flag authoring,
+// 9-action umbrella for Automated Animations (AA): per-item flag authoring,
 // animation discovery, world-level Autorec config, and manual director play.
 //
 // Design constraints (dossier autoanimations.md §3-§6; pre-plan ADR-8.1):
@@ -36,6 +36,7 @@ import { buildOutcomeResponse } from '../../../services/shared/outcome-response.
 import { requireConfirm } from '../../../services/shared/destructive-confirm.js';
 import { runWriteSteps, type WriteStep } from '../../../services/shared/resume-boundary.js';
 import { verifyFlagWrite } from '../../../utils/verifyWrite.js';
+import { boundList } from '../../../services/bounded-response.js';
 
 
 // ── aa.ready capture (ADR-8.1) ──────────────────────────────────────────────
@@ -78,6 +79,33 @@ async function resolveDoc(uuid: string): Promise<any> {
 /** AA's own label normalization for Autorec name-matching (dossier §3g / open-q §2). */
 function normalizeLabel(s: string): string {
   return String(s ?? '').replace(/\s+/g, '').toLowerCase();
+}
+
+/** Compact human-readable summary of a stored Autorec/item entry's primary animation slot. */
+function summarizeAnimation(entry: any): string {
+  const v = entry?.primary?.video;
+  if (!v) return '(none)';
+  if (v.enableCustom) return `custom:${v.customPath ?? '?'}`;
+  return `${v.dbSection ?? '?'}/${v.menuType ?? '?'}/${v.animation ?? '?'}`;
+}
+
+/**
+ * BUG-812(a): compact per-entry projection for the filtered get-autorec read — the full stored
+ * entry carries the entire v5 animation tree (secondary/source/target/soundOnly/macro/
+ * meleeSwitch), far too heavy for a listing response; project only the fields useful for
+ * identifying/inspecting an entry before an update/remove call.
+ */
+function projectAutorecEntry(e: any): Record<string, unknown> {
+  return {
+    id: e?.id ?? null,
+    label: e?.label ?? null,
+    isEnabled: e?.isEnabled ?? null,
+    isCustomized: e?.isCustomized ?? null,
+    fromAmmo: e?.fromAmmo ?? null,
+    menu: e?.menu ?? null,
+    version: e?.version ?? null,
+    animation: summarizeAnimation(e),
+  };
 }
 
 // ── v5 flag expansion (dossier §3a) ─────────────────────────────────────────
@@ -224,6 +252,8 @@ export async function dispatchModuleAutoAnimations(data: unknown): Promise<any> 
     case 'list-animations':      return handleListAnimations(parsed);
     case 'get-autorec':          return handleGetAutorec(parsed);
     case 'merge-autorec-entry':  return handleMergeAutorecEntry(parsed);
+    case 'update-autorec-entry': return handleUpdateAutorecEntry(parsed);
+    case 'remove-autorec-entry': return handleRemoveAutorecEntry(parsed);
     case 'play-animation':       return handlePlayAnimation(parsed);
     default: {
       const _exhaustive: never = parsed;
@@ -493,6 +523,8 @@ async function handleListAnimations(input: ListAnimInput): Promise<Envelope<unkn
 
 type GetAutorecInput = Extract<ModuleAutoAnimationsInputType, { action: 'get-autorec' }>;
 type MergeAutorecInput = Extract<ModuleAutoAnimationsInputType, { action: 'merge-autorec-entry' }>;
+type UpdateAutorecInput = Extract<ModuleAutoAnimationsInputType, { action: 'update-autorec-entry' }>;
+type RemoveAutorecInput = Extract<ModuleAutoAnimationsInputType, { action: 'remove-autorec-entry' }>;
 
 function getAutorecManager(): any {
   const aa = getAA();
@@ -501,16 +533,70 @@ function getAutorecManager(): any {
   return mgr;
 }
 
-async function handleGetAutorec(_input: GetAutorecInput): Promise<Envelope<unknown>> {
+const AUTOREC_CATEGORIES = ['melee', 'range', 'ontoken', 'templatefx', 'aura', 'preset', 'aefx'] as const;
+
+// BUG-812(c): the removal-capable mechanism — direct game.settings.get/.set against
+// "aaAutorec-<category>", confirmed by the qa.md second research pass to be EXACTLY what
+// AAAutorecManager.getAutorecEntries() itself reads per category (live-bundle-verified,
+// autoanimations.js:23018-23030 — each category key returns that category's array directly).
+// AutorecManager exposes no delete/remove method; mergeMenus is add-only and would silently
+// no-op on a reduced array (qa.md, quoted evidence) — never used here.
+function autorecSettingKey(category: string): string {
+  return `aaAutorec-${category}`;
+}
+
+function readAutorecCategory(category: string): any[] {
+  const g = (globalThis as any).game;
+  const arr = g?.settings?.get?.('autoanimations', autorecSettingKey(category));
+  return Array.isArray(arr) ? arr : [];
+}
+
+async function writeAutorecCategory(category: string, entries: any[]): Promise<void> {
+  const g = (globalThis as any).game;
+  await g.settings.set('autoanimations', autorecSettingKey(category), entries);
+}
+
+async function handleGetAutorec(input: GetAutorecInput): Promise<Envelope<unknown>> {
   if (!isGM()) return { success: false, error: 'GM_REQUIRED' };
   try {
     const mgr = getAutorecManager();
     const entries = mgr.getAutorecEntries();
     const counts: Record<string, number> = {};
-    for (const cat of ['melee', 'range', 'ontoken', 'templatefx', 'aura', 'preset', 'aefx']) {
+    for (const cat of AUTOREC_CATEGORIES) {
       counts[cat] = Array.isArray(entries?.[cat]) ? entries[cat].length : 0;
     }
-    return { success: true, data: { counts, version: entries?.version ?? null } };
+
+    // D7 / CCR-7: a parameterless call MUST keep returning the exact pre-fix counts-only
+    // shape — only a supplied category/label/limit/offset triggers the heavier per-entry
+    // payload below. Existing callers/eval pairs stay byte-unmodified.
+    if (input.category === undefined && input.label === undefined && input.limit === undefined && input.offset === undefined) {
+      return { success: true, data: { counts, version: entries?.version ?? null } };
+    }
+
+    // BUG-812(a): bounded, filtered read — category scope, label substring
+    // (normalizeLabel, matching Autorec's own duplicate-check normalization), paged via
+    // boundList() (item-directory.ts:60-134 filter->paginate->serialize recipe).
+    const categories = input.category ? [input.category] : AUTOREC_CATEGORIES;
+    const normNeedle = input.label !== undefined ? normalizeLabel(input.label) : null;
+    const filtered: any[] = [];
+    for (const cat of categories) {
+      const arr: any[] = Array.isArray(entries?.[cat]) ? entries[cat] : [];
+      for (const e of arr) {
+        if (normNeedle !== null && !normalizeLabel(e?.label).includes(normNeedle)) continue;
+        filtered.push(e);
+      }
+    }
+    const bounded = boundList(filtered, { limit: input.limit, offset: input.offset });
+    return {
+      success: true,
+      data: {
+        entries: bounded.items.map(projectAutorecEntry),
+        totalAvailable: bounded.totalAvailable,
+        truncated: bounded.truncated,
+        offset: bounded.offset,
+        limit: bounded.limit,
+      },
+    };
   } catch (e) {
     return { success: false, error: `AA_GET_AUTOREC_ERROR: ${e instanceof Error ? e.message : String(e)}` };
   }
@@ -532,9 +618,17 @@ async function handleMergeAutorecEntry(input: MergeAutorecInput): Promise<Envelo
     const cat: any[] = Array.isArray(existing?.[input.category]) ? existing[input.category] : [];
 
     // Duplicate-label check using AA's own normalization (dossier §3g).
+    //
+    // BUG-812(b): surface the MATCHED entry's id/label/menu/animation summary in the error
+    // instead of discarding it — the pre-fix message named only the caller's own input,
+    // leaving the GM unable to inspect what's actually stored without the AA UI.
     const norm = normalizeLabel(input.label);
-    if (cat.some((e: any) => normalizeLabel(e?.label) === norm)) {
-      return { success: false, error: `AA_AUTOREC_DUPLICATE_LABEL: an entry labelled "${input.label}" already exists in category "${input.category}" (normalized "${norm}"). mergeMenus would not add a duplicate.` };
+    const matched = cat.find((e: any) => normalizeLabel(e?.label) === norm);
+    if (matched) {
+      return {
+        success: false,
+        error: `AA_AUTOREC_DUPLICATE_LABEL: an entry labelled "${input.label}" already exists in category "${input.category}" (normalized "${norm}") — id="${matched.id ?? '?'}", label="${matched.label ?? '?'}", menu="${matched.menu ?? '?'}", animation=${summarizeAnimation(matched)}. mergeMenus would not add a duplicate. Inspect via get-autorec {category, label}; update/remove via the new actions.`,
+      };
     }
 
     const entry = {
@@ -570,6 +664,128 @@ async function handleMergeAutorecEntry(input: MergeAutorecInput): Promise<Envelo
     return { success: true, data: { category: input.category, label: input.label, added: true } };
   } catch (e) {
     return { success: false, error: `AA_MERGE_AUTOREC_ERROR: ${e instanceof Error ? e.message : String(e)}` };
+  }
+}
+
+// BUG-812(c): update a stored Autorec entry by id (label and/or animation) — confirm-gated,
+// snapshot + DP-16 re-read + restore-on-verify-fail, direct game.settings write (D5/D6).
+async function handleUpdateAutorecEntry(input: UpdateAutorecInput): Promise<Envelope<unknown>> {
+  if (!isGM()) return { success: false, error: 'GM_REQUIRED: only the GM can write Autorec config' };
+
+  // Handler-side "at least one of label/animation" — discriminatedUnion cannot host a
+  // `.refine()`'d member (schemas.ts comment above the union entry).
+  if (input.label === undefined && input.animation === undefined) {
+    return {
+      success: false,
+      error: 'AA_AUTOREC_UPDATE_EMPTY: at least one of label/animation must be supplied to update-autorec-entry.',
+    };
+  }
+
+  if (input.animation?.macro?.enable === true && input.confirmedMacro !== true) {
+    return {
+      success: false,
+      error: 'AA_MACRO_NOT_CONFIRMED: animation.macro.enable=true makes AA run an arbitrary world macro. Re-send with confirmedMacro:true.',
+    };
+  }
+
+  try {
+    const before = readAutorecCategory(input.category);
+    const idx = before.findIndex((e: any) => e?.id === input.id);
+    if (idx === -1) {
+      return {
+        success: false,
+        error: `AA_AUTOREC_ENTRY_NOT_FOUND: no entry with id "${input.id}" in category "${input.category}". Inspect via get-autorec {category:"${input.category}"} to find the id.`,
+      };
+    }
+    const matched = before[idx];
+    const newLabel = input.label ?? matched.label;
+
+    // Blast-radius preview BEFORE the confirm gate (handleClearItemAnimation shape, D6).
+    const blastRadius = `Autorec entry "${matched.label ?? '?'}" (id=${matched.id}, category="${input.category}", menu="${matched.menu ?? '?'}", animation=${summarizeAnimation(matched)})`
+      + `${input.label !== undefined ? ` → label="${input.label}"` : ''}${input.animation !== undefined ? ', animation replaced' : ''}`;
+    // Same exactOptionalPropertyTypes normalization as handleClearItemAnimation (:469-472).
+    const refusal = requireConfirm({ confirm: input.confirm === true }, 'update-autorec-entry', blastRadius);
+    if (refusal) return refusal;
+
+    // Patch: label-only leaves every other field untouched; a supplied animation rebuilds the
+    // entry via the same expandToV5 recipe merge-autorec-entry uses, preserving the original id.
+    const patched = input.animation !== undefined
+      ? { ...expandToV5(input.animation, newLabel), id: matched.id, label: newLabel }
+      : { ...matched, label: newLabel };
+
+    const snapshot = before;
+    const after = before.map((e: any, i: number) => (i === idx ? patched : e));
+    await writeAutorecCategory(input.category, after);
+
+    // DP-16 fresh re-read — verify the patched entry (not the pre-write `after` array) actually
+    // persisted, by value.
+    const verifyRead = readAutorecCategory(input.category);
+    const verified = verifyRead.find((e: any) => e?.id === input.id);
+    const persisted = verified !== undefined && JSON.stringify(verified) === JSON.stringify(patched);
+    if (!persisted) {
+      let rolledBack = true;
+      try {
+        await writeAutorecCategory(input.category, snapshot);
+      } catch {
+        rolledBack = false;
+      }
+      return {
+        success: false,
+        error: `AA_AUTOREC_UPDATE_NOT_PERSISTED: entry "${input.id}" in category "${input.category}" did not verify after update (rolledBack: ${rolledBack})`,
+      };
+    }
+
+    notify.updated('autoanimations', `Autorec ${input.category}`, { summary: `~ "${patched.label}"` });
+    return { success: true, data: { category: input.category, id: input.id, label: patched.label, updated: true } };
+  } catch (e) {
+    return { success: false, error: `AA_UPDATE_AUTOREC_ERROR: ${e instanceof Error ? e.message : String(e)}` };
+  }
+}
+
+// BUG-812(c): remove a stored Autorec entry by id — confirm-gated, snapshot + DP-16 re-read +
+// restore-on-verify-fail, direct game.settings write (D5/D6; qa.md second research pass LAW).
+async function handleRemoveAutorecEntry(input: RemoveAutorecInput): Promise<Envelope<unknown>> {
+  if (!isGM()) return { success: false, error: 'GM_REQUIRED: only the GM can write Autorec config' };
+
+  try {
+    const before = readAutorecCategory(input.category);
+    const matched = before.find((e: any) => e?.id === input.id);
+    if (!matched) {
+      return {
+        success: false,
+        error: `AA_AUTOREC_ENTRY_NOT_FOUND: no entry with id "${input.id}" in category "${input.category}". Inspect via get-autorec {category:"${input.category}"} to find the id.`,
+      };
+    }
+
+    // Blast-radius preview BEFORE the confirm gate (handleClearItemAnimation shape, D6).
+    const blastRadius = `Autorec entry "${matched.label ?? '?'}" (id=${matched.id}, category="${input.category}", menu="${matched.menu ?? '?'}", animation=${summarizeAnimation(matched)})`;
+    const refusal = requireConfirm({ confirm: input.confirm === true }, 'remove-autorec-entry', blastRadius);
+    if (refusal) return refusal;
+
+    const snapshot = before;
+    const after = before.filter((e: any) => e?.id !== input.id);
+    await writeAutorecCategory(input.category, after);
+
+    // DP-16 fresh re-read — verify the id is genuinely absent.
+    const verifyRead = readAutorecCategory(input.category);
+    const stillPresent = verifyRead.some((e: any) => e?.id === input.id);
+    if (stillPresent) {
+      let rolledBack = true;
+      try {
+        await writeAutorecCategory(input.category, snapshot);
+      } catch {
+        rolledBack = false;
+      }
+      return {
+        success: false,
+        error: `AA_AUTOREC_REMOVE_NOT_PERSISTED: entry "${input.id}" still present in category "${input.category}" after remove (rolledBack: ${rolledBack})`,
+      };
+    }
+
+    notify.updated('autoanimations', `Autorec ${input.category}`, { summary: `- "${matched.label ?? input.id}"` });
+    return { success: true, data: { category: input.category, id: input.id, label: matched.label ?? null, removed: true } };
+  } catch (e) {
+    return { success: false, error: `AA_REMOVE_AUTOREC_ERROR: ${e instanceof Error ? e.message : String(e)}` };
   }
 }
 

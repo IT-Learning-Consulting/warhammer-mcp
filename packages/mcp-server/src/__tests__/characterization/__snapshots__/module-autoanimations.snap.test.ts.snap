@@ -13,6 +13,11 @@ exports[`ModuleAutoAnimationsTool — characterization > get-autorec — entry c
   aefx: 0"
 `;
 
+exports[`ModuleAutoAnimationsTool — characterization > get-autorec — filtered entries page 1`] = `
+"module-autoanimations.get-autorec: 2 matching entries (showing 1, offset=0, limit=1, truncated=true):
+  id=melee-0001 label="Hand Weapon" menu=melee isEnabled=true isCustomized=true fromAmmo=false version=5 animation=melee/weapon/sword"
+`;
+
 exports[`ModuleAutoAnimationsTool — characterization > get-item-animation — flags present 1`] = `"module-autoanimations.get-item-animation: Hand Weapon → version=5, isCustomized=true, menu=weapon, animation=sword."`;
 
 exports[`ModuleAutoAnimationsTool — characterization > get-item-animation — no flags (no customization) 1`] = `"module-autoanimations.get-item-animation: no animation flags on Dagger."`;
@@ -24,4 +29,8 @@ exports[`ModuleAutoAnimationsTool — characterization > list-animations — wit
 sword, axe, dagger"
 `;
 
+exports[`ModuleAutoAnimationsTool — characterization > remove-autorec-entry — removal confirmed 1`] = `"module-autoanimations.remove-autorec-entry: removed id="melee-0001" from category "melee" (removed=true)."`;
+
 exports[`ModuleAutoAnimationsTool — characterization > set-item-animation — write confirmed 1`] = `"module-autoanimations.set-item-animation: set on Hand Weapon (v5, isCustomized=true, menu=weapon)."`;
+
+exports[`ModuleAutoAnimationsTool — characterization > update-autorec-entry — patch confirmed 1`] = `"module-autoanimations.update-autorec-entry: updated id="melee-0001" (label="Hand Weapon (Renamed)") in category "melee" (updated=true)."`;

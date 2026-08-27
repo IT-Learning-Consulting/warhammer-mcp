@@ -93,33 +93,83 @@ export function confirmRequiredEnvelope(action: string, actorUuid: string, detai
 // activeGmRequired() already confirms a GM is active BEFORE the API call runs. Re-running that
 // exact same check immediately AFTER a bare `false` comes back is the one genuine business-vs-
 // connectivity discriminator available here: if a GM is STILL active post-call, the socket call
-// itself didn't fail for lack of a GM — the `false` is a business-condition veto, reported via
-// the neutral ITEM_PILES_OPERATION_VETOED token (operation + target context, no GM-disconnect
-// claim). Only a GM that has genuinely gone inactive between the pre-check and this call still
-// yields NO_ACTIVE_GM — which stays truthful because it is re-verified, not assumed.
-export function falseReturnCause(): { noActiveGm: boolean; clause: string } {
+// itself didn't fail for lack of a GM — the `false` is a business-condition veto. Only a GM that
+// has genuinely gone inactive between the pre-check and this call still yields NO_ACTIVE_GM —
+// which stays truthful because it is re-verified, not assumed.
+//
+// systemic_bug_class_prevention v2 Phase 4 (D2, BUG-784 residual): when a GM is confirmed active,
+// an optional `targetUuid` is now probed for the MOST SPECIFIC detectable cause instead of always
+// reporting the neutral veto — see probeVetoToken()/vetoClause() below. All five tokens
+// (ITEM_PILES_OPERATION_VETOED + the 4 precise ones) are enum-backed via ErrorTokens (D4).
+
+/**
+ * D2: probe `targetUuid` (in specificity order) for the most likely reason item-piles returned
+ * `false` while a GM was active. Each predicate is independently try/catch-guarded — a probe
+ * that throws (no targetUuid, or the target doesn't resolve for that predicate) is UNDETECTED,
+ * never a match, and probing continues to the next predicate. Returns null (→ the neutral
+ * ITEM_PILES_OPERATION_VETOED residual) when there is no targetUuid or no predicate matched.
+ */
+function probeVetoToken(targetUuid: string | undefined): string | null {
+  if (!targetUuid) return null;
+  let API: any;
+  try {
+    API = getItemPilesAPI();
+  } catch (_) {
+    return null;
+  }
+  try {
+    if (API.isValidItemPile(targetUuid) === false) return ErrorTokens.ITEM_PILES_INVALID_TARGET;
+  } catch (_) { /* undetected — probing continues */ }
+  try {
+    if (API.isItemPileLocked(targetUuid) === true) return ErrorTokens.ITEM_PILES_TARGET_LOCKED;
+  } catch (_) { /* undetected */ }
+  try {
+    if (API.isItemPileClosed(targetUuid) === true) return ErrorTokens.ITEM_PILES_TARGET_CLOSED;
+  } catch (_) { /* undetected */ }
+  try {
+    if (API.isItemPileMerchant(targetUuid) === false) return ErrorTokens.ITEM_PILES_NOT_A_MERCHANT;
+  } catch (_) { /* undetected */ }
+  return null;
+}
+
+/** Token-specific clause text for the GM-active branch of falseReturnCause() (D2). */
+function vetoClause(token: string, targetUuid: string | undefined): string {
+  const gmNote = 'a GM is currently active, so this is not a connectivity failure';
+  switch (token) {
+    case ErrorTokens.ITEM_PILES_INVALID_TARGET:
+      return `${gmNote} — target ${targetUuid} does not resolve as a valid item pile`;
+    case ErrorTokens.ITEM_PILES_TARGET_LOCKED:
+      return `${gmNote} — target ${targetUuid} is currently locked`;
+    case ErrorTokens.ITEM_PILES_TARGET_CLOSED:
+      return `${gmNote} — target ${targetUuid} is currently closed`;
+    case ErrorTokens.ITEM_PILES_NOT_A_MERCHANT:
+      return `${gmNote} — target ${targetUuid} does not resolve as an item-pile merchant`;
+    default:
+      return `was refused by item-piles — ${gmNote} (likely a hook veto or a business-condition refusal, e.g. a non-lootable target)`;
+  }
+}
+
+export function falseReturnCause(targetUuid?: string): { noActiveGm: boolean; clause: string; token: string } {
   const gmErr = checkActiveGm(getGame());
   if (gmErr) {
-    return { noActiveGm: true, clause: 'no active GM client is currently detected' };
+    return { noActiveGm: true, clause: 'no active GM client is currently detected', token: 'NO_ACTIVE_GM' };
   }
-  return {
-    noActiveGm: false,
-    clause: 'was refused by item-piles — a GM is currently active, so this is not a connectivity failure (likely a hook veto or a business-condition refusal, e.g. a non-lootable target)',
-  };
+  const token = probeVetoToken(targetUuid) ?? ErrorTokens.ITEM_PILES_OPERATION_VETOED;
+  return { noActiveGm: false, clause: vetoClause(token, targetUuid), token };
 }
 
 /** Message form of the BUG-784 classification, for sites that throw rather than return an Envelope. */
-export function falseReturnMessage(operation: string, target: string, detail?: string): string {
-  const { noActiveGm, clause } = falseReturnCause();
+export function falseReturnMessage(operation: string, target: string, detail?: string, targetUuid?: string): string {
+  const { noActiveGm, clause, token } = falseReturnCause(targetUuid);
   if (noActiveGm) {
     return `NO_ACTIVE_GM: ${operation} on ${target} — item-piles socket returned false and ${clause}.`;
   }
-  return `ITEM_PILES_OPERATION_VETOED: ${operation} on ${target} ${clause}.${detail ? ` ${detail}` : ''}`;
+  return `${token}: ${operation} on ${target} ${clause}.${detail ? ` ${detail}` : ''}`;
 }
 
 /** Envelope form of the BUG-784 classification for every bare-`false`-from-item-piles site. */
-export function falseReturnEnvelope(operation: string, target: string, detail?: string): Envelope<never> {
-  return { success: false, error: falseReturnMessage(operation, target, detail) };
+export function falseReturnEnvelope(operation: string, target: string, detail?: string, targetUuid?: string): Envelope<never> {
+  return { success: false, error: falseReturnMessage(operation, target, detail, targetUuid) };
 }
 
 // ── 3A: Item mutations ────────────────────────────────────────────────────────
@@ -185,7 +235,7 @@ export async function handleAddItems(input: AddItemsInput): Promise<Envelope<unk
     // BUG-784: bare false is a GM-disconnect OR a business-condition veto (hook veto, etc.) —
     // classify, don't assume (see falseReturnEnvelope block comment above).
     if (addResult === false) {
-      return falseReturnEnvelope('add-items', input.actorUuid);
+      return falseReturnEnvelope('add-items', input.actorUuid, undefined, input.actorUuid);
     }
 
     // DP-16 (BUG-461b): post-write verify (settle-polled) — on the additive path
@@ -279,7 +329,7 @@ export async function handleRemoveItems(input: RemoveItemsInput): Promise<Envelo
     const removeResult = await API.removeItems(input.actorUuid, items);
     // BUG-784: classify bare false — GM-disconnect vs. business-condition veto.
     if (removeResult === false) {
-      return falseReturnEnvelope('remove-items', input.actorUuid);
+      return falseReturnEnvelope('remove-items', input.actorUuid, undefined, input.actorUuid);
     }
 
     // DP-16 (BUG-445c, D8): post-write verify (settle-polled) — total quantity over the
@@ -371,7 +421,7 @@ export async function handleTransferItems(input: TransferItemsInput): Promise<En
 
     // BUG-784: classify bare false — GM-disconnect vs. business-condition veto.
     if (result === false) {
-      return falseReturnEnvelope(`transfer-items (mode: ${mode})`, `${input.sourceUuid} -> ${input.targetUuid}`);
+      return falseReturnEnvelope(`transfer-items (mode: ${mode})`, `${input.sourceUuid} -> ${input.targetUuid}`, undefined, input.targetUuid);
     }
 
     // BUG-423 (XPK-01): normalize the raw API resolution into an explicit DTO.
@@ -555,7 +605,7 @@ async function applyAbsoluteCurrencies(API: any, actorUuid: string, setString: s
   for (const c of creations) {
     const r = await API.addCurrencies(actorUuid, c);
     // BUG-784: classify bare false — GM-disconnect vs. business-condition veto.
-    if (r === false) throw new Error(falseReturnMessage('add-currency (creating denomination)', actorUuid, `denomination: ${c}`));
+    if (r === false) throw new Error(falseReturnMessage('add-currency (creating denomination)', actorUuid, `denomination: ${c}`, actorUuid));
   }
   return targets;
 }
@@ -591,7 +641,7 @@ export async function handleAddCurrency(input: AddCurrencyInput): Promise<Envelo
     const addCurrResult = await API.addCurrencies(input.actorUuid, input.currencies);
     // BUG-784: classify bare false — GM-disconnect vs. business-condition veto.
     if (addCurrResult === false) {
-      return falseReturnEnvelope('add-currency', input.actorUuid);
+      return falseReturnEnvelope('add-currency', input.actorUuid, undefined, input.actorUuid);
     }
 
     // DP-16: post-write verify (settle-polled) — closure-diff against the pre-call snapshot.
@@ -816,7 +866,7 @@ export async function handleTransferCurrency(input: TransferCurrencyInput): Prom
 
     // BUG-784: classify bare false — GM-disconnect vs. business-condition veto.
     if (result === false) {
-      return falseReturnEnvelope(`transfer-currency (mode: ${mode})`, `${input.sourceUuid} -> ${input.targetUuid}`);
+      return falseReturnEnvelope(`transfer-currency (mode: ${mode})`, `${input.sourceUuid} -> ${input.targetUuid}`, undefined, input.targetUuid);
     }
 
     // BUG-423 (XPK-01) + live-smoke correction (2026-07-02): the REAL transferCurrencies/
@@ -992,7 +1042,7 @@ export async function handleSplitLoot(input: SplitLootInput): Promise<Envelope<u
     const splitResult = await API.splitItemPileContents(input.actorUuid, options);
     // BUG-784: classify bare false — GM-disconnect vs. business-condition veto.
     if (splitResult === false) {
-      return falseReturnEnvelope('split-loot', input.actorUuid, `target(s): ${dedupedTargets.join(', ')}`);
+      return falseReturnEnvelope('split-loot', input.actorUuid, `target(s): ${dedupedTargets.join(', ')}`, input.actorUuid);
     }
 
     // BUG-776 (DP-16): post-write verify against the EXPECTED remainder (currency-inclusive TOTAL

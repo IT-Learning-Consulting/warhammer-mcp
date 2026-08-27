@@ -1,4 +1,9 @@
-import { AddItemFromCompendiumInput } from '@foundry-mcp/shared';
+import {
+  AddItemFromCompendiumInput,
+  AddItemFromCompendiumOutput,
+  type AddItemFromCompendiumOutputType,
+  ADD_ITEM_FROM_COMPENDIUM_OUTPUT_JSON_SCHEMA,
+} from '@foundry-mcp/shared';
 import { FoundryClient } from '../foundry-client.js';
 import { Logger } from '../logger.js';
 import { BaseTool, BaseToolOptions } from '../base-tool.js';
@@ -75,6 +80,7 @@ Performance Notes:
           },
           required: ['actorId'],
         },
+        outputSchema: ADD_ITEM_FROM_COMPENDIUM_OUTPUT_JSON_SCHEMA,
       },
     ];
   }
@@ -89,6 +95,10 @@ Performance Notes:
       actorId: parsed.actorId,
       uuid,
     });
-    return await this.query<any>('addItemFromCompendium', parsed);
+    // BUG-869 (D5): envelope wrap; content[0].text === JSON.stringify(data) preserves
+    // the prior auto-wrapped wire text (additive structuredContent) — see add-active-effect.ts.
+    const data = await this.query<AddItemFromCompendiumOutputType>('addItemFromCompendium', parsed);
+    AddItemFromCompendiumOutput.parse(data);
+    return { content: [{ type: 'text' as const, text: JSON.stringify(data) }], structuredContent: data };
   }
 }

@@ -542,14 +542,17 @@ export class ItemService {
     }
     notify.created('item', createdItem.name ?? 'unknown', { summary: `on ${actor.name} from compendium`, uuid: (createdItem as any).uuid });
 
-    return {
+    // BUG-869 (Phase 3 task 4.1, widened): the success path must ALSO carry `outcome`
+    // — mirrors the `alreadyApplied` branch's `buildOutcomeResponse('alreadyApplied', {...})`
+    // call above (this same function). Same fields as before; only the outcome wrapper is new.
+    return buildOutcomeResponse('applied', {
       itemId: createdItem.id,
       itemName: createdItem.name,
       itemType: (createdItem as any).type,
       actorId: actor.id,
       actorName: actor.name,
       message: `Successfully added "${createdItem.name}" to ${actor.name} from compendium`,
-    };
+    });
   }
 
   /**

@@ -115,6 +115,17 @@ function formatDatabase(r: DatabaseResult, action: string): string {
   return `module-sequencer.${action}: ${items.length} result(s) for "${r.path}".\n\n${items.join('\n')}`;
 }
 
+// Phase 3 (systemic_bug_class_prevention v2, task 5.2, D8): empty-passthrough outputSchema,
+// mirroring module-matt's MattMutationOutput/MATT_MUTATION_OUTPUT_JSON_SCHEMA precedent
+// (z.object({}).passthrough() run through zodToJsonSchema). Inlined here rather than added to
+// shared/src/schemas/mutation-outputs.ts — this task's declared file set is this file +
+// apply-npc-career-advance.ts/item-piles.ts/autoanimations.ts only.
+const SEQUENCER_MUTATION_OUTPUT_JSON_SCHEMA = {
+  type: 'object',
+  properties: {},
+  additionalProperties: true,
+} as const;
+
 export interface ModuleSequencerToolOptions extends BaseToolOptions {}
 
 export class ModuleSequencerTool extends BaseTool {
@@ -257,6 +268,7 @@ Performance Notes:
             { if: { properties: { action: { const: 'permission-write' } } }, then: { required: ['key', 'value'] } },
           ],
         },
+        outputSchema: SEQUENCER_MUTATION_OUTPUT_JSON_SCHEMA,
       },
     ];
   }

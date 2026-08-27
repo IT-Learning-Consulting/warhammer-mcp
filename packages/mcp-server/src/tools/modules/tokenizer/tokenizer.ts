@@ -55,9 +55,22 @@ interface GetSettingsResult {
   settings?: Record<string, unknown>;
 }
 
+interface ListRegisteredFrame {
+  id: string;
+  label?: string;
+  kind?: 'frame' | 'mask';
+  source?: 'registry' | 'setting';
+  group?: string;
+}
+
+interface ListRegisteredPlugin {
+  id: string;
+  name?: string;
+}
+
 interface ListRegisteredResult {
-  frames?: string[];
-  plugins?: string[];
+  frames?: ListRegisteredFrame[];
+  plugins?: ListRegisteredPlugin[];
 }
 
 type TokenizerResult =
@@ -100,7 +113,9 @@ function formatGetSettings(r: GetSettingsResult): string {
 }
 
 function formatListRegistered(r: ListRegisteredResult): string {
-  return `module-tokenizer.list-registered:\nFrames: [${(r.frames ?? []).join(', ')}]\nPlugins: [${(r.plugins ?? []).join(', ')}]`;
+  const frames = (r.frames ?? []).map((f) => f.label ?? f.id).join(', ');
+  const plugins = (r.plugins ?? []).map((p) => p.name ?? p.id).join(', ');
+  return `module-tokenizer.list-registered:\nFrames: [${frames}]\nPlugins: [${plugins}]`;
 }
 
 // ── Tool-definition constants (kept out of getToolDefinitions to stay under the lint line cap) ──
@@ -200,6 +215,16 @@ const RESULT_FORMATTERS: Record<string, (data: TokenizerResult) => string> = {
   'list-registered': (d) => formatListRegistered(d as ListRegisteredResult),
 };
 
+// Phase 3 (systemic_bug_class_prevention v2, D8): empty-passthrough outputSchema, mirroring
+// module-matt's MattMutationOutput/MATT_MUTATION_OUTPUT_JSON_SCHEMA precedent (z.object({}).passthrough()
+// run through zodToJsonSchema). Inlined here rather than added to shared/src/schemas/mutation-outputs.ts —
+// this task's declared file set is this file + wfrp-economy.ts only.
+const TOKENIZER_MUTATION_OUTPUT_JSON_SCHEMA = {
+  type: 'object',
+  properties: {},
+  additionalProperties: true,
+} as const;
+
 export interface ModuleTokenizerToolOptions extends BaseToolOptions {}
 
 export class ModuleTokenizerTool extends BaseTool {
@@ -232,6 +257,7 @@ export class ModuleTokenizerTool extends BaseTool {
           required: ['action'],
           allOf: TOOL_INPUT_ALLOF,
         },
+        outputSchema: TOKENIZER_MUTATION_OUTPUT_JSON_SCHEMA,
       },
     ];
   }
